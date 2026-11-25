@@ -99,19 +99,19 @@
  * is a record of intended output changes for one release, not an allowlist to
  * grow.
  */
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
-import { seedArgs } from "./self/seed.js";
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import { spawn, spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
+import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
+import { seedArgs } from "./self/seed.js"
 
 /** The two `--emit-header` comment lines the 0.37.0 seed writes. */
 const SEED_HEADER_LINES = [
   " * C ABI of the Nish modules listed below. Link the .ll module(s) and",
   " * runtime/runtime.c next to your C code; include runtime/nish.h's",
-].join("\n");
+].join("\n")
 
 /**
  * The five lines WP50 writes in their place: stage 4 names `runtime-text.c`
@@ -123,35 +123,33 @@ const STAGE4_HEADER_LINES = [
   " * and runtime/runtime-os.c, compiled with -ffp-contract=off, next to your C",
   " * code, or hand runtime/runtime.c to scripts/build.sh, which does both;",
   " * include runtime/nish.h's",
-].join("\n");
+].join("\n")
 
 /**
  * `text` with the stage 4 header comment put back as the seed wrote it. A
  * declaration's `undo`: it touches only those five lines, so any other change
  * to a `.h` still differs.
  */
-const withoutStage4Header = (text) =>
-  text.split(STAGE4_HEADER_LINES).join(SEED_HEADER_LINES);
+const withoutStage4Header = (text) => text.split(STAGE4_HEADER_LINES).join(SEED_HEADER_LINES)
 
 /** The `--emit-dts` preamble lines the 0.37.0 seed writes about string functions. */
 const SEED_DTS_PREAMBLE = [
   "// String functions are not callable from the freestanding wasm profile and",
   "// are listed below as comments.",
-].join("\n");
+].join("\n")
 
 /** The two lines WP50 stage 4 writes in their place. */
 const STAGE4_DTS_PREAMBLE = [
   "// A string result is decoded into a JS string; a function that takes a",
   "// string, or answers what needs the full runtime, is listed below as a comment.",
-].join("\n");
+].join("\n")
 
 /** The reason the 0.37.0 seed gives for leaving a string argument out of the wasm bridge. */
-const SEED_DTS_STRING_ARG =
-  "which needs the Nish runtime the freestanding wasm profile does not include";
+const SEED_DTS_STRING_ARG = "which needs the Nish runtime the freestanding wasm profile does not include"
 
 /** The reason WP50 stage 4 gives for the same argument, naming the page's way in. */
 const STAGE4_DTS_STRING_ARG =
-  "which the wasm bridge carries only as a result: have the page `encodeInto` module storage and pass the byte count (`nish/host/text`)";
+  "which the wasm bridge carries only as a result: have the page `encodeInto` module storage and pass the byte count (`nish/host/text`)"
 
 /**
  * `text` with the stage 4 `--emit-dts` comments put back as the seed wrote
@@ -164,7 +162,7 @@ const withoutStage4Dts = (text) =>
     .split(STAGE4_DTS_PREAMBLE)
     .join(SEED_DTS_PREAMBLE)
     .split(`\`string\`, ${STAGE4_DTS_STRING_ARG}`)
-    .join(`\`string\`, ${SEED_DTS_STRING_ARG}`);
+    .join(`\`string\`, ${SEED_DTS_STRING_ARG}`)
 
 /**
  * The programs with a function that returns a `string` and so, since WP50
@@ -458,19 +456,19 @@ const STAGE4_STRING_EXPORTS = [
   "tests/link/std_testing/main.ts",
   "tests/link/std_yaml/main.ts",
   "tests/link/tfb_entry/main.ts",
-];
+]
 
 /** One declaration per program and sidecar `STAGE4_STRING_EXPORTS` names. */
 const declareStringExports = (moved, changelog, why) =>
   moved.flatMap((program) => {
-    const stem = path.basename(program, ".ts");
+    const stem = path.basename(program, ".ts")
     return [`${stem}.d.ts`, `${stem}.mjs`].map((file) => ({
       program,
       file,
       changelog,
       why,
-    }));
-  });
+    }))
+  })
 
 /**
  * Output differences that are decided rather than broken, each with the words
@@ -498,153 +496,139 @@ const declareStringExports = (moved, changelog, why) =>
  * nothing, the full run says so, and they go.
  */
 const DNS_FALLBACK =
-  "A DNS search fallback no longer masks a later NODATA, and resolveHost keeps an answered family at its timeout";
+  "A DNS search fallback no longer masks a later NODATA, and resolveHost keeps an answered family at its timeout"
 const dnsFallback = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: DNS_FALLBACK, why })),
-  );
+    files.map((file) => ({ program, file, changelog: DNS_FALLBACK, why }))
+  )
 // The fail-fast UTF-8 check lands under this PR's subject, which names the
 // Autobahn run that grades it.
-const WS_FAIL_FAST = "Autobahn";
+const WS_FAIL_FAST = "Autobahn"
 // The H1-3 fix lands under this PR's subject.
-const WS_ACCEPT_FLAT = "Accept a WebSocket without leaving bytes in the arena";
+const WS_ACCEPT_FLAT = "Accept a WebSocket without leaving bytes in the arena"
 const wsAcceptFlat = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: WS_ACCEPT_FLAT, why })),
-  );
+    files.map((file) => ({ program, file, changelog: WS_ACCEPT_FLAT, why }))
+  )
 const wsFailFast = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: WS_FAIL_FAST, why })),
-  );
-const ASYNC_FETCH =
-  "Async fetch speaks https and resolves names without blocking";
+    files.map((file) => ({ program, file, changelog: WS_FAIL_FAST, why }))
+  )
+const ASYNC_FETCH = "Async fetch speaks https and resolves names without blocking"
 const asyncFetch = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why })),
-  );
+    files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why }))
+  )
 // Echoing ECN counts lands under this PR's subject.
-const ECN_ECHO = "ECN counts in the QUIC server's ACKs";
+const ECN_ECHO = "ECN counts in the QUIC server's ACKs"
 const ecnEcho = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: ECN_ECHO, why })),
-  );
+    files.map((file) => ({ program, file, changelog: ECN_ECHO, why }))
+  )
 // The redirect sink lands under this PR's subject: the NL9018 sweep that found it.
-const NL9018_DEPTH =
-  "NL9018 warns when a handler the loop calls drops a temporary";
+const NL9018_DEPTH = "NL9018 warns when a handler the loop calls drops a temporary"
 const nl9018Depth = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: NL9018_DEPTH, why })),
-  );
+    files.map((file) => ({ program, file, changelog: NL9018_DEPTH, why }))
+  )
 const RESULT_LOOP =
-  "Keep a Result made in a loop body and stored in an outer let alive past the pass's arena rewind";
+  "Keep a Result made in a loop body and stored in an outer let alive past the pass's arena rewind"
 const resultLoop = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: RESULT_LOOP, why })),
-  );
-const AWAIT_ALL_LANES = "Give each awaitAll lane its own region";
+    files.map((file) => ({ program, file, changelog: RESULT_LOOP, why }))
+  )
+const AWAIT_ALL_LANES = "Give each awaitAll lane its own region"
 const awaitAllLanes = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: AWAIT_ALL_LANES, why })),
-  );
-const PAGE_MATH = "transcendentals";
+    files.map((file) => ({ program, file, changelog: AWAIT_ALL_LANES, why }))
+  )
+const PAGE_MATH = "transcendentals"
 const pageMath = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: PAGE_MATH, why })),
-  );
-const UNION_GENERICS = "Let a discriminated union be a generic's type argument";
-const DESTRUCTURING = "Destructuring declarations over objects and arrays";
-const CONST_TABLES = "Add module-level constant arrays of numeric literals";
-const STRING_ENUMS = "Add string enums, decoded and encoded by typed JSON";
-const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown";
+    files.map((file) => ({ program, file, changelog: PAGE_MATH, why }))
+  )
+const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
+const DESTRUCTURING = "Destructuring declarations over objects and arrays"
+const CONST_TABLES = "Add module-level constant arrays of numeric literals"
+const STRING_ENUMS = "Add string enums, decoded and encoded by typed JSON"
+const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why })),
-  );
-const RING_BATCH = "batched ring waits on HttpHandler";
+    files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why }))
+  )
+const RING_BATCH = "batched ring waits on HttpHandler"
 const ringBatch = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: RING_BATCH, why })),
-  );
+    files.map((file) => ({ program, file, changelog: RING_BATCH, why }))
+  )
 /** WP80 S4's release-note words, lower-case so they match the capitalised CHANGELOG.md line. */
-const HTTP1_SERVER_PANIC_FREE = "the HTTP/1 server panic-free";
-const BETWEEN_REQUESTS = "Http1Connection says when it is between requests";
+const HTTP1_SERVER_PANIC_FREE = "the HTTP/1 server panic-free"
+const BETWEEN_REQUESTS = "Http1Connection says when it is between requests"
 const betweenRequests = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: BETWEEN_REQUESTS, why })),
-  );
-const ASYNC_TRIM = "the async request path's instructions per request";
+    files.map((file) => ({ program, file, changelog: BETWEEN_REQUESTS, why }))
+  )
+const ASYNC_TRIM = "the async request path's instructions per request"
 const asyncTrim = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: ASYNC_TRIM, why })),
-  );
-const STATIC_ROUTES =
-  "static routes from an exact-path table ahead of the trie walk";
+    files.map((file) => ({ program, file, changelog: ASYNC_TRIM, why }))
+  )
+const STATIC_ROUTES = "static routes from an exact-path table ahead of the trie walk"
 const staticRoutes = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: STATIC_ROUTES, why })),
-  );
+    files.map((file) => ({ program, file, changelog: STATIC_ROUTES, why }))
+  )
 /** The changelog words of WP43 stage 5, which adds steps to Router, HttpHandler and HttpServer. */
-const ROUTE_STEPS = "steps that run before and after route bodies";
+const ROUTE_STEPS = "steps that run before and after route bodies"
 const routeSteps = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: ROUTE_STEPS, why })),
-  );
+    files.map((file) => ({ program, file, changelog: ROUTE_STEPS, why }))
+  )
 /** The changelog words of WP43 stage 4, which decodes request bodies in HttpHandler. */
-const BOMB_LIMIT = "request bodies under a decompression-bomb limit";
+const BOMB_LIMIT = "request bodies under a decompression-bomb limit"
 const bombLimit = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: BOMB_LIMIT, why })),
-  );
-const PIPELINED_WRITE = "answers pipelined requests in one write";
+    files.map((file) => ({ program, file, changelog: BOMB_LIMIT, why }))
+  )
+const PIPELINED_WRITE = "answers pipelined requests in one write"
 const pipelinedWrite = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: PIPELINED_WRITE, why })),
-  );
-const DATE_SINGLETON = "Refuse a response that carries two Date fields";
+    files.map((file) => ({ program, file, changelog: PIPELINED_WRITE, why }))
+  )
+const DATE_SINGLETON = "Refuse a response that carries two Date fields"
 const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why })),
-  );
+    files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
+  )
 /** The changelog line of the stage that folds a JSON number's digits as `number()` scans them. */
-const NUMBER_ONE_PASS = "Parse a JSON number in one pass";
+const NUMBER_ONE_PASS = "Parse a JSON number in one pass"
 const numberOnePass = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: NUMBER_ONE_PASS, why })),
-  );
-const TAGGED_UNIONS = "Typed JSON decodes and encodes tagged unions";
+    files.map((file) => ({ program, file, changelog: NUMBER_ONE_PASS, why }))
+  )
+const TAGGED_UNIONS = "Typed JSON decodes and encodes tagged unions"
 const taggedUnions = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: TAGGED_UNIONS, why })),
-  );
-const POOL_PIPELINE = "async Postgres pool pipelines queries across tasks";
+    files.map((file) => ({ program, file, changelog: TAGGED_UNIONS, why }))
+  )
+const POOL_PIPELINE = "async Postgres pool pipelines queries across tasks"
 const poolPipeline = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: POOL_PIPELINE, why })),
-  );
-const MSS_UNSET = "explicitly set enc.mss wins over the socket MSS";
+    files.map((file) => ({ program, file, changelog: POOL_PIPELINE, why }))
+  )
+const MSS_UNSET = "explicitly set enc.mss wins over the socket MSS"
 const mssUnset = (why, moved) =>
-  moved.map((program) => ({
-    program,
-    file: "http-compress.ll",
-    changelog: MSS_UNSET,
-    why,
-  }));
+  moved.map((program) => ({ program, file: "http-compress.ll", changelog: MSS_UNSET, why }))
 /** The changelog line of the stage that adds `spawnPipedWithin`. */
-const SPAWN_PIPED_WITHIN = "spawnPipedWithin, a captured run with a deadline";
+const SPAWN_PIPED_WITHIN = "spawnPipedWithin, a captured run with a deadline"
 /** The changelog line of the fix that arms a held HTTP/1 write for writing. */
-const HELD_WRITE =
-  "held HTTP/1 write keeps the write bit once a flush empties the output";
+const HELD_WRITE = "held HTTP/1 write keeps the write bit once a flush empties the output"
 const heldWrite = (why, moved) =>
-  moved.map((program) => ({
-    program,
-    file: "http1-server.ll",
-    changelog: HELD_WRITE,
-    why,
-  }));
+  moved.map((program) => ({ program, file: "http1-server.ll", changelog: HELD_WRITE, why }))
 /** The changelog words of the stage that clears the QUIC engine's panic sites (WP82 S5). */
-const QUIC_ENGINE_PANIC_FREE = "the std/net QUIC engine";
+const QUIC_ENGINE_PANIC_FREE = "the std/net QUIC engine"
 /** The changelog line of the stage that copies QUIC stream and packet bytes by slice (#699). */
-const QUIC_SLICE_COPY = "QUIC stream bytes by slice, not by byte";
+const QUIC_SLICE_COPY = "QUIC stream bytes by slice, not by byte"
 /** Why each module a #699 program writes moves; a module not named here is a program's own, renamed beside `std_bytes.ll`. */
 const QUIC_SLICE_COPY_WHY = {
   "quic-stream.ll":
@@ -655,7 +639,7 @@ const QUIC_SLICE_COPY_WHY = {
     "the program now reaches nish/bytes through std/net/quic-stream.ts or std/net/quic-packet.ts, so it writes that module",
   "std_bytes.ll":
     "the program now reaches nish/bytes through std/net/quic-packet.ts and has a module named bytes of its own, so nish/bytes is written as std_bytes.ll",
-};
+}
 const quicSliceCopy = (filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({
@@ -665,15 +649,15 @@ const quicSliceCopy = (filesByProgram) =>
       why:
         QUIC_SLICE_COPY_WHY[file] ??
         "the program's own module named bytes is written under its program-prefixed name now that nish/bytes takes bytes.ll's place beside it",
-    })),
-  );
+    }))
+  )
 
 /** The changelog words of the stage that reads an HTTP/1 head a vector at a time (#1416). */
-const VECTOR_HEAD = "a vector at a time";
+const VECTOR_HEAD = "a vector at a time"
 const vectorHead = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: VECTOR_HEAD, why })),
-  );
+    files.map((file) => ({ program, file, changelog: VECTOR_HEAD, why }))
+  )
 
 /**
  * The modules the TLS server's secp256r1 key shares and carrier idle timeout
@@ -683,21 +667,12 @@ const vectorHead = (why, filesByProgram) =>
  */
 const TLS_SERVER_MOVED = [
   ["bench/http-app-carrier.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
-  [
-    "bench/http1-request/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["bench/http1-request/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
   ["bench/http1-server.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
-  [
-    "bench/techempower/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["bench/techempower/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
   ["examples/http-app/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   ["examples/http-get-json.ts", "codec.ll record-server.ll tls.ll"],
-  [
-    "examples/prefork-server.ts",
-    "codec.ll prefork-server.h record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["examples/prefork-server.ts", "codec.ll prefork-server.h record-server.ll tls-tcp.ll tls.ll"],
   [
     "examples/relay/main.ts",
     "codec.ll http3-server.ll http3.ll main.h main.ll quic-listener.ll quic.ll record-server.ll relay.ll tls-tcp.ll tls.ll webtransport.ll",
@@ -705,23 +680,11 @@ const TLS_SERVER_MOVED = [
   ["tests/link/crypto_held_derive/main.ts", "codec.ll main.h"],
   ["tests/link/crypto_tls_held_hash/main.ts", "codec.ll main.h"],
   ["tests/link/crypto_tls_held_length/main.ts", "codec.ll main.h"],
-  [
-    "tests/link/crypto_x509/main.ts",
-    "client.ll codec.ll handshake.ll main.h server.ll tls.ll",
-  ],
+  ["tests/link/crypto_x509/main.ts", "client.ll codec.ll handshake.ll main.h server.ll tls.ll"],
   ["tests/link/net_fetch_async/main.ts", "codec.ll record-server.ll tls.ll"],
-  [
-    "tests/link/net_fetch_async_deadline/main.ts",
-    "codec.ll main.h record-server.ll tls.ll",
-  ],
-  [
-    "tests/link/net_fetch_async_dns_slow/main.ts",
-    "codec.ll main.h record-server.ll tls.ll",
-  ],
-  [
-    "tests/link/net_fetch_async_flat/main.ts",
-    "codec.ll record-server.ll tls.ll",
-  ],
+  ["tests/link/net_fetch_async_deadline/main.ts", "codec.ll main.h record-server.ll tls.ll"],
+  ["tests/link/net_fetch_async_dns_slow/main.ts", "codec.ll main.h record-server.ll tls.ll"],
+  ["tests/link/net_fetch_async_flat/main.ts", "codec.ll record-server.ll tls.ll"],
   [
     "tests/link/net_fetch_async_https/main.ts",
     "codec.ll record-server.ll server.ll servers.ll tls-tcp.ll tls.ll",
@@ -730,14 +693,8 @@ const TLS_SERVER_MOVED = [
     "tests/link/net_fetch_async_https_flat/main.ts",
     "codec.ll record-server.ll server.ll servers.ll tls-tcp.ll tls.ll",
   ],
-  [
-    "tests/link/net_fetch_async_overlap/main.ts",
-    "codec.ll record-server.ll tls.ll",
-  ],
-  [
-    "tests/link/net_fetch_async_policy/main.ts",
-    "codec.ll record-server.ll tls.ll",
-  ],
+  ["tests/link/net_fetch_async_overlap/main.ts", "codec.ll record-server.ll tls.ll"],
+  ["tests/link/net_fetch_async_policy/main.ts", "codec.ll record-server.ll tls.ll"],
   [
     "tests/link/net_handler/main.ts",
     "codec.ll net_tls_record_common_bytes.ll record-server.ll tls-tcp.ll tls.ll",
@@ -762,46 +719,25 @@ const TLS_SERVER_MOVED = [
     "tests/link/net_http1_server/main.ts",
     "codec.ll main.h net_tls_common_client.ll net_tls_record_common_bytes.ll net_tls_record_tcp_harness.ll record-server.ll server.ll tls-tcp.ll tls.ll",
   ],
-  [
-    "tests/link/net_http1_server_bad_config/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_http1_server_bad_head/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["tests/link/net_http1_server_bad_config/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_http1_server_bad_head/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
   [
     "tests/link/net_http1_server_bad_head_timeout/main.ts",
     "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
   ],
-  [
-    "tests/link/net_http1_server_bad_message/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["tests/link/net_http1_server_bad_message/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
   [
     "tests/link/net_http1_server_f64/main.ts",
     "codec.ll main.h net_tls_common_client.ll net_tls_record_common_bytes.ll net_tls_record_tcp_harness.ll record-server.ll server.ll tls-tcp.ll tls.ll",
   ],
-  [
-    "tests/link/net_http1_server_feed_window/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_http1_server_frame_window/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_http1_server_send_body/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["tests/link/net_http1_server_feed_window/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_http1_server_frame_window/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_http1_server_send_body/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
   [
     "tests/link/net_http1_server_send_body_window/main.ts",
     "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
   ],
-  [
-    "tests/link/net_http1_server_write_window/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["tests/link/net_http1_server_write_window/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
   [
     "tests/link/net_http2_bad_config_tls/main.ts",
     "codec.ll http2-tls.ll main.h main.ll record-server.ll server.ll tls-tcp.ll tls.ll",
@@ -878,10 +814,7 @@ const TLS_SERVER_MOVED = [
     "tests/link/net_http3_write_window/main.ts",
     "codec.ll http3-server.ll http3.ll main.h main.ll net_quic_conn_client.ll net_quic_conn_replay_server.ll net_tls_common_client.ll net_tls_common_server.ll peer.ll quic-listener.ll quic.ll record-server.ll tls-tcp.ll tls.ll",
   ],
-  [
-    "tests/link/net_http_app/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["tests/link/net_http_app/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   [
     "tests/link/net_http_date/main.ts",
     "checks.ll codec.ll http3-server.ll http3.ll main.h net_quic_conn_client.ll net_quic_conn_replay_server.ll net_tls_common_client.ll net_tls_common_server.ll peer.ll quic-listener.ll quic.ll record-server.ll tls-tcp.ll tls.ll",
@@ -1075,51 +1008,21 @@ const TLS_SERVER_MOVED = [
     "tests/link/net_relay_soak/main.ts",
     "codec.ll http3-server.ll http3.ll loopback.ll main.h net_http3_peer.ll net_quic_conn_client.ll net_quic_conn_replay_server.ll net_tls_common_client.ll net_tls_common_server.ll net_webtransport_peer.ll quic-listener.ll quic.ll record-server.ll relay.ll rig.ll serve.ll tls-tcp.ll tls.ll webtransport.ll",
   ],
-  [
-    "tests/link/net_serve/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_serve_deadline/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_serve_hangup/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_serve_pg/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["tests/link/net_serve/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_serve_deadline/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_serve_hangup/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_serve_pg/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   ["tests/link/net_serve_lent_window/main.ts", "tls.ll"],
-  [
-    "tests/link/net_serve_pipelined_flat/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_serve_server_field/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_serve_server_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_serve_shutdown/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_tls_client_handshake/main.ts",
-    "codec.ll main.h main.ll server.ll tls.ll",
-  ],
+  ["tests/link/net_serve_pipelined_flat/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_serve_server_field/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_serve_server_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_serve_shutdown/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_tls_client_handshake/main.ts", "codec.ll main.h main.ll server.ll tls.ll"],
   [
     "tests/link/net_tls_client_record/main.ts",
     "bytes.ll codec.ll main.h main.ll record-server.ll server.ll tls.ll",
   ],
-  [
-    "tests/link/net_tls_client_refusals/main.ts",
-    "codec.ll main.h main.ll server.ll tls.ll",
-  ],
+  ["tests/link/net_tls_client_refusals/main.ts", "codec.ll main.h main.ll server.ll tls.ll"],
   [
     "tests/link/net_tls_client_tcp/main.ts",
     "codec.ll loop.ll main.h main.ll record-server.ll server.ll tls-tcp.ll tls.ll",
@@ -1132,10 +1035,7 @@ const TLS_SERVER_MOVED = [
     "tests/link/net_tls_ecdsa_f64/main.ts",
     "checks.ll client.ll codec.ll held.ll main.h record-server.ll server.ll tls.ll",
   ],
-  [
-    "tests/link/net_tls_ext_alpn/main.ts",
-    "checks.ll client.ll codec.ll main.h server.ll tls.ll",
-  ],
+  ["tests/link/net_tls_ext_alpn/main.ts", "checks.ll client.ll codec.ll main.h server.ll tls.ll"],
   [
     "tests/link/net_tls_ext_f64/main.ts",
     "client.ll codec.ll held.ll main.h net_tls_ext_alpn_checks.ll net_tls_ext_hrr_checks.ll net_tls_ext_quic_checks.ll net_tls_ext_refusals_checks.ll net_tls_ext_sni_checks.ll record-server.ll server.ll tls.ll",
@@ -1148,10 +1048,7 @@ const TLS_SERVER_MOVED = [
     "tests/link/net_tls_ext_quic/main.ts",
     "checks.ll client.ll codec.ll main.h net_tls_ext_alpn_checks.ll server.ll tls.ll",
   ],
-  [
-    "tests/link/net_tls_ext_refusals/main.ts",
-    "checks.ll client.ll codec.ll main.h server.ll tls.ll",
-  ],
+  ["tests/link/net_tls_ext_refusals/main.ts", "checks.ll client.ll codec.ll main.h server.ll tls.ll"],
   [
     "tests/link/net_tls_ext_sni/main.ts",
     "checks.ll client.ll codec.ll main.h net_tls_ext_alpn_checks.ll server.ll tls.ll",
@@ -1164,14 +1061,8 @@ const TLS_SERVER_MOVED = [
     "tests/link/net_tls_memory_f64/main.ts",
     "bytes.ll codec.ll held.ll main.h net_tls_common_client.ll net_tls_memory_checks.ll net_tls_rfc8448_checks.ll record-server.ll server.ll tls-tcp.ll tls.ll",
   ],
-  [
-    "tests/link/net_tls_psk_wire/main.ts",
-    "checks.ll client.ll codec.ll main.h server.ll tls.ll",
-  ],
-  [
-    "tests/link/net_tls_psk_wire_f64/main.ts",
-    "checks.ll client.ll codec.ll main.h server.ll tls.ll",
-  ],
+  ["tests/link/net_tls_psk_wire/main.ts", "checks.ll client.ll codec.ll main.h server.ll tls.ll"],
+  ["tests/link/net_tls_psk_wire_f64/main.ts", "checks.ll client.ll codec.ll main.h server.ll tls.ll"],
   [
     "tests/link/net_tls_record_f64/main.ts",
     "bytes.ll codec.ll held.ll main.h net_tls_common_client.ll net_tls_record_refusals_checks.ll net_tls_record_rfc8448_checks.ll net_tls_rfc8448_checks.ll record-server.ll server.ll tls.ll",
@@ -1214,14 +1105,8 @@ const TLS_SERVER_MOVED = [
     "tests/link/net_tls_wipes_f64/main.ts",
     "bytes.ll checks.ll codec.ll main.h net_tls_common_client.ll record-server.ll server.ll tls-tcp.ll tls.ll",
   ],
-  [
-    "tests/link/net_upstream/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/net_upstream_release/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["tests/link/net_upstream/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_upstream_release/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   [
     "tests/link/net_webtransport/main.ts",
     "arena.ll closing.ll codec.ll data.ll golden.ll http3-server.ll http3.ll main.h net_http3_peer.ll net_quic_conn_client.ll net_quic_conn_common.ll net_quic_conn_replay_server.ll net_quic_stream_arena.ll net_quic_stream_common.ll net_tls_common_client.ll net_tls_common_server.ll peer.ll quic-listener.ll quic.ll record-server.ll record.ll refusals.ll sessions.ll tls-tcp.ll tls.ll webtransport.ll",
@@ -1278,120 +1163,67 @@ const TLS_SERVER_MOVED = [
     "tests/link/net_webtransport_whole_window/main.ts",
     "codec.ll http3-server.ll http3.ll main.h main.ll net_http3_peer.ll net_quic_conn_client.ll net_quic_conn_replay_server.ll net_tls_common_client.ll net_tls_common_server.ll net_webtransport_peer.ll quic-listener.ll quic.ll record-server.ll tls-tcp.ll tls.ll webtransport.ll",
   ],
-  [
-    "tests/link/std_http1_end_head/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_http1_mss/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_http_compress/main.ts",
-    "codec.ll main.h record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_async_cancel/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_async_caps_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["tests/link/std_http1_end_head/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_http1_mss/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_http_compress/main.ts", "codec.ll main.h record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_async_cancel/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_async_caps_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   [
     "tests/link/std_postgres_async_double_release_panic/main.ts",
     "codec.ll record-server.ll tls-tcp.ll tls.ll",
   ],
-  [
-    "tests/link/std_postgres_async_flat/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["tests/link/std_postgres_async_flat/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   [
     "tests/link/std_postgres_async_release_closed_panic/main.ts",
     "codec.ll record-server.ll tls-tcp.ll tls.ll",
   ],
-  [
-    "tests/link/std_postgres_async_release_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_async_size_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_carrier/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_carrier_attach_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_carrier_batcher_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_carrier_connection_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_carrier_limits_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_carrier_next_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_carrier_request_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/std_postgres_carrier_send_panic/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
-  [
-    "tests/link/tfb_async_entry/main.ts",
-    "codec.ll record-server.ll tls-tcp.ll tls.ll",
-  ],
+  ["tests/link/std_postgres_async_release_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_async_size_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_carrier/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_carrier_attach_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_carrier_batcher_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_carrier_connection_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_carrier_limits_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_carrier_next_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_carrier_request_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/std_postgres_carrier_send_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/tfb_async_entry/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   ["tests/link/tfb_db/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   [
     "tests/link/tfb_entry/main.ts",
     "codec.ll harness.ll main.h net_tls_common_server.ll net_tls_record_common_bytes.ll record-server.ll tls-tcp.ll tls.ll",
   ],
-];
+]
 
 /** The changelog line of #1028's stage: x509 keeps each extension's critical flag. */
-const X509_CRITICALITY =
-  "Expose x509 criticality, AKI issuer/serial and AIA to pki";
+const X509_CRITICALITY = "Expose x509 criticality, AKI issuer/serial and AIA to pki"
 const x509Criticality = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: X509_CRITICALITY, why })),
-  );
+    files.map((file) => ({ program, file, changelog: X509_CRITICALITY, why }))
+  )
 /** The changelog words of WP84 S2, which clears std/compress/deflate.ts's panic sites but its contract's. */
-const WP84_DEFLATE = "deflate and inflate's panic sites";
+const WP84_DEFLATE = "deflate and inflate's panic sites"
 const wp84Deflate = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: WP84_DEFLATE, why })),
-  );
+    files.map((file) => ({ program, file, changelog: WP84_DEFLATE, why }))
+  )
 /** The changelog words of WP83 S4, which clears the panic sites of x509, pki, pki-roots and x509-random. */
-const WP83_PKI = "X.509 and the PKI";
+const WP83_PKI = "X.509 and the PKI"
 const wp83Pki = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: WP83_PKI, why })),
-  );
+    files.map((file) => ({ program, file, changelog: WP83_PKI, why }))
+  )
 /** The changelog words of the stage that probes the QUIC path MTU. */
-const PATH_MTU = "path MTU discovery";
+const PATH_MTU = "path MTU discovery"
 const pathMtu = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: PATH_MTU, why })),
-  );
+    files.map((file) => ({ program, file, changelog: PATH_MTU, why }))
+  )
 /** The changelog words of the stage that adds atomic arrays to nish/threads. */
-const ATOMIC_ARRAYS =
-  "AtomicI32Array and AtomicI64Array, n atomics in one buffer";
+const ATOMIC_ARRAYS = "AtomicI32Array and AtomicI64Array, n atomics in one buffer"
 /** The changelog words of the stage that gives HmacSha256 and Sha256 digestInto (#1542). */
 /** The release-note words for the push loop that copies an array range in one `memcpy`. */
-const APPEND_RANGE = "Copy a push loop over an array range in one memcpy";
+const APPEND_RANGE = "Copy a push loop over an array range in one memcpy"
 /** Why each module the WP83 S3 crypto changes move differs, by file. */
 const WP83_S3_WHY = {
   "p256.ll":
@@ -1412,32 +1244,25 @@ const WP83_S3_WHY = {
     "the test declares p256SignSha256Into, whose message array is no longer marked readonly now that it reaches p256ShaCompress, so the declaration loses readonly and its attribute group renumbers",
   "tls.ll":
     "the tls module declares p256SignSha256Into and P256SignScratch's constructor, and p256SignSha256Into's message array is no longer marked readonly now that it reaches p256ShaCompress, so the declarations lose readonly and their attribute groups renumber",
-};
+}
 
-const HMAC_DIGEST_INTO =
-  "HmacSha256.digest allocates only the tag, and digestInto allocates nothing";
+const HMAC_DIGEST_INTO = "HmacSha256.digest allocates only the tag, and digestInto allocates nothing"
 /** The changelog words of the stage that proves vector accesses in range and tags them as element data. */
-const VECTOR_ACCESS_TBAA = "vector loads and stores in range";
+const VECTOR_ACCESS_TBAA = "vector loads and stores in range"
 const vectorAccessTbaa = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({
-      program,
-      file,
-      changelog: VECTOR_ACCESS_TBAA,
-      why,
-    })),
-  );
+    files.map((file) => ({ program, file, changelog: VECTOR_ACCESS_TBAA, why }))
+  )
 
 /**
  * The words WP39 G6's changelog line starts with: the branch's runtime commit
  * renders "Steer QUIC datagrams ...", the squashed pull request "Steer QUIC
  * packets ...".
  */
-const QUIC_STEER = "Steer QUIC";
+const QUIC_STEER = "Steer QUIC"
 
 /** The changelog words of the fix that keeps a port-0 prefork UDP group off another group's port. */
-const PREFORK_FREE_PORT =
-  "A prefork UDP group on port 0 never joins another reuseport group's port";
+const PREFORK_FREE_PORT = "A prefork UDP group on port 0 never joins another reuseport group's port"
 
 /**
  * WP39 G6's moves: `PreforkConfig` gains `listenUdp` (its struct in every
@@ -1455,35 +1280,35 @@ const quicSteer = (filesByProgram) =>
         file === "exit"
           ? "the program uses `workerIndex`, `workerCount` or `preforkUdpCount`, which the 0.38.0 seed's std/ lacks, so only the candidate compiles it"
           : "`PreforkConfig` gains `listenUdp` and the supervisor binds a steered UDP group, so the prefork struct and IR move",
-    })),
-  );
+    }))
+  )
 
 /** The changelog words of the WP39 G2 server-clock fixes (H1-2, H2-3, WT-2). */
 const byFinding = (changelog) => (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog, why })),
-  );
-const lingeringClose = byFinding("lingering close");
-const http2Timeouts = byFinding("SETTINGS and idle timeouts for HTTP/2");
-const sessionClock = byFinding("session clock");
+    files.map((file) => ({ program, file, changelog, why }))
+  )
+const lingeringClose = byFinding("lingering close")
+const http2Timeouts = byFinding("SETTINGS and idle timeouts for HTTP/2")
+const sessionClock = byFinding("session clock")
 /** The changelog words of the loop-guarded additions (`emitAddGuards`, src/emit-arrays.ts). */
-const LOOP_GUARD = "counted loop's x + i for overflow once";
-const loopGuard = byFinding(LOOP_GUARD);
+const LOOP_GUARD = "counted loop's x + i for overflow once"
+const loopGuard = byFinding(LOOP_GUARD)
 
 /** The changelog line of the stage that runs TLS in the Postgres carrier. */
-const PG_TLS = "Postgres over TLS in the carrier";
+const PG_TLS = "Postgres over TLS in the carrier"
 const pgTls = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: PG_TLS, why })),
-  );
+    files.map((file) => ({ program, file, changelog: PG_TLS, why }))
+  )
 
 /** The changelog words of the QUIC NAT-rebind fix (#1511). */
 const quicRebind = byFinding(
-  "QUIC transfer survives a NAT rebind while one hole fills the stream buffer",
+  "QUIC transfer survives a NAT rebind while one hole fills the stream buffer"
 ).bind(
   null,
-  "QuicConnection gains a field and grows from 752 to 760 bytes, and QuicStreams gains `bufferBlocked`, so every module laying them out or calling them moves",
-);
+  "QuicConnection gains a field and grows from 752 to 760 bytes, and QuicStreams gains `bufferBlocked`, so every module laying them out or calling them moves"
+)
 
 /**
  * The release-note words of the security pass that closes HTTP/1 chunk
@@ -1492,12 +1317,12 @@ const quicRebind = byFinding(
  * paths. They land as one squashed pull request, so every declaration of it
  * names its title; each entry's `why` says which fix moved the file.
  */
-const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths";
+const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
 /** The changelog words of the stage that writes a typed object's keys as one copy (#1580). */
-const JSON_KEYS_QUOTED = "a typed object's keys as one pre-escaped copy";
+const JSON_KEYS_QUOTED = "a typed object's keys as one pre-escaped copy"
 
 /** The changelog words of the stage that loads YAML text into a JsonDocument without repeated work (#1539). */
-const YAML_LOAD_CUTS = "YAML into a JsonDocument about a fifth faster";
+const YAML_LOAD_CUTS = "YAML into a JsonDocument about a fifth faster"
 
 /**
  * The generated comment lines that named a work package, as the seed writes
@@ -1512,59 +1337,49 @@ const WP_COMMENT_LINES = [
     "// Module storage for the TypeScript reading (WP50 §5.4), written by",
     "// Module storage for the TypeScript reading, written by",
   ],
-  [
-    "/* `Result<T, E>` (WP16/WP17). A `Result`",
-    "/* `Result<T, E>`. A `Result`",
-  ],
-  [
-    "/* The arena is thread-local (WP20 T0), so",
-    "/* The arena is thread-local, so",
-  ],
+  ["/* `Result<T, E>` (WP16/WP17). A `Result`", "/* `Result<T, E>`. A `Result`"],
+  ["/* The arena is thread-local (WP20 T0), so", "/* The arena is thread-local, so"],
   ["/* WP17: a `Result` as the object JS", "/* A `Result` as the object JS"],
   ["/** A Result in one i64 (WP17): bit 0", "/** A Result in one i64: bit 0"],
   [
     " * Where module storage lives in `memory` (WP50 §5.2). `length`",
     " * Where module storage lives in `memory`. `length`",
   ],
-];
+]
 
 /**
  * `text` with each work-package comment line put back as the seed wrote it. A
  * declaration's `undo`: it touches only those lines, so any other change differs.
  */
 const withSeedWpComments = (text) =>
-  WP_COMMENT_LINES.reduce(
-    (acc, [seed, now]) => acc.split(now).join(seed),
-    text,
-  );
+  WP_COMMENT_LINES.reduce((acc, [seed, now]) => acc.split(now).join(seed), text)
 
-const LET_REASSIGN = "reassigned let no longer keeps its values in the arena";
+const LET_REASSIGN = "reassigned let no longer keeps its values in the arena"
 
-const RECURSION_LOOP = "Emit self-recursive checked sums as a loop";
+const RECURSION_LOOP = "Emit self-recursive checked sums as a loop"
 const RECURSION_LOOP_WHY =
-  "a function whose recursive returns are `X + self(...)` over a checked `i32` `+` is one loop whose header carries the previous sum and the last `X` as phis and tests their signs, handing a step that test rejects to one call of itself, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`";
+  "a function whose recursive returns are `X + self(...)` over a checked `i32` `+` is one loop whose header carries the previous sum and the last `X` as phis and tests their signs, handing a step that test rejects to one call of itself, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
-const RECURSION_METHOD = "Emit self-recursive checked-sum methods as a loop";
+const RECURSION_METHOD = "Emit self-recursive checked-sum methods as a loop"
 const RECURSION_METHOD_WHY =
-  "a method of a non-generic class whose recursive returns are `X + r.m(...)` on a receiver of its own class is the same loop, with the receiver as its first phi (`%this` from `%this.in`), so `this` and its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`";
-const RECURSION_WIDTH = "Emit self-recursive checked i64 sums as a loop";
+  "a method of a non-generic class whose recursive returns are `X + r.m(...)` on a receiver of its own class is the same loop, with the receiver as its first phi (`%this` from `%this.in`), so `this` and its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
+const RECURSION_WIDTH = "Emit self-recursive checked i64 sums as a loop"
 const RECURSION_WIDTH_WHY =
-  "a self-recursive `X + self(...)` sum returning `i64` is the same loop at `i64`: its prev, last and sum phis, wrapping add and sign test are `i64`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow.i64`";
+  "a self-recursive `X + self(...)` sum returning `i64` is the same loop at `i64`: its prev, last and sum phis, wrapping add and sign test are `i64`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow.i64`"
 
-const RECURSION_ARENA =
-  "Emit self-recursive checked sums with a per-step arena scope as a loop";
+const RECURSION_ARENA = "Emit self-recursive checked sums with a per-step arena scope as a loop"
 const RECURSION_ARENA_WHY =
-  "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`";
+  "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
-const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext";
+const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
 
 /** The changelog words of the pull request that proposes WP68 and adds its `bench/wp68-*` programs. */
-const WP68_BENCH = "WP68, shared libraries layered like atomic design";
+const WP68_BENCH = "WP68, shared libraries layered like atomic design"
 const WP68_BENCH_WHY =
-  "a new WP68 bench program, which the candidate compiles with the codegen changes made since the reference was released";
+  "a new WP68 bench program, which the candidate compiles with the codegen changes made since the reference was released"
 
 /** The changelog words of the stage that adds nish/net/protobuf. */
-const PROTOBUF_MODULE = "nish/net/protobuf, protobuf's wire format";
+const PROTOBUF_MODULE = "nish/net/protobuf, protobuf's wire format"
 const protobufModule = () =>
   [
     "net_protobuf",
@@ -1581,25 +1396,24 @@ const protobufModule = () =>
     file: "exit",
     changelog: PROTOBUF_MODULE,
     why: "the program tests nish/net/protobuf, which is new in this release, so the seed's standard library has no such module and refuses it",
-  }));
+  }))
 
 /** The changelog words of the stage that adds `nish proto`. */
-const PROTO_CLASSES = "proto writes message classes from a .proto file";
+const PROTO_CLASSES = "proto writes message classes from a .proto file"
 const protoClasses = () =>
   ["net_proto_classes"].map((name) => ({
     program: `tests/link/${name}/main.ts`,
     file: "exit",
     changelog: PROTO_CLASSES,
     why: "the program imports classes nish proto generates, which read and write through nish/net/protobuf, new in this release, so the seed's standard library has no such module and refuses it",
-  }));
+  }))
 
 /** The changelog words of the stage that adds nish/net/grpc. */
 const GRPC_MODULE =
-  "Add nish/net/grpc, unary gRPC calls on the HTTP/2 listeners, with its security record (WP72 S3)";
+  "Add nish/net/grpc, unary gRPC calls on the HTTP/2 listeners, with its security record (WP72 S3)"
 
 /** The changelog line of the stage that adds nish/crypto/scram. */
-const SCRAM_MODULE =
-  "Add nish/crypto/scram and move the Postgres SCRAM arithmetic onto it";
+const SCRAM_MODULE = "Add nish/crypto/scram and move the Postgres SCRAM arithmetic onto it"
 // nish/net/postgres reaches its SCRAM arithmetic through the new
 // nish/crypto/scram, so every program that links it writes scram.ll, which
 // the seed's standard library has no module for.
@@ -1703,7 +1517,7 @@ const SCRAM_LINKERS = [
   "tests/link/std_postgres_user_panic/main.ts",
   "tests/link/tfb_async_db/main.ts",
   "tests/link/tfb_db/main.ts",
-];
+]
 // Of those, the programs that also link chacha20poly1305.ll: scram.ll now
 // instantiates `wipe` on `u8[]` first, so chacha20poly1305.ll, which wipes
 // both `u32[]` and `u8[]`, writes the two instantiations in the other order.
@@ -1723,7 +1537,7 @@ const SCRAM_CHACHA_LINKERS = [
   "tests/link/std_postgres_async_size_panic/main.ts",
   "tests/link/tfb_async_db/main.ts",
   "tests/link/tfb_db/main.ts",
-];
+]
 const scramModule = () => [
   {
     program: "tests/link/std_scram/main.ts",
@@ -1743,18 +1557,17 @@ const scramModule = () => [
     changelog: SCRAM_MODULE,
     why: "scram.ll instantiates `wipe` on `u8[]` before chacha20poly1305.ll does, so chacha20poly1305.ll writes its `u8[]` and `u32[]` wipes in the other order",
   })),
-];
+]
 
-const COMPAT_SIGNATURES =
-  "optional parameters, non-constant defaults and overload signatures under --compat";
+const COMPAT_SIGNATURES = "optional parameters, non-constant defaults and overload signatures under --compat"
 
-const PACKAGE_LINK = "A package links a C library or its own C sources";
+const PACKAGE_LINK = "A package links a C library or its own C sources"
 
 /** The changelog words of WP80 S1, which makes std's json-typed and cli modules panic-free. */
-const S1_PANIC_FREE = "json-typed, cli-args, cli-flags and cli panic-free";
-const s1PanicFree = byFinding(S1_PANIC_FREE);
+const S1_PANIC_FREE = "json-typed, cli-args, cli-flags and cli panic-free"
+const s1PanicFree = byFinding(S1_PANIC_FREE)
 /** The changelog words of WP80 S6, which spells std/net's read windows as the panic prover reads them. */
-const S6_READ_WINDOWS = "read windows the prover reads";
+const S6_READ_WINDOWS = "read windows the prover reads"
 /** WP80 S6's moves: `preforkDiscard` reads into `buf` at its own length and drops its `size` local, so prefork.ll's values after it renumber. */
 const s6ReadWindowsDeclared = () =>
   byFinding(S6_READ_WINDOWS)(
@@ -1762,10 +1575,10 @@ const s6ReadWindowsDeclared = () =>
     {
       "examples/prefork-jobs.ts": ["prefork.ll"],
       "tests/link/net_prefork_checked/main.ts": ["prefork.ll"],
-    },
-  );
+    }
+  )
 /** The changelog words of WP80 S5, which makes nish/net's handler, serve and static panic-free for http-app. */
-const S5_PANIC_FREE = "handler, serve and static panic-free for http-app";
+const S5_PANIC_FREE = "handler, serve and static panic-free for http-app"
 /** WP80 S5's programs: one new negative, and four that call the checked forms the seed's std/net does not have. */
 const s5PanicFreeDeclared = () => [
   ...byFinding(S5_PANIC_FREE)(
@@ -1788,7 +1601,7 @@ const s5PanicFreeDeclared = () => [
         "tls.ll",
         "zlib.ll",
       ],
-    },
+    }
   ),
   {
     program: "tests/link/net_handler_open/main.ts",
@@ -1814,23 +1627,20 @@ const s5PanicFreeDeclared = () => [
     changelog: S5_PANIC_FREE,
     why: "the program calls Request.tryParam, which the seed's std/net does not have, so only the candidate compiles it",
   },
-];
+]
 /** The changelog words of WP82 S7: the HTTP/2 frame, connection, h2c and TLS carriers and HPACK answer malformed input without a panic. */
-const S7_HTTP2_PANIC_FREE = "the std/net HTTP/2 stack and HPACK panic-free";
+const S7_HTTP2_PANIC_FREE = "the std/net HTTP/2 stack and HPACK panic-free"
 /** The changelog words of WP82 S8: WebTransport, WebSocket, gRPC and OIDC answer malformed input without a panic. */
-const S8_REALTIME_PANIC_FREE =
-  "make WebTransport, WebSocket, gRPC and OIDC panic-free";
+const S8_REALTIME_PANIC_FREE = "make WebTransport, WebSocket, gRPC and OIDC panic-free"
 /** The changelog words of WP84 S1: std/compress's checksums, zlib and gzip answer an error where they panicked. */
-const COMPRESS_PANIC_FREE = "make checksum, zlib and gzip panic-free";
+const COMPRESS_PANIC_FREE = "make checksum, zlib and gzip panic-free"
 /** The changelog words of WP85 S3: std/term.ts proves its indexes and arithmetic, and `Screen.flush` flushes what every buffer holds where it panicked. */
-const TERM_TS_PANIC_FREE = "std/term.ts panic-free";
+const TERM_TS_PANIC_FREE = "std/term.ts panic-free"
 /** The changelog words of WP85 S2: std's term-pixels, term-io, term-rate and term-probe modules prove or drop their panic sites. */
-const TERM_PANIC_FREE =
-  "term-pixels, term-io, term-rate and term-probe panic-free";
+const TERM_PANIC_FREE = "term-pixels, term-io, term-rate and term-probe panic-free"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
-const PROVER_READS =
-  "named constants, masks, charCodeAt and down-counting loops in the panic prover";
-const proverReads = byFinding(PROVER_READS);
+const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
+const proverReads = byFinding(PROVER_READS)
 /**
  * Each program whose IR the prover's new reads move, and the files that move:
  * a named-constant length, a masked or shifted value, a charCodeAt result or a
@@ -1871,17 +1681,9 @@ const PROVER_READS_FILES = {
   "docs/cookbook/map-get.ts": ["map-get.ll"],
   "docs/cookbook/map-has.ts": ["map-has.ll"],
   "examples/api-cli/main.ts": ["cli-args.ll"],
-  "examples/file-server.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
+  "examples/file-server.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "examples/http-app/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
-  "examples/http-get-json.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
+  "examples/http-get-json.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
   "examples/prefork-server.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "examples/relay/main.ts": [
     "chacha20poly1305.ll",
@@ -2466,11 +2268,7 @@ const PROVER_READS_FILES = {
     "validator.ll",
     "visibility.ll",
   ],
-  "src/break-director.ts": [
-    "break-intro.ll",
-    "break-levels.ll",
-    "term-pixels.ll",
-  ],
+  "src/break-director.ts": ["break-intro.ll", "break-levels.ll", "term-pixels.ll"],
   "src/break-game.ts": ["term-pixels.ll"],
   "src/break-gfx.ts": ["term-pixels.ll"],
   "src/break-intro.ts": ["break-intro.ll", "term-pixels.ll"],
@@ -2478,13 +2276,7 @@ const PROVER_READS_FILES = {
   "src/break-settings-file.ts": ["paths.ll", "term-pixels.ll"],
   "src/break-sound.ts": ["term-pixels.ll"],
   "src/break-voices.ts": ["break-levels.ll", "term-pixels.ll"],
-  "src/break.ts": [
-    "break-intro.ll",
-    "break.ll",
-    "paths.ll",
-    "term-io.ll",
-    "term-pixels.ll",
-  ],
+  "src/break.ts": ["break-intro.ll", "break.ll", "paths.ll", "term-io.ll", "term-pixels.ll"],
   "src/build-cache.ts": [
     "accumulate.ll",
     "annotations.ll",
@@ -3487,13 +3279,7 @@ const PROVER_READS_FILES = {
     "visibility.ll",
   ],
   "src/diagnostics.ts": ["diagnostics.ll", "map.ll"],
-  "src/dump-ast.ts": [
-    "diagnostics.ll",
-    "dump-ast.ll",
-    "lexer.ll",
-    "map.ll",
-    "parser.ll",
-  ],
+  "src/dump-ast.ts": ["diagnostics.ll", "dump-ast.ll", "lexer.ll", "map.ll", "parser.ll"],
   "src/dump-checked.ts": [
     "accumulate.ll",
     "annotations.ll",
@@ -6238,13 +6024,7 @@ const PROVER_READS_FILES = {
     "validator.ll",
     "visibility.ll",
   ],
-  "src/host-module.ts": [
-    "diagnostics.ll",
-    "host-module.ll",
-    "lexer.ll",
-    "map.ll",
-    "parser.ll",
-  ],
+  "src/host-module.ts": ["diagnostics.ll", "host-module.ll", "lexer.ll", "map.ll", "parser.ll"],
   "src/hygiene.ts": [
     "accumulate.ll",
     "annotations.ll",
@@ -8204,13 +7984,7 @@ const PROVER_READS_FILES = {
     "visibility.ll",
   ],
   "src/runtime.ts": ["map.ll", "runtime.ll"],
-  "src/script.ts": [
-    "diagnostics.ll",
-    "lexer.ll",
-    "map.ll",
-    "parser.ll",
-    "script.ll",
-  ],
+  "src/script.ts": ["diagnostics.ll", "lexer.ll", "map.ll", "parser.ll", "script.ll"],
   "src/secret.ts": [
     "accumulate.ll",
     "annotations.ll",
@@ -8956,12 +8730,8 @@ const PROVER_READS_FILES = {
   "tests/cases/arr_sort_cmp_record.ts": ["arr_sort_cmp_record.ll"],
   "tests/cases/async_spawn_shared.ts": ["async_spawn_shared.ll"],
   "tests/cases/cf_label_walks.ts": ["cf_label_walks.ll"],
-  "tests/cases/compat_optional_chain_fusion.ts": [
-    "compat_optional_chain_fusion.ll",
-  ],
-  "tests/cases/compat_optional_chain_loops.ts": [
-    "compat_optional_chain_loops.ll",
-  ],
+  "tests/cases/compat_optional_chain_fusion.ts": ["compat_optional_chain_fusion.ll"],
+  "tests/cases/compat_optional_chain_loops.ts": ["compat_optional_chain_loops.ll"],
   "tests/cases/ct_asm_p256.ts": ["ct_asm_p256.ll"],
   "tests/cases/ct_asm_refused.ts": ["ct_asm_refused.ll"],
   "tests/cases/dbg_map_get.ts": ["dbg_map_get.ll"],
@@ -8993,15 +8763,11 @@ const PROVER_READS_FILES = {
   "tests/cases/map_fused_no_alias.ts": ["map_fused_no_alias.ll"],
   "tests/cases/map_fused_no_assign.ts": ["map_fused_no_assign.ll"],
   "tests/cases/map_fused_no_call.ts": ["map_fused_no_call.ll"],
-  "tests/cases/map_fused_no_element_receiver.ts": [
-    "map_fused_no_element_receiver.ll",
-  ],
+  "tests/cases/map_fused_no_element_receiver.ts": ["map_fused_no_element_receiver.ll"],
   "tests/cases/map_fused_no_else_branch.ts": ["map_fused_no_else_branch.ll"],
   "tests/cases/map_fused_no_key_spelling.ts": ["map_fused_no_key_spelling.ll"],
   "tests/cases/map_fused_no_other_map.ts": ["map_fused_no_other_map.ll"],
-  "tests/cases/map_fused_no_statement_before.ts": [
-    "map_fused_no_statement_before.ll",
-  ],
+  "tests/cases/map_fused_no_statement_before.ts": ["map_fused_no_statement_before.ll"],
   "tests/cases/map_fused_no_template.ts": ["map_fused_no_template.ll"],
   "tests/cases/map_fused_no_two_gets.ts": ["map_fused_no_two_gets.ll"],
   "tests/cases/map_fused_set_insert.ts": ["map_fused_set_insert.ll"],
@@ -9069,61 +8835,29 @@ const PROVER_READS_FILES = {
   "tests/cases/simd_adler32.ts": ["simd_adler32.ll"],
   "tests/cases/str_surrogate_map_key.ts": ["str_surrogate_map_key.ll"],
   "tests/cases/wasm_math_std.ts": ["wasm_math_std.ll"],
-  "tests/link/break_core/main.ts": [
-    "break-intro.ll",
-    "break-levels.ll",
-    "term-pixels.ll",
-  ],
+  "tests/link/break_core/main.ts": ["break-intro.ll", "break-levels.ll", "term-pixels.ll"],
   "tests/link/break_gfx/main.ts": ["term-io.ll", "term-pixels.ll"],
   "tests/link/break_intro/main.ts": ["break-intro.ll", "term-pixels.ll"],
   "tests/link/break_menu/main.ts": ["term-pixels.ll"],
   "tests/link/break_settings/main.ts": ["paths.ll", "term-pixels.ll"],
   "tests/link/break_sound/main.ts": ["main.ll", "term-pixels.ll"],
-  "tests/link/break_sound_wav/main.ts": [
-    "break-levels.ll",
-    "break-sound.ll",
-    "term-pixels.ll",
-  ],
+  "tests/link/break_sound_wav/main.ts": ["break-levels.ll", "break-sound.ll", "term-pixels.ll"],
   "tests/link/chacha20_hw_agree/main.ts": ["chacha20poly1305.ll"],
-  "tests/link/cls_field_init_json/main.ts": [
-    "json-tokenizer.ll",
-    "json-typed.ll",
-  ],
+  "tests/link/cls_field_init_json/main.ts": ["json-tokenizer.ll", "json-typed.ll"],
   "tests/link/crypto_aes_wipes/main.ts": ["chacha20poly1305.ll"],
   "tests/link/crypto_aes_wipes_f64/main.ts": ["chacha20poly1305.ll"],
-  "tests/link/crypto_chacha20poly1305/main.ts": [
-    "chacha20poly1305.ll",
-    "suite.ll",
-  ],
-  "tests/link/crypto_chacha20poly1305_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "suite.ll",
-  ],
+  "tests/link/crypto_chacha20poly1305/main.ts": ["chacha20poly1305.ll", "suite.ll"],
+  "tests/link/crypto_chacha20poly1305_f64/main.ts": ["chacha20poly1305.ll", "suite.ll"],
   "tests/link/crypto_held_derive/main.ts": ["chacha20poly1305.ll"],
   "tests/link/crypto_hmac/main.ts": ["checks.ll", "hmac.ll"],
   "tests/link/crypto_hmac_f64/main.ts": ["checks.ll", "hmac.ll"],
   "tests/link/crypto_hmac_scratch_sha384_key_window/main.ts": ["main.ll"],
   "tests/link/crypto_hmac_scratch_sha384_tag_window/main.ts": ["main.ll"],
-  "tests/link/crypto_hmac_sha256_digest_into_negative/main.ts": [
-    "hmac.ll",
-    "main.ll",
-  ],
-  "tests/link/crypto_hmac_sha256_digest_into_past_end/main.ts": [
-    "hmac.ll",
-    "main.ll",
-  ],
-  "tests/link/crypto_hmac_sha256_digest_into_short/main.ts": [
-    "hmac.ll",
-    "main.ll",
-  ],
-  "tests/link/crypto_hmac_sha256_digest_into_twice/main.ts": [
-    "hmac.ll",
-    "main.ll",
-  ],
-  "tests/link/crypto_hmac_sha256_update_after_digest_into/main.ts": [
-    "hmac.ll",
-    "main.ll",
-  ],
+  "tests/link/crypto_hmac_sha256_digest_into_negative/main.ts": ["hmac.ll", "main.ll"],
+  "tests/link/crypto_hmac_sha256_digest_into_past_end/main.ts": ["hmac.ll", "main.ll"],
+  "tests/link/crypto_hmac_sha256_digest_into_short/main.ts": ["hmac.ll", "main.ll"],
+  "tests/link/crypto_hmac_sha256_digest_into_twice/main.ts": ["hmac.ll", "main.ll"],
+  "tests/link/crypto_hmac_sha256_update_after_digest_into/main.ts": ["hmac.ll", "main.ll"],
   "tests/link/crypto_hmac_sha384_digest_twice/main.ts": ["main.ll"],
   "tests/link/crypto_hmac_sha384_update_after_digest/main.ts": ["main.ll"],
   "tests/link/crypto_hmac_sha384_window/main.ts": ["main.ll"],
@@ -9149,11 +8883,7 @@ const PROVER_READS_FILES = {
   "tests/link/map_own_class/main.ts": ["unique.ll"],
   "tests/link/map_two_modules/main.ts": ["main.ll", "tally.ll"],
   "tests/link/map_walk_two_modules/main.ts": ["main.ll"],
-  "tests/link/net_fetch_async/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
+  "tests/link/net_fetch_async/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
   "tests/link/net_fetch_async_deadline/main.ts": [
     "chacha20poly1305.ll",
     "dns-config.ll",
@@ -9168,36 +8898,13 @@ const PROVER_READS_FILES = {
     "dns-resolver.ll",
     "dns.ll",
   ],
-  "tests/link/net_fetch_async_flat/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
-  "tests/link/net_fetch_async_https/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
-  "tests/link/net_fetch_async_https_flat/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
-  "tests/link/net_fetch_async_overlap/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
-  "tests/link/net_fetch_async_policy/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
+  "tests/link/net_fetch_async_flat/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
+  "tests/link/net_fetch_async_https/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
+  "tests/link/net_fetch_async_https_flat/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
+  "tests/link/net_fetch_async_overlap/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
+  "tests/link/net_fetch_async_policy/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
   "tests/link/net_handler/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
-  "tests/link/net_handler_descriptors/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
+  "tests/link/net_handler_descriptors/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "tests/link/net_handler_overlong/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "tests/link/net_handler_rest_close/main.ts": [
     "chacha20poly1305.ll",
@@ -9210,77 +8917,27 @@ const PROVER_READS_FILES = {
   "tests/link/net_handler_short/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "tests/link/net_handler_unbegun/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "tests/link/net_http1_server/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
-  "tests/link/net_http1_server_bad_config/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/net_http1_server_bad_head/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/net_http1_server_bad_head_timeout/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/net_http1_server_bad_linger/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
+  "tests/link/net_http1_server_bad_config/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/net_http1_server_bad_head/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/net_http1_server_bad_head_timeout/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/net_http1_server_bad_linger/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/net_http1_server_bad_linger_bytes/main.ts": [
     "chacha20poly1305.ll",
     "gzip.ll",
     "http-compress.ll",
   ],
-  "tests/link/net_http1_server_bad_message/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
+  "tests/link/net_http1_server_bad_message/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "tests/link/net_http1_server_f64/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
-  "tests/link/net_http1_server_feed_window/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/net_http1_server_frame_window/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/net_http1_server_head_reuse/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_http1_server_implicit_end/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_http1_server_send_body/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/net_http1_server_send_body_window/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/net_http1_server_write_window/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/net_http2_bad_config_tls/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/net_http2_cleartext/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_http2_cleartext_bad_slots/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
+  "tests/link/net_http1_server_feed_window/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/net_http1_server_frame_window/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/net_http1_server_head_reuse/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_http1_server_implicit_end/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_http1_server_send_body/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/net_http1_server_send_body_window/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/net_http1_server_write_window/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/net_http2_bad_config_tls/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/net_http2_cleartext/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_http2_cleartext_bad_slots/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/net_http2_cleartext_bad_timeout/main.ts": [
     "chacha20poly1305.ll",
     "gzip.ll",
@@ -9398,17 +9055,8 @@ const PROVER_READS_FILES = {
     "qpack.ll",
     "quic-conn-cid.ll",
   ],
-  "tests/link/net_http3_frame/main.ts": [
-    "chacha20poly1305.ll",
-    "checks.ll",
-    "http3-frame.ll",
-    "qpack.ll",
-  ],
-  "tests/link/net_http3_frame_bad_window/main.ts": [
-    "chacha20poly1305.ll",
-    "http3-frame.ll",
-    "qpack.ll",
-  ],
+  "tests/link/net_http3_frame/main.ts": ["chacha20poly1305.ll", "checks.ll", "http3-frame.ll", "qpack.ll"],
+  "tests/link/net_http3_frame_bad_window/main.ts": ["chacha20poly1305.ll", "http3-frame.ll", "qpack.ll"],
   "tests/link/net_http3_frame_f64/main.ts": [
     "chacha20poly1305.ll",
     "checks.ll",
@@ -9491,16 +9139,8 @@ const PROVER_READS_FILES = {
     "qpack.ll",
     "quic-conn-cid.ll",
   ],
-  "tests/link/net_http_fetch/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
-  "tests/link/net_http_fetch_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
+  "tests/link/net_http_fetch/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
+  "tests/link/net_http_fetch_f64/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
   "tests/link/net_http_fetch_tls/main.ts": [
     "chacha20poly1305.ll",
     "client.ll",
@@ -10021,16 +9661,8 @@ const PROVER_READS_FILES = {
     "qpack.ll",
     "quic-conn-cid.ll",
   ],
-  "tests/link/net_outbound/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
-  "tests/link/net_outbound_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-  ],
+  "tests/link/net_outbound/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
+  "tests/link/net_outbound_f64/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll"],
   "tests/link/net_qpack/main.ts": ["qpack.ll"],
   "tests/link/net_qpack_bad_decoder_stream_window/main.ts": ["qpack.ll"],
   "tests/link/net_qpack_bad_encoder_stream_window/main.ts": ["qpack.ll"],
@@ -10040,52 +9672,16 @@ const PROVER_READS_FILES = {
   "tests/link/net_qpack_bad_value_window/main.ts": ["qpack.ll"],
   "tests/link/net_qpack_bad_window/main.ts": ["qpack.ll"],
   "tests/link/net_qpack_f64/main.ts": ["checks.ll", "qpack.ll"],
-  "tests/link/net_quic_conn/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_conn_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_conn_parts/main.ts": [
-    "chacha20poly1305.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_conn_parts_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_conn_replay/main.ts": [
-    "chacha20poly1305.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_conn_replay_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_datagram/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_datagram_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_ecn/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_ecn_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
+  "tests/link/net_quic_conn/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_conn_f64/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_conn_parts/main.ts": ["chacha20poly1305.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_conn_parts_f64/main.ts": ["chacha20poly1305.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_conn_replay/main.ts": ["chacha20poly1305.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_conn_replay_f64/main.ts": ["chacha20poly1305.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_datagram/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_datagram_f64/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_ecn/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_ecn_f64/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
   "tests/link/net_quic_frame/main.ts": ["chacha20poly1305.ll"],
   "tests/link/net_quic_frame_f64/main.ts": ["chacha20poly1305.ll"],
   "tests/link/net_quic_lifecycle/main.ts": [
@@ -10098,53 +9694,17 @@ const PROVER_READS_FILES = {
     "net_quic_common_keys.ll",
     "quic-conn-cid.ll",
   ],
-  "tests/link/net_quic_lifecycle_replay/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_lifecycle_replay_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_listener/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_listener_bad_window/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_listener_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_memory/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_memory_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
+  "tests/link/net_quic_lifecycle_replay/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_lifecycle_replay_f64/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_listener/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_listener_bad_window/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_listener_f64/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_memory/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_memory_f64/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
   "tests/link/net_quic_packet/main.ts": ["chacha20poly1305.ll", "keys.ll"],
   "tests/link/net_quic_packet_f64/main.ts": ["chacha20poly1305.ll", "keys.ll"],
-  "tests/link/net_quic_path/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_path_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
+  "tests/link/net_quic_path/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_path_f64/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
   "tests/link/net_quic_prefork/main.ts": [
     "chacha20poly1305.ll",
     "gzip.ll",
@@ -10154,16 +9714,8 @@ const PROVER_READS_FILES = {
     "qpack.ll",
     "quic-conn-cid.ll",
   ],
-  "tests/link/net_quic_recovery/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_recovery_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
+  "tests/link/net_quic_recovery/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_recovery_f64/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
   "tests/link/net_quic_server_wipes/main.ts": [
     "chacha20poly1305.ll",
     "gzip.ll",
@@ -10180,26 +9732,10 @@ const PROVER_READS_FILES = {
     "qpack.ll",
     "quic-conn-cid.ll",
   ],
-  "tests/link/net_quic_stream/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_stream_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_wipes/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
-  "tests/link/net_quic_wipes_f64/main.ts": [
-    "chacha20poly1305.ll",
-    "keys.ll",
-    "quic-conn-cid.ll",
-  ],
+  "tests/link/net_quic_stream/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_stream_f64/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_wipes/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
+  "tests/link/net_quic_wipes_f64/main.ts": ["chacha20poly1305.ll", "keys.ll", "quic-conn-cid.ll"],
   "tests/link/net_quic_worker/main.ts": [
     "chacha20poly1305.ll",
     "gzip.ll",
@@ -10311,11 +9847,7 @@ const PROVER_READS_FILES = {
     "qpack.ll",
     "quic-conn-cid.ll",
   ],
-  "tests/link/net_relay_encode_window/main.ts": [
-    "chacha20poly1305.ll",
-    "http3-frame.ll",
-    "qpack.ll",
-  ],
+  "tests/link/net_relay_encode_window/main.ts": ["chacha20poly1305.ll", "http3-frame.ll", "qpack.ll"],
   "tests/link/net_relay_f64/main.ts": [
     "chacha20poly1305.ll",
     "grant.ll",
@@ -10337,11 +9869,7 @@ const PROVER_READS_FILES = {
     "qpack.ll",
     "quic-conn-cid.ll",
   ],
-  "tests/link/net_relay_frame_window/main.ts": [
-    "chacha20poly1305.ll",
-    "http3-frame.ll",
-    "qpack.ll",
-  ],
+  "tests/link/net_relay_frame_window/main.ts": ["chacha20poly1305.ll", "http3-frame.ll", "qpack.ll"],
   "tests/link/net_relay_grant_window/main.ts": [
     "chacha20poly1305.ll",
     "grant.ll",
@@ -10365,72 +9893,20 @@ const PROVER_READS_FILES = {
     "qpack.ll",
     "quic-conn-cid.ll",
   ],
-  "tests/link/net_serve/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_burst/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_deadline/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_hangup/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_head_drain/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
+  "tests/link/net_serve/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_burst/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_deadline/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_hangup/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_head_drain/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/net_serve_pg/main.ts": ["gzip.ll", "http-compress.ll"],
-  "tests/link/net_serve_lent_window/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_pipelined_flat/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_queued_wait/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_raw/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_server_field/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_server_panic/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_shutdown/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/net_serve_slot_reuse/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
+  "tests/link/net_serve_lent_window/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_pipelined_flat/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_queued_wait/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_raw/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_server_field/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_server_panic/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_shutdown/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_slot_reuse/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/net_tls_client_handshake/main.ts": ["chacha20poly1305.ll"],
   "tests/link/net_tls_client_record/main.ts": ["chacha20poly1305.ll"],
   "tests/link/net_tls_client_refusals/main.ts": ["chacha20poly1305.ll"],
@@ -10464,12 +9940,7 @@ const PROVER_READS_FILES = {
   "tests/link/net_tls_ticket_f64/main.ts": ["chacha20poly1305.ll", "checks.ll"],
   "tests/link/net_tls_wipes/main.ts": ["chacha20poly1305.ll"],
   "tests/link/net_tls_wipes_f64/main.ts": ["chacha20poly1305.ll"],
-  "tests/link/net_upstream/main.ts": [
-    "chacha20poly1305.ll",
-    "dns-config.ll",
-    "dns-message.ll",
-    "gzip.ll",
-  ],
+  "tests/link/net_upstream/main.ts": ["chacha20poly1305.ll", "dns-config.ll", "dns-message.ll", "gzip.ll"],
   "tests/link/net_upstream_release/main.ts": [
     "chacha20poly1305.ll",
     "dns-config.ll",
@@ -10614,20 +10085,13 @@ const PROVER_READS_FILES = {
   "tests/link/par_map_reclaim_strings/main.ts": ["main.ll"],
   "tests/link/par_map_table_reads/main.ts": ["main.ll"],
   "tests/link/par_reduce_blocks/main.ts": ["main.ll"],
-  "tests/link/region_sessions_soak/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
+  "tests/link/region_sessions_soak/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/std_base64_f64/main.ts": ["main.ll"],
   "tests/link/std_cli_args/main.ts": ["cli-args.ll", "main.ll"],
   "tests/link/std_cli_args_exit/main.ts": ["cli-args.ll", "main.ll"],
   "tests/link/std_cli_args_misuse/main.ts": ["cli-args.ll", "main.ll"],
   "tests/link/std_cli_args_misuse_default/main.ts": ["cli-args.ll", "main.ll"],
-  "tests/link/std_cli_args_misuse_negatable/main.ts": [
-    "cli-args.ll",
-    "main.ll",
-  ],
+  "tests/link/std_cli_args_misuse_negatable/main.ts": ["cli-args.ll", "main.ll"],
   "tests/link/std_cli_args_misuse_negation/main.ts": ["cli-args.ll", "main.ll"],
   "tests/link/std_cli_args_misuse_required/main.ts": ["cli-args.ll", "main.ll"],
   "tests/link/std_compress/main.ts": ["gzip.ll", "zlib.ll"],
@@ -10640,116 +10104,40 @@ const PROVER_READS_FILES = {
   "tests/link/std_compress_node/main.ts": ["gzip.ll", "zlib.ll"],
   "tests/link/std_dns/main.ts": ["dns-config.ll", "dns-message.ll"],
   "tests/link/std_dns_caps/main.ts": ["dns-config.ll", "dns-message.ll"],
-  "tests/link/std_dns_config/main.ts": [
-    "dns-config.ll",
-    "dns-message.ll",
-    "main.ll",
-  ],
+  "tests/link/std_dns_config/main.ts": ["dns-config.ll", "dns-message.ll", "main.ll"],
   "tests/link/std_dns_message/main.ts": ["dns-message.ll", "main.ll"],
-  "tests/link/std_dns_resolver/main.ts": [
-    "dns-config.ll",
-    "dns-message.ll",
-    "dns-resolver.ll",
-    "main.ll",
-  ],
+  "tests/link/std_dns_resolver/main.ts": ["dns-config.ll", "dns-message.ll", "dns-resolver.ll", "main.ll"],
   "tests/link/std_dns_soak/main.ts": ["dns-config.ll", "dns-message.ll"],
   "tests/link/std_http1_end_head/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "tests/link/std_http1_mss/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
-  "tests/link/std_http_compress/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "zlib.ll",
-  ],
+  "tests/link/std_http_compress/main.ts": ["chacha20poly1305.ll", "gzip.ll", "zlib.ll"],
   "tests/link/std_json_equal/main.ts": ["json-number.ll"],
   "tests/link/std_json_number/main.ts": ["json-number.ll"],
   "tests/link/std_json_pointer/main.ts": ["json-number.ll"],
   "tests/link/std_json_typed/main.ts": ["models.ll"],
   "tests/link/std_postgres_async/main.ts": ["gzip.ll", "http-compress.ll"],
-  "tests/link/std_postgres_async_cancel/main.ts": [
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/std_postgres_async_caps_panic/main.ts": [
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/std_postgres_async_depth_panic/main.ts": [
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/std_postgres_async_double_release_panic/main.ts": [
-    "gzip.ll",
-    "http-compress.ll",
-  ],
+  "tests/link/std_postgres_async_cancel/main.ts": ["gzip.ll", "http-compress.ll"],
+  "tests/link/std_postgres_async_caps_panic/main.ts": ["gzip.ll", "http-compress.ll"],
+  "tests/link/std_postgres_async_depth_panic/main.ts": ["gzip.ll", "http-compress.ll"],
+  "tests/link/std_postgres_async_double_release_panic/main.ts": ["gzip.ll", "http-compress.ll"],
   "tests/link/std_postgres_async_flat/main.ts": ["gzip.ll", "http-compress.ll"],
-  "tests/link/std_postgres_async_pipeline/main.ts": [
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/std_postgres_async_release_closed_panic/main.ts": [
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/std_postgres_async_release_panic/main.ts": [
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/std_postgres_async_seat_ticket_panic/main.ts": [
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/std_postgres_async_size_panic/main.ts": [
-    "gzip.ll",
-    "http-compress.ll",
-  ],
+  "tests/link/std_postgres_async_pipeline/main.ts": ["gzip.ll", "http-compress.ll"],
+  "tests/link/std_postgres_async_release_closed_panic/main.ts": ["gzip.ll", "http-compress.ll"],
+  "tests/link/std_postgres_async_release_panic/main.ts": ["gzip.ll", "http-compress.ll"],
+  "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["gzip.ll", "http-compress.ll"],
+  "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["gzip.ll", "http-compress.ll"],
+  "tests/link/std_postgres_async_size_panic/main.ts": ["gzip.ll", "http-compress.ll"],
   "tests/link/std_postgres_carrier/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
-  "tests/link/std_postgres_carrier_attach_panic/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/std_postgres_carrier_batcher_panic/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/std_postgres_carrier_connection_panic/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/std_postgres_carrier_limits_panic/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/std_postgres_carrier_next_panic/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/std_postgres_carrier_request_panic/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/std_postgres_carrier_send_panic/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-  ],
-  "tests/link/std_postgres_tls/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/std_postgres_tls_roots_panic/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/std_postgres_tls_unix_panic/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
+  "tests/link/std_postgres_carrier_attach_panic/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/std_postgres_carrier_connection_panic/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/std_postgres_carrier_limits_panic/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/std_postgres_carrier_next_panic/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/std_postgres_carrier_request_panic/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/std_postgres_carrier_send_panic/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "tests/link/std_postgres_tls/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/std_postgres_tls_roots_panic/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/std_postgres_tls_unix_panic/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/std_regex/main.ts": ["regex.ll"],
   "tests/link/std_regex_f64/main.ts": ["regex.ll"],
   "tests/link/std_regex_unicode/main.ts": ["regex.ll"],
@@ -10766,16 +10154,8 @@ const PROVER_READS_FILES = {
   "tests/link/std_term_pixels_negative_size/main.ts": ["term-pixels.ll"],
   "tests/link/std_term_rate/main.ts": ["main.ll"],
   "tests/link/std_text_f64/main.ts": ["json.ll"],
-  "tests/link/tfb_async_db/main.ts": [
-    "backend.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
-  "tests/link/tfb_async_entry/main.ts": [
-    "chacha20poly1305.ll",
-    "gzip.ll",
-    "http-compress.ll",
-  ],
+  "tests/link/tfb_async_db/main.ts": ["backend.ll", "gzip.ll", "http-compress.ll"],
+  "tests/link/tfb_async_entry/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/tfb_db/main.ts": ["gzip.ll"],
   "tests/link/tfb_entry/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "tests/link/thread_bcrypt_batcher/main.ts": ["bcrypt-batch.ll"],
@@ -10788,9 +10168,9 @@ const PROVER_READS_FILES = {
   "tests/link/thread_scope_region_set_add/main.ts": ["main.ll"],
   "tests/link/thread_scope_task_map_reads/main.ts": ["main.ll"],
   "tests/link/thread_task_own_writes/main.ts": ["main.ll"],
-};
+}
 const PROVER_READS_WHY =
-  "the panic prover now reads a named `const`, a mask or shift, a charCodeAt result and a down-counting loop, so the checks and panic blocks it proves leave this module and the values after them renumber";
+  "the panic prover now reads a named `const`, a mask or shift, a charCodeAt result and a down-counting loop, so the checks and panic blocks it proves leave this module and the values after them renumber"
 const proverReadsDeclared = () => [
   ...proverReads(PROVER_READS_WHY, PROVER_READS_FILES),
   {
@@ -10829,44 +10209,38 @@ const proverReadsDeclared = () => [
     changelog: PROVER_READS,
     why: "the program checks under --deny-panics that a down-counting loop's index stays in range, which the reference cannot prove and refuses",
   },
-];
+]
 
 /** The changelog words of WP72 S2, which ends an HTTP/2 answer of nish/net/http-server with trailers. */
-const SERVER_TRAILERS =
-  "Trailers on the nish/net/http-server façade's HTTP/2 answers";
+const SERVER_TRAILERS = "Trailers on the nish/net/http-server façade's HTTP/2 answers"
 /** WP72 S2's negatives call `HttpServer.trailers`, which the seed's std/net does not have. */
 const serverTrailersDeclared = () =>
-  ["after_end", "ended", "fields", "h1", "h3", "short", "unstarted"].map(
-    (name) => ({
-      program: `tests/link/net_http_server_trailers_${name}/main.ts`,
-      file: "exit",
-      changelog: SERVER_TRAILERS,
-      why: "the program calls HttpServer.trailers, which the seed's std/net does not have, so only the candidate compiles it",
-    }),
-  );
+  ["after_end", "ended", "fields", "h1", "h3", "short", "unstarted"].map((name) => ({
+    program: `tests/link/net_http_server_trailers_${name}/main.ts`,
+    file: "exit",
+    changelog: SERVER_TRAILERS,
+    why: "the program calls HttpServer.trailers, which the seed's std/net does not have, so only the candidate compiles it",
+  }))
 
 /** The changelog words of WP82 S6, which proves or removes the HTTP/3 stack's panic sites. */
-const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free";
+const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free"
 const http3PanicFree = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: HTTP3_PANIC_FREE, why })),
-  );
+    files.map((file) => ({ program, file, changelog: HTTP3_PANIC_FREE, why }))
+  )
 
 // The std/ modules a strict module calls (Map and Set, text, JSON, array,
 // regex, bytes) prove or drop their panic sites under this PR's subject.
-const STD_PANIC_FREE = "std/ panic-free for strict modules";
+const STD_PANIC_FREE = "std/ panic-free for strict modules"
 const stdPanicFree = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: STD_PANIC_FREE, why })),
-  );
+    files.map((file) => ({ program, file, changelog: STD_PANIC_FREE, why }))
+  )
 
 /** The changelog words of WP80 S3, which proves or drops the panic sites of the HTTP/1 wire layer. */
-const WIRE_PANIC_FREE = "make the HTTP/1 wire layer panic-free";
+const WIRE_PANIC_FREE = "make the HTTP/1 wire layer panic-free"
 const wirePanicFreeDeclared = () => [
-  ...[
-    "tests/link/net_http_fields/main.ts",
-    "tests/link/net_http_fields_f64/main.ts",
-  ].map((program) => ({
+  ...["tests/link/net_http_fields/main.ts", "tests/link/net_http_fields_f64/main.ts"].map((program) => ({
     program,
     file: "checks.ll",
     changelog: WIRE_PANIC_FREE,
@@ -10888,7 +10262,7 @@ const wirePanicFreeDeclared = () => [
     changelog: WIRE_PANIC_FREE,
     why: "the program calls tryFeed, http1TryWriteChunk, tryPercentDecode, tryCompress and their failure codes, which the seed's std does not have, so only the candidate compiles it",
   },
-];
+]
 
 // WP83 S1 proves or drops the panic sites of std/crypto's hashes, MACs and
 // key derivation, so the module each of them writes changes in every program
@@ -10897,15 +10271,13 @@ const wirePanicFreeDeclared = () => [
 // `declaredFor` takes the first match, so these narrow entries come first in
 // DECLARED: each names the program and the file this change moves, listed
 // from a nish-cmp run against the 0.44.0 seed with those files undeclared.
-const HASH_MAC_KDF = "hashes, MACs and key derivation";
+const HASH_MAC_KDF = "hashes, MACs and key derivation"
 /** Why each module of WP83 S1 writes different IR. */
 const HASH_MAC_KDF_WHY = Object.fromEntries([
-  ...["base64url", "hkdf", "hmac", "scram", "sha1", "sha256", "sha512"].map(
-    (name) => [
-      `${name}.ll`,
-      `std/crypto/${name}.ts proves or drops its panic sites, so the ${name}.ll module a program reaching it writes changes`,
-    ],
-  ),
+  ...["base64url", "hkdf", "hmac", "scram", "sha1", "sha256", "sha512"].map((name) => [
+    `${name}.ll`,
+    `std/crypto/${name}.ts proves or drops its panic sites, so the ${name}.ll module a program reaching it writes changes`,
+  ]),
   ...["record", "std-net-tls-record"].map((name) => [
     `${name}.ll`,
     `std/crypto/sha512.ts's engine absorbs a long array whole and finishes into a caller's array, so the ${name}.ll module declares its new signatures`,
@@ -10918,7 +10290,7 @@ const HASH_MAC_KDF_WHY = Object.fromEntries([
     "ct.ll",
     "std/crypto/ct.ts's timingSafeEqual and timingSafeEqualAt read under guards the prover discharges, so the ct.ll module a program reaching nish/crypto/ct writes drops its nish_panic_index calls and renumbers its values",
   ],
-]);
+])
 /**
  * Every corpus program that writes a ct.ll module: its nish_panic_index calls
  * go, so each of them moves. No corpus program's own module is named ct.
@@ -11357,18 +10729,11 @@ const HASH_MAC_KDF_CT_PROGRAMS = [
   "tests/link/thread_bcrypt_batch/main.ts",
   "tests/link/thread_bcrypt_batcher/main.ts",
   "tests/link/thread_bcrypt_task/main.ts",
-];
+]
 /** The programs whose module of each WP83 S1 file moves, grouped by the files they reach. */
 const HASH_MAC_KDF_MOVES = [
   {
-    files: [
-      "base64url.ll",
-      "hkdf.ll",
-      "hmac.ll",
-      "sha1.ll",
-      "sha256.ll",
-      "sha512.ll",
-    ],
+    files: ["base64url.ll", "hkdf.ll", "hmac.ll", "sha1.ll", "sha256.ll", "sha512.ll"],
     movedPrograms: [
       "bench/http-app-carrier.ts",
       "bench/http1-request/main.ts",
@@ -11760,15 +11125,7 @@ const HASH_MAC_KDF_MOVES = [
     ],
   },
   {
-    files: [
-      "base64url.ll",
-      "hkdf.ll",
-      "hmac.ll",
-      "scram.ll",
-      "sha1.ll",
-      "sha256.ll",
-      "sha512.ll",
-    ],
+    files: ["base64url.ll", "hkdf.ll", "hmac.ll", "scram.ll", "sha1.ll", "sha256.ll", "sha512.ll"],
     movedPrograms: [
       "tests/link/net_serve_pg/main.ts",
       "tests/link/std_postgres_async/main.ts",
@@ -11919,14 +11276,7 @@ const HASH_MAC_KDF_MOVES = [
     movedPrograms: ["bench/std-http1.ts"],
   },
   {
-    files: [
-      "client.ll",
-      "hkdf.ll",
-      "hmac.ll",
-      "record.ll",
-      "scram.ll",
-      "tls.ll",
-    ],
+    files: ["client.ll", "hkdf.ll", "hmac.ll", "record.ll", "scram.ll", "tls.ll"],
     movedPrograms: ["bench/pg-carrier.ts"],
   },
   {
@@ -11938,7 +11288,7 @@ const HASH_MAC_KDF_MOVES = [
     movedPrograms: ["tests/link/crypto_jwt_refusals/main.ts"],
   },
   { files: ["ct.ll"], movedPrograms: HASH_MAC_KDF_CT_PROGRAMS },
-];
+]
 const hashMacKdfDeclared = () =>
   HASH_MAC_KDF_MOVES.flatMap(({ files, movedPrograms }) =>
     movedPrograms.flatMap((program) =>
@@ -11947,27 +11297,20 @@ const hashMacKdfDeclared = () =>
         file,
         changelog: HASH_MAC_KDF,
         why: HASH_MAC_KDF_WHY[file],
-      })),
-    ),
-  );
+      }))
+    )
+  )
 
 // WP83 S2: std/crypto's ciphers, curves, signatures and password hashing
 // prove or refuse their panic sites under this PR's subject.
-const STD_CIPHER_PANIC_FREE =
-  "ciphers, curves, signatures and password hashing";
+const STD_CIPHER_PANIC_FREE = "ciphers, curves, signatures and password hashing"
 
 /** One `STD_CIPHER_PANIC_FREE` entry per program for `file`: this PR moves that file in each, and nothing older may absorb the move. */
 const stdCipherPanicFree = (file, why, entries) =>
-  entries.map((program) => ({
-    program,
-    file,
-    changelog: STD_CIPHER_PANIC_FREE,
-    why,
-  }));
+  entries.map((program) => ({ program, file, changelog: STD_CIPHER_PANIC_FREE, why }))
 
 /** The changelog words of the sqlite-cursor-speed S3 stage, which adds `Cursor.selectRow` and `Cursor.readRow`. */
-const CURSOR_READ_ROW =
-  "Cursor.readRow decodes the columns selectRow chose in one call";
+const CURSOR_READ_ROW = "Cursor.readRow decodes the columns selectRow chose in one call"
 /**
  * Every corpus program that reaches nish/sqlite: Cursor gains its rowIo and
  * nsel fields, selectRow and readRow, so sqlite.ll and the mains that build a
@@ -11976,8 +11319,8 @@ const CURSOR_READ_ROW =
  */
 const cursorReadRow = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
-    files.map((file) => ({ program, file, changelog: CURSOR_READ_ROW, why })),
-  );
+    files.map((file) => ({ program, file, changelog: CURSOR_READ_ROW, why }))
+  )
 
 const DECLARED = [
   // Batched ring waits: `HandlerLimits` gains `minEvents` and `maxWaitMs`, and
@@ -11989,74 +11332,24 @@ const DECLARED = [
       "examples/http-app/main.ts": ["static.ll"],
       "tests/link/net_grpc/main.ts": ["handler.ll", "main.h"],
       "tests/link/net_grpc_interop/main.ts": ["handler.ll", "main.h"],
-      "tests/link/net_handler_bomb/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/net_handler_open/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/net_handler_refused/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_handler_steps/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/net_handler_steps_split/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/net_handler_try_answers/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-        "taken.ll",
-      ],
+      "tests/link/net_handler_bomb/main.ts": ["handler.ll", "main.h", "main.ll"],
+      "tests/link/net_handler_open/main.ts": ["handler.ll", "main.h", "main.ll"],
+      "tests/link/net_handler_refused/main.ts": ["handler.ll", "main.h", "main.ll", "taken.ll"],
+      "tests/link/net_handler_steps/main.ts": ["handler.ll", "main.h", "main.ll"],
+      "tests/link/net_handler_steps_split/main.ts": ["handler.ll", "main.h", "main.ll"],
+      "tests/link/net_handler_try_answers/main.ts": ["handler.ll", "main.h", "main.ll", "taken.ll"],
       "tests/link/net_http_app/main.ts": ["static.ll"],
       "tests/link/net_http_server_steps/main.ts": ["handler.ll", "main.h"],
       "tests/link/net_http_server_steps_full/main.ts": ["handler.ll", "main.h"],
-      "tests/link/net_http_server_steps_split/main.ts": [
-        "handler.ll",
-        "main.h",
-      ],
+      "tests/link/net_http_server_steps_split/main.ts": ["handler.ll", "main.h"],
       "tests/link/net_http_server_stream/main.ts": ["handler.ll", "main.h"],
-      "tests/link/net_http_server_trailers_after_end/main.ts": [
-        "handler.ll",
-        "main.h",
-      ],
-      "tests/link/net_http_server_trailers_ended/main.ts": [
-        "handler.ll",
-        "main.h",
-      ],
-      "tests/link/net_http_server_trailers_fields/main.ts": [
-        "handler.ll",
-        "main.h",
-      ],
-      "tests/link/net_http_server_trailers_h1/main.ts": [
-        "handler.ll",
-        "main.h",
-      ],
-      "tests/link/net_http_server_trailers_h3/main.ts": [
-        "handler.ll",
-        "main.h",
-      ],
-      "tests/link/net_http_server_trailers_short/main.ts": [
-        "handler.ll",
-        "main.h",
-      ],
-      "tests/link/net_http_server_trailers_unstarted/main.ts": [
-        "handler.ll",
-        "main.h",
-      ],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_h3/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_short/main.ts": ["handler.ll", "main.h"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["handler.ll", "main.h"],
       "tests/link/net_serve_try/main.ts": ["handler.ll", "main.h"],
       "tests/link/net_static/main.ts": [
         "client.ll",
@@ -12066,13 +11359,13 @@ const DECLARED = [
         "rig.ll",
         "static.ll",
       ],
-    },
+    }
   ),
   ...ringBatch(
     "the release has no minEvents or maxWaitMs on HandlerLimits, so it refuses the program that sets them",
     {
       "tests/link/net_handler_batch_limits/main.ts": ["exit"],
-    },
+    }
   ),
   ...cursorReadRow(
     "std/sqlite.ts's Cursor gains rowIo and nsel fields, selectRow and readRow, which call nishsqlite_cursor_read_row, so the sqlite.ll module and every main that reaches a Cursor change",
@@ -12092,14 +11385,14 @@ const DECLARED = [
       "tests/link/std_sqlite_nul/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite_vfs_wasi/main.ts": ["main.ll", "sqlite.ll"],
       "tests/link/std_sqlite_wasi/main.ts": ["main.ll", "sqlite.ll"],
-    },
+    }
   ),
   ...cursorReadRow(
     "the program calls Cursor.selectRow and Cursor.readRow, which the reference's std/sqlite.ts does not have, so only the candidate compiles it",
     {
       "bench/sqlite/main.ts": ["exit"],
       "tests/link/std_sqlite_cursor_row/main.ts": ["exit"],
-    },
+    }
   ),
   ...wp84Deflate(
     "WP84 S2 proves std/compress/deflate.ts's panic sites but its contract's five (guards before each read, a Deflater that marks a store which would not fit and answers DEFLATE_NO_ROOM, a Huffman build that answers DEFLATE_ERR_HUFFMAN), so Deflater gains its overrun field and the deflate and inflate code moves wherever it is reached",
@@ -12107,31 +11400,20 @@ const DECLARED = [
       "bench/crc32.ts": ["crc32.h", "crc32.ll"],
       "bench/gzip/main.ts": ["main.h", "main.ll"],
       "bench/pg-carrier.ts": ["gzip.ll"],
-      "bench/std-compress-deflate.ts": [
-        "std-compress-deflate.h",
-        "std-compress-deflate.ll",
-      ],
-      "bench/std-compress-inflate.ts": [
-        "std-compress-inflate.h",
-        "std-compress-inflate.ll",
-      ],
+      "bench/std-compress-deflate.ts": ["std-compress-deflate.h", "std-compress-deflate.ll"],
+      "bench/std-compress-inflate.ts": ["std-compress-inflate.h", "std-compress-inflate.ll"],
       "bench/std-http1.ts": ["gzip.ll"],
       "tests/link/net_handler_limits_panic/main.ts": ["gzip.ll"],
       "tests/link/std_compress/main.ts": ["main.h"],
       "tests/link/std_compress_adler_paths/main.ts": ["main.h", "main.ll"],
       "tests/link/std_compress_crc_paths/main.ts": ["main.h", "main.ll"],
-      "tests/link/std_compress_deflate_bounds/main.ts": [
-        "bytes.ll",
-        "gzip.ll",
-        "main.h",
-        "main.ll",
-      ],
+      "tests/link/std_compress_deflate_bounds/main.ts": ["bytes.ll", "gzip.ll", "main.h", "main.ll"],
       "tests/link/std_compress_f64/main.ts": ["main.ll"],
       "tests/link/std_compress_gzip_files/main.ts": ["main.h"],
       "tests/link/std_compress_node/main.ts": ["main.h"],
       "tests/link/std_http1_encoded_window/main.ts": ["gzip.ll"],
       "tests/link/std_http1_output_bytes/main.ts": ["gzip.ll"],
-    },
+    }
   ),
   // WP83 S4 first: `declaredFor` takes the first match, so no broader entry claims these moves.
   ...wp83Pki(
@@ -12152,255 +11434,67 @@ const DECLARED = [
       "tests/link/crypto_pki_f64/main.ts": ["pki.ll", "x509.ll"],
       "tests/link/crypto_pki_limbo/main.ts": ["pki.ll", "x509.ll"],
       "tests/link/crypto_pki_malformed/main.ts": ["pki.ll", "x509.ll"],
-      "tests/link/crypto_pki_roots/main.ts": [
-        "main.ll",
-        "pki-roots.ll",
-        "x509.ll",
-      ],
+      "tests/link/crypto_pki_roots/main.ts": ["main.ll", "pki-roots.ll", "x509.ll"],
       "tests/link/crypto_x509/main.ts": ["x509.ll"],
       "tests/link/crypto_x509_audit/main.ts": ["x509.ll"],
       "tests/link/crypto_x509_f64/main.ts": ["x509.ll"],
       "tests/link/crypto_x509_malformed/main.ts": ["x509.ll"],
       "tests/link/crypto_x509_random/main.ts": ["x509-random.ll", "x509.ll"],
-      "tests/link/net_fetch_async/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_fetch_async_deadline/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_fetch_async_dns_slow/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_fetch_async_flat/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_fetch_async_https/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_fetch_async_https_flat/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_fetch_async_overlap/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_fetch_async_policy/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_fetch_async/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_fetch_async_deadline/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_handler/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_handler_descriptors/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_handler_overlong/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_handler_short/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_handler_unbegun/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server_bad_config/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server_bad_head/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server_bad_head_timeout/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server_bad_message/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server_feed_window/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server_frame_window/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server_send_body/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server_send_body_window/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http1_server_write_window/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http2_bad_config_tls/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_handler_descriptors/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_handler_overlong/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_handler_short/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_handler_unbegun/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server_bad_config/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server_bad_head/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server_bad_message/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server_feed_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server_frame_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server_send_body/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http1_server_write_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http2_bad_config_tls/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_http2_tls/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_http2_tls_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_http2_tls_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_http3/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_http3_bad_body_chunk/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http3_bad_config/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http3_bad_credit/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http3_bad_local_limit/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http3_bad_uni_limit/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http3_bad_write_chunk/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_http3_bad_body_chunk/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http3_bad_config/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http3_bad_credit/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http3_bad_local_limit/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http3_bad_uni_limit/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http3_bad_write_chunk/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_http3_ecn/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_http3_ecn_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http3_errors/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http3_errors_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_http3_ecn_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http3_errors/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http3_errors_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_http3_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_http3_server/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http3_server_bad_config/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http3_server_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http3_write_window/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_http3_server/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http3_server_bad_config/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http3_server_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http3_write_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_http_app/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_http_date/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_http_date_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http_fetch/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http_fetch_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http_fetch_tls/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_interop_server/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_interop_server_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_http_date_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http_fetch/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http_fetch_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_http_fetch_tls/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_interop_server/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_interop_server_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_loopback/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_loopback_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_loopback_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_outbound/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_outbound_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_outbound_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_quic_conn/main.ts": ["x509.ll"],
       "tests/link/net_quic_conn_f64/main.ts": ["x509.ll"],
       "tests/link/net_quic_datagram/main.ts": ["x509.ll"],
@@ -12420,125 +11514,37 @@ const DECLARED = [
       "tests/link/net_quic_path_f64/main.ts": ["x509.ll"],
       "tests/link/net_quic_recovery/main.ts": ["x509.ll"],
       "tests/link/net_quic_recovery_f64/main.ts": ["x509.ll"],
-      "tests/link/net_quic_server_wipes/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_quic_server_wipes_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_quic_server_wipes/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_quic_server_wipes_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_quic_stream/main.ts": ["x509.ll"],
       "tests/link/net_quic_stream_f64/main.ts": ["x509.ll"],
       "tests/link/net_quic_wipes/main.ts": ["x509.ll"],
       "tests/link/net_quic_wipes_f64/main.ts": ["x509.ll"],
       "tests/link/net_relay/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_relay_bad_hello/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_relay_bad_idle/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_relay_bad_path/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_relay_bad_per_peer/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_relay_bad_pool/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_relay_bad_rate/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_relay_bad_sessions/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_relay_bad_spare/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_relay_bad_stats/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_relay_bad_hello/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_relay_bad_idle/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_relay_bad_path/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_relay_bad_per_peer/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_relay_bad_pool/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_relay_bad_rate/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_relay_bad_sessions/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_relay_bad_spare/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_relay_bad_stats/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_relay_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_relay_forged/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_relay_soak/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_relay_forged/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_relay_soak/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_serve/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_serve_burst/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_serve_deadline/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_serve_hangup/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_serve_burst/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_serve_deadline/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_serve_hangup/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_serve_pg/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_serve_pipelined_flat/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_serve_queued_wait/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_serve_server_field/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_serve_server_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_serve_shutdown/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_serve_pipelined_flat/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_serve_queued_wait/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_serve_server_field/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_serve_server_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_serve_shutdown/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_tls_client_refusals/main.ts": ["x509.ll"],
-      "tests/link/net_tls_client_tcp/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_tls_client_tcp/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_tls_ecdsa/main.ts": ["x509.ll"],
       "tests/link/net_tls_ecdsa_f64/main.ts": ["x509.ll"],
       "tests/link/net_tls_ext_alpn/main.ts": ["x509.ll"],
@@ -12547,250 +11553,70 @@ const DECLARED = [
       "tests/link/net_tls_ext_quic/main.ts": ["x509.ll"],
       "tests/link/net_tls_ext_refusals/main.ts": ["x509.ll"],
       "tests/link/net_tls_ext_sni/main.ts": ["x509.ll"],
-      "tests/link/net_tls_memory/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_tls_memory_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_tls_memory/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_tls_memory_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_tls_psk_wire/main.ts": ["x509.ll"],
       "tests/link/net_tls_psk_wire_f64/main.ts": ["x509.ll"],
       "tests/link/net_tls_record_f64/main.ts": ["x509.ll"],
       "tests/link/net_tls_record_refusals/main.ts": ["x509.ll"],
       "tests/link/net_tls_record_rfc8448/main.ts": ["x509.ll"],
-      "tests/link/net_tls_record_tcp/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_tls_record_tcp_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_tls_resume/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_tls_record_tcp/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_tls_record_tcp_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_tls_resume/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_tls_resume_bench/main.ts": ["x509.ll"],
-      "tests/link/net_tls_resume_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_tls_resume_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_tls_rfc8448/main.ts": ["x509.ll"],
       "tests/link/net_tls_rfc8448_f64/main.ts": ["x509.ll"],
       "tests/link/net_tls_wipes/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_tls_wipes_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_tls_wipes_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_upstream/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/net_upstream_release/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_bad_datagrams/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_bad_datagrams_off/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_bad_layer/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_bad_pending/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_bad_pending_high/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_bad_sessions/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_bad_streams/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_bad_streams_high/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_close_window/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_datagram_window/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_stream_window/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_webtransport_whole_window/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_http1_end_head/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_upstream_release/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_bad_datagrams/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_bad_layer/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_bad_pending/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_bad_sessions/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_bad_streams/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_close_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_stream_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_whole_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_http1_end_head/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/std_http1_mss/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/std_http_compress/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_cancel/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_caps_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_depth_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_double_release_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_flat/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_pipeline/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_release_closed_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_release_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_async_size_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_carrier/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_carrier_attach_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_carrier_batcher_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_carrier_connection_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_carrier_limits_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_carrier_next_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_carrier_request_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/std_postgres_carrier_send_panic/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/std_http_compress/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_flat/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_carrier/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_carrier_next_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/std_postgres_carrier_send_panic/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/tfb_async_db/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-      "tests/link/tfb_async_entry/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
+      "tests/link/tfb_async_entry/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/tfb_db/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/tfb_entry/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
-    },
+    }
   ),
   ...wp83Pki(
     "this stage edits crypto_pki_malformed (the name-constraint cases), and in its main module the 0.42.0 seed gives PkiTrustStore's constructor declaration attribute group #0 where the candidate, like main's own compiler, gives #1",
-    { "tests/link/crypto_pki_malformed/main.ts": ["main.ll"] },
+    { "tests/link/crypto_pki_malformed/main.ts": ["main.ll"] }
   ),
   ...s5PanicFreeDeclared(),
   ...s6ReadWindowsDeclared(),
@@ -13103,7 +11929,7 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts",
       "tests/link/tfb_db/main.ts",
       "tests/link/tfb_entry/main.ts",
-    ],
+    ]
   ),
   ...stdCipherPanicFree(
     "chacha20poly1305.ll",
@@ -13412,7 +12238,7 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts",
       "tests/link/tfb_db/main.ts",
       "tests/link/tfb_entry/main.ts",
-    ],
+    ]
   ),
   ...stdCipherPanicFree(
     "ed25519.ll",
@@ -13650,7 +12476,7 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts",
       "tests/link/tfb_db/main.ts",
       "tests/link/tfb_entry/main.ts",
-    ],
+    ]
   ),
   ...stdCipherPanicFree(
     "bcrypt.ll",
@@ -13663,17 +12489,17 @@ const DECLARED = [
       "tests/link/thread_bcrypt_batch/main.ts",
       "tests/link/thread_bcrypt_batcher/main.ts",
       "tests/link/thread_bcrypt_task/main.ts",
-    ],
+    ]
   ),
   ...stdCipherPanicFree(
     "bcrypt-batch.ll",
     "std/crypto/bcrypt-batch.ts keeps a salt per request, reads no lane past a batch's end and wraps its ticket, so the batcher's code changes",
-    ["tests/link/thread_bcrypt_batcher/main.ts"],
+    ["tests/link/thread_bcrypt_batcher/main.ts"]
   ),
   ...stdCipherPanicFree(
     "main.h",
     "a bcrypt batch now keeps one salt per request, so the header the test's sidecar writes for the batch's `salts` field declares a `u8[][]`",
-    ["tests/link/thread_bcrypt_batcher/main.ts"],
+    ["tests/link/thread_bcrypt_batcher/main.ts"]
   ),
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
@@ -13689,7 +12515,7 @@ const DECLARED = [
         "main.ll",
         "qpack.ll",
       ],
-    },
+    }
   ),
   ...http3PanicFree(
     "Http3CidIndex's lookups and QPACK's decoder and encoder steps can no longer panic, so the declarations this module imports carry the attributes of a function that cannot",
@@ -13703,7 +12529,7 @@ const DECLARED = [
       "tests/link/net_qpack_bad_limit/main.ts": ["main.ll"],
       "tests/link/net_qpack_bad_value_window/main.ts": ["main.ll"],
       "tests/link/net_qpack_bad_window/main.ts": ["main.ll"],
-    },
+    }
   ),
   ...stdPanicFree(
     "Map and Set probe until a bucket answers instead of counting steps, and rebuild a small table into a fresh u16-sized array, so the inlined table walk changes",
@@ -13711,26 +12537,26 @@ const DECLARED = [
       "docs/cookbook/map-foreach.ts": ["map-foreach.ll"],
       "docs/cookbook/map-iter.ts": ["map-iter.ll"],
       "tests/link/map_walk_two_modules/main.ts": ["walker.ll"],
-    },
+    }
   ),
   ...stdPanicFree(
     "std/array's sliceAll, what `xs.slice()` compiles to, copies directly instead of through slice's range check, so the copy changes",
     {
       "tests/cases/arr_slice.ts": ["arr_slice.ll"],
-    },
+    }
   ),
   ...stdPanicFree(
     "std/text's indexOfAny walks its input under guards the prover reads, so the scan changes",
     {
       "bench/index-of-any.ts": ["index-of-any.ll"],
-    },
+    }
   ),
   ...stdPanicFree(
     "std/regex compiles and matches with guarded indexes and Results in place of panics, so its code and its classes change",
     {
       "bench/regex/main.ts": ["main.h", "main.ll"],
       "tests/link/caps_dep_std_not_refused/main.ts": ["main.h"],
-    },
+    }
   ),
   ...stdPanicFree(
     "std/json's reader, tokenizer and writer guard every index and grow their buffers without a computed array length, so json.ll changes",
@@ -13774,19 +12600,14 @@ const DECLARED = [
         "net_http_server_write_long",
         "net_http_server_write_unstarted",
         "net_http_server_write_window",
-      ].map((name) => [`tests/link/${name}/main.ts`, ["json.ll"]]),
-    ),
+      ].map((name) => [`tests/link/${name}/main.ts`, ["json.ll"]])
+    )
   ),
   ...stdPanicFree(
     "the program decodes JSON into class fields, so it moves with std/json's guarded reader (json.ll, and the declarations and field ranges main.ll and main.h take from it) and with nish/bytes' guarded reads (bytes.ll)",
     {
-      "tests/link/cls_field_init_json/main.ts": [
-        "bytes.ll",
-        "json.ll",
-        "main.h",
-        "main.ll",
-      ],
-    },
+      "tests/link/cls_field_init_json/main.ts": ["bytes.ll", "json.ll", "main.h", "main.ll"],
+    }
   ),
   ...stdPanicFree(
     "the emit-ts strings bench loads YAML into a JsonDocument and parses JSON, so it moves with the guarded readers of std/json, its tokenizer and value modules, std/yaml-json and nish/bytes, and with the declarations and field ranges main.ll and main.h take from them",
@@ -13800,7 +12621,7 @@ const DECLARED = [
         "main.ll",
         "yaml-json.ll",
       ],
-    },
+    }
   ),
   ...stdPanicFree(
     "std/text's indexOfAny walks its input under guards the prover reads, so the scan inlined into the program changes",
@@ -13811,14 +12632,14 @@ const DECLARED = [
         "std_text_index_of_any_long_set",
         "std_text_index_of_any_non_ascii_offset",
         "std_text_index_of_any_non_ascii_set",
-      ].map((name) => [`tests/link/${name}/main.ts`, ["main.ll"]]),
-    ),
+      ].map((name) => [`tests/link/${name}/main.ts`, ["main.ll"]])
+    )
   ),
   ...stdPanicFree(
     "std/text's case helpers index under guards instead of panicking, so the inlined code and the classes it declares change",
     {
       "tests/link/std_text_camel_case/main.ts": ["main.h", "main.ll"],
-    },
+    }
   ),
   ...stdPanicFree(
     "std/regex compiles and matches with guarded indexes and Results in place of panics, so the program's matching code and its classes change",
@@ -13827,17 +12648,13 @@ const DECLARED = [
       "tests/link/std_regex_f64/main.ts": ["suite.ll"],
       "tests/link/std_regex_node/main.ts": ["main.h", "main.ll"],
       "tests/link/std_regex_unicode/main.ts": ["main.ll"],
-    },
+    }
   ),
   ...stdPanicFree(
     "std/json's writer guards every index and grows its buffer without a computed array length, so the formatter, its unit table and the classes they declare change",
     {
-      "tests/link/std_json_format/main.ts": [
-        "json-format.ll",
-        "main.h",
-        "units.ll",
-      ],
-    },
+      "tests/link/std_json_format/main.ts": ["json-format.ll", "main.h", "units.ll"],
+    }
   ),
   ...stdPanicFree(
     "the program calls nish/bytes' new tryCopyBytes, or reaches it through std/json, which now copies with that Result form in place of a panicking copy; the seed's nish/bytes does not export it, so the seed refuses the program",
@@ -13849,15 +12666,15 @@ const DECLARED = [
         "std_text_f64",
         "std_yaml_conformance",
         "std_yaml_write",
-      ].map((name) => [`tests/link/${name}/main.ts`, ["exit"]]),
-    ),
+      ].map((name) => [`tests/link/${name}/main.ts`, ["exit"]])
+    )
   ),
   ...stdPanicFree(
     "the example drops its --allow-panics opt-out now that the Map and Set calls it makes cannot panic, so the seed, whose collections still can, refuses it as a strict module",
     {
       "examples/sets.ts": ["exit"],
       "examples/wordcount.ts": ["exit"],
-    },
+    }
   ),
   // WP80 S2: examples/prefork-jobs names RING_CORRUPT and the checked ring
   // calls this branch adds, so a seed without them refuses the program.
@@ -13865,7 +12682,7 @@ const DECLARED = [
     "std/sync/ring answers a ring a peer scribbled on as RING_CORRUPT through checked twins, which prefork-jobs now calls, so only the candidate compiles it",
     {
       "examples/prefork-jobs.ts": ["exit"],
-    },
+    }
   ),
   // WP80 S2: the checked-prefork test calls tryPreforkWith, which this branch
   // adds, so a seed without it refuses the program.
@@ -13873,7 +12690,7 @@ const DECLARED = [
     "std/net/prefork gains tryPreforkWith, which answers a config it refuses as an Err, so only the candidate compiles its test",
     {
       "tests/link/net_prefork_checked/main.ts": ["exit"],
-    },
+    }
   ),
   // WP80 S2: compared only under `--no-sidecars`, where the WP8 sidecars no
   // longer hide these programs. The ring and region modules, the pool, and
@@ -13888,19 +12705,11 @@ const DECLARED = [
       "tests/link/sync_ring/main.ts": ["main.ll", "ring.ll", "shm.ll"],
       "tests/link/sync_ring_checked/main.ts": ["exit"],
       "tests/link/sync_ring_inplace/main.ts": ["ring.ll", "shm.ll"],
-      "tests/link/sync_ring_inplace_memmove/main.ts": [
-        "main.ll",
-        "ring.ll",
-        "shm.ll",
-      ],
-      "tests/link/sync_ring_inplace_partial/main.ts": [
-        "main.ll",
-        "ring.ll",
-        "shm.ll",
-      ],
+      "tests/link/sync_ring_inplace_memmove/main.ts": ["main.ll", "ring.ll", "shm.ll"],
+      "tests/link/sync_ring_inplace_partial/main.ts": ["main.ll", "ring.ll", "shm.ll"],
       "tests/link/sync_shm/main.ts": ["shm.ll"],
       "tests/link/sync_shm_window/main.ts": ["shm.ll"],
-    },
+    }
   ),
   // WP80 S2: BufferPool.take tests its free list before it reads and pops
   // it, and lent() subtracts in 64 bits, so the pool and every module that
@@ -13925,34 +12734,13 @@ const DECLARED = [
       "tests/link/crypto_held_derive/main.ts": ["buffer-pool.ll"],
       "tests/link/crypto_x509/main.ts": ["buffer-pool.ll"],
       "tests/link/net_buffer_pool/main.ts": ["buffer-pool.ll", "main.ll"],
-      "tests/link/net_buffer_pool_bad_ceiling/main.ts": [
-        "buffer-pool.ll",
-        "main.ll",
-      ],
-      "tests/link/net_buffer_pool_bad_give/main.ts": [
-        "buffer-pool.ll",
-        "main.ll",
-      ],
-      "tests/link/net_buffer_pool_bad_length/main.ts": [
-        "buffer-pool.ll",
-        "main.ll",
-      ],
-      "tests/link/net_buffer_pool_bad_new_ceiling/main.ts": [
-        "buffer-pool.ll",
-        "main.ll",
-      ],
-      "tests/link/net_buffer_pool_bad_new_size/main.ts": [
-        "buffer-pool.ll",
-        "main.ll",
-      ],
-      "tests/link/net_buffer_pool_bad_used/main.ts": [
-        "buffer-pool.ll",
-        "main.ll",
-      ],
-      "tests/link/net_buffer_pool_bad_used_negative/main.ts": [
-        "buffer-pool.ll",
-        "main.ll",
-      ],
+      "tests/link/net_buffer_pool_bad_ceiling/main.ts": ["buffer-pool.ll", "main.ll"],
+      "tests/link/net_buffer_pool_bad_give/main.ts": ["buffer-pool.ll", "main.ll"],
+      "tests/link/net_buffer_pool_bad_length/main.ts": ["buffer-pool.ll", "main.ll"],
+      "tests/link/net_buffer_pool_bad_new_ceiling/main.ts": ["buffer-pool.ll", "main.ll"],
+      "tests/link/net_buffer_pool_bad_new_size/main.ts": ["buffer-pool.ll", "main.ll"],
+      "tests/link/net_buffer_pool_bad_used/main.ts": ["buffer-pool.ll", "main.ll"],
+      "tests/link/net_buffer_pool_bad_used_negative/main.ts": ["buffer-pool.ll", "main.ll"],
       "tests/link/net_fetch_async/main.ts": ["buffer-pool.ll"],
       "tests/link/net_fetch_async_deadline/main.ts": ["buffer-pool.ll"],
       "tests/link/net_fetch_async_dns_slow/main.ts": ["buffer-pool.ll"],
@@ -13970,13 +12758,9 @@ const DECLARED = [
       "tests/link/net_http1_server/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http1_server_bad_config/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http1_server_bad_head/main.ts": ["buffer-pool.ll"],
-      "tests/link/net_http1_server_bad_head_timeout/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http1_server_bad_linger/main.ts": ["buffer-pool.ll"],
-      "tests/link/net_http1_server_bad_linger_bytes/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/net_http1_server_bad_linger_bytes/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http1_server_bad_message/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http1_server_f64/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http1_server_feed_window/main.ts": ["buffer-pool.ll"],
@@ -13984,9 +12768,7 @@ const DECLARED = [
       "tests/link/net_http1_server_head_reuse/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http1_server_implicit_end/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http1_server_send_body/main.ts": ["buffer-pool.ll"],
-      "tests/link/net_http1_server_send_body_window/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http1_server_write_window/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http2/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http2_bad_config/main.ts": ["buffer-pool.ll"],
@@ -14011,10 +12793,7 @@ const DECLARED = [
       "tests/link/net_http3_bad_config/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http3_bad_credit/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http3_bad_local_limit/main.ts": ["buffer-pool.ll"],
-      "tests/link/net_http3_bad_reset_budget/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
+      "tests/link/net_http3_bad_reset_budget/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
       "tests/link/net_http3_bad_uni_limit/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http3_bad_write_chunk/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http3_ecn/main.ts": ["buffer-pool.ll"],
@@ -14024,14 +12803,8 @@ const DECLARED = [
       "tests/link/net_http3_f64/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http3_server/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http3_server_bad_config/main.ts": ["buffer-pool.ll"],
-      "tests/link/net_http3_server_bad_head_timeout/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http3_server_bad_idle_timeout/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
+      "tests/link/net_http3_server_bad_head_timeout/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http3_server_bad_idle_timeout/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
       "tests/link/net_http3_server_f64/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http3_write_window/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http_date/main.ts": ["buffer-pool.ll"],
@@ -14039,130 +12812,37 @@ const DECLARED = [
       "tests/link/net_http_fetch/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http_fetch_f64/main.ts": ["buffer-pool.ll"],
       "tests/link/net_http_fetch_tls/main.ts": ["buffer-pool.ll"],
-      "tests/link/net_http_server/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_bad_limit/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_bad_param/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_bad_watch/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_end_short/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_end_unstarted/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_foreign/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h1_fields/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h1_head/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h1_slots/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h1_twice/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h2_connect/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h2_head/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h2_slots/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h2_twice/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h2c/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h3_head/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h3_slots/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h3_twice/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_h3_webtransport/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_start_fields/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_start_length/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_start_refused/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_start_status/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_start_twice/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_take_none/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_unbegun/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_wait_tls/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_write_long/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_write_unstarted/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
-      "tests/link/net_http_server_write_window/main.ts": [
-        "buffer-pool.ll",
-        "quic-stream.ll",
-      ],
+      "tests/link/net_http_server/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_bad_limit/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_bad_param/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_bad_watch/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_end_short/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_end_unstarted/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_foreign/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h1_fields/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h1_head/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h1_slots/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h1_twice/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h2_connect/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h2_head/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h2_slots/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h2_twice/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h2c/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h3_head/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h3_slots/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h3_twice/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_h3_webtransport/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_start_fields/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_start_length/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_start_refused/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_start_status/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_start_twice/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_take_none/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_unbegun/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_wait_tls/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_write_long/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_write_unstarted/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
+      "tests/link/net_http_server_write_window/main.ts": ["buffer-pool.ll", "quic-stream.ll"],
       "tests/link/net_interop_server/main.ts": ["buffer-pool.ll"],
       "tests/link/net_interop_server_f64/main.ts": ["buffer-pool.ll"],
       "tests/link/net_loopback/main.ts": ["buffer-pool.ll"],
@@ -14260,21 +12940,15 @@ const DECLARED = [
       "tests/link/net_upstream_release/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_bad_datagrams/main.ts": ["buffer-pool.ll"],
-      "tests/link/net_webtransport_bad_datagrams_off/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_bad_idle/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_bad_layer/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_bad_pending/main.ts": ["buffer-pool.ll"],
-      "tests/link/net_webtransport_bad_pending_high/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_bad_rate/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_bad_sessions/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_bad_streams/main.ts": ["buffer-pool.ll"],
-      "tests/link/net_webtransport_bad_streams_high/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["buffer-pool.ll"],
@@ -14288,39 +12962,21 @@ const DECLARED = [
       "tests/link/std_postgres_async_cancel/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_async_caps_panic/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_async_depth_panic/main.ts": ["buffer-pool.ll"],
-      "tests/link/std_postgres_async_double_release_panic/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_async_flat/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_async_pipeline/main.ts": ["buffer-pool.ll"],
-      "tests/link/std_postgres_async_release_closed_panic/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_async_release_panic/main.ts": ["buffer-pool.ll"],
-      "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
-        "buffer-pool.ll",
-      ],
-      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["buffer-pool.ll"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_async_size_panic/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_carrier/main.ts": ["buffer-pool.ll"],
-      "tests/link/std_postgres_carrier_attach_panic/main.ts": [
-        "buffer-pool.ll",
-      ],
-      "tests/link/std_postgres_carrier_batcher_panic/main.ts": [
-        "buffer-pool.ll",
-      ],
-      "tests/link/std_postgres_carrier_connection_panic/main.ts": [
-        "buffer-pool.ll",
-      ],
-      "tests/link/std_postgres_carrier_limits_panic/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": ["buffer-pool.ll"],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["buffer-pool.ll"],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["buffer-pool.ll"],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_carrier_next_panic/main.ts": ["buffer-pool.ll"],
-      "tests/link/std_postgres_carrier_request_panic/main.ts": [
-        "buffer-pool.ll",
-      ],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_carrier_send_panic/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_tls/main.ts": ["buffer-pool.ll"],
       "tests/link/std_postgres_tls_roots_panic/main.ts": ["buffer-pool.ll"],
@@ -14329,29 +12985,20 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts": ["buffer-pool.ll"],
       "tests/link/tfb_db/main.ts": ["buffer-pool.ll"],
       "tests/link/tfb_entry/main.ts": ["buffer-pool.ll"],
-    },
+    }
   ),
   ...stdPanicFree(
     "the program reaches std/net's DNS modules, which now parse and build messages and read resolv.conf under guards the prover reads in place of panicking indexes, so their code and the inlined callers change; bytes.ll differs because the program is new to the corpus and the 0.44.0 seed's std/bytes.ts is older than main's, which this PR does not touch",
     {
-      "bench/std-net-dns-message.ts": [
-        "bytes.ll",
-        "dns-message.ll",
-        "std-net-dns-message.ll",
-      ],
-      "tests/link/net_dns_fallback_short/main.ts": [
-        "bytes.ll",
-        "dns-config.ll",
-        "dns-message.ll",
-        "main.ll",
-      ],
-    },
+      "bench/std-net-dns-message.ts": ["bytes.ll", "dns-message.ll", "std-net-dns-message.ll"],
+      "tests/link/net_dns_fallback_short/main.ts": ["bytes.ll", "dns-config.ll", "dns-message.ll", "main.ll"],
+    }
   ),
   ...stdPanicFree(
     "the QUIC packet bench is new to the corpus and reads through nish/bytes; bytes.ll differs because the 0.44.0 seed's std/bytes.ts is older than main's, which this PR does not touch",
     {
       "bench/std-net-quic-packet.ts": ["bytes.ll"],
-    },
+    }
   ),
   ...scramModule(),
   ...protobufModule(),
@@ -14365,8 +13012,7 @@ const DECLARED = [
   {
     program: "tests/link/net_grpc_interop/main.ts",
     file: "exit",
-    changelog:
-      "Call the gRPC server with pinned grpcurl and ghz over TLS and h2c (WP72 S4)",
+    changelog: "Call the gRPC server with pinned grpcurl and ghz over TLS and h2c (WP72 S4)",
     why: "the interop job's gRPC server is built on nish/net/grpc, which is new in this release, so the seed's standard library has no such module and refuses it",
   },
   {
@@ -14509,7 +13155,7 @@ const DECLARED = [
       "src/c-import-json.ts": ["c-import-json.ll"],
       "src/c-import.ts": ["c-import-json.ll"],
       "src/compile.ts": ["c-import-json.ll"],
-    },
+    }
   ),
   // QuicAckRanges counts ECT(0), ECT(1) and CE and QuicConnection and Http3Server
   // keep the arrival codepoint, so every module laying them out or writing an ACK moves.
@@ -14528,27 +13174,11 @@ const DECLARED = [
         "tests_link_net_quic_conn_replay_server.ll",
       ],
       "examples/relay/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
-      "tests/link/net_http3/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-        "resets.ll",
-      ],
-      "tests/link/net_http3_bad_body_chunk/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_http3_bad_config/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_http3_bad_credit/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_http3_bad_local_limit/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_http3/main.ts": ["quic-conn-ack.ll", "quic-frame.ll", "resets.ll"],
+      "tests/link/net_http3_bad_body_chunk/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_http3_bad_config/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_http3_bad_credit/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_http3_bad_local_limit/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_http3_bad_reset_budget/main.ts": [
         "http3-server.ll",
         "http3.ll",
@@ -14561,41 +13191,15 @@ const DECLARED = [
         "quic-listener.ll",
         "quic.ll",
       ],
-      "tests/link/net_http3_bad_uni_limit/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_http3_bad_write_chunk/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_http3_bad_uni_limit/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_http3_bad_write_chunk/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_http3_ecn/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
-      "tests/link/net_http3_ecn_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_http3_errors/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_http3_errors_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_http3_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-        "resets.ll",
-      ],
-      "tests/link/net_http3_server/main.ts": [
-        "clock.ll",
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_http3_server_bad_config/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_http3_ecn_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_http3_errors/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_http3_errors_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_http3_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll", "resets.ll"],
+      "tests/link/net_http3_server/main.ts": ["clock.ll", "quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_http3_server_bad_config/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_http3_server_bad_head_timeout/main.ts": [
         "http3-server.ll",
         "http3.ll",
@@ -14620,20 +13224,10 @@ const DECLARED = [
         "quic-listener.ll",
         "quic.ll",
       ],
-      "tests/link/net_http3_server_f64/main.ts": [
-        "clock.ll",
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_http3_write_window/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_http3_server_f64/main.ts": ["clock.ll", "quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_http3_write_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_http_date/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
-      "tests/link/net_http_date_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_http_date_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_http_server/main.ts": [
         "http3-server.ll",
         "http3.ll",
@@ -14950,287 +13544,96 @@ const DECLARED = [
         "quic-listener.ll",
         "quic.ll",
       ],
-      "tests/link/net_interop_server/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_interop_server_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_interop_server/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_interop_server_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_loopback/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
-      "tests/link/net_loopback_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_loopback_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_quic_conn/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
-      "tests/link/net_quic_conn_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_conn_parts/main.ts": [
-        "checks.ll",
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_quic_conn_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_conn_parts/main.ts": ["checks.ll", "quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_quic_conn_parts_f64/main.ts": [
         "net_quic_conn_parts_checks.ll",
         "quic-conn-ack.ll",
         "quic-frame.ll",
       ],
-      "tests/link/net_quic_conn_replay/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_conn_replay_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_datagram/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_datagram_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_quic_conn_replay/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_conn_replay_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_datagram/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_datagram_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_quic_frame/main.ts": ["quic-frame.ll"],
       "tests/link/net_quic_frame_f64/main.ts": ["quic-frame.ll"],
-      "tests/link/net_quic_lifecycle/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_lifecycle_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_lifecycle_replay/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_lifecycle_replay_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_listener/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_listener_bad_window/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_listener_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_memory/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_memory_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_quic_lifecycle/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_lifecycle_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_lifecycle_replay/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_lifecycle_replay_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_listener/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_listener_bad_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_listener_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_memory/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_memory_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_quic_path/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
-      "tests/link/net_quic_path_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_prefork/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_recovery/main.ts": [
-        "cubic.ll",
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_recovery_f64/main.ts": [
-        "cubic.ll",
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_server_wipes/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_server_wipes_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_stream/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_stream_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_wipes/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_wipes_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_quic_worker/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_quic_path_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_prefork/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_recovery/main.ts": ["cubic.ll", "quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_recovery_f64/main.ts": ["cubic.ll", "quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_server_wipes/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_server_wipes_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_stream/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_stream_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_wipes/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_wipes_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_quic_worker/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_relay/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
-      "tests/link/net_relay_bad_hello/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_relay_bad_idle/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_relay_bad_path/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_relay_bad_per_peer/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_relay_bad_pool/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_relay_bad_rate/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_relay_bad_sessions/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_relay_bad_spare/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_relay_bad_stats/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
+      "tests/link/net_relay_bad_hello/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_relay_bad_idle/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_relay_bad_path/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_relay_bad_per_peer/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_relay_bad_pool/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_relay_bad_rate/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_relay_bad_sessions/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_relay_bad_spare/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_relay_bad_stats/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_relay_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
-      "tests/link/net_relay_forged/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_relay_soak/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_bad_datagrams/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_bad_datagrams_off/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_bad_idle/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_bad_layer/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_bad_pending/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_bad_pending_high/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_bad_rate/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_bad_sessions/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_bad_streams/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_bad_streams_high/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_close_window/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_datagram_window/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_f64/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_stream_window/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-      "tests/link/net_webtransport_whole_window/main.ts": [
-        "quic-conn-ack.ll",
-        "quic-frame.ll",
-      ],
-    },
+      "tests/link/net_relay_forged/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_relay_soak/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_bad_datagrams/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_bad_idle/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_bad_layer/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_bad_pending/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_bad_rate/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_bad_sessions/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_bad_streams/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_close_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_stream_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_whole_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+    }
   ),
   // First, so it is the entry a fetch program's file reports: older entries of
   // this release name the same files.
   ...nl9018Depth(
     "FetchSyncClient keeps the sink a redirect's body is drained into, so the class gains a field and its layout grows 8 bytes (160 to 168)",
     {
-      "examples/http-get-json.ts": [
-        "fetch.ll",
-        "http-get-json.h",
-        "http-get-json.ll",
-      ],
+      "examples/http-get-json.ts": ["fetch.ll", "http-get-json.h", "http-get-json.ll"],
       "tests/link/net_fetch_async/main.ts": ["fetch.ll", "main.h"],
       "tests/link/net_fetch_async_deadline/main.ts": ["fetch.ll", "main.h"],
       "tests/link/net_fetch_async_dns_slow/main.ts": ["fetch.ll", "main.h"],
       "tests/link/net_fetch_async_flat/main.ts": ["fetch.ll", "main.h"],
-      "tests/link/net_fetch_async_https/main.ts": [
-        "fetch.ll",
-        "main.h",
-        "main.ll",
-      ],
+      "tests/link/net_fetch_async_https/main.ts": ["fetch.ll", "main.h", "main.ll"],
       "tests/link/net_fetch_async_https_flat/main.ts": ["fetch.ll", "main.h"],
       "tests/link/net_fetch_async_overlap/main.ts": ["fetch.ll", "main.h"],
       "tests/link/net_fetch_async_policy/main.ts": ["fetch.ll", "main.h"],
       "tests/link/net_http_fetch/main.ts": ["checks.ll", "fetch.ll", "main.h"],
-      "tests/link/net_http_fetch_f64/main.ts": [
-        "checks.ll",
-        "fetch.ll",
-        "main.h",
-      ],
-      "tests/link/net_http_fetch_tls/main.ts": [
-        "fetch.ll",
-        "main.h",
-        "main.ll",
-      ],
+      "tests/link/net_http_fetch_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_tls/main.ts": ["fetch.ll", "main.h", "main.ll"],
       "tests/link/net_outbound/main.ts": ["checks.ll", "fetch.ll", "main.h"],
-      "tests/link/net_outbound_f64/main.ts": [
-        "checks.ll",
-        "fetch.ll",
-        "main.h",
-      ],
-    },
+      "tests/link/net_outbound_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+    }
   ),
   // WP83 S3: std/crypto/p256.ts, p384.ts, rsa.ts and jwt.ts prove or refuse
   // the panic sites the prover could not discharge, so the module each
@@ -15276,350 +13679,98 @@ const DECLARED = [
     "tests/link/crypto_x509_malformed/main.ts": ["p256.ll"],
     "tests/link/crypto_x509_random/main.ts": ["p256.ll"],
     "tests/link/net_fetch_async/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_fetch_async_deadline/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_fetch_async_dns_slow/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_fetch_async_deadline/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_fetch_async_dns_slow/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_fetch_async_flat/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_fetch_async_https/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_fetch_async_https_flat/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_fetch_async_overlap/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_fetch_async_policy/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_fetch_async_https/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_fetch_async_https_flat/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_fetch_async_overlap/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_fetch_async_policy/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_handler/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_handler_descriptors/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_handler_descriptors/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_handler_limits_panic/main.ts": ["p384.ll"],
     "tests/link/net_handler_overlong/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_handler_rest_close/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_handler_rest_close/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_handler_short/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_handler_unbegun/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http1_server/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_http1_server_bad_config/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_bad_head/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_bad_head_timeout/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_bad_linger/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_bad_linger_bytes/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_bad_message/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_http1_server_bad_config/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_bad_head/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_bad_head_timeout/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_bad_linger/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_bad_linger_bytes/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_bad_message/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http1_server_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_http1_server_feed_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_frame_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_head_reuse/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_implicit_end/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_send_body/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_send_body_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http1_server_write_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http2_bad_config_tls/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_http1_server_feed_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_frame_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_head_reuse/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_implicit_end/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_send_body/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_send_body_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http1_server_write_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http2_bad_config_tls/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http2_cleartext/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_http2_cleartext_bad_slots/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http2_cleartext_bad_timeout/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_http2_cleartext_bad_slots/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http2_cleartext_bad_timeout/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http2_tls/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http2_tls_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http3/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_http3_bad_body_chunk/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_http3_bad_body_chunk/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http3_bad_config/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http3_bad_credit/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_http3_bad_local_limit/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http3_bad_reset_budget/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http3_bad_uni_limit/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http3_bad_write_chunk/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_http3_bad_local_limit/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http3_bad_reset_budget/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http3_bad_uni_limit/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http3_bad_write_chunk/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http3_ecn/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http3_ecn_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http3_errors/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http3_errors_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http3_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http3_server/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_http3_server_bad_config/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http3_server_bad_head_timeout/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http3_server_bad_idle_timeout/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_http3_server_bad_config/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http3_server_bad_head_timeout/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http3_server_bad_idle_timeout/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http3_server_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_http3_write_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_http3_write_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http_date/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http_date_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http_fetch/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http_fetch_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http_fetch_tls/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http_server/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_http_server_bad_limit/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_bad_param/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_bad_watch/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_end_short/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_end_unstarted/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_foreign/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h1_fields/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h1_head/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h1_slots/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h1_twice/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h2_connect/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h2_head/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h2_slots/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h2_twice/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_http_server_bad_limit/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_bad_param/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_bad_watch/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_end_short/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_end_unstarted/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_foreign/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h1_fields/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h1_head/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h1_slots/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h1_twice/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h2_connect/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h2_head/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h2_slots/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h2_twice/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_http_server_h2c/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_http_server_h3_head/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h3_slots/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h3_twice/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_h3_webtransport/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_start_fields/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_start_length/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_start_refused/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_start_status/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_start_twice/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_take_none/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_unbegun/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_wait_tls/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_write_long/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_write_unstarted/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_http_server_write_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_http_server_h3_head/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h3_slots/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h3_twice/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_h3_webtransport/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_start_fields/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_start_length/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_start_refused/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_start_status/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_start_twice/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_take_none/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_unbegun/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_wait_tls/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_write_long/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_write_unstarted/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_http_server_write_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_interop_server/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_interop_server_f64/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_interop_server_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_loopback/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_loopback_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_outbound/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
@@ -15646,16 +13797,8 @@ const DECLARED = [
     "tests/link/net_quic_prefork/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_quic_recovery/main.ts": ["p256.ll"],
     "tests/link/net_quic_recovery_f64/main.ts": ["p256.ll"],
-    "tests/link/net_quic_server_wipes/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_quic_server_wipes_f64/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_quic_server_wipes/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_quic_server_wipes_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_quic_stream/main.ts": ["p256.ll"],
     "tests/link/net_quic_stream_f64/main.ts": ["p256.ll"],
     "tests/link/net_quic_wipes/main.ts": ["p256.ll"],
@@ -15665,18 +13808,10 @@ const DECLARED = [
     "tests/link/net_relay_bad_hello/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_relay_bad_idle/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_relay_bad_path/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_relay_bad_per_peer/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_relay_bad_per_peer/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_relay_bad_pool/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_relay_bad_rate/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_relay_bad_sessions/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_relay_bad_sessions/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_relay_bad_spare/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_relay_bad_stats/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_relay_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
@@ -15687,33 +13822,13 @@ const DECLARED = [
     "tests/link/net_serve_deadline/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_serve_hangup/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_serve_head_drain/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_serve_lent_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_serve_lent_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_serve_pg/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_serve_pipelined_flat/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_serve_queued_wait/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_serve_pipelined_flat/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_serve_queued_wait/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_serve_raw/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_serve_server_field/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_serve_server_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_serve_server_field/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_serve_server_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_serve_shutdown/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_serve_slot_reuse/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_tls_client_handshake/main.ts": ["p256.ll"],
@@ -15739,11 +13854,7 @@ const DECLARED = [
     "tests/link/net_tls_record_size_limit/main.ts": ["p256.ll"],
     "tests/link/net_tls_record_size_limit_f64/main.ts": ["p256.ll"],
     "tests/link/net_tls_record_tcp/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_tls_record_tcp_f64/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_tls_record_tcp_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_tls_resume/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_tls_resume_bench/main.ts": ["p256.ll"],
     "tests/link/net_tls_resume_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
@@ -15754,77 +13865,21 @@ const DECLARED = [
     "tests/link/net_upstream/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_upstream_release/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_webtransport/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_webtransport_bad_datagrams/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_bad_datagrams_off/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_bad_idle/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_bad_layer/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_bad_pending/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_bad_pending_high/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_bad_rate/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_bad_sessions/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_bad_streams/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_bad_streams_high/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_close_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_datagram_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_webtransport_bad_datagrams/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_bad_idle/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_bad_layer/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_bad_pending/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_bad_pending_high/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_bad_rate/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_bad_sessions/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_bad_streams/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_bad_streams_high/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_close_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_datagram_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_webtransport_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/net_webtransport_stream_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/net_webtransport_whole_window/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/net_webtransport_stream_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_whole_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/region_sessions_soak/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/std_http1_encoded_window/main.ts": ["p384.ll"],
     "tests/link/std_http1_end_head/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
@@ -15832,108 +13887,28 @@ const DECLARED = [
     "tests/link/std_http1_output_bytes/main.ts": ["p384.ll"],
     "tests/link/std_http_compress/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/std_postgres_async/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/std_postgres_async_cancel/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_async_caps_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_async_depth_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_async_double_release_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_async_flat/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_async_pipeline/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_async_release_closed_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_async_release_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_async_seat_ticket_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_async_size_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/std_postgres_async_cancel/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_async_caps_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_async_depth_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_async_double_release_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_async_flat/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_async_pipeline/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_async_release_closed_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_async_release_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_async_size_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/std_postgres_carrier/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/std_postgres_carrier_attach_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_carrier_batcher_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_carrier_connection_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_carrier_limits_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_carrier_next_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_carrier_request_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_carrier_send_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/std_postgres_carrier_attach_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_carrier_connection_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_carrier_limits_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_carrier_next_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_carrier_request_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_carrier_send_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/std_postgres_tls/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
-    "tests/link/std_postgres_tls_roots_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
-    "tests/link/std_postgres_tls_unix_panic/main.ts": [
-      "p256.ll",
-      "p384.ll",
-      "rsa.ll",
-    ],
+    "tests/link/std_postgres_tls_roots_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/std_postgres_tls_unix_panic/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/tfb_async_db/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/tfb_async_entry/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/tfb_db/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
@@ -15944,7 +13919,7 @@ const DECLARED = [
       file,
       changelog: "P-256, P-384, RSA and JWT",
       why: WP83_S3_WHY[file],
-    })),
+    }))
   ),
   // tests/link/crypto_jwt_refusals is new in WP83 S3; the seed writes its jwt
   // module and its declarations of it from the JwtJson before the proofs.
@@ -16014,43 +13989,37 @@ const DECLARED = [
   {
     program: "tests/link/duplicate_internal/main.ts",
     file: "exit",
-    changelog:
-      "Two modules may each keep a private function or generic of one name",
+    changelog: "Two modules may each keep a private function or generic of one name",
     why: 'main.ts and helper.ts each keep a private `add`, which the candidate spells `@main$.add` and `@helper$.add`; the 0.42.0 seed refuses the second definition ("Function `add` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
   },
   {
     program: "tests/link/module_private_generic/main.ts",
     file: "exit",
-    changelog:
-      "Two modules may each keep a private function or generic of one name",
+    changelog: "Two modules may each keep a private function or generic of one name",
     why: 'a.ts and b.ts each keep a private generic `identity<T>`, whose instantiations the candidate prefixes with each module\'s qualifier; the 0.42.0 seed refuses the second template ("Generic function `identity` is also defined in a.ts"), so only the candidate compiles it (WP57 S1)',
   },
   {
     program: "tests/link/module_private_helpers/main.ts",
     file: "exit",
-    changelog:
-      "Two modules may each keep a private function or generic of one name",
+    changelog: "Two modules may each keep a private function or generic of one name",
     why: 'main.ts, up.ts and down.ts each keep a private `step`, which the candidate qualifies per module; the 0.42.0 seed refuses the second definition ("Function `step` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
   },
   {
     program: "tests/link/module_private_mixed/main.ts",
     file: "exit",
-    changelog:
-      "Two modules may each keep a private function or generic of one name",
+    changelog: "Two modules may each keep a private function or generic of one name",
     why: "main.ts keeps a private `helper` beside lib.ts's exported one, which the candidate spells `@main$.helper` while `@helper` stays lib's; the 0.42.0 seed refuses the pair (\"Function `helper` is also defined in main.ts\"), so only the candidate compiles it (WP57 S1)",
   },
   {
     program: "tests/link/module_private_spawn/main.ts",
     file: "exit",
-    changelog:
-      "Two modules may each keep a private function or generic of one name",
+    changelog: "Two modules may each keep a private function or generic of one name",
     why: 'main.ts and m.ts each keep a private `work` that a spawn names, which the candidate qualifies per module; the 0.42.0 seed refuses the second definition ("Function `work` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
   },
   {
     program: "tests/link/module_private_outside/main.ts",
     file: "exit",
-    changelog:
-      "Two modules may each keep a private function or generic of one name",
+    changelog: "Two modules may each keep a private function or generic of one name",
     why: 'main.ts keeps a private `helper` and imports ../module_private_shared/u.ts, which keeps one too; the candidate spells them `@main$.helper` and `@___module_private_shared_u$.helper`, and the 0.42.0 seed refuses the pair ("Function `helper` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
   },
   // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
@@ -16063,10 +14032,7 @@ const DECLARED = [
   },
   // WP63: `pollWaitBatch` is new to `nish:net`, so the 0.45.1 seed refuses
   // the case and the cookbook entry that call it.
-  ...[
-    "tests/cases/net_poll_batch.ts",
-    "docs/cookbook/builtin-net-poll-batch.ts",
-  ].map((program) => ({
+  ...["tests/cases/net_poll_batch.ts", "docs/cookbook/builtin-net-poll-batch.ts"].map((program) => ({
     program,
     file: "exit",
     changelog: "pollWaitBatch and the direct ring wait",
@@ -16083,16 +14049,14 @@ const DECLARED = [
   },
   // WP43 S3: `nish/net/static` is a new module, so the 0.42.0 seed refuses
   // every program that imports it, the http-app example's `--static` included.
-  ...[
-    "examples/http-app/main.ts",
-    "tests/link/net_http_app/main.ts",
-    "tests/link/net_static/main.ts",
-  ].map((program) => ({
-    program,
-    file: "exit",
-    changelog: "MIME types, ETag, Range and traversal refused",
-    why: "`nish/net/static` is new in this release, so the 0.42.0 seed's standard library has no such module (WP43 S3)",
-  })),
+  ...["examples/http-app/main.ts", "tests/link/net_http_app/main.ts", "tests/link/net_static/main.ts"].map(
+    (program) => ({
+      program,
+      file: "exit",
+      changelog: "MIME types, ETag, Range and traversal refused",
+      why: "`nish/net/static` is new in this release, so the 0.42.0 seed's standard library has no such module (WP43 S3)",
+    })
+  ),
   // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
   // library has none and refuses the program that tests it.
   {
@@ -16227,8 +14191,7 @@ const DECLARED = [
     why: "the `!nish.compat` mark lists the enabled features after the number mode, which the seed's mark does not",
   },
   {
-    changelog:
-      "internal work-package references from diagnostics and generated files",
+    changelog: "internal work-package references from diagnostics and generated files",
     why: "generated comments in async .ll, interop headers, N-API sidecars and wasm loaders no longer name a work package",
     undo: (text) => withSeedWpComments(text),
   },
@@ -16425,35 +14388,21 @@ const DECLARED = [
       "tests/cases/simd_access_alias.ts": ["simd_access_alias.ll"],
       "tests/cases/simd_access_oob_guard.ts": ["simd_access_oob_guard.ll"],
       "tests/cases/simd_access_oob_resized.ts": ["simd_access_oob_resized.ll"],
-      "tests/cases/simd_access_oob_unfloored.ts": [
-        "simd_access_oob_unfloored.ll",
-      ],
-      "tests/cases/simd_access_oob_loop_pop.ts": [
-        "simd_access_oob_loop_pop.ll",
-      ],
-      "tests/cases/simd_access_oob_alias_pop.ts": [
-        "simd_access_oob_alias_pop.ll",
-      ],
-      "tests/cases/simd_access_oob_field_swap.ts": [
-        "simd_access_oob_field_swap.ll",
-      ],
+      "tests/cases/simd_access_oob_unfloored.ts": ["simd_access_oob_unfloored.ll"],
+      "tests/cases/simd_access_oob_loop_pop.ts": ["simd_access_oob_loop_pop.ll"],
+      "tests/cases/simd_access_oob_alias_pop.ts": ["simd_access_oob_alias_pop.ll"],
+      "tests/cases/simd_access_oob_field_swap.ts": ["simd_access_oob_field_swap.ll"],
       "tests/cases/simd_access_oob_strict.ts": ["simd_access_oob_strict.ll"],
       "tests/cases/simd_access_oob_below.ts": ["simd_access_oob_below.ll"],
-      "tests/cases/simd_access_oob_huge_offset.ts": [
-        "simd_access_oob_huge_offset.ll",
-      ],
-      "tests/cases/simd_access_oob_huge_literal.ts": [
-        "simd_access_oob_huge_literal.ll",
-      ],
+      "tests/cases/simd_access_oob_huge_offset.ts": ["simd_access_oob_huge_offset.ll"],
+      "tests/cases/simd_access_oob_huge_literal.ts": ["simd_access_oob_huge_literal.ll"],
       "tests/cases/simd_access_order.ts": ["simd_access_order.ll"],
       "tests/cases/simd_access_proven.ts": ["simd_access_proven.ll"],
       "tests/cases/simd_values.ts": ["simd_values.ll"],
       "tests/cases/simd_zero_fill.ts": ["simd_zero_fill.ll"],
       "tests/cases/simd_access_oob.ts": ["simd_access_oob.ll"],
       "tests/cases/simd_access_oob_first.ts": ["simd_access_oob_first.ll"],
-      "tests/cases/simd_access_oob_negative.ts": [
-        "simd_access_oob_negative.ll",
-      ],
+      "tests/cases/simd_access_oob_negative.ts": ["simd_access_oob_negative.ll"],
       "tests/cases/simd_chacha_quarter.ts": ["simd_chacha_quarter.ll"],
       "tests/cases/simd_load_field_loop.ts": ["simd_load_field_loop.ll"],
       "tests/cases/simd_store_field_reload.ts": ["simd_store_field_reload.ll"],
@@ -16478,7 +14427,7 @@ const DECLARED = [
       "tests/link/net_outbound_f64/main.ts": ["outbound.ll"],
       "tests/link/net_upstream/main.ts": ["outbound.ll"],
       "tests/link/net_upstream_release/main.ts": ["outbound.ll"],
-    },
+    }
   ),
   // #1430: std/crypto/p256.ts inverts field elements by safegcd and verifies
   // by one interleaved wNAF pass, so the module every importer writes moves.
@@ -16542,150 +14491,54 @@ const DECLARED = [
     ["examples/http-get-json.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["examples/prefork-server.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["examples/relay/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/crypto_held_derive/main.ts",
-      "hkdf.ll hmac.ll main.ll record.ll",
-    ],
+    ["tests/link/crypto_held_derive/main.ts", "hkdf.ll hmac.ll main.ll record.ll"],
     ["tests/link/crypto_hkdf/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/crypto_hkdf_expand_label/main.ts", "hkdf.ll hmac.ll main.h"],
-    [
-      "tests/link/crypto_hkdf_expand_label_empty_label/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_f64/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_long_context/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_long_context_f64/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_long_label/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_long_length/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_negative_length/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_secret/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_secret_f64/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_secret_short/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_secret_short_sha384/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_short_secret/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_expand_label_short_secret_sha384/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
+    ["tests/link/crypto_hkdf_expand_label_empty_label/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_long_context/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_long_context_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_long_label/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_long_length/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_negative_length/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_secret/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_secret_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_secret_short/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_secret_short_sha384/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_short_secret/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_short_secret_sha384/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/crypto_hkdf_f64/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/crypto_hkdf_held_into_hash/main.ts", "hkdf.ll hmac.ll main.h"],
-    [
-      "tests/link/crypto_hkdf_held_into_output/main.ts",
-      "hkdf.ll hmac.ll main.h",
-    ],
+    ["tests/link/crypto_hkdf_held_into_output/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/crypto_hkdf_held_label/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/crypto_hkdf_k1_bounds/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/crypto_hkdf_k1_bounds_f64/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/crypto_hkdf_long_f64/main.ts", "hkdf.ll hmac.ll main.h"],
-    [
-      "tests/link/crypto_hkdf_scratch/main.ts",
-      "checks.ll hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_scratch_f64/main.ts",
-      "checks.ll hkdf.ll hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hkdf_scratch_hash/main.ts",
-      "hkdf.ll hmac.ll main.h main.ll",
-    ],
-    [
-      "tests/link/crypto_hkdf_scratch_label_context/main.ts",
-      "hkdf.ll hmac.ll main.h main.ll",
-    ],
-    [
-      "tests/link/crypto_hkdf_scratch_label_label/main.ts",
-      "hkdf.ll hmac.ll main.h main.ll",
-    ],
-    [
-      "tests/link/crypto_hkdf_scratch_label_length/main.ts",
-      "hkdf.ll hmac.ll main.h main.ll",
-    ],
-    [
-      "tests/link/crypto_hkdf_scratch_label_secret/main.ts",
-      "hkdf.ll hmac.ll main.h main.ll",
-    ],
-    [
-      "tests/link/crypto_hkdf_scratch_long_f64/main.ts",
-      "hkdf.ll hmac.ll main.h main.ll",
-    ],
-    [
-      "tests/link/crypto_hkdf_scratch_output/main.ts",
-      "hkdf.ll hmac.ll main.h main.ll",
-    ],
+    ["tests/link/crypto_hkdf_scratch/main.ts", "checks.ll hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_scratch_f64/main.ts", "checks.ll hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_scratch_hash/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_label_context/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_label_label/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_label_length/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_label_secret/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_long_f64/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_output/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
     ["tests/link/crypto_hkdf_wycheproof/main.ts", "checks.ll hmac.ll main.h"],
-    [
-      "tests/link/crypto_hkdf_wycheproof_f64/main.ts",
-      "checks.ll hmac.ll main.h",
-    ],
+    ["tests/link/crypto_hkdf_wycheproof_f64/main.ts", "checks.ll hmac.ll main.h"],
     ["tests/link/crypto_hmac_k1_verify/main.ts", "hmac.ll main.h"],
     ["tests/link/crypto_hmac_k1_verify_f64/main.ts", "hmac.ll main.h"],
-    [
-      "tests/link/crypto_hmac_scratch_key_window/main.ts",
-      "hmac.ll main.h main.ll",
-    ],
-    [
-      "tests/link/crypto_hmac_scratch_sha384_key_window/main.ts",
-      "hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hmac_scratch_sha384_tag_window/main.ts",
-      "hmac.ll main.h",
-    ],
-    [
-      "tests/link/crypto_hmac_scratch_tag_window/main.ts",
-      "hmac.ll main.h main.ll",
-    ],
-    [
-      "tests/link/crypto_hmac_sha256_digest_twice/main.ts",
-      "hmac.ll main.h main.ll",
-    ],
+    ["tests/link/crypto_hmac_scratch_key_window/main.ts", "hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hmac_scratch_sha384_key_window/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_scratch_sha384_tag_window/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_scratch_tag_window/main.ts", "hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hmac_sha256_digest_twice/main.ts", "hmac.ll main.h main.ll"],
     ["tests/link/crypto_hmac_sha256_long_f64/main.ts", "hmac.ll main.h"],
     ["tests/link/crypto_hmac_sha256_long_key_f64/main.ts", "hmac.ll main.h"],
-    [
-      "tests/link/crypto_hmac_sha256_update_after_digest/main.ts",
-      "hmac.ll main.h main.ll",
-    ],
+    ["tests/link/crypto_hmac_sha256_update_after_digest/main.ts", "hmac.ll main.h main.ll"],
     ["tests/link/crypto_hmac_sha256_window/main.ts", "hmac.ll main.h main.ll"],
     ["tests/link/crypto_hmac_sha384_digest_twice/main.ts", "hmac.ll main.h"],
     ["tests/link/crypto_hmac_sha384_long_f64/main.ts", "hmac.ll main.h"],
-    [
-      "tests/link/crypto_hmac_sha384_update_after_digest/main.ts",
-      "hmac.ll main.h",
-    ],
+    ["tests/link/crypto_hmac_sha384_update_after_digest/main.ts", "hmac.ll main.h"],
     ["tests/link/crypto_hmac_sha384_window/main.ts", "hmac.ll main.h"],
     ["tests/link/crypto_hmac_sha512_digest_twice/main.ts", "hmac.ll main.h"],
     ["tests/link/crypto_hmac_wycheproof/main.ts", "checks.ll main.h"],
@@ -16702,154 +14555,49 @@ const DECLARED = [
     ["tests/link/crypto_tls_held_hash/main.ts", "hkdf.ll hmac.ll"],
     ["tests/link/crypto_tls_held_length/main.ts", "hkdf.ll hmac.ll"],
     ["tests/link/crypto_x509/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_fetch_async/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_fetch_async_deadline/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_fetch_async_dns_slow/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_fetch_async_flat/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_fetch_async_https/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_fetch_async_https_flat/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_fetch_async_overlap/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_fetch_async_policy/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_fetch_async/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_deadline/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_dns_slow/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_flat/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_https/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_https_flat/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_overlap/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_policy/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_handler/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_handler_descriptors/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_handler_overlong/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_handler_short/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_handler_unbegun/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_bad_config/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_bad_head/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_bad_head_timeout/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_bad_linger/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_bad_linger_bytes/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_bad_message/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_f64/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_feed_window/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_frame_window/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_head_reuse/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_implicit_end/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_send_body/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_send_body_window/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http1_server_write_window/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http2_bad_config_tls/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_handler_descriptors/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_handler_overlong/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_handler_short/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_handler_unbegun/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_http1_server_bad_config/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_bad_head/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_bad_head_timeout/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_bad_linger/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_bad_linger_bytes/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_bad_message/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_http1_server_feed_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_frame_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_head_reuse/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_implicit_end/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_send_body/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_send_body_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_write_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http2_bad_config_tls/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     [
       "tests/link/net_http2_cleartext/main.ts",
       "client.ll hkdf.ll hmac.ll net_tls_record_common_bytes.ll record.ll server.ll",
     ],
-    [
-      "tests/link/net_http2_cleartext_bad_slots/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http2_cleartext_bad_timeout/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http2_tls/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
-    [
-      "tests/link/net_http2_tls_f64/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
-    [
-      "tests/link/net_http3_bad_body_chunk/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_http2_cleartext_bad_slots/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http2_cleartext_bad_timeout/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http2_tls/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_http2_tls_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_http3_bad_body_chunk/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http3_bad_config/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http3_bad_credit/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_http3_bad_local_limit/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_http3_bad_local_limit/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http3_bad_uni_limit/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_http3_bad_write_chunk/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_http3_bad_write_chunk/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http3_ecn/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http3_ecn_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http3_errors/main.ts", "hkdf.ll hmac.ll record.ll"],
@@ -16857,43 +14605,22 @@ const DECLARED = [
     ["tests/link/net_http3_frame/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/net_http3_frame_bad_window/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/net_http3_frame_f64/main.ts", "hkdf.ll hmac.ll main.h"],
-    [
-      "tests/link/net_http3_server_bad_config/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_http3_server_bad_config/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http3_write_window/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http_app/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http_date/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http_date_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_http_fetch/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_http_fetch_f64/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_interop_server/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
+    ["tests/link/net_http_fetch/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http_fetch_f64/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_interop_server/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
     [
       "tests/link/net_interop_server_f64/main.ts",
       "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
     ],
-    [
-      "tests/link/net_loopback/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
-    [
-      "tests/link/net_loopback_f64/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
+    ["tests/link/net_loopback/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_loopback_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
     ["tests/link/net_outbound/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_outbound_f64/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_outbound_f64/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_quic_conn/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_quic_conn_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_quic_conn_parts/main.ts", "hkdf.ll hmac.ll main.h"],
@@ -16908,34 +14635,13 @@ const DECLARED = [
     ["tests/link/net_quic_frame_f64/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/net_quic_lifecycle/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_quic_lifecycle_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_quic_lifecycle_replay/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_quic_lifecycle_replay_f64/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_quic_listener/main.ts",
-      "checks.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_quic_listener_bad_window/main.ts",
-      "hkdf.ll hmac.ll main.ll record.ll",
-    ],
-    [
-      "tests/link/net_quic_listener_f64/main.ts",
-      "checks.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_quic_memory/main.ts",
-      "hkdf.ll hmac.ll record.ll units.ll",
-    ],
-    [
-      "tests/link/net_quic_memory_f64/main.ts",
-      "hkdf.ll hmac.ll record.ll units.ll",
-    ],
+    ["tests/link/net_quic_lifecycle_replay/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_lifecycle_replay_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_listener/main.ts", "checks.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_listener_bad_window/main.ts", "hkdf.ll hmac.ll main.ll record.ll"],
+    ["tests/link/net_quic_listener_f64/main.ts", "checks.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_memory/main.ts", "hkdf.ll hmac.ll record.ll units.ll"],
+    ["tests/link/net_quic_memory_f64/main.ts", "hkdf.ll hmac.ll record.ll units.ll"],
     ["tests/link/net_quic_packet/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/net_quic_packet_f64/main.ts", "hkdf.ll hmac.ll main.h"],
     ["tests/link/net_quic_path/main.ts", "hkdf.ll hmac.ll record.ll"],
@@ -16947,10 +14653,7 @@ const DECLARED = [
     ["tests/link/net_quic_recovery/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_quic_recovery_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_quic_server_wipes/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_quic_server_wipes_f64/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_quic_server_wipes_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_quic_stream/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_quic_stream_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_quic_wipes/main.ts", "hkdf.ll hmac.ll record.ll"],
@@ -16983,36 +14686,18 @@ const DECLARED = [
     ["tests/link/net_serve_hangup/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_serve_pg/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_serve_lent_window/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_serve_pipelined_flat/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_serve_pipelined_flat/main.ts", "hkdf.ll hmac.ll record.ll"],
     [
       "tests/link/net_serve_queued_wait/main.ts",
       "client.ll hkdf.ll hmac.ll net_tls_record_common_bytes.ll record.ll",
     ],
     ["tests/link/net_serve_server_field/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_serve_server_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_serve_server_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_serve_shutdown/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_tls_client_handshake/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_tls_client_record/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_tls_client_refusals/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_tls_client_tcp/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_tls_client_handshake/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_client_record/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_client_refusals/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_client_tcp/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_tls_ecdsa/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_tls_ecdsa_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_tls_ext_alpn/main.ts", "hkdf.ll hmac.ll record.ll"],
@@ -17021,24 +14706,15 @@ const DECLARED = [
     ["tests/link/net_tls_ext_quic/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_tls_ext_refusals/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_tls_ext_sni/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_tls_memory/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
-    [
-      "tests/link/net_tls_memory_f64/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
+    ["tests/link/net_tls_memory/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_tls_memory_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
     [
       "tests/link/net_tls_p256/main.ts",
       "hkdf.ll hmac.ll main.ll net_tls_common_client.ll record.ll server.ll",
     ],
     ["tests/link/net_tls_psk_wire/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_tls_psk_wire_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_tls_record_f64/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
+    ["tests/link/net_tls_record_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
     [
       "tests/link/net_tls_record_refusals/main.ts",
       "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
@@ -17060,108 +14736,45 @@ const DECLARED = [
       "tests/link/net_tls_record_tcp_f64/main.ts",
       "bytes.ll held.ll hkdf.ll hmac.ll net_tls_common_client.ll net_tls_record_common_client.ll net_tls_rfc8448_checks.ll record.ll server.ll",
     ],
-    [
-      "tests/link/net_tls_resume/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
-    [
-      "tests/link/net_tls_resume_bench/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
-    [
-      "tests/link/net_tls_resume_f64/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
+    ["tests/link/net_tls_resume/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_tls_resume_bench/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_tls_resume_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
     ["tests/link/net_tls_rfc8448/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_tls_rfc8448_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_tls_ticket/main.ts", "hkdf.ll hmac.ll"],
     ["tests/link/net_tls_ticket_f64/main.ts", "hkdf.ll hmac.ll"],
-    [
-      "tests/link/net_tls_wipes/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
-    [
-      "tests/link/net_tls_wipes_f64/main.ts",
-      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
-    ],
+    ["tests/link/net_tls_wipes/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_tls_wipes_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
     ["tests/link/net_upstream/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_upstream_release/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_upstream_release/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_webtransport/main.ts", "hkdf.ll hmac.ll"],
-    [
-      "tests/link/net_webtransport_bad_datagrams/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_webtransport_bad_datagrams_off/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_webtransport_bad_datagrams/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_bad_datagrams_off/main.ts", "hkdf.ll hmac.ll record.ll"],
     [
       "tests/link/net_webtransport_bad_idle/main.ts",
       "hkdf.ll hmac.ll net_tls_common_client.ll net_tls_common_server.ll record.ll",
     ],
-    [
-      "tests/link/net_webtransport_bad_layer/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_webtransport_bad_pending/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_webtransport_bad_pending_high/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_webtransport_bad_layer/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_bad_pending/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_bad_pending_high/main.ts", "hkdf.ll hmac.ll record.ll"],
     [
       "tests/link/net_webtransport_bad_rate/main.ts",
       "hkdf.ll hmac.ll net_tls_common_client.ll net_tls_common_server.ll record.ll",
     ],
-    [
-      "tests/link/net_webtransport_bad_sessions/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_webtransport_bad_streams/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_webtransport_bad_streams_high/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_webtransport_close_window/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_webtransport_datagram_window/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_webtransport_bad_sessions/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_bad_streams/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_bad_streams_high/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_close_window/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_datagram_window/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_webtransport_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/net_webtransport_stream_window/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/net_webtransport_whole_window/main.ts",
-      "hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/region_sessions_soak/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/net_webtransport_stream_window/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_whole_window/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/region_sessions_soak/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/sha256_hw_agree/main.ts", "main.ll"],
     ["tests/link/sha256_hw_vectors/main.ts", "hmac.ll main.h"],
-    [
-      "tests/link/std_http1_end_head/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/std_http1_end_head/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/std_http1_mss/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
-    [
-      "tests/link/std_http_compress/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/std_http_compress/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/std_pbkdf2/main.ts", "hmac.ll main.h"],
     ["tests/link/std_pbkdf2_f64/main.ts", "hmac.ll main.h"],
     ["tests/link/std_postgres/main.ts", "hmac.ll"],
@@ -17176,54 +14789,18 @@ const DECLARED = [
     ["tests/link/std_postgres_array_param_text_array_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_array_start_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_array_window_panic/main.ts", "hmac.ll"],
-    [
-      "tests/link/std_postgres_async/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_cancel/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_caps_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_depth_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_double_release_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_flat/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_pipeline/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_release_closed_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_release_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_seat_statement_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_seat_ticket_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_size_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/std_postgres_async/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_cancel/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_caps_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_depth_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_double_release_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_flat/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_pipeline/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_release_closed_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_release_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_seat_statement_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_seat_ticket_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_size_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/std_postgres_batch/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_add_int_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_add_text_panic/main.ts", "hmac.ll"],
@@ -17236,26 +14813,14 @@ const DECLARED = [
     ["tests/link/std_postgres_batch_config_cap_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_config_empty_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_config_key_panic/main.ts", "hmac.ll"],
-    [
-      "tests/link/std_postgres_batch_config_name_empty_panic/main.ts",
-      "hmac.ll",
-    ],
+    ["tests/link/std_postgres_batch_config_name_empty_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_config_name_nul_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_config_query_panic/main.ts", "hmac.ll"],
-    [
-      "tests/link/std_postgres_batch_config_queue_bytes_panic/main.ts",
-      "hmac.ll",
-    ],
-    [
-      "tests/link/std_postgres_batch_config_queue_size_panic/main.ts",
-      "hmac.ll",
-    ],
+    ["tests/link/std_postgres_batch_config_queue_bytes_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_queue_size_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_config_requests_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_config_runs_panic/main.ts", "hmac.ll"],
-    [
-      "tests/link/std_postgres_batch_config_select_nul_panic/main.ts",
-      "hmac.ll",
-    ],
+    ["tests/link/std_postgres_batch_config_select_nul_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_pending_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_row_pending_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_batch_run_negative_panic/main.ts", "hmac.ll"],
@@ -17268,47 +14833,20 @@ const DECLARED = [
     ["tests/link/std_postgres_binary_array_null_none_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_binary_array_oid_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_binary_array_start_panic/main.ts", "hmac.ll"],
-    [
-      "tests/link/std_postgres_binary_array_text_element_panic/main.ts",
-      "hmac.ll",
-    ],
+    ["tests/link/std_postgres_binary_array_text_element_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_binary_int4_range_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_binary_window_count_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_binary_window_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_binary_window_start_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_caps/main.ts", "hmac.ll"],
-    [
-      "tests/link/std_postgres_carrier/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_carrier_attach_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_carrier_batcher_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_carrier_connection_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_carrier_limits_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_carrier_next_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_carrier_request_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_carrier_send_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/std_postgres_carrier/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_attach_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_batcher_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_connection_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_limits_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_next_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_request_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_send_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/std_postgres_config_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_decimal/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_int_array_range_panic/main.ts", "hmac.ll"],
@@ -17326,20 +14864,11 @@ const DECLARED = [
     ["tests/link/std_postgres_pool_size_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_receive_panic/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_replay/main.ts", "hmac.ll"],
-    [
-      "tests/link/std_postgres_tls/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll server.ll",
-    ],
+    ["tests/link/std_postgres_tls/main.ts", "client.ll hkdf.ll hmac.ll record.ll server.ll"],
     ["tests/link/std_postgres_tls_connection_panic/main.ts", "hmac.ll main.h"],
     ["tests/link/std_postgres_tls_pool_panic/main.ts", "hmac.ll main.h"],
-    [
-      "tests/link/std_postgres_tls_roots_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
-    [
-      "tests/link/std_postgres_tls_unix_panic/main.ts",
-      "client.ll hkdf.ll hmac.ll record.ll",
-    ],
+    ["tests/link/std_postgres_tls_roots_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_tls_unix_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/std_postgres_unix_target/main.ts", "hmac.ll"],
     ["tests/link/std_postgres_user_panic/main.ts", "hmac.ll"],
     ["tests/link/tfb_async_db/main.ts", "hkdf.ll hmac.ll record.ll"],
@@ -17352,7 +14881,7 @@ const DECLARED = [
       file,
       changelog: HMAC_DIGEST_INTO,
       why: "std/crypto/sha256.ts and std/crypto/hmac.ts gain digestInto and a new panic string, and HmacSha256 gains its 32-byte inner-digest buffer (a third array field), so each of these modules or headers, which imports them or lays HmacSha256 out, has new functions or declarations, a wider HmacSha256 and renumbered strings or fields",
-    })),
+    }))
   ),
   // WP39 G4: P256PointScratch gains `comb`, the recoded scalar m, so
   // every module laying it out (a C header, or a test that makes its own
@@ -17366,21 +14895,15 @@ const DECLARED = [
     ["tests/link/crypto_p256/main.ts", "scratch.ll"],
     ["tests/link/crypto_p256_ecdh/main.ts", "main.h"],
     ["tests/link/crypto_p256_f64/main.ts", "scratch.ll"],
-    [
-      "tests/link/crypto_p256_sign_into_message_window/main.ts",
-      "main.h main.ll",
-    ],
-    [
-      "tests/link/crypto_p256_sign_into_signature_window/main.ts",
-      "main.h main.ll",
-    ],
+    ["tests/link/crypto_p256_sign_into_message_window/main.ts", "main.h main.ll"],
+    ["tests/link/crypto_p256_sign_into_signature_window/main.ts", "main.h main.ll"],
   ].flatMap(([program, files]) =>
     files.split(" ").map((file) => ({
       program,
       file,
       changelog: "P-256's cached table for G",
       why: "P256PointScratch gains `comb`, the recoded scalar the signed comb reads its digits from, so every module laying it out has a wider struct (64 to 72 bytes) and renumbered field indices",
-    })),
+    }))
   ),
   // The same widening reaches every TLS, HTTP and QUIC program that links
   // the TLS stack: its tls.ll, tls-tcp.ll and http1-server.ll declare
@@ -17388,93 +14911,36 @@ const DECLARED = [
   // `comb`, and p256SignSha256Into now writes its sign scratch.
   ...[
     ["examples/file-server.ts", "http1-server.ll tls.ll"],
-    [
-      "tests/link/net_http1_server_bad_linger/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
-    [
-      "tests/link/net_http1_server_bad_linger_bytes/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
-    [
-      "tests/link/net_http1_server_head_reuse/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
+    ["tests/link/net_http1_server_bad_linger/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http1_server_bad_linger_bytes/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http1_server_head_reuse/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
     ["tests/link/net_http1_server_implicit_end/main.ts", "main.h tls.ll"],
     [
       "tests/link/net_http2_cleartext/main.ts",
       "http1-server.ll main.h net_tls_record_tcp_harness.ll tls-tcp.ll tls.ll",
     ],
-    [
-      "tests/link/net_http2_cleartext_bad_slots/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
-    [
-      "tests/link/net_http2_cleartext_bad_timeout/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
-    [
-      "tests/link/net_quic_prefork/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
-    [
-      "tests/link/net_quic_worker/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
+    ["tests/link/net_http2_cleartext_bad_slots/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http2_cleartext_bad_timeout/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_quic_prefork/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_quic_worker/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
     ["tests/link/net_serve_burst/main.ts", "http1-server.ll tls.ll"],
     ["tests/link/net_serve_queued_wait/main.ts", "http1-server.ll tls.ll"],
     ["tests/link/net_tls_p256/main.ts", "main.h tls.ll"],
     ["tests/link/net_tls_record_size_limit/main.ts", "main.h tls.ll"],
     ["tests/link/net_tls_record_size_limit_f64/main.ts", "main.h tls.ll"],
-    [
-      "tests/link/net_tls_record_tcp/main.ts",
-      "checks.ll harness.ll main.ll tls.ll",
-    ],
-    [
-      "tests/link/net_tls_record_tcp_f64/main.ts",
-      "harness.ll net_tls_record_tcp_checks.ll tls.ll",
-    ],
-    [
-      "tests/link/net_webtransport_bad_idle/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
-    [
-      "tests/link/net_webtransport_bad_rate/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
-    [
-      "tests/link/region_sessions_soak/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
+    ["tests/link/net_tls_record_tcp/main.ts", "checks.ll harness.ll main.ll tls.ll"],
+    ["tests/link/net_tls_record_tcp_f64/main.ts", "harness.ll net_tls_record_tcp_checks.ll tls.ll"],
+    ["tests/link/net_webtransport_bad_idle/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_webtransport_bad_rate/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/region_sessions_soak/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
     ["tests/link/std_postgres_async/main.ts", "http1-server.ll tls.ll"],
-    [
-      "tests/link/std_postgres_async_depth_panic/main.ts",
-      "http1-server.ll tls.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_pipeline/main.ts",
-      "http1-server.ll tls.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_seat_statement_panic/main.ts",
-      "http1-server.ll tls.ll",
-    ],
-    [
-      "tests/link/std_postgres_async_seat_ticket_panic/main.ts",
-      "http1-server.ll tls.ll",
-    ],
-    [
-      "tests/link/std_postgres_tls/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
-    [
-      "tests/link/std_postgres_tls_roots_panic/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
-    [
-      "tests/link/std_postgres_tls_unix_panic/main.ts",
-      "http1-server.ll main.h tls-tcp.ll tls.ll",
-    ],
+    ["tests/link/std_postgres_async_depth_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_pipeline/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_seat_statement_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_seat_ticket_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_tls/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_tls_roots_panic/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_tls_unix_panic/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
     ["tests/link/tfb_async_db/main.ts", "http1-server.ll tls.ll"],
   ].flatMap(([program, files]) =>
     files.split(" ").map((file) => ({
@@ -17482,7 +14948,7 @@ const DECLARED = [
       file,
       changelog: "P-256's cached table for G",
       why: "P256PointScratch gains `comb` (64 to 72 bytes), so every module of a TLS program that declares it or its constructor moves, a C header gains the field and renumbers what follows it, and p256SignSha256Into stores into its P256SignScratch, so that parameter is no longer readonly",
-    })),
+    }))
   ),
   // The TLS server takes secp256r1 key shares and its carrier an idle
   // timeout: four TLS classes gain fields, which moves every module laying
@@ -17493,7 +14959,7 @@ const DECLARED = [
       file,
       changelog: "carrier idle timeout",
       why: "TlsClientHelloView, TlsExchangeWords, TlsServer and TlsTcpServer gain fields for secp256r1 key shares and the carrier idle timeout, so every module laying one of them out has a new struct type and renumbered field indices",
-    })),
+    }))
   ),
   ...[
     "tests/link/net_tls_p256/main.ts",
@@ -17507,15 +14973,14 @@ const DECLARED = [
   })),
   // WP39 G3: the record_size_limit tests import TLS_RECORD_SIZE_LIMIT_MAX and
   // read TlsServer.peerRecordSizeLimit, new in std/net.
-  ...[
-    "tests/link/net_tls_record_size_limit/main.ts",
-    "tests/link/net_tls_record_size_limit_f64/main.ts",
-  ].map((program) => ({
-    program,
-    file: "exit",
-    changelog: "size_limit on the TLS server",
-    why: "the program imports TLS_RECORD_SIZE_LIMIT_MAX from nish/net/tls/codec, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
-  })),
+  ...["tests/link/net_tls_record_size_limit/main.ts", "tests/link/net_tls_record_size_limit_f64/main.ts"].map(
+    (program) => ({
+      program,
+      file: "exit",
+      changelog: "size_limit on the TLS server",
+      why: "the program imports TLS_RECORD_SIZE_LIMIT_MAX from nish/net/tls/codec, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
+    })
+  ),
   // WP39 G5: the goodput bench picks CUBIC, new in std/net/quic-recovery.
   {
     program: "bench/quic-goodput.ts",
@@ -17552,7 +15017,7 @@ const DECLARED = [
       file,
       changelog: "host, raster and synth",
       why: "nish/host/ring, nish/host/game, nish/raster and nish/synth prove every index and count the std-panics ratchet counted, so the modules gain range guards and helpers and drop panic paths, and a caller's declarations of the moved functions change attributes",
-    })),
+    }))
   ),
   // forEach on an array, a Map or a Set is new, so the seed refuses the
   // programs that call it.
@@ -17571,14 +15036,10 @@ const DECLARED = [
   })),
   // WP21 S3: a freestanding wasm32 build that reaches a hostless builtin is
   // refused by reachability, after every module is checked.
-  ...[
-    "tests/link/package_wasm_hostless/main.ts",
-    "tests/link/wasm_hostless_own/main.ts",
-  ].map((program) => ({
+  ...["tests/link/package_wasm_hostless/main.ts", "tests/link/wasm_hostless_own/main.ts"].map((program) => ({
     program,
     file: "exit",
-    changelog:
-      "Attribute dependency diagnostics and refuse hostless builtins on wasm32",
+    changelog: "Attribute dependency diagnostics and refuse hostless builtins on wasm32",
     why: "the program reaches getenv from a --target wasm32 build, which the 0.38.0 seed compiles and then fails to link, and the candidate refuses with NL2404 naming the chain, so only the reference compiles it",
   })),
   // H3-5: the bad-config tests set Http3Config.idleTimeout or headTimeout,
@@ -17629,8 +15090,7 @@ const DECLARED = [
   // std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd.
   {
     file: "text.ll",
-    changelog:
-      "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
+    changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
     why: "std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd, so the module every importer of nish/text writes has new functions and renumbered string constants; no importer's own module moves",
   },
   // std/text.ts's splitLines scans with nish:simd, a lane-wise compare over a
@@ -17660,7 +15120,7 @@ const DECLARED = [
       "tests/link/crypto_sha1/main.ts": ["main.h"],
       "tests/link/crypto_sha1_f64/main.ts": ["main.h"],
       "tests/link/crypto_sha1_long_f64/main.ts": ["main.h"],
-    },
+    }
   ),
   ...wsAcceptFlat(
     "Http1Connection keeps a WsAcceptKey, so a program's C header that lays out the connection gains WsAcceptKey's struct and renumbers what follows it",
@@ -17668,17 +15128,13 @@ const DECLARED = [
       "tests/link/net_http3_bad_reset_budget/main.ts": ["main.h"],
       "tests/link/net_http3_server_bad_head_timeout/main.ts": ["main.h"],
       "tests/link/net_http3_server_bad_idle_timeout/main.ts": ["main.h"],
-    },
+    }
   ),
   ...wsAcceptFlat(
     "Http1Connection gains the WsAcceptKey field, so the probe that links the handler lays out WsAcceptKey and Sha1 in its modules and header and renumbers what follows them; the 0.41.0 seed refused this probe, the 0.42.0 seed builds it",
     {
-      "tests/link/net_handler_rest_close/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-      ],
-    },
+      "tests/link/net_handler_rest_close/main.ts": ["handler.ll", "main.h", "main.ll"],
+    }
   ),
   // WsDecoder gains `frameChecked`, how far the text frame still arriving has
   // been unmasked and UTF-8 checked, so every program that links
@@ -17775,13 +15231,12 @@ const DECLARED = [
       "tests/link/std_http1_mss/main.ts": ["main.h"],
       "tests/link/std_http_compress/main.ts": ["main.h"],
       "tests/link/tfb_entry/main.ts": ["main.h"],
-    },
+    }
   ),
   {
     program: "tests/link/std_text_camel_case/main.ts",
     file: "exit",
-    changelog:
-      "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
+    changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
     why: "the program imports asciiLower, asciiUpper and split from nish/text, which the 0.37.0 seed's std/text.ts does not export, so only the candidate compiles it",
   },
   // #1362: std/regex.ts makes its tables through regexZeros/regexZeroBytes,
@@ -17815,24 +15270,11 @@ const DECLARED = [
       "src/attributes.ts": ["constants.ll", "expressions.ll"],
       "src/bounds.ts": ["constants.ll", "expressions.ll"],
       "src/break-game.ts": ["break-game.ll", "break-levels.ll"],
-      "src/break-intro.ts": [
-        "break-game.ll",
-        "break-levels.ll",
-        "break-menu.ll",
-      ],
+      "src/break-intro.ts": ["break-game.ll", "break-levels.ll", "break-menu.ll"],
       "src/break-levels.ts": ["break-levels.ll"],
       "src/break-menu.ts": ["break-menu.ll"],
-      "src/break-sound.ts": [
-        "break-game.ll",
-        "break-levels.ll",
-        "break-sound.ll",
-      ],
-      "src/break.ts": [
-        "break-game.ll",
-        "break-levels.ll",
-        "break-menu.ll",
-        "break-sound.ll",
-      ],
+      "src/break-sound.ts": ["break-game.ll", "break-levels.ll", "break-sound.ll"],
+      "src/break.ts": ["break-game.ll", "break-levels.ll", "break-menu.ll", "break-sound.ll"],
       "src/build-cache.ts": ["constants.ll", "expressions.ll"],
       "src/builtins.ts": ["constants.ll", "expressions.ll"],
       "src/capability-report.ts": ["constants.ll", "expressions.ll"],
@@ -17917,9 +15359,7 @@ const DECLARED = [
       "tests/cases/arr_sort_cmp_f64.ts": ["arr_sort_cmp_f64.ll"],
       "tests/cases/arr_sort_edge.ts": ["arr_sort_edge.ll"],
       "tests/cases/f32_arith.ts": ["f32_arith.ll"],
-      "tests/cases/map_iter_compaction_deferred.ts": [
-        "map_iter_compaction_deferred.ll",
-      ],
+      "tests/cases/map_iter_compaction_deferred.ts": ["map_iter_compaction_deferred.ll"],
       "tests/cases/math_intrinsics.ts": ["math_intrinsics.ll"],
       "tests/cases/math_split_member.ts": ["math_split_member.ll"],
       "tests/cases/math_std_edges.ts": ["math_std_edges.ll"],
@@ -17933,25 +15373,17 @@ const DECLARED = [
       "tests/differential/corpus/f64_libm.ts": ["f64_libm.ll"],
       "tests/differential/corpus/f64_math.ts": ["f64_math.ll"],
       "tests/differential/corpus/f64_pow_spec.ts": ["f64_pow_spec.ll"],
-      "tests/link/break_intro/main.ts": [
-        "break-game.ll",
-        "break-levels.ll",
-        "break-menu.ll",
-      ],
+      "tests/link/break_intro/main.ts": ["break-game.ll", "break-levels.ll", "break-menu.ll"],
       "tests/link/break_menu/main.ts": ["break-menu.ll"],
       "tests/link/break_settings/main.ts": ["break-menu.ll"],
-      "tests/link/break_sound/main.ts": [
-        "break-game.ll",
-        "break-levels.ll",
-        "break-sound.ll",
-      ],
-    },
+      "tests/link/break_sound/main.ts": ["break-game.ll", "break-levels.ll", "break-sound.ll"],
+    }
   ),
   ...pageMath(
     "the reference's std/math.ts does not export the six functions the program imports from nish/math, so only the candidate compiles it",
     {
       "tests/cases/wasm_math_std.ts": ["exit"],
-    },
+    }
   ),
   // WP49 stage 5, part 7: `Http1Connection` gains `ended()` and
   // `HttpHandler` `hungUp()`, so every program that reaches
@@ -17959,50 +15391,18 @@ const DECLARED = [
   ...serveCancel(
     "Http1Connection gains ended() and HttpHandler hungUp(), so serve can cancel a task whose client hung up; both modules' IR moves",
     {
-      "examples/http-app/main.ts": [
-        "app.ll",
-        "handler.ll",
-        "http1-server.ll",
-        "main.ll",
-      ],
+      "examples/http-app/main.ts": ["app.ll", "handler.ll", "http1-server.ll", "main.ll"],
       "examples/prefork-server.ts": ["http1-server.ll", "prefork-server.ll"],
       "examples/relay/main.ts": ["http1-server.ll"],
       "bench/http-app-carrier.ts": ["http-app-carrier.ll", "http1-server.ll"],
       "bench/http1-request/main.ts": ["http1-server.ll", "main.ll"],
-      "bench/http1-server.ts": [
-        "handler.ll",
-        "http1-server.ll",
-        "std_net_http1-server.ll",
-      ],
+      "bench/http1-server.ts": ["handler.ll", "http1-server.ll", "std_net_http1-server.ll"],
       "bench/techempower/main.ts": ["http1-server.ll", "main.ll", "server.ll"],
-      "tests/link/net_handler/main.ts": [
-        "handler.ll",
-        "http1-server.ll",
-        "main.ll",
-      ],
-      "tests/link/net_handler_descriptors/main.ts": [
-        "handler.ll",
-        "http1-server.ll",
-        "main.ll",
-      ],
-      "tests/link/net_handler_overlong/main.ts": [
-        "handler.ll",
-        "http1-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_handler_short/main.ts": [
-        "handler.ll",
-        "http1-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_handler_unbegun/main.ts": [
-        "handler.ll",
-        "http1-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
+      "tests/link/net_handler/main.ts": ["handler.ll", "http1-server.ll", "main.ll"],
+      "tests/link/net_handler_descriptors/main.ts": ["handler.ll", "http1-server.ll", "main.ll"],
+      "tests/link/net_handler_overlong/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_handler_short/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_handler_unbegun/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "taken.ll"],
       "tests/link/net_http1_server/main.ts": [
         "checks.ll",
         "conn.ll",
@@ -18010,47 +15410,20 @@ const DECLARED = [
         "http1-server.ll",
         "main.ll",
       ],
-      "tests/link/net_http1_server_bad_config/main.ts": [
-        "http1-server.ll",
-        "main.ll",
-      ],
-      "tests/link/net_http1_server_bad_head/main.ts": [
-        "http1-server.ll",
-        "main.ll",
-      ],
-      "tests/link/net_http1_server_bad_head_timeout/main.ts": [
-        "http1-server.ll",
-        "main.ll",
-      ],
-      "tests/link/net_http1_server_bad_message/main.ts": [
-        "http1-server.ll",
-        "main.ll",
-      ],
+      "tests/link/net_http1_server_bad_config/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_bad_head/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_bad_message/main.ts": ["http1-server.ll", "main.ll"],
       "tests/link/net_http1_server_f64/main.ts": [
         "checks.ll",
         "http1-server.ll",
         "net_http1_server_harness.ll",
       ],
-      "tests/link/net_http1_server_feed_window/main.ts": [
-        "http1-server.ll",
-        "main.ll",
-      ],
-      "tests/link/net_http1_server_frame_window/main.ts": [
-        "http1-server.ll",
-        "main.ll",
-      ],
-      "tests/link/net_http1_server_send_body/main.ts": [
-        "http1-server.ll",
-        "main.ll",
-      ],
-      "tests/link/net_http1_server_send_body_window/main.ts": [
-        "http1-server.ll",
-        "main.ll",
-      ],
-      "tests/link/net_http1_server_write_window/main.ts": [
-        "http1-server.ll",
-        "main.ll",
-      ],
+      "tests/link/net_http1_server_feed_window/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_frame_window/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_send_body/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_write_window/main.ts": ["http1-server.ll", "main.ll"],
       "tests/link/net_http2_bad_config_tls/main.ts": ["http1-server.ll"],
       "tests/link/net_http2_tls/main.ts": ["http1-server.ll"],
       "tests/link/net_http2_tls_f64/main.ts": ["http1-server.ll"],
@@ -18070,12 +15443,7 @@ const DECLARED = [
       "tests/link/net_http3_server_bad_config/main.ts": ["http1-server.ll"],
       "tests/link/net_http3_server_f64/main.ts": ["http1-server.ll"],
       "tests/link/net_http3_write_window/main.ts": ["http1-server.ll"],
-      "tests/link/net_http_app/main.ts": [
-        "app.ll",
-        "handler.ll",
-        "http1-server.ll",
-        "main.ll",
-      ],
+      "tests/link/net_http_app/main.ts": ["app.ll", "handler.ll", "http1-server.ll", "main.ll"],
       "tests/link/net_http_date/main.ts": ["http1-server.ll"],
       "tests/link/net_http_date_f64/main.ts": ["http1-server.ll"],
       "tests/link/net_interop_server/main.ts": [
@@ -18134,37 +15502,19 @@ const DECLARED = [
       "tests/link/net_relay_f64/main.ts": ["http1-server.ll"],
       "tests/link/net_relay_forged/main.ts": ["http1-server.ll"],
       "tests/link/net_relay_soak/main.ts": ["http1-server.ll"],
-      "tests/link/net_upstream/main.ts": [
-        "handler.ll",
-        "http1-server.ll",
-        "main.ll",
-        "upstream.ll",
-      ],
-      "tests/link/net_upstream_release/main.ts": [
-        "handler.ll",
-        "http1-server.ll",
-        "main.ll",
-        "upstream.ll",
-      ],
+      "tests/link/net_upstream/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "upstream.ll"],
+      "tests/link/net_upstream_release/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "upstream.ll"],
       "tests/link/net_webtransport/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_bad_datagrams/main.ts": ["http1-server.ll"],
-      "tests/link/net_webtransport_bad_datagrams_off/main.ts": [
-        "http1-server.ll",
-      ],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_bad_layer/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_bad_pending/main.ts": ["http1-server.ll"],
-      "tests/link/net_webtransport_bad_pending_high/main.ts": [
-        "http1-server.ll",
-      ],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_bad_sessions/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_bad_streams/main.ts": ["http1-server.ll"],
-      "tests/link/net_webtransport_bad_streams_high/main.ts": [
-        "http1-server.ll",
-      ],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["http1-server.ll"],
-      "tests/link/net_webtransport_datagram_window/main.ts": [
-        "http1-server.ll",
-      ],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_stream_window/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["http1-server.ll"],
@@ -18226,12 +15576,8 @@ const DECLARED = [
         "main.ll",
         "postgres-carrier.ll",
       ],
-      "tests/link/tfb_entry/main.ts": [
-        "bench_techempower_server.ll",
-        "http1-server.ll",
-        "main.ll",
-      ],
-    },
+      "tests/link/tfb_entry/main.ts": ["bench_techempower_server.ll", "http1-server.ll", "main.ll"],
+    }
   ),
   // `Http1Connection` gains `betweenRequests()`, so every module of a program
   // that reaches std/net/http1-server.ts declares one more method and the
@@ -18239,30 +15585,10 @@ const DECLARED = [
   ...betweenRequests(
     "Http1Connection gains betweenRequests(), so a graceful drain can ask whether closing a connection cuts a request short; every module declaring the class's methods moves",
     {
-      "tests/link/net_http_server/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "server.ll",
-      ],
-      "tests/link/net_http_server_bad_limit/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_bad_param/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_bad_watch/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
+      "tests/link/net_http_server/main.ts": ["handler.ll", "http-server.ll", "main.ll", "server.ll"],
+      "tests/link/net_http_server_bad_limit/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_bad_param/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_bad_watch/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
       "tests/link/net_http_server_caps/main.ts": [
         "handler.ll",
         "http-server.ll",
@@ -18277,60 +15603,25 @@ const DECLARED = [
         "main.ll",
         "rig.ll",
       ],
-      "tests/link/net_http_server_end_short/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
+      "tests/link/net_http_server_end_short/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
       "tests/link/net_http_server_end_unstarted/main.ts": [
         "handler.ll",
         "http-server.ll",
         "main.ll",
         "taken.ll",
       ],
-      "tests/link/net_http_server_foreign/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_h1_fields/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_h1_head/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_h1_slots/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_h1_twice/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
+      "tests/link/net_http_server_foreign/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_fields/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_head/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_slots/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_twice/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
       "tests/link/net_http_server_h2_connect/main.ts": [
         "handler.ll",
         "http-server.ll",
         "main.ll",
         "taken.ll",
       ],
-      "tests/link/net_http_server_h2_head/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
+      "tests/link/net_http_server_h2_head/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
       "tests/link/net_http_server_h2_refused/main.ts": [
         "handler.ll",
         "http-server.ll",
@@ -18338,42 +15629,12 @@ const DECLARED = [
         "net_http_server_carriers_client.ll",
         "rig.ll",
       ],
-      "tests/link/net_http_server_h2_slots/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_h2_twice/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_h2c/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_h3_head/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_h3_slots/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_h3_twice/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
+      "tests/link/net_http_server_h2_slots/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h2_twice/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_head/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_slots/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_twice/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
       "tests/link/net_http_server_h3_webtransport/main.ts": [
         "handler.ll",
         "http-server.ll",
@@ -18426,12 +15687,7 @@ const DECLARED = [
         "main.ll",
         "taken.ll",
       ],
-      "tests/link/net_http_server_take_none/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
+      "tests/link/net_http_server_take_none/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
       "tests/link/net_http_server_timeouts/main.ts": [
         "handler.ll",
         "http-server.ll",
@@ -18439,18 +15695,8 @@ const DECLARED = [
         "rig.ll",
         "rows.ll",
       ],
-      "tests/link/net_http_server_unbegun/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
-      "tests/link/net_http_server_wait_tls/main.ts": [
-        "handler.ll",
-        "http-server.ll",
-        "main.ll",
-        "taken.ll",
-      ],
+      "tests/link/net_http_server_unbegun/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_wait_tls/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
       "tests/link/net_http_server_write_long/main.ts": [
         "handler.ll",
         "http-server.ll",
@@ -18469,7 +15715,7 @@ const DECLARED = [
         "main.ll",
         "taken.ll",
       ],
-    },
+    }
   ),
   {
     program: "tests/link/net_fetch_async_deadline/main.ts",
@@ -18702,18 +15948,9 @@ const DECLARED = [
       "tests/link/net_fetch_async/main.ts": ["dns-resolver.ll", "dns.ll"],
       "tests/link/net_fetch_async_flat/main.ts": ["dns-resolver.ll", "dns.ll"],
       "tests/link/net_fetch_async_https/main.ts": ["dns-resolver.ll", "dns.ll"],
-      "tests/link/net_fetch_async_https_flat/main.ts": [
-        "dns-resolver.ll",
-        "dns.ll",
-      ],
-      "tests/link/net_fetch_async_overlap/main.ts": [
-        "dns-resolver.ll",
-        "dns.ll",
-      ],
-      "tests/link/net_fetch_async_policy/main.ts": [
-        "dns-resolver.ll",
-        "dns.ll",
-      ],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["dns-resolver.ll", "dns.ll"],
       "tests/link/net_http_fetch/main.ts": ["dns-resolver.ll", "dns.ll"],
       "tests/link/net_http_fetch_f64/main.ts": ["dns-resolver.ll", "dns.ll"],
       "tests/link/net_http_fetch_tls/main.ts": ["dns-resolver.ll", "dns.ll"],
@@ -18722,17 +15959,9 @@ const DECLARED = [
       "tests/link/net_upstream/main.ts": ["dns-resolver.ll", "dns.ll"],
       "tests/link/net_upstream_release/main.ts": ["dns-resolver.ll", "dns.ll"],
       "tests/link/std_dns/main.ts": ["dns-resolver.ll", "dns.ll", "main.ll"],
-      "tests/link/std_dns_caps/main.ts": [
-        "dns-resolver.ll",
-        "dns.ll",
-        "main.ll",
-      ],
-      "tests/link/std_dns_soak/main.ts": [
-        "dns-resolver.ll",
-        "dns.ll",
-        "main.ll",
-      ],
-    },
+      "tests/link/std_dns_caps/main.ts": ["dns-resolver.ll", "dns.ll", "main.ll"],
+      "tests/link/std_dns_soak/main.ts": ["dns-resolver.ll", "dns.ll", "main.ll"],
+    }
   ),
   // QUIC path MTU discovery: QuicConnection and QuicRecovery gain the search's
   // fields, so every module of a program that reaches nish/net/quic declares a
@@ -19099,14 +16328,8 @@ const DECLARED = [
         "quic.ll",
         "refusals.ll",
       ],
-      "tests/link/net_quic_conn_parts/main.ts": [
-        "quic-datagram.ll",
-        "slots.ll",
-      ],
-      "tests/link/net_quic_conn_parts_f64/main.ts": [
-        "quic-datagram.ll",
-        "slots.ll",
-      ],
+      "tests/link/net_quic_conn_parts/main.ts": ["quic-datagram.ll", "slots.ll"],
+      "tests/link/net_quic_conn_parts_f64/main.ts": ["quic-datagram.ll", "slots.ll"],
       "tests/link/net_quic_conn_replay/main.ts": [
         "main.h",
         "quic-datagram.ll",
@@ -19818,13 +17041,13 @@ const DECLARED = [
         "quic.ll",
         "webtransport.ll",
       ],
-    },
+    }
   ),
   ...dnsFallback(
     "#1304's test calls DnsResolver.settle, a method the reference's std/net/dns-resolver.ts does not have, so only the candidate compiles it",
     {
       "tests/link/std_dns_resolver/main.ts": ["exit"],
-    },
+    }
   ),
   // `HttpOptions` gains `dns` and `HttpClientConn` the TLS session, so every
   // program that reaches std/net/fetch.ts lays both out again. dns.ts's
@@ -19833,61 +17056,25 @@ const DECLARED = [
   ...asyncFetch(
     "async fetch speaks https and takes a DNS config, so HttpOptions and HttpClientConn grow fields",
     {
-      "examples/http-get-json.ts": [
-        "fetch.ll",
-        "http-get-json.h",
-        "http-get-json.ll",
-      ],
+      "examples/http-get-json.ts": ["fetch.ll", "http-get-json.h", "http-get-json.ll"],
       "tests/link/net_fetch_async/main.ts": ["fetch.ll", "main.h", "main.ll"],
-      "tests/link/net_fetch_async_flat/main.ts": [
-        "fetch.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/net_fetch_async_https/main.ts": [
-        "fetch.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/net_fetch_async_https_flat/main.ts": [
-        "fetch.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/net_fetch_async_overlap/main.ts": [
-        "fetch.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/net_fetch_async_policy/main.ts": [
-        "fetch.ll",
-        "main.h",
-        "main.ll",
-      ],
+      "tests/link/net_fetch_async_flat/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["fetch.ll", "main.h", "main.ll"],
       "tests/link/net_http_fetch/main.ts": ["checks.ll", "fetch.ll", "main.h"],
-      "tests/link/net_http_fetch_f64/main.ts": [
-        "checks.ll",
-        "fetch.ll",
-        "main.h",
-      ],
-      "tests/link/net_http_fetch_tls/main.ts": [
-        "fetch.ll",
-        "main.h",
-        "main.ll",
-      ],
+      "tests/link/net_http_fetch_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_tls/main.ts": ["fetch.ll", "main.h", "main.ll"],
       "tests/link/net_outbound/main.ts": ["checks.ll", "fetch.ll", "main.h"],
-      "tests/link/net_outbound_f64/main.ts": [
-        "checks.ll",
-        "fetch.ll",
-        "main.h",
-      ],
-    },
+      "tests/link/net_outbound_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+    }
   ),
   ...asyncFetch(
     "the program sets HttpOptions.dns, a field the reference's std/net/fetch.ts does not have, so only the candidate compiles it",
     {
       "tests/link/net_fetch_async_dns_slow/main.ts": ["exit"],
-    },
+    }
   ),
   {
     program: "tests/cases/async_spawn_fn_arg.ts",
@@ -19910,8 +17097,7 @@ const DECLARED = [
   {
     program: "tests/cases/async_await_all_arrays.ts",
     file: "exit",
-    changelog:
-      "awaitAlls whose lanes return arrays no longer crash the compiler",
+    changelog: "awaitAlls whose lanes return arrays no longer crash the compiler",
     why: "the 0.37.0 seed lifts an `a[0]` header load above the `awaitAll` that binds `a` in a loop and stops with an internal compiler error (#1326)",
   },
   {
@@ -19981,10 +17167,8 @@ const DECLARED = [
     {
       "tests/cases/result_loop_outer_let.ts": ["result_loop_outer_let.ll"],
       "tests/cases/result_loop_payloads.ts": ["result_loop_payloads.ll"],
-      "tests/cases/result_loop_return_alloc.ts": [
-        "result_loop_return_alloc.ll",
-      ],
-    },
+      "tests/cases/result_loop_return_alloc.ts": ["result_loop_return_alloc.ll"],
+    }
   ),
   // WP49 stage 5: an awaitAll member that waits runs in a region of its own,
   // so every function holding an awaitAll of a suspending call gains a lane
@@ -19993,16 +17177,14 @@ const DECLARED = [
     "an awaitAll member that waits gets a region its poll enters and adopts, so each awaiting function gains lane slots and region calls",
     {
       "tests/cases/async_await_all.ts": ["async_await_all.ll"],
-      "tests/cases/async_await_all_lanes_large.ts": [
-        "async_await_all_lanes_large.ll",
-      ],
+      "tests/cases/async_await_all_lanes_large.ts": ["async_await_all_lanes_large.ll"],
       "tests/link/async_await_all_lanes/main.ts": ["lib.ll", "main.ll"],
       "tests/link/async_await_all_retain/main.ts": ["main.ll"],
       "tests/link/async_await_all_small/main.ts": ["main.ll"],
       "tests/link/async_across_modules/main.ts": ["main.ll"],
       "docs/cookbook/async-await-all.ts": ["async-await-all.ll"],
       "docs/cookbook/runtime-prelude.ts": ["runtime-prelude.ll"],
-    },
+    }
   ),
   {
     changelog: "Strings cross between a wasm module and its page",
@@ -20017,7 +17199,7 @@ const DECLARED = [
   ...declareStringExports(
     STAGE4_STRING_EXPORTS,
     "Strings cross between a wasm module and its page",
-    "a string result is decoded into a JS string, so a function returning one is exported to the page instead of listed as a comment",
+    "a string result is decoded into a JS string, so a function returning one is exported to the page instead of listed as a comment"
   ),
   {
     program: "tests/cases/deterministic_bits.ts",
@@ -20358,47 +17540,17 @@ const DECLARED = [
       "bench/http1-server.ts": ["http-fields.ll", "http1-codec.ll"],
       "bench/router.ts": ["http-fields.ll"],
       "bench/techempower/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_fetch_async/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_fetch_async_flat/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_fetch_async_https/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_fetch_async_https_flat/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_fetch_async_overlap/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_fetch_async_policy/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_fetch_async/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_handler/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_handler_descriptors/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_handler_overlong/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_handler_short/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_handler_unbegun/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_handler_descriptors/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_handler_overlong/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_handler_short/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_handler_unbegun/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_http1/main.ts": ["http1-codec.ll"],
       "tests/link/net_http1_chunk_window/main.ts": ["http1-codec.ll"],
       "tests/link/net_http1_client/main.ts": ["http1-codec.ll"],
@@ -20409,57 +17561,21 @@ const DECLARED = [
       "tests/link/net_http1_f64/main.ts": ["http1-codec.ll"],
       "tests/link/net_http1_feed_window/main.ts": ["http1-codec.ll"],
       "tests/link/net_http1_parse_diff/main.ts": ["http1-codec.ll"],
-      "tests/link/net_http1_server/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http1_server_bad_config/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http1_server_bad_head/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http1_server_bad_head_timeout/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http1_server_bad_message/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http1_server_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http1_server_feed_window/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http1_server_frame_window/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http1_server_send_body/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http1_server_send_body_window/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http1_server_write_window/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_http1_server/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_bad_config/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_bad_head/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_bad_message/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_feed_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_frame_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_send_body/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_write_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_http1_write_chunk_window/main.ts": ["http1-codec.ll"],
       "tests/link/net_http2/main.ts": ["http-fields.ll"],
       "tests/link/net_http2_bad_config/main.ts": ["http-fields.ll"],
-      "tests/link/net_http2_bad_config_tls/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_http2_bad_config_tls/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_http2_errors/main.ts": ["http-fields.ll"],
       "tests/link/net_http2_errors_f64/main.ts": ["http-fields.ll"],
       "tests/link/net_http2_f64/main.ts": ["http-fields.ll"],
@@ -20469,431 +17585,220 @@ const DECLARED = [
       "tests/link/net_http2_hpack_table_f64/main.ts": ["http-fields.ll"],
       "tests/link/net_http2_reset/main.ts": ["http-fields.ll"],
       "tests/link/net_http2_tls/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_http2_tls_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_http2_tls_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_http3/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_http3_bad_body_chunk/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http3_bad_config/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http3_bad_credit/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http3_bad_local_limit/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http3_bad_uni_limit/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http3_bad_write_chunk/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_http3_bad_body_chunk/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_config/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_credit/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_local_limit/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_uni_limit/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_write_chunk/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_http3_ecn/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_http3_ecn_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http3_errors/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http3_errors_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_http3_ecn_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_errors/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_errors_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_http3_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_http3_server/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http3_server_bad_config/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http3_server_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http3_write_window/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_http3_server/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_server_bad_config/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_server_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_write_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_http_app/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_http_date/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-        "main.d.ts",
-        "main.mjs",
-      ],
-      "tests/link/net_http_date_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-        "main.d.ts",
-        "main.mjs",
-      ],
+      "tests/link/net_http_date/main.ts": ["http-fields.ll", "http1-codec.ll", "main.d.ts", "main.mjs"],
+      "tests/link/net_http_date_f64/main.ts": ["http-fields.ll", "http1-codec.ll", "main.d.ts", "main.mjs"],
       "tests/link/net_http_fetch/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_http_fetch_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_http_fetch_tls/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_interop_server/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_interop_server_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_http_fetch_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http_fetch_tls/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_interop_server/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_interop_server_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_loopback/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_loopback_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_loopback_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_outbound/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_outbound_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_quic_server_wipes/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_quic_server_wipes_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_outbound_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_quic_server_wipes/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_quic_server_wipes_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_relay/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_relay_bad_hello/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_relay_bad_idle/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_relay_bad_path/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_relay_bad_per_peer/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_relay_bad_pool/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_relay_bad_rate/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_relay_bad_sessions/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_relay_bad_spare/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_relay_bad_stats/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_relay_bad_hello/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_idle/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_path/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_per_peer/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_pool/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_rate/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_sessions/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_spare/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_stats/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_relay_encode_window/main.ts": ["http1-codec.ll"],
       "tests/link/net_relay_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_relay_forged/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_relay_forged/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_relay_frame_window/main.ts": ["http1-codec.ll"],
       "tests/link/net_relay_grant_window/main.ts": ["http1-codec.ll"],
       "tests/link/net_relay_json_window/main.ts": ["http1-codec.ll"],
       "tests/link/net_relay_soak/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_router/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_router_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_router_negative_too_many_params/main.ts": [
-        "http-fields.ll",
-      ],
+      "tests/link/net_router_negative_too_many_params/main.ts": ["http-fields.ll"],
       "tests/link/net_upstream/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/net_upstream_release/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_upstream_release/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_websocket/main.ts": ["http1-codec.ll"],
       "tests/link/net_websocket_f64/main.ts": ["http1-codec.ll"],
       "tests/link/net_websocket_feed_window/main.ts": ["http1-codec.ll"],
       "tests/link/net_websocket_frame_window/main.ts": ["http1-codec.ll"],
       "tests/link/net_websocket_utf8_window/main.ts": ["http1-codec.ll"],
       "tests/link/net_websocket_write_window/main.ts": ["http1-codec.ll"],
-      "tests/link/net_webtransport/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_bad_datagrams/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_bad_datagrams_off/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_bad_layer/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_bad_pending/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_bad_pending_high/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_bad_sessions/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_bad_streams/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_bad_streams_high/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_close_window/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_datagram_window/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_f64/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_stream_window/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/net_webtransport_whole_window/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/std_http1_end_head/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/net_webtransport/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_datagrams/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_layer/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_pending/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_sessions/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_streams/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_close_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_stream_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_whole_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_http1_end_head/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/std_http1_mss/main.ts": ["http-fields.ll", "http1-codec.ll"],
-      "tests/link/std_http_compress/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/std_postgres_carrier/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/std_postgres_carrier_attach_panic/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/std_postgres_carrier_batcher_panic/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/std_postgres_carrier_connection_panic/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/std_postgres_carrier_limits_panic/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/std_postgres_carrier_next_panic/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/std_postgres_carrier_request_panic/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
-      "tests/link/std_postgres_carrier_send_panic/main.ts": [
-        "http-fields.ll",
-        "http1-codec.ll",
-      ],
+      "tests/link/std_http_compress/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_next_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_send_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/tfb_db/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/tfb_entry/main.ts": ["http-fields.ll", "http1-codec.ll"],
-    },
+    }
   ),
   ...dateSingleton(
     "the 0.37.0 seed's std/net/http-fields.ts has no HTTP_FIELDS_DATE_REPEATED, so only the candidate compiles the program",
     {
       "tests/link/net_http_fields/main.ts": ["exit"],
       "tests/link/net_http_fields_f64/main.ts": ["exit"],
-    },
+    }
   ),
   // HttpCompressor.mss starts at 0, unset, instead of HTTP_DEFAULT_MSS, so
   // every program that reaches std/net/http-compress.ts stores 0 in its
   // constructor; http1-server.ll moves too, where serveCancel already covers it.
-  ...mssUnset(
-    "HttpCompressor's constructor stores 0 (unset) in mss instead of HTTP_DEFAULT_MSS",
-    [
-      "examples/http-app/main.ts",
-      "examples/prefork-server.ts",
-      "examples/relay/main.ts",
-      "bench/http-app-carrier.ts",
-      "bench/http1-request/main.ts",
-      "bench/http1-server.ts",
-      "bench/techempower/main.ts",
-      "tests/link/net_handler/main.ts",
-      "tests/link/net_handler_descriptors/main.ts",
-      "tests/link/net_handler_overlong/main.ts",
-      "tests/link/net_handler_short/main.ts",
-      "tests/link/net_handler_unbegun/main.ts",
-      "tests/link/net_http1_server/main.ts",
-      "tests/link/net_http1_server_bad_config/main.ts",
-      "tests/link/net_http1_server_bad_head/main.ts",
-      "tests/link/net_http1_server_bad_head_timeout/main.ts",
-      "tests/link/net_http1_server_bad_message/main.ts",
-      "tests/link/net_http1_server_f64/main.ts",
-      "tests/link/net_http1_server_feed_window/main.ts",
-      "tests/link/net_http1_server_frame_window/main.ts",
-      "tests/link/net_http1_server_send_body/main.ts",
-      "tests/link/net_http1_server_send_body_window/main.ts",
-      "tests/link/net_http1_server_write_window/main.ts",
-      "tests/link/net_http2_bad_config_tls/main.ts",
-      "tests/link/net_http2_tls/main.ts",
-      "tests/link/net_http2_tls_f64/main.ts",
-      "tests/link/net_http3/main.ts",
-      "tests/link/net_http3_bad_body_chunk/main.ts",
-      "tests/link/net_http3_bad_config/main.ts",
-      "tests/link/net_http3_bad_credit/main.ts",
-      "tests/link/net_http3_bad_local_limit/main.ts",
-      "tests/link/net_http3_bad_uni_limit/main.ts",
-      "tests/link/net_http3_bad_write_chunk/main.ts",
-      "tests/link/net_http3_ecn/main.ts",
-      "tests/link/net_http3_ecn_f64/main.ts",
-      "tests/link/net_http3_errors/main.ts",
-      "tests/link/net_http3_errors_f64/main.ts",
-      "tests/link/net_http3_f64/main.ts",
-      "tests/link/net_http3_server/main.ts",
-      "tests/link/net_http3_server_bad_config/main.ts",
-      "tests/link/net_http3_server_f64/main.ts",
-      "tests/link/net_http3_write_window/main.ts",
-      "tests/link/net_http_app/main.ts",
-      "tests/link/net_http_date/main.ts",
-      "tests/link/net_http_date_f64/main.ts",
-      "tests/link/net_interop_server/main.ts",
-      "tests/link/net_interop_server_f64/main.ts",
-      "tests/link/net_loopback/main.ts",
-      "tests/link/net_loopback_f64/main.ts",
-      "tests/link/net_quic_server_wipes/main.ts",
-      "tests/link/net_quic_server_wipes_f64/main.ts",
-      "tests/link/net_relay/main.ts",
-      "tests/link/net_relay_bad_hello/main.ts",
-      "tests/link/net_relay_bad_idle/main.ts",
-      "tests/link/net_relay_bad_path/main.ts",
-      "tests/link/net_relay_bad_per_peer/main.ts",
-      "tests/link/net_relay_bad_pool/main.ts",
-      "tests/link/net_relay_bad_rate/main.ts",
-      "tests/link/net_relay_bad_sessions/main.ts",
-      "tests/link/net_relay_bad_spare/main.ts",
-      "tests/link/net_relay_bad_stats/main.ts",
-      "tests/link/net_relay_f64/main.ts",
-      "tests/link/net_relay_forged/main.ts",
-      "tests/link/net_relay_soak/main.ts",
-      "tests/link/net_upstream/main.ts",
-      "tests/link/net_upstream_release/main.ts",
-      "tests/link/net_webtransport/main.ts",
-      "tests/link/net_webtransport_bad_datagrams/main.ts",
-      "tests/link/net_webtransport_bad_datagrams_off/main.ts",
-      "tests/link/net_webtransport_bad_layer/main.ts",
-      "tests/link/net_webtransport_bad_pending/main.ts",
-      "tests/link/net_webtransport_bad_pending_high/main.ts",
-      "tests/link/net_webtransport_bad_sessions/main.ts",
-      "tests/link/net_webtransport_bad_streams/main.ts",
-      "tests/link/net_webtransport_bad_streams_high/main.ts",
-      "tests/link/net_webtransport_close_window/main.ts",
-      "tests/link/net_webtransport_datagram_window/main.ts",
-      "tests/link/net_webtransport_f64/main.ts",
-      "tests/link/net_webtransport_stream_window/main.ts",
-      "tests/link/net_webtransport_whole_window/main.ts",
-      "tests/link/std_compress_f64/main.ts",
-      "tests/link/std_http1_end_head/main.ts",
-      "tests/link/std_http1_mss/main.ts",
-      "tests/link/std_http_compress/main.ts",
-      "tests/link/std_postgres_carrier/main.ts",
-      "tests/link/std_postgres_carrier_attach_panic/main.ts",
-      "tests/link/std_postgres_carrier_batcher_panic/main.ts",
-      "tests/link/std_postgres_carrier_connection_panic/main.ts",
-      "tests/link/std_postgres_carrier_limits_panic/main.ts",
-      "tests/link/std_postgres_carrier_next_panic/main.ts",
-      "tests/link/std_postgres_carrier_request_panic/main.ts",
-      "tests/link/std_postgres_carrier_send_panic/main.ts",
-      "tests/link/tfb_db/main.ts",
-      "tests/link/tfb_entry/main.ts",
-    ],
-  ),
+  ...mssUnset("HttpCompressor's constructor stores 0 (unset) in mss instead of HTTP_DEFAULT_MSS", [
+    "examples/http-app/main.ts",
+    "examples/prefork-server.ts",
+    "examples/relay/main.ts",
+    "bench/http-app-carrier.ts",
+    "bench/http1-request/main.ts",
+    "bench/http1-server.ts",
+    "bench/techempower/main.ts",
+    "tests/link/net_handler/main.ts",
+    "tests/link/net_handler_descriptors/main.ts",
+    "tests/link/net_handler_overlong/main.ts",
+    "tests/link/net_handler_short/main.ts",
+    "tests/link/net_handler_unbegun/main.ts",
+    "tests/link/net_http1_server/main.ts",
+    "tests/link/net_http1_server_bad_config/main.ts",
+    "tests/link/net_http1_server_bad_head/main.ts",
+    "tests/link/net_http1_server_bad_head_timeout/main.ts",
+    "tests/link/net_http1_server_bad_message/main.ts",
+    "tests/link/net_http1_server_f64/main.ts",
+    "tests/link/net_http1_server_feed_window/main.ts",
+    "tests/link/net_http1_server_frame_window/main.ts",
+    "tests/link/net_http1_server_send_body/main.ts",
+    "tests/link/net_http1_server_send_body_window/main.ts",
+    "tests/link/net_http1_server_write_window/main.ts",
+    "tests/link/net_http2_bad_config_tls/main.ts",
+    "tests/link/net_http2_tls/main.ts",
+    "tests/link/net_http2_tls_f64/main.ts",
+    "tests/link/net_http3/main.ts",
+    "tests/link/net_http3_bad_body_chunk/main.ts",
+    "tests/link/net_http3_bad_config/main.ts",
+    "tests/link/net_http3_bad_credit/main.ts",
+    "tests/link/net_http3_bad_local_limit/main.ts",
+    "tests/link/net_http3_bad_uni_limit/main.ts",
+    "tests/link/net_http3_bad_write_chunk/main.ts",
+    "tests/link/net_http3_ecn/main.ts",
+    "tests/link/net_http3_ecn_f64/main.ts",
+    "tests/link/net_http3_errors/main.ts",
+    "tests/link/net_http3_errors_f64/main.ts",
+    "tests/link/net_http3_f64/main.ts",
+    "tests/link/net_http3_server/main.ts",
+    "tests/link/net_http3_server_bad_config/main.ts",
+    "tests/link/net_http3_server_f64/main.ts",
+    "tests/link/net_http3_write_window/main.ts",
+    "tests/link/net_http_app/main.ts",
+    "tests/link/net_http_date/main.ts",
+    "tests/link/net_http_date_f64/main.ts",
+    "tests/link/net_interop_server/main.ts",
+    "tests/link/net_interop_server_f64/main.ts",
+    "tests/link/net_loopback/main.ts",
+    "tests/link/net_loopback_f64/main.ts",
+    "tests/link/net_quic_server_wipes/main.ts",
+    "tests/link/net_quic_server_wipes_f64/main.ts",
+    "tests/link/net_relay/main.ts",
+    "tests/link/net_relay_bad_hello/main.ts",
+    "tests/link/net_relay_bad_idle/main.ts",
+    "tests/link/net_relay_bad_path/main.ts",
+    "tests/link/net_relay_bad_per_peer/main.ts",
+    "tests/link/net_relay_bad_pool/main.ts",
+    "tests/link/net_relay_bad_rate/main.ts",
+    "tests/link/net_relay_bad_sessions/main.ts",
+    "tests/link/net_relay_bad_spare/main.ts",
+    "tests/link/net_relay_bad_stats/main.ts",
+    "tests/link/net_relay_f64/main.ts",
+    "tests/link/net_relay_forged/main.ts",
+    "tests/link/net_relay_soak/main.ts",
+    "tests/link/net_upstream/main.ts",
+    "tests/link/net_upstream_release/main.ts",
+    "tests/link/net_webtransport/main.ts",
+    "tests/link/net_webtransport_bad_datagrams/main.ts",
+    "tests/link/net_webtransport_bad_datagrams_off/main.ts",
+    "tests/link/net_webtransport_bad_layer/main.ts",
+    "tests/link/net_webtransport_bad_pending/main.ts",
+    "tests/link/net_webtransport_bad_pending_high/main.ts",
+    "tests/link/net_webtransport_bad_sessions/main.ts",
+    "tests/link/net_webtransport_bad_streams/main.ts",
+    "tests/link/net_webtransport_bad_streams_high/main.ts",
+    "tests/link/net_webtransport_close_window/main.ts",
+    "tests/link/net_webtransport_datagram_window/main.ts",
+    "tests/link/net_webtransport_f64/main.ts",
+    "tests/link/net_webtransport_stream_window/main.ts",
+    "tests/link/net_webtransport_whole_window/main.ts",
+    "tests/link/std_compress_f64/main.ts",
+    "tests/link/std_http1_end_head/main.ts",
+    "tests/link/std_http1_mss/main.ts",
+    "tests/link/std_http_compress/main.ts",
+    "tests/link/std_postgres_carrier/main.ts",
+    "tests/link/std_postgres_carrier_attach_panic/main.ts",
+    "tests/link/std_postgres_carrier_batcher_panic/main.ts",
+    "tests/link/std_postgres_carrier_connection_panic/main.ts",
+    "tests/link/std_postgres_carrier_limits_panic/main.ts",
+    "tests/link/std_postgres_carrier_next_panic/main.ts",
+    "tests/link/std_postgres_carrier_request_panic/main.ts",
+    "tests/link/std_postgres_carrier_send_panic/main.ts",
+    "tests/link/tfb_db/main.ts",
+    "tests/link/tfb_entry/main.ts",
+  ]),
   ...poolPipeline(
     "the pool's slots gain a send queue, a parse cache and abandoned-seat state, so every program that links `std/net/postgres-async.ts` lays out and walks the pool differently (WP49 stage 6, part 5)",
     {
-      "tests/link/net_serve_pg/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres-async.ll",
-        "serve.ll",
-      ],
-      "tests/link/std_postgres_async_cancel/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres-async.ll",
-      ],
-      "tests/link/std_postgres_async_caps_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres-async.ll",
-      ],
+      "tests/link/net_serve_pg/main.ts": ["main.h", "main.ll", "postgres-async.ll", "serve.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
       "tests/link/std_postgres_async_double_release_panic/main.ts": [
         "main.h",
         "main.ll",
         "postgres-async.ll",
       ],
-      "tests/link/std_postgres_async_flat/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres-async.ll",
-      ],
+      "tests/link/std_postgres_async_flat/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
       "tests/link/std_postgres_async_release_closed_panic/main.ts": [
         "main.h",
         "main.ll",
         "postgres-async.ll",
       ],
-      "tests/link/std_postgres_async_release_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres-async.ll",
-      ],
-      "tests/link/std_postgres_async_size_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres-async.ll",
-      ],
-    },
+      "tests/link/std_postgres_async_release_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+    }
   ),
   ...poolPipeline(
     "the program calls the pipelined API (`pgAsyncPrepare`, `pgAsyncSeat`, `pgAsyncAnswer`) the 0.38.0 seed's std does not export, so only the candidate compiles it (WP49 stage 6, part 5)",
@@ -20902,7 +17807,7 @@ const DECLARED = [
       "tests/link/std_postgres_async_pipeline/main.ts": ["exit"],
       "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["exit"],
       "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["exit"],
-    },
+    }
   ),
   // WP49 stage 6, part 3: `HttpHandler` holds owed sends (`flush`, `sends`),
   // so every program that reaches std/net/handler.ts lays it out again.
@@ -20917,24 +17822,9 @@ const DECLARED = [
       "tests/link/net_handler_short/main.ts": ["main.h"],
       "tests/link/net_handler_unbegun/main.ts": ["main.h"],
       "tests/link/net_http_app/main.ts": ["main.h"],
-      "tests/link/net_serve/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-        "serve.ll",
-      ],
-      "tests/link/net_serve_deadline/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-        "serve.ll",
-      ],
-      "tests/link/net_serve_hangup/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-        "serve.ll",
-      ],
+      "tests/link/net_serve/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_deadline/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_hangup/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
       "tests/link/net_serve_pg/main.ts": [
         "handler.ll",
         "main.h",
@@ -20942,77 +17832,29 @@ const DECLARED = [
         "postgres-carrier.ll",
         "serve.ll",
       ],
-      "tests/link/net_serve_lent_window/main.ts": [
-        "handler.ll",
-        "main.h",
-        "serve.ll",
-      ],
-      "tests/link/net_serve_pipelined_flat/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-        "serve.ll",
-      ],
-      "tests/link/net_serve_server_field/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-        "serve.ll",
-      ],
-      "tests/link/net_serve_server_panic/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-        "serve.ll",
-      ],
-      "tests/link/net_serve_shutdown/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-        "serve.ll",
-      ],
+      "tests/link/net_serve_lent_window/main.ts": ["handler.ll", "main.h", "serve.ll"],
+      "tests/link/net_serve_pipelined_flat/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_server_field/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_server_panic/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_shutdown/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
       "tests/link/net_upstream/main.ts": ["main.h"],
       "tests/link/net_upstream_release/main.ts": ["main.h"],
-      "tests/link/std_postgres_async/main.ts": [
-        "handler.ll",
-        "main.h",
-        "postgres-carrier.ll",
-      ],
-      "tests/link/std_postgres_async_cancel/main.ts": [
-        "handler.ll",
-        "main.h",
-        "postgres-carrier.ll",
-      ],
-      "tests/link/std_postgres_async_caps_panic/main.ts": [
-        "handler.ll",
-        "main.h",
-        "postgres-carrier.ll",
-      ],
+      "tests/link/std_postgres_async/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
       "tests/link/std_postgres_async_double_release_panic/main.ts": [
         "handler.ll",
         "main.h",
         "postgres-carrier.ll",
       ],
-      "tests/link/std_postgres_async_flat/main.ts": [
-        "handler.ll",
-        "main.h",
-        "postgres-carrier.ll",
-      ],
+      "tests/link/std_postgres_async_flat/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
       "tests/link/std_postgres_async_release_closed_panic/main.ts": [
         "handler.ll",
         "main.h",
         "postgres-carrier.ll",
       ],
-      "tests/link/std_postgres_async_release_panic/main.ts": [
-        "handler.ll",
-        "main.h",
-        "postgres-carrier.ll",
-      ],
-      "tests/link/std_postgres_async_size_panic/main.ts": [
-        "handler.ll",
-        "main.h",
-        "postgres-carrier.ll",
-      ],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
       "tests/link/std_postgres_carrier/main.ts": ["main.h"],
       "tests/link/std_postgres_carrier_attach_panic/main.ts": ["main.h"],
       "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["main.h"],
@@ -21030,14 +17872,9 @@ const DECLARED = [
         "postgres-carrier.ll",
         "serve.ll",
       ],
-      "tests/link/tfb_async_entry/main.ts": [
-        "handler.ll",
-        "main.h",
-        "main.ll",
-        "serve.ll",
-      ],
+      "tests/link/tfb_async_entry/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
       "tests/link/tfb_db/main.ts": ["main.h"],
-    },
+    }
   ),
   {
     program: "tests/link/net_serve_burst/main.ts",
@@ -21055,36 +17892,30 @@ const DECLARED = [
   // probes link the modules net_serve_burst does (json.ll too, on aarch64),
   // and each differs from the seed's because the seed's `serve` goes through
   // HttpHandler while this one drives Http1Server from its own ServeConns.
-  ...[
-    "tests/link/net_serve_slot_reuse/main.ts",
-    "tests/link/net_serve_head_drain/main.ts",
-  ].flatMap((program) =>
-    [
-      "handler.ll",
-      "hkdf.ll",
-      "hmac.ll",
-      "json.ll",
-      "main.h",
-      "main.ll",
-      "record.ll",
-      "router.ll",
-      "serve.ll",
-      "tls.ll",
-    ].map((file) => ({
-      program,
-      file,
-      changelog:
-        "drives the HTTP/1 server directly instead of through HttpHandler",
-      why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns (json.ll only on aarch64)",
-    })),
+  ...["tests/link/net_serve_slot_reuse/main.ts", "tests/link/net_serve_head_drain/main.ts"].flatMap(
+    (program) =>
+      [
+        "handler.ll",
+        "hkdf.ll",
+        "hmac.ll",
+        "json.ll",
+        "main.h",
+        "main.ll",
+        "record.ll",
+        "router.ll",
+        "serve.ll",
+        "tls.ll",
+      ].map((file) => ({
+        program,
+        file,
+        changelog: "drives the HTTP/1 server directly instead of through HttpHandler",
+        why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns (json.ll only on aarch64)",
+      }))
   ),
   // Two probes new with this change: net_serve_raw pins serve's answered
   // bytes and net_serve_idle_record an idle connection's record. Each links
   // the same modules as the probes above, which differ from the seed's.
-  ...[
-    "tests/link/net_serve_raw/main.ts",
-    "tests/link/net_serve_idle_record/main.ts",
-  ].flatMap((program) =>
+  ...["tests/link/net_serve_raw/main.ts", "tests/link/net_serve_idle_record/main.ts"].flatMap((program) =>
     [
       "handler.ll",
       "hkdf.ll",
@@ -21099,10 +17930,9 @@ const DECLARED = [
     ].map((file) => ({
       program,
       file,
-      changelog:
-        "Cut serve's answer path and hold a request record only from parse to copy",
+      changelog: "Cut serve's answer path and hold a request record only from parse to copy",
       why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns, and this change moves serve's answer path and holds each request record only from the head's parse to the task's copy (json.ll only on aarch64)",
-    })),
+    }))
   ),
   ...taggedUnions(
     "JsonTokenizer gains rewindObject and JsonDecoder two trailing i32 fields (`unionStart`, where a read-ahead union object began, and `unionReread`, the bytes read again to reach a tag that is not the first key), so every program that links nish/json-tokenizer or nish/json-typed declares one more function and lays the decoder out 8 bytes wider; a program reading the tokenizer's header re-declares it",
@@ -21113,74 +17943,29 @@ const DECLARED = [
         "json-typed.ll",
         "json-value.ll",
       ],
-      "bench/http1-server.ts": [
-        "json-tokenizer.ll",
-        "json-typed.ll",
-        "json-value.ll",
-      ],
-      "bench/json-compare/main.ts": [
-        "json-tokenizer.ll",
-        "json-typed.ll",
-        "main.h",
-        "main.ll",
-      ],
+      "bench/http1-server.ts": ["json-tokenizer.ll", "json-typed.ll", "json-value.ll"],
+      "bench/json-compare/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
       "bench/json-tokenizer/main.ts": ["json-tokenizer.ll", "main.ll"],
-      "bench/json-value/main.ts": [
-        "json-tokenizer.ll",
-        "json-value.ll",
-        "loop.ll",
-        "main.ll",
-      ],
-      "bench/yaml-json/main.ts": [
-        "json-tokenizer.ll",
-        "json-value.ll",
-        "main.ll",
-        "yaml-json.ll",
-      ],
+      "bench/json-value/main.ts": ["json-tokenizer.ll", "json-value.ll", "loop.ll", "main.ll"],
+      "bench/yaml-json/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll", "yaml-json.ll"],
       "docs/cookbook/json-presence.ts": [
         "json-presence.h",
         "json-presence.ll",
         "json-tokenizer.ll",
         "json-typed.ll",
       ],
-      "docs/cookbook/json-tokenizer.ts": [
-        "json-tokenizer.ll",
-        "std_json-tokenizer.ll",
-      ],
+      "docs/cookbook/json-tokenizer.ts": ["json-tokenizer.ll", "std_json-tokenizer.ll"],
       "docs/cookbook/json-typed.ts": [
         "json-tokenizer.ll",
         "json-typed.h",
         "json-typed.ll",
         "std_json-typed.ll",
       ],
-      "docs/cookbook/json-value.ts": [
-        "json-tokenizer.ll",
-        "json-value.ll",
-        "std_json-value.ll",
-      ],
-      "examples/merge-patch.ts": [
-        "json-tokenizer.ll",
-        "json-typed.ll",
-        "merge-patch.h",
-        "merge-patch.ll",
-      ],
-      "tests/link/json_merge_patch/main.ts": [
-        "json-tokenizer.ll",
-        "json-typed.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/json_presence/main.ts": [
-        "json-tokenizer.ll",
-        "json-typed.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/std_json_conformance/main.ts": [
-        "conformance.ll",
-        "json-tokenizer.ll",
-        "rewrite.ll",
-      ],
+      "docs/cookbook/json-value.ts": ["json-tokenizer.ll", "json-value.ll", "std_json-value.ll"],
+      "examples/merge-patch.ts": ["json-tokenizer.ll", "json-typed.ll", "merge-patch.h", "merge-patch.ll"],
+      "tests/link/json_merge_patch/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
+      "tests/link/json_presence/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
+      "tests/link/std_json_conformance/main.ts": ["conformance.ll", "json-tokenizer.ll", "rewrite.ll"],
       "tests/link/std_json_equal/main.ts": [
         "json-equal.ll",
         "json-pointer.ll",
@@ -21224,24 +18009,10 @@ const DECLARED = [
         "json-value.ll",
         "units.ll",
       ],
-      "tests/link/std_json_value_ranges/main.ts": [
-        "json-tokenizer.ll",
-        "json-value.ll",
-        "main.ll",
-      ],
-      "tests/link/std_json_writer/main.ts": [
-        "common.ll",
-        "json-tokenizer.ll",
-        "json-typed.ll",
-        "main.h",
-      ],
-      "tests/link/std_yaml_json/main.ts": [
-        "json-tokenizer.ll",
-        "json-value.ll",
-        "main.ll",
-        "yaml-json.ll",
-      ],
-    },
+      "tests/link/std_json_value_ranges/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll"],
+      "tests/link/std_json_writer/main.ts": ["common.ll", "json-tokenizer.ll", "json-typed.ll", "main.h"],
+      "tests/link/std_yaml_json/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll", "yaml-json.ll"],
+    }
   ),
   ...numberOnePass(
     "JsonTokenizer gains four fields (`numberMantissa`, `numberScale`, `numberDigits`, `numberNegative`) that number() fills as it scans, so a program reading the tokenizer's header lays it out 16 bytes wider, and a module that compiles nish/json-tokenizer whole shifts every field offset after them",
@@ -21260,7 +18031,7 @@ const DECLARED = [
       "tests/link/std_json_value_ranges/main.ts": ["main.h"],
       "tests/link/std_yaml_json_golden/main.ts": ["json-tokenizer.ll"],
       "tests/link/std_yaml_json_own_keys/main.ts": ["json-tokenizer.ll"],
-    },
+    }
   ),
   {
     program: "tests/cases/caps_process_spawn_piped_within.ts",
@@ -21305,7 +18076,7 @@ const DECLARED = [
       "tests/link/std_postgres_async_release_panic/main.ts",
       "tests/link/std_postgres_async_size_panic/main.ts",
       "tests/link/tfb_async_entry/main.ts",
-    ],
+    ]
   ),
   // WP39 G2: the HTTP/1.1 lingering close, the HTTP/2 SETTINGS and idle timeouts, the WebTransport session clock.
   ...lingeringClose(
@@ -21351,79 +18122,32 @@ const DECLARED = [
       "tests/link/std_http1_mss/main.ts": ["main.h"],
       "tests/link/std_http_compress/main.ts": ["main.h"],
       "tests/link/tfb_entry/main.ts": ["main.h"],
-    },
+    }
   ),
   ...http2Timeouts(
     "Http2Config gains settingsTimeout and idleTimeout, the connection a clock, and Http2TlsServer an expire method, so http2.ll, http2-tls.ll and every importer's structs and calls move, and the 0.38.0 seed refuses a program that sets them or calls expire",
     {
       "tests/link/net_http2/main.ts": ["exit"],
-      "tests/link/net_http2_bad_config/main.ts": [
-        "http2.ll",
-        "main.h",
-        "main.ll",
-      ],
-      "tests/link/net_http2_bad_config_tls/main.ts": [
-        "http2-tls.ll",
-        "http2.ll",
-        "main.h",
-        "main.ll",
-      ],
+      "tests/link/net_http2_bad_config/main.ts": ["http2.ll", "main.h", "main.ll"],
+      "tests/link/net_http2_bad_config_tls/main.ts": ["http2-tls.ll", "http2.ll", "main.h", "main.ll"],
       "tests/link/net_http2_bad_idle/main.ts": ["exit"],
       "tests/link/net_http2_bad_timeout/main.ts": ["exit"],
-      "tests/link/net_http2_errors/main.ts": [
-        "checks.ll",
-        "http2.ll",
-        "main.h",
-        "peer.ll",
-      ],
-      "tests/link/net_http2_errors_f64/main.ts": [
-        "checks.ll",
-        "http2.ll",
-        "main.h",
-        "peer.ll",
-      ],
+      "tests/link/net_http2_errors/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_errors_f64/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
       "tests/link/net_http2_f64/main.ts": ["exit"],
-      "tests/link/net_http2_hpack_bomb/main.ts": [
-        "checks.ll",
-        "http2.ll",
-        "main.h",
-        "peer.ll",
-      ],
-      "tests/link/net_http2_hpack_bomb_f64/main.ts": [
-        "checks.ll",
-        "http2.ll",
-        "main.h",
-        "peer.ll",
-      ],
-      "tests/link/net_http2_hpack_table/main.ts": [
-        "http2.ll",
-        "main.h",
-        "peer.ll",
-      ],
-      "tests/link/net_http2_hpack_table_f64/main.ts": [
-        "http2.ll",
-        "main.h",
-        "peer.ll",
-      ],
-      "tests/link/net_http2_reset/main.ts": [
-        "http2.ll",
-        "main.h",
-        "main.ll",
-        "peer.ll",
-      ],
+      "tests/link/net_http2_hpack_bomb/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_hpack_bomb_f64/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_hpack_table/main.ts": ["http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_hpack_table_f64/main.ts": ["http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_reset/main.ts": ["http2.ll", "main.h", "main.ll", "peer.ll"],
       "tests/link/net_http2_tls/main.ts": ["exit"],
       "tests/link/net_http2_tls_f64/main.ts": ["exit"],
-    },
+    }
   ),
   ...sessionClock(
     'WebTransportConfig gains idleTimeout and maxDatagramsPerSecond and the layer a session clock and a datagram window, so webtransport.ll and the relay\'s structs move, and the 0.38.0 seed refuses a program that sets idleTimeout with "Unknown field"',
     {
-      "examples/relay/main.ts": [
-        "main.h",
-        "main.ll",
-        "relay.ll",
-        "webtransport.ll",
-      ],
+      "examples/relay/main.ts": ["main.h", "main.ll", "relay.ll", "webtransport.ll"],
       "tests/link/net_interop_server/main.ts": ["exit"],
       "tests/link/net_interop_server_f64/main.ts": ["exit"],
       "tests/link/net_loopback/main.ts": ["exit"],
@@ -21457,7 +18181,7 @@ const DECLARED = [
       "tests/link/net_webtransport_f64/main.ts": ["exit"],
       "tests/link/net_webtransport_stream_window/main.ts": ["exit"],
       "tests/link/net_webtransport_whole_window/main.ts": ["exit"],
-    },
+    }
   ),
   ...[
     "bench/pg-decode/main.ts",
@@ -21550,14 +18274,12 @@ const DECLARED = [
     changelog: "postgres panic-free",
     why: "std/net/postgres.ts's `PgBatchTurns` drops its `size` field and bounds its slots by `busy.length`, which the prover can see, so the struct the header lays out for it loses that field (on aarch64; the x86_64 run shows no row for this header)",
   },
-  ...["bench/pg-codec.ts:pg-codec.ll", "bench/postgres/main.ts:main.ll"].map(
-    (entry) => ({
-      program: entry.split(":")[0],
-      file: entry.split(":")[1],
-      changelog: "postgres panic-free",
-      why: "std/net/postgres.ts's `PgConnection.room` takes its byte count as i64 so the length arithmetic is proved in range, and the attributes of the postgres functions the program declares change with their new guards, so the declarations it carries renumber their attribute groups",
-    }),
-  ),
+  ...["bench/pg-codec.ts:pg-codec.ll", "bench/postgres/main.ts:main.ll"].map((entry) => ({
+    program: entry.split(":")[0],
+    file: entry.split(":")[1],
+    changelog: "postgres panic-free",
+    why: "std/net/postgres.ts's `PgConnection.room` takes its byte count as i64 so the length arithmetic is proved in range, and the attributes of the postgres functions the program declares change with their new guards, so the declarations it carries renumber their attribute groups",
+  })),
   ...pgTls(
     "PgConfig gains tls, tlsRootsPath and tlsServerName and the carrier a TLS session per slot, so the config struct grows by 24 bytes and every module that lays it out or reaches the carrier moves; the new TLS tests use exports the reference does not have, so only the candidate compiles them",
     {
@@ -21565,367 +18287,96 @@ const DECLARED = [
       "bench/pg-decode/main.ts": ["main.h", "main.ll", "postgres.ll"],
       "tests/link/net_serve_pg/main.ts": ["postgres.ll"],
       "tests/link/std_postgres/main.ts": ["main.h", "main.ll", "postgres.ll"],
-      "tests/link/std_postgres_array_bindend_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_array_element_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_array_end_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_array_int_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_array_param_bytes_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_array_param_int_array_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_array_param_null_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_array_param_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_array_param_text_array_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_array_start_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_array_window_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
+      "tests/link/std_postgres_array_bindend_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_element_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_end_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_int_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_param_bytes_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_param_int_array_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_param_null_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_param_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_param_text_array_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_start_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_window_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
       "tests/link/std_postgres_async_cancel/main.ts": ["postgres.ll"],
       "tests/link/std_postgres_async_caps_panic/main.ts": ["postgres.ll"],
-      "tests/link/std_postgres_async_double_release_panic/main.ts": [
-        "postgres.ll",
-      ],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["postgres.ll"],
       "tests/link/std_postgres_async_flat/main.ts": ["postgres.ll"],
-      "tests/link/std_postgres_async_release_closed_panic/main.ts": [
-        "postgres.ll",
-      ],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["postgres.ll"],
       "tests/link/std_postgres_async_release_panic/main.ts": ["postgres.ll"],
       "tests/link/std_postgres_async_size_panic/main.ts": ["postgres.ll"],
-      "tests/link/std_postgres_batch/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_add_int_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_add_text_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_add_text_window_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_clock/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_clock_config_panic/main.ts": [
-        "main.h",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_clock_started_panic/main.ts": [
-        "main.h",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_clock_take_due_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_clock_turns_panic/main.ts": [
-        "main.h",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_cap_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_empty_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_key_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_name_empty_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_name_nul_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_query_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_queue_bytes_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_queue_size_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_requests_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_runs_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_config_select_nul_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_pending_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_row_pending_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_run_negative_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_run_range_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_scale/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_batch_unsorted/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_array_element_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_array_int_none_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_array_int_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_array_null_none_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_array_oid_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_array_start_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_array_text_element_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_int4_range_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_window_count_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_window_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_binary_window_start_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_caps/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
+      "tests/link/std_postgres_batch/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_add_int_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_add_text_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_add_text_window_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_clock/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_clock_config_panic/main.ts": ["main.h", "postgres.ll"],
+      "tests/link/std_postgres_batch_clock_started_panic/main.ts": ["main.h", "postgres.ll"],
+      "tests/link/std_postgres_batch_clock_take_due_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_clock_turns_panic/main.ts": ["main.h", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_cap_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_empty_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_key_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_name_empty_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_name_nul_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_query_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_queue_bytes_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_queue_size_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_requests_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_runs_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_select_nul_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_pending_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_row_pending_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_run_negative_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_run_range_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_scale/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_unsorted/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_element_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_int_none_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_int_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_null_none_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_oid_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_start_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_text_element_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_int4_range_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_window_count_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_window_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_window_start_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_caps/main.ts": ["main.h", "main.ll", "postgres.ll"],
       "tests/link/std_postgres_carrier/main.ts": ["postgres.ll"],
       "tests/link/std_postgres_carrier_attach_panic/main.ts": ["postgres.ll"],
       "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["postgres.ll"],
-      "tests/link/std_postgres_carrier_connection_panic/main.ts": [
-        "postgres.ll",
-      ],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["postgres.ll"],
       "tests/link/std_postgres_carrier_limits_panic/main.ts": ["postgres.ll"],
       "tests/link/std_postgres_carrier_next_panic/main.ts": ["postgres.ll"],
       "tests/link/std_postgres_carrier_request_panic/main.ts": ["postgres.ll"],
       "tests/link/std_postgres_carrier_send_panic/main.ts": ["postgres.ll"],
-      "tests/link/std_postgres_config_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_decimal/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_int_array_range_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_nonce_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_nul_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_pool/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_pool_connect_dispose_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_pool_connect_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_pool_connect_range_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_pool_connection_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_pool_connection_range_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_pool_inflight_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_pool_next_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_pool_queue_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_pool_size_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_receive_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
-      "tests/link/std_postgres_replay/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
+      "tests/link/std_postgres_config_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_decimal/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_int_array_range_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_nonce_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_nul_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_connect_dispose_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_connect_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_connect_range_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_connection_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_connection_range_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_inflight_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_next_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_queue_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_size_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_receive_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_replay/main.ts": ["main.h", "main.ll", "postgres.ll"],
       "tests/link/std_postgres_tls/main.ts": ["exit"],
       "tests/link/std_postgres_tls_connection_panic/main.ts": ["exit"],
       "tests/link/std_postgres_tls_pool_panic/main.ts": ["exit"],
       "tests/link/std_postgres_tls_roots_panic/main.ts": ["exit"],
       "tests/link/std_postgres_tls_unix_panic/main.ts": ["exit"],
       "tests/link/std_postgres_unix_target/main.ts": ["main.h", "postgres.ll"],
-      "tests/link/std_postgres_user_panic/main.ts": [
-        "main.h",
-        "main.ll",
-        "postgres.ll",
-      ],
+      "tests/link/std_postgres_user_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
       "tests/link/tfb_db/main.ts": ["postgres.ll"],
-    },
+    }
   ),
   // #1416: the HTTP/1 parser reads a header section a vector at a time and
   // classifies each framing field as it keeps it. Two causes: Http1Parser
@@ -21945,14 +18396,8 @@ const DECLARED = [
       "examples/http-app/main.ts": ["websocket.ll"],
       "examples/prefork-server.ts": ["prefork-server.h", "websocket.ll"],
       "examples/relay/main.ts": ["main.h", "websocket.ll"],
-      "tests/link/net_fetch_async_deadline/main.ts": [
-        "http1-codec.ll",
-        "main.h",
-      ],
-      "tests/link/net_fetch_async_dns_slow/main.ts": [
-        "http1-codec.ll",
-        "main.h",
-      ],
+      "tests/link/net_fetch_async_deadline/main.ts": ["http1-codec.ll", "main.h"],
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["http1-codec.ll", "main.h"],
       "tests/link/net_handler/main.ts": ["websocket.ll"],
       "tests/link/net_handler_descriptors/main.ts": ["websocket.ll"],
       "tests/link/net_handler_overlong/main.ts": ["websocket.ll"],
@@ -21969,43 +18414,16 @@ const DECLARED = [
       "tests/link/net_http1_feed_window/main.ts": ["main.h", "main.ll"],
       "tests/link/net_http1_parse_diff/main.ts": ["main.h", "main.ll"],
       "tests/link/net_http1_server/main.ts": ["main.h", "websocket.ll"],
-      "tests/link/net_http1_server_bad_config/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_http1_server_bad_head/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_http1_server_bad_head_timeout/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_http1_server_bad_message/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
+      "tests/link/net_http1_server_bad_config/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_http1_server_bad_head/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_http1_server_bad_message/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http1_server_f64/main.ts": ["main.h", "websocket.ll"],
-      "tests/link/net_http1_server_feed_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_http1_server_frame_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_http1_server_send_body/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_http1_server_send_body_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_http1_server_write_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
+      "tests/link/net_http1_server_feed_window/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_http1_server_frame_window/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_http1_server_send_body/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_http1_server_write_window/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http1_write_chunk_window/main.ts": ["main.h"],
       "tests/link/net_http2_bad_config_tls/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http2_tls/main.ts": ["main.h", "websocket.ll"],
@@ -22014,25 +18432,16 @@ const DECLARED = [
       "tests/link/net_http3_bad_body_chunk/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_bad_config/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_bad_credit/main.ts": ["main.h", "websocket.ll"],
-      "tests/link/net_http3_bad_local_limit/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
+      "tests/link/net_http3_bad_local_limit/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_bad_uni_limit/main.ts": ["main.h", "websocket.ll"],
-      "tests/link/net_http3_bad_write_chunk/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
+      "tests/link/net_http3_bad_write_chunk/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_ecn/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_ecn_f64/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_errors/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_errors_f64/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_f64/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_server/main.ts": ["main.h", "websocket.ll"],
-      "tests/link/net_http3_server_bad_config/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
+      "tests/link/net_http3_server_bad_config/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_server_f64/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http3_write_window/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_http_app/main.ts": ["websocket.ll"],
@@ -22043,10 +18452,7 @@ const DECLARED = [
       "tests/link/net_loopback/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_loopback_f64/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_quic_server_wipes/main.ts": ["main.h", "websocket.ll"],
-      "tests/link/net_quic_server_wipes_f64/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
+      "tests/link/net_quic_server_wipes_f64/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_relay/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_relay_bad_hello/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_relay_bad_idle/main.ts": ["main.h", "websocket.ll"],
@@ -22067,143 +18473,49 @@ const DECLARED = [
       "tests/link/net_router/main.ts": ["checks.ll", "main.h"],
       "tests/link/net_router_f64/main.ts": ["checks.ll", "main.h"],
       "tests/link/net_serve/main.ts": ["http1-codec.ll", "websocket.ll"],
-      "tests/link/net_serve_deadline/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
+      "tests/link/net_serve_deadline/main.ts": ["http1-codec.ll", "websocket.ll"],
       "tests/link/net_serve_hangup/main.ts": ["http1-codec.ll", "websocket.ll"],
       "tests/link/net_serve_pg/main.ts": ["http1-codec.ll", "websocket.ll"],
-      "tests/link/net_serve_pipelined_flat/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
-      "tests/link/net_serve_server_field/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
-      "tests/link/net_serve_server_panic/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
-      "tests/link/net_serve_shutdown/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
+      "tests/link/net_serve_pipelined_flat/main.ts": ["http1-codec.ll", "websocket.ll"],
+      "tests/link/net_serve_server_field/main.ts": ["http1-codec.ll", "websocket.ll"],
+      "tests/link/net_serve_server_panic/main.ts": ["http1-codec.ll", "websocket.ll"],
+      "tests/link/net_serve_shutdown/main.ts": ["http1-codec.ll", "websocket.ll"],
       "tests/link/net_upstream/main.ts": ["websocket.ll"],
       "tests/link/net_upstream_release/main.ts": ["websocket.ll"],
-      "tests/link/net_websocket/main.ts": [
-        "checks.ll",
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_websocket_f64/main.ts": [
-        "checks.ll",
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_websocket_feed_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_websocket_frame_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_websocket_utf8_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_websocket_write_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
+      "tests/link/net_websocket/main.ts": ["checks.ll", "main.h", "websocket.ll"],
+      "tests/link/net_websocket_f64/main.ts": ["checks.ll", "main.h", "websocket.ll"],
+      "tests/link/net_websocket_feed_window/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_websocket_frame_window/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_websocket_utf8_window/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_websocket_write_window/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_webtransport/main.ts": ["main.h", "websocket.ll"],
-      "tests/link/net_webtransport_bad_datagrams/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_webtransport_bad_datagrams_off/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_webtransport_bad_layer/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_webtransport_bad_pending/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_webtransport_bad_pending_high/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_webtransport_bad_sessions/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_webtransport_bad_streams/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_webtransport_bad_streams_high/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_webtransport_close_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_webtransport_datagram_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
+      "tests/link/net_webtransport_bad_datagrams/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_bad_layer/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_bad_pending/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_bad_sessions/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_bad_streams/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_close_window/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["main.h", "websocket.ll"],
-      "tests/link/net_webtransport_stream_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
-      "tests/link/net_webtransport_whole_window/main.ts": [
-        "main.h",
-        "websocket.ll",
-      ],
+      "tests/link/net_webtransport_stream_window/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_whole_window/main.ts": ["main.h", "websocket.ll"],
       "tests/link/std_http1_end_head/main.ts": ["main.h", "websocket.ll"],
       "tests/link/std_http1_mss/main.ts": ["main.h", "websocket.ll"],
       "tests/link/std_http_compress/main.ts": ["main.h", "websocket.ll"],
-      "tests/link/std_postgres_async_cancel/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
-      "tests/link/std_postgres_async_caps_panic/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
-      "tests/link/std_postgres_async_double_release_panic/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
-      "tests/link/std_postgres_async_flat/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
-      "tests/link/std_postgres_async_release_closed_panic/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
-      "tests/link/std_postgres_async_release_panic/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
-      "tests/link/std_postgres_async_size_panic/main.ts": [
-        "http1-codec.ll",
-        "websocket.ll",
-      ],
+      "tests/link/std_postgres_async_cancel/main.ts": ["http1-codec.ll", "websocket.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["http1-codec.ll", "websocket.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["http1-codec.ll", "websocket.ll"],
+      "tests/link/std_postgres_async_flat/main.ts": ["http1-codec.ll", "websocket.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["http1-codec.ll", "websocket.ll"],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["http1-codec.ll", "websocket.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["http1-codec.ll", "websocket.ll"],
       "tests/link/std_postgres_carrier/main.ts": ["websocket.ll"],
       "tests/link/std_postgres_carrier_attach_panic/main.ts": ["websocket.ll"],
       "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["websocket.ll"],
-      "tests/link/std_postgres_carrier_connection_panic/main.ts": [
-        "websocket.ll",
-      ],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["websocket.ll"],
       "tests/link/std_postgres_carrier_limits_panic/main.ts": ["websocket.ll"],
       "tests/link/std_postgres_carrier_next_panic/main.ts": ["websocket.ll"],
       "tests/link/std_postgres_carrier_request_panic/main.ts": ["websocket.ll"],
@@ -22211,7 +18523,7 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts": ["http1-codec.ll", "websocket.ll"],
       "tests/link/tfb_db/main.ts": ["websocket.ll"],
       "tests/link/tfb_entry/main.ts": ["main.h", "websocket.ll"],
-    },
+    }
   ),
   // WP43 stage 5: `Router` gains its step tables (`routeSteps`,
   // `missSteps` and `refusedSteps`), so the benchmark that lays the
@@ -22229,7 +18541,7 @@ const DECLARED = [
       "tests/link/net_http_server_steps_full/main.ts": ["exit"],
       "tests/link/net_http_server_steps_split/main.ts": ["exit"],
       "tests/link/net_router_use_unknown/main.ts": ["exit"],
-    },
+    }
   ),
   // WP43 stage 4: HttpHandler decodes a gzip or deflate request body
   // through HttpBodyDecoder, which imports nish/compress/zlib, so every
@@ -22409,13 +18721,13 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts": ["zlib.ll"],
       "tests/link/tfb_db/main.ts": ["zlib.ll"],
       "tests/link/tfb_entry/main.ts": ["zlib.ll"],
-    },
+    }
   ),
   ...bombLimit(
     "the test sets HandlerLimits.maxDecoded, which the release does not have, so only the candidate compiles it",
     {
       "tests/link/net_handler_bomb/main.ts": ["exit"],
-    },
+    }
   ),
   // WP49 stage 6: `Router` files a route with no parameter in an exact-path
   // table, so the class gains the table's fields, `matchTree` and
@@ -22433,17 +18745,10 @@ const DECLARED = [
       "tests/link/net_router_negative_ambiguous/main.ts": ["main.h", "main.ll"],
       "tests/link/net_router_negative_duplicate/main.ts": ["main.h", "main.ll"],
       "tests/link/net_router_negative_limits/main.ts": ["main.h", "main.ll"],
-      "tests/link/net_router_negative_range/main.ts": [
-        "main.h",
-        "main.ll",
-        "router.ll",
-      ],
+      "tests/link/net_router_negative_range/main.ts": ["main.h", "main.ll", "router.ll"],
       "tests/link/net_router_negative_too_long/main.ts": ["main.h", "main.ll"],
-      "tests/link/net_router_negative_too_many_params/main.ts": [
-        "main.h",
-        "main.ll",
-      ],
-    },
+      "tests/link/net_router_negative_too_many_params/main.ts": ["main.h", "main.ll"],
+    }
   ),
   // The same Router struct, reached through HttpHandler and serve: the
   // programs below hold a Router in a module other than the router, so that
@@ -22451,28 +18756,11 @@ const DECLARED = [
   ...staticRoutes(
     "Router gains the exact-path table's fields, so a module or header naming its struct moves, and the release has no matchTree or staticCount for the equivalence tests and the benchmark to call",
     {
-      "tests/link/net_serve_burst/main.ts": [
-        "handler.ll",
-        "main.ll",
-        "router.ll",
-        "serve.ll",
-      ],
-      "tests/link/net_serve_queued_wait/main.ts": [
-        "handler.ll",
-        "main.ll",
-        "router.ll",
-      ],
+      "tests/link/net_serve_burst/main.ts": ["handler.ll", "main.ll", "router.ll", "serve.ll"],
+      "tests/link/net_serve_queued_wait/main.ts": ["handler.ll", "main.ll", "router.ll"],
       "tests/link/std_postgres_async/main.ts": ["router.ll"],
-      "tests/link/std_postgres_async_depth_panic/main.ts": [
-        "handler.ll",
-        "postgres-carrier.ll",
-        "router.ll",
-      ],
-      "tests/link/std_postgres_async_pipeline/main.ts": [
-        "handler.ll",
-        "postgres-carrier.ll",
-        "router.ll",
-      ],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["handler.ll", "postgres-carrier.ll", "router.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["handler.ll", "postgres-carrier.ll", "router.ll"],
       "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
         "handler.ll",
         "postgres-carrier.ll",
@@ -22505,7 +18793,7 @@ const DECLARED = [
         "router.ll",
       ],
       "tests/link/tfb_async_db/main.ts": ["router.ll"],
-    },
+    }
   ),
   // #1416: Http1Connection keeps its last response head, and the head-reuse
   // test reads the internal `headCopies` counter that counts its copies.
@@ -22553,13 +18841,9 @@ const DECLARED = [
       "tests/link/std_http1_end_head/main.ts": ["router.ll"],
       "tests/link/std_postgres_async_cancel/main.ts": ["router.ll"],
       "tests/link/std_postgres_async_caps_panic/main.ts": ["router.ll"],
-      "tests/link/std_postgres_async_double_release_panic/main.ts": [
-        "router.ll",
-      ],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["router.ll"],
       "tests/link/std_postgres_async_flat/main.ts": ["router.ll"],
-      "tests/link/std_postgres_async_release_closed_panic/main.ts": [
-        "router.ll",
-      ],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["router.ll"],
       "tests/link/std_postgres_async_release_panic/main.ts": ["router.ll"],
       "tests/link/std_postgres_async_size_panic/main.ts": ["router.ll"],
       "tests/link/std_postgres_carrier/main.ts": ["router.ll"],
@@ -22572,13 +18856,13 @@ const DECLARED = [
       "tests/link/std_postgres_carrier_send_panic/main.ts": ["router.ll"],
       "tests/link/tfb_async_entry/main.ts": ["router.ll"],
       "tests/link/tfb_db/main.ts": ["router.ll"],
-    },
+    }
   ),
   ...asyncTrim(
     "HttpRequest gains headLength, so a module that names HttpRequest's struct type gains an i32 field",
     {
       "tests/link/tfb_async_entry/main.ts": ["async-server.ll"],
-    },
+    }
   ),
   // #1028: X509Certificate keeps each decoded extension's critical flag and
   // the authorityKeyIdentifier's shape, which lays it out 8 bytes wider in
@@ -22592,13 +18876,7 @@ const DECLARED = [
   ...x509Criticality(
     "X509Certificate gains the critical flag of each extension it decodes, whether the authorityKeyIdentifier is present and names its issuer and serial, and whether a policyConstraints is present and critical, so it is laid out 8 bytes wider (168 to 176) in every module and header that names it; std/crypto/x509.ts also checks authorityInfoAccess's syntax and std/crypto/pki.ts refuses the markings RFC 5280 forbids, so those two modules move further; every other module and header (pki-roots, verify, tls-tcp, fetch, identity, main.h and the rest) moves only from that 168 to 176 layout",
     {
-      "bench/http-app-carrier.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "bench/http-app-carrier.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
       "bench/http1-request/main.ts": [
         "main.h",
         "pki-roots.ll",
@@ -22607,21 +18885,8 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "bench/http1-server.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
-      "bench/techempower/main.ts": [
-        "main.h",
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "bench/http1-server.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
+      "bench/techempower/main.ts": ["main.h", "pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
       "examples/file-server.ts": [
         "file-server.h",
         "pki-roots.ll",
@@ -22630,19 +18895,8 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "examples/http-app/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
-      "examples/http-get-json.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "examples/http-app/main.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
+      "examples/http-get-json.ts": ["pki-roots.ll", "pki.ll", "verify.ll", "x509.ll"],
       "examples/prefork-server.ts": [
         "pki-roots.ll",
         "pki.ll",
@@ -22662,44 +18916,15 @@ const DECLARED = [
       ],
       "tests/link/crypto_p256/main.ts": ["main.h", "x509.ll"],
       "tests/link/crypto_p256_f64/main.ts": ["main.h", "x509.ll"],
-      "tests/link/crypto_pki/main.ts": [
-        "main.h",
-        "pki.ll",
-        "suites.ll",
-        "x509.ll",
-      ],
-      "tests/link/crypto_pki_f64/main.ts": [
-        "main.h",
-        "pki.ll",
-        "suites.ll",
-        "x509.ll",
-      ],
-      "tests/link/crypto_pki_limbo/main.ts": [
-        "main.h",
-        "main.ll",
-        "pki.ll",
-        "x509.ll",
-      ],
-      "tests/link/crypto_pki_roots/main.ts": [
-        "main.h",
-        "main.ll",
-        "pki-roots.ll",
-        "x509.ll",
-      ],
+      "tests/link/crypto_pki/main.ts": ["main.h", "pki.ll", "suites.ll", "x509.ll"],
+      "tests/link/crypto_pki_f64/main.ts": ["main.h", "pki.ll", "suites.ll", "x509.ll"],
+      "tests/link/crypto_pki_limbo/main.ts": ["main.h", "main.ll", "pki.ll", "x509.ll"],
+      "tests/link/crypto_pki_roots/main.ts": ["main.h", "main.ll", "pki-roots.ll", "x509.ll"],
       "tests/link/crypto_x509_audit/main.ts": ["main.h", "main.ll", "x509.ll"],
       "tests/link/crypto_x509_f64/main.ts": ["main.h", "main.ll", "x509.ll"],
-      "tests/link/crypto_x509_malformed/main.ts": [
-        "main.h",
-        "main.ll",
-        "x509.ll",
-      ],
+      "tests/link/crypto_x509_malformed/main.ts": ["main.h", "main.ll", "x509.ll"],
       "tests/link/crypto_x509_random/main.ts": ["main.h", "main.ll", "x509.ll"],
-      "tests/link/net_fetch_async/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_fetch_async/main.ts": ["pki-roots.ll", "pki.ll", "verify.ll", "x509.ll"],
       "tests/link/net_fetch_async_deadline/main.ts": [
         "fetch.ll",
         "main.h",
@@ -22716,12 +18941,7 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "tests/link/net_fetch_async_flat/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_fetch_async_flat/main.ts": ["pki-roots.ll", "pki.ll", "verify.ll", "x509.ll"],
       "tests/link/net_fetch_async_https/main.ts": [
         "pki-roots.ll",
         "pki.ll",
@@ -22736,25 +18956,9 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "tests/link/net_fetch_async_overlap/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_fetch_async_policy/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_handler/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_fetch_async_overlap/main.ts": ["pki-roots.ll", "pki.ll", "verify.ll", "x509.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["pki-roots.ll", "pki.ll", "verify.ll", "x509.ll"],
+      "tests/link/net_handler/main.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
       "tests/link/net_handler_descriptors/main.ts": [
         "pki-roots.ll",
         "pki.ll",
@@ -23023,13 +19227,7 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "tests/link/net_http_app/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_http_app/main.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
       "tests/link/net_http_date/main.ts": [
         "main.h",
         "pki-roots.ll",
@@ -23046,18 +19244,8 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "tests/link/net_http_fetch/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_http_fetch_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_http_fetch/main.ts": ["pki-roots.ll", "pki.ll", "verify.ll", "x509.ll"],
+      "tests/link/net_http_fetch_f64/main.ts": ["pki-roots.ll", "pki.ll", "verify.ll", "x509.ll"],
       "tests/link/net_http_fetch_tls/main.ts": [
         "pki-roots.ll",
         "pki.ll",
@@ -23097,18 +19285,8 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "tests/link/net_outbound/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_outbound_f64/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_outbound/main.ts": ["pki-roots.ll", "pki.ll", "verify.ll", "x509.ll"],
+      "tests/link/net_outbound_f64/main.ts": ["pki-roots.ll", "pki.ll", "verify.ll", "x509.ll"],
       "tests/link/net_quic_conn/main.ts": ["main.h", "x509.ll"],
       "tests/link/net_quic_conn_f64/main.ts": ["main.h", "x509.ll"],
       "tests/link/net_quic_datagram/main.ts": ["main.h", "x509.ll"],
@@ -23254,13 +19432,7 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "tests/link/net_serve/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_serve/main.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
       "tests/link/net_serve_burst/main.ts": [
         "main.h",
         "pki-roots.ll",
@@ -23276,20 +19448,8 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "tests/link/net_serve_hangup/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
-      "tests/link/net_serve_pg/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_serve_hangup/main.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
+      "tests/link/net_serve_pg/main.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
       "tests/link/net_serve_pipelined_flat/main.ts": [
         "pki-roots.ll",
         "pki.ll",
@@ -23417,13 +19577,7 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "tests/link/net_upstream/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "tests/link/net_upstream/main.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
       "tests/link/net_upstream_release/main.ts": [
         "pki-roots.ll",
         "pki.ll",
@@ -23711,27 +19865,9 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-      "tests/link/tfb_async_db/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
-      "tests/link/tfb_async_entry/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
-      "tests/link/tfb_db/main.ts": [
-        "pki-roots.ll",
-        "pki.ll",
-        "tls-tcp.ll",
-        "verify.ll",
-        "x509.ll",
-      ],
+      "tests/link/tfb_async_db/main.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
+      "tests/link/tfb_async_entry/main.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
+      "tests/link/tfb_db/main.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
       "tests/link/tfb_entry/main.ts": [
         "main.h",
         "pki-roots.ll",
@@ -23740,7 +19876,7 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
-    },
+    }
   ),
   // #699: std/net/quic-stream.ts and quic-packet.ts copy through copyBytes
   // from nish/bytes, so every program reaching them writes that module too.
@@ -23748,167 +19884,51 @@ const DECLARED = [
     "examples/relay/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/crypto_held_derive/main.ts": ["bytes.ll", "quic-packet.ll"],
     "tests/link/net_http3/main.ts": ["quic-packet.ll", "quic-stream.ll"],
-    "tests/link/net_http3_bad_body_chunk/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_http3_bad_config/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_http3_bad_credit/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_http3_bad_local_limit/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_http3_bad_uni_limit/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_http3_bad_write_chunk/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_http3_bad_body_chunk/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_config/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_credit/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_local_limit/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_uni_limit/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_write_chunk/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_http3_ecn/main.ts": ["quic-packet.ll", "quic-stream.ll"],
-    "tests/link/net_http3_ecn_f64/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_http3_ecn_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_http3_errors/main.ts": ["quic-packet.ll", "quic-stream.ll"],
-    "tests/link/net_http3_errors_f64/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_http3_errors_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_http3_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_http3_frame/main.ts": ["bytes.ll", "quic-packet.ll"],
-    "tests/link/net_http3_frame_bad_window/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-    ],
+    "tests/link/net_http3_frame_bad_window/main.ts": ["bytes.ll", "quic-packet.ll"],
     "tests/link/net_http3_frame_f64/main.ts": ["bytes.ll", "quic-packet.ll"],
     "tests/link/net_http3_server/main.ts": ["quic-packet.ll", "quic-stream.ll"],
-    "tests/link/net_http3_server_bad_config/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_http3_server_f64/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_http3_write_window/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_http3_server_bad_config/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_server_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_write_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_http_date/main.ts": ["quic-packet.ll", "quic-stream.ll"],
-    "tests/link/net_http_date_f64/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_interop_server/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_interop_server_f64/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_http_date_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_interop_server/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_interop_server_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_loopback/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_loopback_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
-    "tests/link/net_quic_conn/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_conn_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_quic_conn/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_conn_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_quic_conn_parts/main.ts": ["bytes.ll", "quic-packet.ll"],
-    "tests/link/net_quic_conn_parts_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-    ],
-    "tests/link/net_quic_conn_replay/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_conn_replay_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_datagram/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_datagram_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_ecn/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_ecn_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_quic_conn_parts_f64/main.ts": ["bytes.ll", "quic-packet.ll"],
+    "tests/link/net_quic_conn_replay/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_conn_replay_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_datagram/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_datagram_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_ecn/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_ecn_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_quic_frame/main.ts": ["bytes.ll", "quic-packet.ll"],
     "tests/link/net_quic_frame_f64/main.ts": ["bytes.ll", "quic-packet.ll"],
-    "tests/link/net_quic_lifecycle/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_lifecycle_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_lifecycle_replay/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_lifecycle_replay_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_listener/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_listener_bad_window/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_listener_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_memory/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_memory_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_quic_lifecycle/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_lifecycle_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_lifecycle_replay/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_lifecycle_replay_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_listener/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_listener_bad_window/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_listener_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_memory/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_memory_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_quic_packet/main.ts": ["quic-packet.ll", "std_bytes.ll"],
     "tests/link/net_quic_packet_f64/main.ts": [
       "bytes.ll",
@@ -23916,92 +19936,27 @@ const DECLARED = [
       "quic-packet.ll",
       "std_bytes.ll",
     ],
-    "tests/link/net_quic_path/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_path_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_recovery/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_recovery_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_server_wipes/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_server_wipes_f64/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_stream/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_stream_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_wipes/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_quic_wipes_f64/main.ts": [
-      "bytes.ll",
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_quic_path/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_path_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_recovery/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_recovery_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_server_wipes/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_server_wipes_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_stream/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_stream_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_wipes/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_wipes_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_relay/main.ts": ["quic-packet.ll", "quic-stream.ll"],
-    "tests/link/net_relay_bad_hello/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_relay_bad_idle/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_relay_bad_path/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_relay_bad_hello/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_idle/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_path/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_relay_bad_peers/main.ts": ["bytes.ll", "quic-packet.ll"],
-    "tests/link/net_relay_bad_per_peer/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_relay_bad_pool/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_relay_bad_rate/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_relay_bad_sessions/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_relay_bad_spare/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_relay_bad_stats/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_relay_bad_per_peer/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_pool/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_rate/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_sessions/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_spare/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_stats/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_relay_encode_window/main.ts": ["quic-packet.ll"],
     "tests/link/net_relay_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_relay_forged/main.ts": ["quic-packet.ll", "quic-stream.ll"],
@@ -24010,58 +19965,19 @@ const DECLARED = [
     "tests/link/net_relay_json_window/main.ts": ["quic-packet.ll"],
     "tests/link/net_relay_soak/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_webtransport/main.ts": ["quic-packet.ll", "quic-stream.ll"],
-    "tests/link/net_webtransport_bad_datagrams/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_bad_datagrams_off/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_bad_layer/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_bad_pending/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_bad_pending_high/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_bad_sessions/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_bad_streams/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_bad_streams_high/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_close_window/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_datagram_window/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_f64/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_stream_window/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
-    "tests/link/net_webtransport_whole_window/main.ts": [
-      "quic-packet.ll",
-      "quic-stream.ll",
-    ],
+    "tests/link/net_webtransport_bad_datagrams/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_layer/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_pending/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_pending_high/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_sessions/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_streams/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_streams_high/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_close_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_datagram_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_stream_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_whole_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
   }),
   ...quicSteer({
     "examples/prefork-server.ts": ["prefork.ll"],
@@ -24092,37 +20008,13 @@ const DECLARED = [
     "tests/link/net_loopback/main.ts": ["exit"],
     "tests/link/net_loopback_f64/main.ts": ["exit"],
     "tests/link/net_prefork/main.ts": ["main.h", "main.ll", "prefork.ll"],
-    "tests/link/net_prefork_bad_config/main.ts": [
-      "main.h",
-      "main.ll",
-      "prefork.ll",
-    ],
-    "tests/link/net_prefork_bad_listen/main.ts": [
-      "main.h",
-      "main.ll",
-      "prefork.ll",
-    ],
-    "tests/link/net_prefork_channels/main.ts": [
-      "main.h",
-      "main.ll",
-      "prefork.ll",
-    ],
-    "tests/link/net_prefork_no_restart/main.ts": [
-      "main.h",
-      "main.ll",
-      "prefork.ll",
-    ],
+    "tests/link/net_prefork_bad_config/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_bad_listen/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_channels/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_no_restart/main.ts": ["main.h", "main.ll", "prefork.ll"],
     "tests/link/net_prefork_pin/main.ts": ["main.h", "main.ll", "prefork.ll"],
-    "tests/link/net_prefork_pin_too_many/main.ts": [
-      "main.h",
-      "main.ll",
-      "prefork.ll",
-    ],
-    "tests/link/net_prefork_zero_backoff/main.ts": [
-      "main.h",
-      "main.ll",
-      "prefork.ll",
-    ],
+    "tests/link/net_prefork_pin_too_many/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_zero_backoff/main.ts": ["main.h", "main.ll", "prefork.ll"],
     "tests/link/net_quic_conn/main.ts": ["exit"],
     "tests/link/net_quic_conn_f64/main.ts": ["exit"],
     "tests/link/net_quic_conn_replay/main.ts": ["exit"],
@@ -24278,16 +20170,8 @@ const DECLARED = [
   // #1511: QuicConnection gains a field (752 to 760 bytes) and QuicStreams
   // gains `bufferBlocked`, so every module laying either out moves.
   ...quicRebind({
-    "tests/link/net_interop_server/main.ts": [
-      "common.ll",
-      "data.ll",
-      "rebind.ll",
-    ],
-    "tests/link/net_interop_server_f64/main.ts": [
-      "common.ll",
-      "data.ll",
-      "rebind.ll",
-    ],
+    "tests/link/net_interop_server/main.ts": ["common.ll", "data.ll", "rebind.ll"],
+    "tests/link/net_interop_server_f64/main.ts": ["common.ll", "data.ll", "rebind.ll"],
     "tests/link/net_quic_prefork/main.ts": [
       "common.ll",
       "http3-server.ll",
@@ -24311,11 +20195,7 @@ const DECLARED = [
       "pmtu.ll",
     ],
     "tests/link/net_quic_stream/main.ts": ["pool.ll", "ragged.ll", "resend.ll"],
-    "tests/link/net_quic_stream_f64/main.ts": [
-      "pool.ll",
-      "ragged.ll",
-      "resend.ll",
-    ],
+    "tests/link/net_quic_stream_f64/main.ts": ["pool.ll", "ragged.ll", "resend.ll"],
     "tests/link/net_quic_worker/main.ts": [
       "http3-server.ll",
       "http3.ll",
@@ -24358,16 +20238,14 @@ const DECLARED = [
   }),
   // WP55: module storage of `C | null` is root storage, which the seed
   // refuses as NL2686.
-  ...[
-    "tests/cases/root_storage.ts",
-    "tests/cases/root_storage_page.ts",
-    "docs/cookbook/storage-root.ts",
-  ].map((program) => ({
-    program,
-    file: "exit",
-    changelog: "root storage's object graph",
-    why: "the program declares module storage of a class or null, which the seed refuses with NL2686 and the candidate keeps as root storage, so only the candidate compiles it",
-  })),
+  ...["tests/cases/root_storage.ts", "tests/cases/root_storage_page.ts", "docs/cookbook/storage-root.ts"].map(
+    (program) => ({
+      program,
+      file: "exit",
+      changelog: "root storage's object graph",
+      why: "the program declares module storage of a class or null, which the seed refuses with NL2686 and the candidate keeps as root storage, so only the candidate compiles it",
+    })
+  ),
   // A guarded loader marks a failed release or keep a `trap` only when no
   // panic recorded its own kind first (guardLoader, src/interop-wasm.ts).
   ...[
@@ -24460,14 +20338,12 @@ const DECLARED = [
       "tests/link/region_sessions_soak/main.ts": ["main.ll"],
       "tests/link/std_postgres_async_depth_panic/main.ts": ["handler.ll"],
       "tests/link/std_postgres_async_pipeline/main.ts": ["handler.ll"],
-      "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
-        "handler.ll",
-      ],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["handler.ll"],
       "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["handler.ll"],
       "tests/link/std_postgres_tls/main.ts": ["handler.ll"],
       "tests/link/std_postgres_tls_roots_panic/main.ts": ["handler.ll"],
       "tests/link/std_postgres_tls_unix_panic/main.ts": ["handler.ll"],
-    },
+    }
   ),
   ...byFinding(SECURITY_PATHS)(
     "the YAML loader gains `mergeItemsChecked` and checks a shared merge sequence once, so the loader's struct and the modules laying it out move",
@@ -24477,24 +20353,14 @@ const DECLARED = [
       "tests/link/std_yaml_bad_depth_high/main.ts": ["main.h", "main.ll"],
       "tests/link/std_yaml_bad_depth_low/main.ts": ["main.h", "main.ll"],
       "tests/link/std_yaml_json/main.ts": ["main.h"],
-    },
+    }
   ),
   ...byFinding(YAML_LOAD_CUTS)(
     "the two programs that pin the YAML loader's answers are new in this stage and link the loader and JsonDocument it reshapes (`quickCount` and `quickPart` over `quickSizes`, `newStoredNumber`, the own-key path), so the reference and the candidate lay them out differently",
     {
-      "tests/link/std_yaml_json_golden/main.ts": [
-        "json-value.ll",
-        "main.h",
-        "main.ll",
-        "yaml-json.ll",
-      ],
-      "tests/link/std_yaml_json_own_keys/main.ts": [
-        "json-value.ll",
-        "main.h",
-        "main.ll",
-        "yaml-json.ll",
-      ],
-    },
+      "tests/link/std_yaml_json_golden/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
+    }
   ),
   ...byFinding(SECURITY_PATHS)(
     "X509Certificate gains `spki`, PkiTrustStore gains a `distrusted` set and HttpOptions gains `distrustSpkiSha256`, so every module laying them out moves and a program naming `PKI_ERR_DISTRUSTED` or `spki` compiles only under the candidate",
@@ -24508,11 +20374,11 @@ const DECLARED = [
       "tests/link/std_postgres_tls/main.ts": ["main.ll"],
       "tests/link/std_postgres_tls_roots_panic/main.ts": ["main.ll"],
       "tests/link/std_postgres_tls_unix_panic/main.ts": ["main.ll"],
-    },
+    }
   ),
   ...byFinding(SECURITY_PATHS)(
     "the program calls `http1ChunkExtValid`, which only the candidate's nish/net/http1-codec exports",
-    { "tests/link/net_http1_parse_diff/main.ts": ["exit"] },
+    { "tests/link/net_http1_parse_diff/main.ts": ["exit"] }
   ),
   ...byFinding(SECURITY_PATHS)(
     "Http2Connection's SETTINGS handling gains `windowPassesMax` and walks its streams at most twice, so the modules that declare or call its methods move",
@@ -24520,12 +20386,7 @@ const DECLARED = [
       "tests/link/net_http2/main.ts": ["checks.ll", "peer.ll"],
       "tests/link/net_http2_bad_idle/main.ts": ["main.ll"],
       "tests/link/net_http2_bad_timeout/main.ts": ["main.ll"],
-      "tests/link/net_http2_cleartext/main.ts": [
-        "checks.ll",
-        "harness.ll",
-        "main.ll",
-        "peer.ll",
-      ],
+      "tests/link/net_http2_cleartext/main.ts": ["checks.ll", "harness.ll", "main.ll", "peer.ll"],
       "tests/link/net_http2_cleartext_bad_slots/main.ts": ["main.ll"],
       "tests/link/net_http2_cleartext_bad_timeout/main.ts": ["main.ll"],
       "tests/link/net_http2_f64/main.ts": ["checks.ll", "peer.ll"],
@@ -24535,18 +20396,15 @@ const DECLARED = [
       "tests/link/net_interop_server_f64/main.ts": ["net_http2_peer.ll"],
       "tests/link/net_loopback/main.ts": ["net_http2_peer.ll"],
       "tests/link/net_loopback_f64/main.ts": ["net_http2_peer.ll"],
-    },
+    }
   ),
   ...byFinding(SECURITY_PATHS)(
     "the program sets `Http3Config.resetBudget`, which only the candidate's nish/net/http3 has",
-    { "tests/link/net_http3_bad_reset_budget/main.ts": ["exit"] },
+    { "tests/link/net_http3_bad_reset_budget/main.ts": ["exit"] }
   ),
   ...byFinding(SECURITY_PATHS)(
     "the program calls `websocketOriginAllowed`, which only the candidate's nish/net/websocket exports",
-    {
-      "tests/link/net_websocket/main.ts": ["exit"],
-      "tests/link/net_websocket_f64/main.ts": ["exit"],
-    },
+    { "tests/link/net_websocket/main.ts": ["exit"], "tests/link/net_websocket_f64/main.ts": ["exit"] }
   ),
   // WP58 S1: a discriminated union is a generic's type argument, which the
   // seed refuses as NL2533, as it refuses a class passed where a generic
@@ -24780,14 +20638,12 @@ const DECLARED = [
     "tests/link/thread_task_wipe_secret/main.ts",
     "tests/link/union_narrowing_capture/main.ts",
   ].flatMap((program) =>
-    ["threads.ll", `${program.split("/").pop().replace(/\.ts$/, "")}.h`].map(
-      (file) => ({
-        program,
-        file,
-        changelog: ATOMIC_ARRAYS,
-        why: "std/threads.ts declares the classes AtomicI32Array and AtomicI64Array, so the threads module and the interop header of every program importing nish/threads carry their struct types and methods; the program's own main module is unchanged",
-      }),
-    ),
+    ["threads.ll", `${program.split("/").pop().replace(/\.ts$/, "")}.h`].map((file) => ({
+      program,
+      file,
+      changelog: ATOMIC_ARRAYS,
+      why: "std/threads.ts declares the classes AtomicI32Array and AtomicI64Array, so the threads module and the interop header of every program importing nish/threads carry their struct types and methods; the program's own main module is unchanged",
+    }))
   ),
   ...byFinding(JSON_KEYS_QUOTED)(
     "JsonWriter gains `keyQuoted`, the compiler's `jsonEncode` of a class calls it with each key quoted and escaped as a string constant, and `i32` and `i64` count their digits by compares rather than divides, so nish/json moves in every program linking it and a module encoding a class moves where it writes a key",
@@ -24869,22 +20725,18 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts": ["json.ll"],
       "tests/link/tfb_db/main.ts": ["json.ll"],
       "tests/link/tfb_entry/main.ts": ["json.ll"],
-    },
+    }
   ),
   ...byFinding(JSON_KEYS_QUOTED)(
     "the API-page benchmark is new in this stage: its encoder and nish/json move as above, and its nish/json-typed declares `JsonWriter.keyQuoted`, which the reference's nish/json lacks",
-    { "bench/json-api/main.ts": ["json-typed.ll", "json.ll", "main.ll"] },
+    { "bench/json-api/main.ts": ["json-typed.ll", "json.ll", "main.ll"] }
   ),
   ...byFinding(JSON_KEYS_QUOTED)(
     "the stage adds these tests: tests/link/json_encode_keys encodes a class whose keys need escaping, and its nish/json-typed declares `JsonWriter.keyQuoted`, which the reference's nish/json lacks; std_json_typed gains keys.ts, which encodes classes and so writes their keys through it",
     {
-      "tests/link/json_encode_keys/main.ts": [
-        "json-typed.ll",
-        "json.ll",
-        "main.ll",
-      ],
+      "tests/link/json_encode_keys/main.ts": ["json-typed.ll", "json.ll", "main.ll"],
       "tests/link/std_json_typed/main.ts": ["keys.ll"],
-    },
+    }
   ),
   // WP63 S4: `HandlerLimits` can listen on io_uring rings. The bench server
   // calls `netRingState`, which the 0.41.0 seed's `nish:net` lacks; the new
@@ -24952,7 +20804,7 @@ const DECLARED = [
     {
       "tests/cases/sandbox_hello.ts": ["sandbox_hello.ll"],
       "docs/cookbook/sandbox.ts": ["sandbox.ll"],
-    },
+    }
   ),
   // A counted loop's `x + i` tests for overflow once, before the loop, so each
   // module with such a loop gains the pre-loop test and the unchecked and
@@ -25021,13 +20873,7 @@ const DECLARED = [
       "examples/http-get-json.ts": ["bytes.ll"],
       "examples/merge-patch.ts": ["bytes.ll"],
       "examples/prefork-server.ts": ["bytes.ll"],
-      "examples/relay/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-        "json.ll",
-        "peers.ll",
-      ],
+      "examples/relay/main.ts": ["bytes.ll", "frame.ll", "hpack.ll", "json.ll", "peers.ll"],
       "tests/cases/ovf_loop_guard.ts": ["ovf_loop_guard.ll"],
       "tests/cases/storage_lend_bytes.ts": ["storage_lend_bytes.ll"],
       "tests/link/crypto_p384/main.ts": ["der.ll"],
@@ -25101,14 +20947,8 @@ const DECLARED = [
       "tests/link/net_http2_bad_idle/main.ts": ["hpack.ll"],
       "tests/link/net_http2_bad_timeout/main.ts": ["hpack.ll"],
       "tests/link/net_http2_cleartext/main.ts": ["hpack.ll", "std_bytes.ll"],
-      "tests/link/net_http2_cleartext_bad_slots/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
-      "tests/link/net_http2_cleartext_bad_timeout/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
+      "tests/link/net_http2_cleartext_bad_slots/main.ts": ["bytes.ll", "hpack.ll"],
+      "tests/link/net_http2_cleartext_bad_timeout/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_http2_errors/main.ts": ["hpack.ll"],
       "tests/link/net_http2_errors_f64/main.ts": ["hpack.ll"],
       "tests/link/net_http2_f64/main.ts": ["hpack.ll"],
@@ -25121,12 +20961,7 @@ const DECLARED = [
       "tests/link/net_http2_reset/main.ts": ["hpack.ll"],
       "tests/link/net_http2_tls/main.ts": ["hpack.ll", "std_bytes.ll"],
       "tests/link/net_http2_tls_f64/main.ts": ["hpack.ll", "std_bytes.ll"],
-      "tests/link/net_http3/main.ts": [
-        "bytes.ll",
-        "hkdf.ll",
-        "hpack.ll",
-        "record.ll",
-      ],
+      "tests/link/net_http3/main.ts": ["bytes.ll", "hkdf.ll", "hpack.ll", "record.ll"],
       "tests/link/net_http3_bad_body_chunk/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_http3_bad_config/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_http3_bad_credit/main.ts": ["bytes.ll", "hpack.ll"],
@@ -25145,25 +20980,12 @@ const DECLARED = [
       "tests/link/net_http3_ecn_f64/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_http3_errors/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_http3_errors_f64/main.ts": ["bytes.ll", "hpack.ll"],
-      "tests/link/net_http3_f64/main.ts": [
-        "bytes.ll",
-        "hkdf.ll",
-        "hpack.ll",
-        "record.ll",
-      ],
+      "tests/link/net_http3_f64/main.ts": ["bytes.ll", "hkdf.ll", "hpack.ll", "record.ll"],
       "tests/link/net_http3_frame/main.ts": ["hpack.ll"],
       "tests/link/net_http3_frame_bad_window/main.ts": ["hpack.ll"],
       "tests/link/net_http3_frame_f64/main.ts": ["hpack.ll"],
-      "tests/link/net_http3_server/main.ts": [
-        "bytes.ll",
-        "hkdf.ll",
-        "hpack.ll",
-        "record.ll",
-      ],
-      "tests/link/net_http3_server_bad_config/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
+      "tests/link/net_http3_server/main.ts": ["bytes.ll", "hkdf.ll", "hpack.ll", "record.ll"],
+      "tests/link/net_http3_server_bad_config/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_http3_server_bad_head_timeout/main.ts": [
         "bytes.ll",
         "hkdf.ll",
@@ -25180,23 +21002,14 @@ const DECLARED = [
         "record.ll",
         "tls.ll",
       ],
-      "tests/link/net_http3_server_f64/main.ts": [
-        "bytes.ll",
-        "hkdf.ll",
-        "hpack.ll",
-        "record.ll",
-      ],
+      "tests/link/net_http3_server_f64/main.ts": ["bytes.ll", "hkdf.ll", "hpack.ll", "record.ll"],
       "tests/link/net_http3_write_window/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_http_app/main.ts": ["bytes.ll"],
       "tests/link/net_http_date/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_http_date_f64/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_http_fetch/main.ts": ["bytes.ll"],
       "tests/link/net_http_fetch_f64/main.ts": ["bytes.ll"],
-      "tests/link/net_http_fetch_tls/main.ts": [
-        "bytes.ll",
-        "hkdf.ll",
-        "record.ll",
-      ],
+      "tests/link/net_http_fetch_tls/main.ts": ["bytes.ll", "hkdf.ll", "record.ll"],
       "tests/link/net_http_server/main.ts": [
         "hkdf.ll",
         "hpack.ll",
@@ -25505,16 +21318,8 @@ const DECLARED = [
       ],
       "tests/link/net_interop_server/main.ts": ["hpack.ll", "std_bytes.ll"],
       "tests/link/net_interop_server_f64/main.ts": ["hpack.ll", "std_bytes.ll"],
-      "tests/link/net_loopback/main.ts": [
-        "echo-table.ll",
-        "hpack.ll",
-        "std_bytes.ll",
-      ],
-      "tests/link/net_loopback_f64/main.ts": [
-        "echo-table.ll",
-        "hpack.ll",
-        "std_bytes.ll",
-      ],
+      "tests/link/net_loopback/main.ts": ["echo-table.ll", "hpack.ll", "std_bytes.ll"],
+      "tests/link/net_loopback_f64/main.ts": ["echo-table.ll", "hpack.ll", "std_bytes.ll"],
       "tests/link/net_outbound/main.ts": ["bytes.ll"],
       "tests/link/net_outbound_f64/main.ts": ["bytes.ll"],
       "tests/link/net_qpack/main.ts": ["hpack.ll"],
@@ -25527,42 +21332,20 @@ const DECLARED = [
       "tests/link/net_qpack_bad_window/main.ts": ["hpack.ll"],
       "tests/link/net_qpack_f64/main.ts": ["hpack.ll"],
       "tests/link/net_quic_lifecycle/main.ts": ["common.ll"],
-      "tests/link/net_quic_lifecycle_f64/main.ts": [
-        "net_quic_lifecycle_common.ll",
-      ],
-      "tests/link/net_quic_lifecycle_replay/main.ts": [
-        "net_quic_lifecycle_common.ll",
-      ],
-      "tests/link/net_quic_lifecycle_replay_f64/main.ts": [
-        "net_quic_lifecycle_common.ll",
-      ],
+      "tests/link/net_quic_lifecycle_f64/main.ts": ["net_quic_lifecycle_common.ll"],
+      "tests/link/net_quic_lifecycle_replay/main.ts": ["net_quic_lifecycle_common.ll"],
+      "tests/link/net_quic_lifecycle_replay_f64/main.ts": ["net_quic_lifecycle_common.ll"],
       "tests/link/net_quic_listener/main.ts": ["net_quic_lifecycle_common.ll"],
-      "tests/link/net_quic_listener_bad_window/main.ts": [
-        "net_quic_lifecycle_common.ll",
-      ],
-      "tests/link/net_quic_listener_f64/main.ts": [
-        "net_quic_lifecycle_common.ll",
-      ],
-      "tests/link/net_quic_prefork/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-        "peer.ll",
-      ],
-      "tests/link/net_quic_server_wipes/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-        "net_quic_lifecycle_common.ll",
-      ],
+      "tests/link/net_quic_listener_bad_window/main.ts": ["net_quic_lifecycle_common.ll"],
+      "tests/link/net_quic_listener_f64/main.ts": ["net_quic_lifecycle_common.ll"],
+      "tests/link/net_quic_prefork/main.ts": ["bytes.ll", "hpack.ll", "peer.ll"],
+      "tests/link/net_quic_server_wipes/main.ts": ["bytes.ll", "hpack.ll", "net_quic_lifecycle_common.ll"],
       "tests/link/net_quic_server_wipes_f64/main.ts": [
         "bytes.ll",
         "hpack.ll",
         "net_quic_lifecycle_common.ll",
       ],
-      "tests/link/net_quic_worker/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-        "net_quic_lifecycle_common.ll",
-      ],
+      "tests/link/net_quic_worker/main.ts": ["bytes.ll", "hpack.ll", "net_quic_lifecycle_common.ll"],
       "tests/link/net_relay/main.ts": [
         "bytes.ll",
         "examples_relay_peers.ll",
@@ -25570,27 +21353,9 @@ const DECLARED = [
         "hpack.ll",
         "json.ll",
       ],
-      "tests/link/net_relay_bad_hello/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-        "json.ll",
-        "peers.ll",
-      ],
-      "tests/link/net_relay_bad_idle/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-        "json.ll",
-        "peers.ll",
-      ],
-      "tests/link/net_relay_bad_path/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-        "json.ll",
-        "peers.ll",
-      ],
+      "tests/link/net_relay_bad_hello/main.ts": ["bytes.ll", "frame.ll", "hpack.ll", "json.ll", "peers.ll"],
+      "tests/link/net_relay_bad_idle/main.ts": ["bytes.ll", "frame.ll", "hpack.ll", "json.ll", "peers.ll"],
+      "tests/link/net_relay_bad_path/main.ts": ["bytes.ll", "frame.ll", "hpack.ll", "json.ll", "peers.ll"],
       "tests/link/net_relay_bad_peers/main.ts": ["peers.ll"],
       "tests/link/net_relay_bad_per_peer/main.ts": [
         "bytes.ll",
@@ -25599,20 +21364,8 @@ const DECLARED = [
         "json.ll",
         "peers.ll",
       ],
-      "tests/link/net_relay_bad_pool/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-        "json.ll",
-        "peers.ll",
-      ],
-      "tests/link/net_relay_bad_rate/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-        "json.ll",
-        "peers.ll",
-      ],
+      "tests/link/net_relay_bad_pool/main.ts": ["bytes.ll", "frame.ll", "hpack.ll", "json.ll", "peers.ll"],
+      "tests/link/net_relay_bad_rate/main.ts": ["bytes.ll", "frame.ll", "hpack.ll", "json.ll", "peers.ll"],
       "tests/link/net_relay_bad_sessions/main.ts": [
         "bytes.ll",
         "frame.ll",
@@ -25620,25 +21373,9 @@ const DECLARED = [
         "json.ll",
         "peers.ll",
       ],
-      "tests/link/net_relay_bad_spare/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-        "json.ll",
-        "peers.ll",
-      ],
-      "tests/link/net_relay_bad_stats/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-        "json.ll",
-        "peers.ll",
-      ],
-      "tests/link/net_relay_encode_window/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-      ],
+      "tests/link/net_relay_bad_spare/main.ts": ["bytes.ll", "frame.ll", "hpack.ll", "json.ll", "peers.ll"],
+      "tests/link/net_relay_bad_stats/main.ts": ["bytes.ll", "frame.ll", "hpack.ll", "json.ll", "peers.ll"],
+      "tests/link/net_relay_encode_window/main.ts": ["bytes.ll", "frame.ll", "hpack.ll"],
       "tests/link/net_relay_f64/main.ts": [
         "bytes.ll",
         "examples_relay_peers.ll",
@@ -25646,29 +21383,10 @@ const DECLARED = [
         "hpack.ll",
         "json.ll",
       ],
-      "tests/link/net_relay_forged/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-        "json.ll",
-        "peers.ll",
-      ],
-      "tests/link/net_relay_frame_window/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-      ],
-      "tests/link/net_relay_grant_window/main.ts": [
-        "bytes.ll",
-        "frame.ll",
-        "hpack.ll",
-        "json.ll",
-      ],
-      "tests/link/net_relay_json_window/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-        "json.ll",
-      ],
+      "tests/link/net_relay_forged/main.ts": ["bytes.ll", "frame.ll", "hpack.ll", "json.ll", "peers.ll"],
+      "tests/link/net_relay_frame_window/main.ts": ["bytes.ll", "frame.ll", "hpack.ll"],
+      "tests/link/net_relay_grant_window/main.ts": ["bytes.ll", "frame.ll", "hpack.ll", "json.ll"],
+      "tests/link/net_relay_json_window/main.ts": ["bytes.ll", "hpack.ll", "json.ll"],
       "tests/link/net_relay_soak/main.ts": [
         "bytes.ll",
         "drive.ll",
@@ -25702,54 +21420,21 @@ const DECLARED = [
       "tests/link/net_websocket_utf8_window/main.ts": ["bytes.ll"],
       "tests/link/net_websocket_write_window/main.ts": ["bytes.ll"],
       "tests/link/net_webtransport/main.ts": ["bytes.ll", "hpack.ll"],
-      "tests/link/net_webtransport_bad_datagrams/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
-      "tests/link/net_webtransport_bad_datagrams_off/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
+      "tests/link/net_webtransport_bad_datagrams/main.ts": ["bytes.ll", "hpack.ll"],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_webtransport_bad_idle/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_webtransport_bad_layer/main.ts": ["bytes.ll", "hpack.ll"],
-      "tests/link/net_webtransport_bad_pending/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
-      "tests/link/net_webtransport_bad_pending_high/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
+      "tests/link/net_webtransport_bad_pending/main.ts": ["bytes.ll", "hpack.ll"],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_webtransport_bad_rate/main.ts": ["bytes.ll", "hpack.ll"],
-      "tests/link/net_webtransport_bad_sessions/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
-      "tests/link/net_webtransport_bad_streams/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
-      "tests/link/net_webtransport_bad_streams_high/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
-      "tests/link/net_webtransport_close_window/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
-      "tests/link/net_webtransport_datagram_window/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
+      "tests/link/net_webtransport_bad_sessions/main.ts": ["bytes.ll", "hpack.ll"],
+      "tests/link/net_webtransport_bad_streams/main.ts": ["bytes.ll", "hpack.ll"],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["bytes.ll", "hpack.ll"],
+      "tests/link/net_webtransport_close_window/main.ts": ["bytes.ll", "hpack.ll"],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["bytes.ll", "hpack.ll"],
-      "tests/link/net_webtransport_stream_window/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
-      "tests/link/net_webtransport_whole_window/main.ts": [
-        "bytes.ll",
-        "hpack.ll",
-      ],
+      "tests/link/net_webtransport_stream_window/main.ts": ["bytes.ll", "hpack.ll"],
+      "tests/link/net_webtransport_whole_window/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/region_sessions_soak/main.ts": ["bytes.ll"],
       "tests/link/std_base64/main.ts": ["main.ll"],
       "tests/link/std_bytes/main.ts": ["bytes.ll"],
@@ -25796,91 +21481,57 @@ const DECLARED = [
       "tests/link/std_postgres_array_end_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_array_int_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_array_param_bytes_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_array_param_int_array_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_array_param_int_array_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_array_param_null_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_array_param_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_array_param_text_array_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_array_param_text_array_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_array_start_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_array_window_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_async/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_async_cancel/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_async_caps_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_async_depth_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_async_double_release_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_async_flat/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_async_pipeline/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_async_release_closed_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_async_release_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_async_size_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_add_int_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_add_text_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_batch_add_text_window_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_batch_add_text_window_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_clock/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_clock_config_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_clock_started_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_batch_clock_take_due_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_batch_clock_take_due_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_clock_turns_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_config_cap_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_config_empty_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_config_key_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_batch_config_name_empty_panic/main.ts": [
-        "bytes.ll",
-      ],
-      "tests/link/std_postgres_batch_config_name_nul_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_batch_config_name_empty_panic/main.ts": ["bytes.ll"],
+      "tests/link/std_postgres_batch_config_name_nul_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_config_query_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_batch_config_queue_bytes_panic/main.ts": [
-        "bytes.ll",
-      ],
-      "tests/link/std_postgres_batch_config_queue_size_panic/main.ts": [
-        "bytes.ll",
-      ],
-      "tests/link/std_postgres_batch_config_requests_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_batch_config_queue_bytes_panic/main.ts": ["bytes.ll"],
+      "tests/link/std_postgres_batch_config_queue_size_panic/main.ts": ["bytes.ll"],
+      "tests/link/std_postgres_batch_config_requests_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_config_runs_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_batch_config_select_nul_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_batch_config_select_nul_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_pending_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_row_pending_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_run_negative_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_run_range_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_scale/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_batch_unsorted/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_binary_array_element_panic/main.ts": [
-        "bytes.ll",
-      ],
-      "tests/link/std_postgres_binary_array_int_none_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_binary_array_element_panic/main.ts": ["bytes.ll"],
+      "tests/link/std_postgres_binary_array_int_none_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_binary_array_int_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_binary_array_null_none_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_binary_array_null_none_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_binary_array_oid_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_binary_array_start_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_binary_array_text_element_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_binary_array_text_element_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_binary_int4_range_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_binary_window_count_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_binary_window_panic/main.ts": ["bytes.ll"],
@@ -25900,15 +21551,11 @@ const DECLARED = [
       "tests/link/std_postgres_nonce_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_nul_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_pool/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_pool_connect_dispose_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_pool_connect_dispose_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_pool_connect_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_pool_connect_range_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_pool_connection_panic/main.ts": ["bytes.ll"],
-      "tests/link/std_postgres_pool_connection_range_panic/main.ts": [
-        "bytes.ll",
-      ],
+      "tests/link/std_postgres_pool_connection_range_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_pool_inflight_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_pool_next_panic/main.ts": ["bytes.ll"],
       "tests/link/std_postgres_pool_queue_panic/main.ts": ["bytes.ll"],
@@ -25931,7 +21578,7 @@ const DECLARED = [
       "tests/link/tfb_db/main.ts": ["bytes.ll"],
       "tests/link/tfb_entry/main.ts": ["std_bytes.ll"],
       "tests/link/thread_scope_exit_paths/main.ts": ["main.ll"],
-    },
+    }
   ),
   // WP48 stage 6: on wasm32 a class's pointer field takes 4 bytes, so the
   // wasm32 programs' allocation sizes, field offsets, TBAA offsets,
@@ -25954,18 +21601,13 @@ const DECLARED = [
         "term-rate.ll",
         "testing.ll",
       ],
-      "tests/link/std_host_game/main.ts": [
-        "game.ll",
-        "input.ll",
-        "main.ll",
-        "testing.ll",
-      ],
+      "tests/link/std_host_game/main.ts": ["game.ll", "input.ll", "main.ll", "testing.ll"],
       // Compared only under `--no-sidecars`: with the WP8 sidecars on, both
       // compilers refuse the two (a union no sidecar describes, root storage
       // in a shim build).
       "tests/cases/root_storage_page.ts": ["root_storage_page.ll"],
       "tests/cases/wasm_union_generic.ts": ["wasm_union_generic.ll"],
-    },
+    }
   ),
   // #1750: a seat waiting for its turn waits on its own turn lane, and a
   // done rings the waiting seats' lanes in answer order, so the pool gains
@@ -25974,18 +21616,12 @@ const DECLARED = [
     "a seat waiting for its turn waits on its own turn lane, which a done rings in answer order, so `std/net/postgres-async.ts` gains `pgAsyncWakeTurns` and `pgAsyncTurnLane` and renumbers its wakes; no importer's own module moves",
     {
       "tests/link/std_postgres_async/main.ts": ["postgres-async.ll"],
-      "tests/link/std_postgres_async_depth_panic/main.ts": [
-        "postgres-async.ll",
-      ],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["postgres-async.ll"],
       "tests/link/std_postgres_async_pipeline/main.ts": ["postgres-async.ll"],
-      "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
-        "postgres-async.ll",
-      ],
-      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": [
-        "postgres-async.ll",
-      ],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["postgres-async.ll"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["postgres-async.ll"],
       "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
-    },
+    }
   ),
   {
     program: "bench/wp68-be-load.ts",
@@ -26039,14 +21675,9 @@ const DECLARED = [
     "the program has a compact class, so every module of it that allocates gains a volatile load of `nish_arena_range_abi` in `nish_alloc_struct`'s slow block, so every line after it moves down one",
     {
       "tests/cases/perf_padding_compact.ts": ["perf_padding_compact.ll"],
-      "tests/link/compact_json/main.ts": [
-        "json-tokenizer.ll",
-        "json-typed.ll",
-        "json.ll",
-        "main.ll",
-      ],
+      "tests/link/compact_json/main.ts": ["json-tokenizer.ll", "json-typed.ll", "json.ll", "main.ll"],
       "tests/link/compact_threads/main.ts": ["main.ll", "threads.ll"],
-    },
+    }
   ),
   // `reserve` splits its growth into `grow`, so a program whose own module
   // declares the connection's put methods declares one more.
@@ -26187,13 +21818,11 @@ const DECLARED = [
   },
   // `std_http1_output_bytes` imports only the pool, so its main.ll agrees.
   ...[
-    ...["bytes.ll", "http-compress.ll", "main.h", "main.ll", "zlib.ll"].map(
-      (file) => ["std_http1_encoded_window", file],
-    ),
-    ...["bytes.ll", "http-compress.ll", "main.h", "zlib.ll"].map((file) => [
-      "std_http1_output_bytes",
+    ...["bytes.ll", "http-compress.ll", "main.h", "main.ll", "zlib.ll"].map((file) => [
+      "std_http1_encoded_window",
       file,
     ]),
+    ...["bytes.ll", "http-compress.ll", "main.h", "zlib.ll"].map((file) => ["std_http1_output_bytes", file]),
   ].map(([name, file]) => ({
     program: `tests/link/${name}/main.ts`,
     file,
@@ -26204,20 +21833,12 @@ const DECLARED = [
   // through std/net/http1-server.ts, and main has changed those since the
   // 0.44.0 seed.
   ...["std_http1_encoded_window", "std_http1_output_bytes"].flatMap((name) =>
-    [
-      "buffer-pool.ll",
-      "client.ll",
-      "ct.ll",
-      "hkdf.ll",
-      "hmac.ll",
-      "record.ll",
-      "tls.ll",
-    ].map((file) => ({
+    ["buffer-pool.ll", "client.ll", "ct.ll", "hkdf.ll", "hmac.ll", "record.ll", "tls.ll"].map((file) => ({
       program: `tests/link/${name}/main.ts`,
       file,
       changelog: HTTP1_SERVER_PANIC_FREE,
       why: "a probe new with this change: the reference compiles it against the 0.44.0 seed's std/net/buffer-pool.ts, std/crypto and std/net/tls modules, which differ from this tree's, so those modules' IR differs (WP80 S4)",
-    })),
+    }))
   ),
   // Reported only under `--no-sidecars`.
   {
@@ -26235,10 +21856,7 @@ const DECLARED = [
   // WP82 S3: the HTTP/1 client codec refuses more than 2^30 buffered bytes
   // with the new `HTTP1_E_MEMORY_LIMIT` code where it used to panic, and
   // `Http1ResponseParser.buffered` no longer reaches a panic site.
-  ...[
-    "tests/link/net_http1_client/main.ts",
-    "tests/link/net_http1_client_f64/main.ts",
-  ].map((program) => ({
+  ...["tests/link/net_http1_client/main.ts", "tests/link/net_http1_client_f64/main.ts"].map((program) => ({
     program,
     file: "exit",
     changelog: "std/net TLS, fetch and outbound client side panic-free",
@@ -26254,14 +21872,12 @@ const DECLARED = [
     changelog: "std/net TLS, fetch and outbound client side panic-free",
     why: "`Http1ResponseParser.buffered` no longer reaches a panic site, so its declaration takes the `nounwind willreturn readonly` attribute group (#2) in place of plain `nounwind` (#0) (WP82 S3)",
   })),
-  ...["bench/http1-conn/main.ts", "tests/link/net_serve_rss_flat/main.ts"].map(
-    (program) => ({
-      program,
-      file: "tls.ll",
-      changelog: "std/net TLS, fetch and outbound client side panic-free",
-      why: 'std/net/tls.ts sizes its arrays under bounds the prover reads, so the "array length out of range" panic and its string leave the module and the values after them renumber (WP82 S3)',
-    }),
-  ),
+  ...["bench/http1-conn/main.ts", "tests/link/net_serve_rss_flat/main.ts"].map((program) => ({
+    program,
+    file: "tls.ll",
+    changelog: "std/net TLS, fetch and outbound client side panic-free",
+    why: 'std/net/tls.ts sizes its arrays under bounds the prover reads, so the "array length out of range" panic and its string leave the module and the values after them renumber (WP82 S3)',
+  })),
   {
     program: "bench/http1-conn/main.ts",
     file: "client.ll",
@@ -26305,10 +21921,7 @@ const DECLARED = [
     changelog: HASH_MAC_KDF,
     why: "ct.ll no longer declares nish_panic_index, so the attribute group numbers shift and this module's declaration of timingSafeEqualAt names the next group",
   })),
-  ...[
-    "tests/link/crypto_sha1/main.ts",
-    "tests/link/crypto_sha1_f64/main.ts",
-  ].map((program) => ({
+  ...["tests/link/crypto_sha1/main.ts", "tests/link/crypto_sha1_f64/main.ts"].map((program) => ({
     program,
     file: "exit",
     changelog: HASH_MAC_KDF,
@@ -26342,19 +21955,15 @@ const DECLARED = [
     changelog: "the std/net QUIC wire layer panic-free",
     why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
   })),
-  ...[
-    "tests/link/net_quic_conn_parts/main.ts",
-    "tests/link/net_quic_conn_parts_f64/main.ts",
-  ].map((program) => ({
-    program,
-    file: "net_quic_frame_checks.ll",
-    changelog: "the std/net QUIC wire layer panic-free",
-    why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
-  })),
-  ...[
-    "tests/link/net_quic_ecn/main.ts",
-    "tests/link/net_quic_ecn_f64/main.ts",
-  ].map((program) => ({
+  ...["tests/link/net_quic_conn_parts/main.ts", "tests/link/net_quic_conn_parts_f64/main.ts"].map(
+    (program) => ({
+      program,
+      file: "net_quic_frame_checks.ll",
+      changelog: "the std/net QUIC wire layer panic-free",
+      why: "only the attribute groups on its declares of the QUIC wire layer functions move, because those functions no longer panic (WP82 S4)",
+    })
+  ),
+  ...["tests/link/net_quic_ecn/main.ts", "tests/link/net_quic_ecn_f64/main.ts"].map((program) => ({
     program,
     file: "quic-conn-ack.ll",
     changelog: "the std/net QUIC wire layer panic-free",
@@ -26410,10 +22019,7 @@ const DECLARED = [
     changelog: "the std/net QUIC wire layer panic-free",
     why: "the module itself: its queue and frame helpers now guard every index and size, so their bodies, and the attributes of the functions that can no longer panic, change (WP82 S4)",
   })),
-  ...[
-    "tests/link/net_quic_ecn/main.ts",
-    "tests/link/net_quic_ecn_f64/main.ts",
-  ].map((program) => ({
+  ...["tests/link/net_quic_ecn/main.ts", "tests/link/net_quic_ecn_f64/main.ts"].map((program) => ({
     program,
     file: "quic-frame.ll",
     changelog: "the std/net QUIC wire layer panic-free",
@@ -26461,10 +22067,7 @@ const DECLARED = [
     changelog: "the std/net QUIC wire layer panic-free",
     why: "only the attribute groups on its declares of the `quic-frame.ts` writers move, because those writers no longer panic (WP82 S4)",
   })),
-  ...[
-    "tests/link/net_quic_packet/main.ts",
-    "tests/link/net_quic_packet_f64/main.ts",
-  ].map((program) => ({
+  ...["tests/link/net_quic_packet/main.ts", "tests/link/net_quic_packet_f64/main.ts"].map((program) => ({
     program,
     file: "refusals.ll",
     changelog: "the std/net QUIC wire layer panic-free",
@@ -26492,9 +22095,9 @@ const DECLARED = [
           "std_cli_args_misuse_negatable",
           "std_cli_args_misuse_negation",
           "std_cli_args_misuse_required",
-        ].map((name) => [`tests/link/${name}/main.ts`, ["cli.ll", "main.h"]]),
+        ].map((name) => [`tests/link/${name}/main.ts`, ["cli.ll", "main.h"]])
       ),
-    },
+    }
   ),
   ...s1PanicFree(
     "std/cli-flags proves its indexes, slices and counts through a new private `FlagTable.kindOf` and guards the parse loop, and std/cli's `HelpMenu` keeps a `hasUsage` boolean where it counted `usages`, so cli-flags.ll, cli.ll, the program's module and its header all move (WP80 S1)",
@@ -26509,41 +22112,26 @@ const DECLARED = [
         "std_cli_flags_bad_no_pair",
         "std_cli_flags_bad_number",
         "std_cli_flags_bad_unknown_flag",
-      ].map((name) => [
-        `tests/link/${name}/main.ts`,
-        ["cli-flags.ll", "cli.ll", "main.h", "main.ll"],
-      ]),
-    ),
+      ].map((name) => [`tests/link/${name}/main.ts`, ["cli-flags.ll", "cli.ll", "main.h", "main.ll"]])
+    )
   ),
   // Two benchmarks new with WP80 S1: each links std modules that changed on
   // main after the 0.44.0 seed, so the seed's copies differ.
   ...s1PanicFree(
     "a benchmark new with this change: it links std modules that changed on main after the 0.44.0 seed was cut (among them `Router`'s step tables and `HttpCompressor`'s request-body decoding, which imports nish/compress/zlib), so the seed's copies of those modules, and the program's module and header naming their structs, differ",
     {
-      "bench/std-http1.ts": [
-        "bytes.ll",
-        "http-compress.ll",
-        "std-http1.h",
-        "std-http1.ll",
-        "zlib.ll",
-      ],
+      "bench/std-http1.ts": ["bytes.ll", "http-compress.ll", "std-http1.h", "std-http1.ll", "zlib.ll"],
       "bench/std-router.ts": ["router.ll", "std-router.h", "std-router.ll"],
-    },
+    }
   ),
   // WP80 S1: the atomic arrays build their values with a counted push loop
   // instead of `new Array(length)`, so every program reaching them moves.
   ...s1PanicFree(
     "std/threads.ts's `AtomicI32Array` and `AtomicI64Array` constructors push a typed zero `length` times instead of building `new Array(length)`, so threads.ll loses its array-length panic and gains the push loop, and a module declaring either constructor numbers its attribute groups differently",
     {
-      "bench/par-histogram-atomic.ts": [
-        "par-histogram-atomic.ll",
-        "threads.ll",
-      ],
+      "bench/par-histogram-atomic.ts": ["par-histogram-atomic.ll", "threads.ll"],
       "bench/std-threads.ts": ["threads.ll"],
-      "docs/cookbook/thread-atomic-array.ts": [
-        "thread-atomic-array.ll",
-        "threads.ll",
-      ],
+      "docs/cookbook/thread-atomic-array.ts": ["thread-atomic-array.ll", "threads.ll"],
       "examples/histogram-atomic.ts": ["threads.ll"],
       "tests/link/module_private_spawn/main.ts": ["threads.ll"],
       ...Object.fromEntries(
@@ -26553,23 +22141,18 @@ const DECLARED = [
           "atomic_array_out_of_range",
           "par_atomic_array",
           "thread_atomic_array",
-        ].map((name) => [
-          `tests/link/${name}/main.ts`,
-          ["main.ll", "threads.ll"],
-        ]),
+        ].map((name) => [`tests/link/${name}/main.ts`, ["main.ll", "threads.ll"]])
       ),
-    },
+    }
   ),
   ...s1PanicFree(
     "a test new with this change: it reads `ParsedFlags` after a flag the table declares late, and std/cli-flags.ts now keeps one `FlagValue` record per flag where the seed's copy kept parallel arrays, so cli-flags.ll, cli.ll, the program's module and its header differ",
     Object.fromEntries(
-      ["std_cli_flags_bad_late_flag", "std_cli_flags_bad_late_has"].map(
-        (name) => [
-          `tests/link/${name}/main.ts`,
-          ["cli-flags.ll", "cli.ll", "main.h", "main.ll"],
-        ],
-      ),
-    ),
+      ["std_cli_flags_bad_late_flag", "std_cli_flags_bad_late_has"].map((name) => [
+        `tests/link/${name}/main.ts`,
+        ["cli-flags.ll", "cli.ll", "main.h", "main.ll"],
+      ])
+    )
   ),
   ...s1PanicFree(
     "a test new with this change: it decodes long arrays through std/json-typed.ts, whose array readers this change proves, against the seed's copies of std/bytes.ts and std/json*.ts, which differ from this tree's",
@@ -26582,16 +22165,14 @@ const DECLARED = [
         "main.h",
         "main.ll",
       ],
-    },
+    }
   ),
-  ...["examples/api-cli/main.ts", "tests/link/std_cli_args_try/main.ts"].map(
-    (program) => ({
-      program,
-      file: "exit",
-      changelog: S1_PANIC_FREE,
-      why: "the program declares its tree through std/cli-args.ts's new `try` twins and reads values through `CliFlag` and `CliArgument`, which the seed's copy does not export, so the reference refuses it",
-    }),
-  ),
+  ...["examples/api-cli/main.ts", "tests/link/std_cli_args_try/main.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: S1_PANIC_FREE,
+    why: "the program declares its tree through std/cli-args.ts's new `try` twins and reads values through `CliFlag` and `CliArgument`, which the seed's copy does not export, so the reference refuses it",
+  })),
   // WP82 S7: std/net/http2*.ts and hpack.ts answer a malformed frame, block or cursor with an error
   // code where they panicked, and prove the rest of their index and arithmetic sites.
   ...[
@@ -26755,10 +22336,7 @@ const DECLARED = [
     changelog: QUIC_ENGINE_PANIC_FREE,
     why: "std/net/quic-stream.ts guards its ring and table indexes through locals, and `QuicStreamPools.lend` and `keep` answer a boolean where they panicked, so the module's checks and panic blocks change (WP82 S5)",
   })),
-  ...[
-    "tests/link/net_quic_recovery/main.ts",
-    "tests/link/net_quic_recovery_f64/main.ts",
-  ].map((program) => ({
+  ...["tests/link/net_quic_recovery/main.ts", "tests/link/net_quic_recovery_f64/main.ts"].map((program) => ({
     program,
     file: "unit.ll",
     changelog: QUIC_ENGINE_PANIC_FREE,
@@ -26769,13 +22347,8 @@ const DECLARED = [
     {
       "bench/std-compress-deflate.ts": ["bytes.ll"],
       "bench/std-compress-inflate.ts": ["bytes.ll"],
-      "bench/std-compress-gzip.ts": [
-        "bytes.ll",
-        "gzip.ll",
-        "std-compress-gzip.ll",
-        "zlib.ll",
-      ],
-    },
+      "bench/std-compress-gzip.ts": ["bytes.ll", "gzip.ll", "std-compress-gzip.ll", "zlib.ll"],
+    }
   ),
   ...byFinding(COMPRESS_PANIC_FREE)(
     "std/compress/gzip.ts answers `DEFLATE_NO_ROOM` or `GZIP_ERR_FINISHED` where `GzipWriter` panicked, and `GzipReader` keeps the room left under its limit and whether it saw a member in place of a running total and a member count (WP84 S1), so gzip.ll, and each module or header that lays out `GzipReader` or declares `GzipWriter`'s methods, move",
@@ -26793,7 +22366,7 @@ const DECLARED = [
       "tests/link/std_compress_node/main.ts": ["main.h"],
       "tests/link/std_http1_encoded_window/main.ts": ["gzip.ll"],
       "tests/link/std_http1_output_bytes/main.ts": ["gzip.ll"],
-    },
+    }
   ),
   {
     program: "tests/link/std_compress_gzip_errors/main.ts",
@@ -26820,11 +22393,7 @@ const DECLARED = [
       "src/break-gfx.ts": ["break-gfx.h"],
       "src/break-intro.ts": ["break-intro.h", "input.ll"],
       "src/break-menu.ts": ["break-menu.h", "input.ll"],
-      "src/break-settings-file.ts": [
-        "break-menu.ll",
-        "break-settings-file.h",
-        "input.ll",
-      ],
+      "src/break-settings-file.ts": ["break-menu.ll", "break-settings-file.h", "input.ll"],
       "src/break-sound.ts": ["break-sound.h", "input.ll"],
       "src/break-voices.ts": ["break-game.ll", "break-voices.h", "input.ll"],
       "src/break.ts": ["break-director.ll", "input.ll", "term-rate.ll"],
@@ -26842,11 +22411,7 @@ const DECLARED = [
       "tests/link/break_menu/main.ts": ["input.ll", "main.h", "main.ll"],
       "tests/link/break_settings/main.ts": ["input.ll", "main.h"],
       "tests/link/break_sound/main.ts": ["input.ll", "main.h"],
-      "tests/link/break_sound_wav/main.ts": [
-        "break-game.ll",
-        "input.ll",
-        "main.h",
-      ],
+      "tests/link/break_sound_wav/main.ts": ["break-game.ll", "input.ll", "main.h"],
       "tests/link/std_host_game/main.ts": ["main.h"],
       "tests/link/std_input/main.ts": ["input.ll", "main.h", "main.ll"],
       "tests/link/std_term/main.ts": ["main.h", "main.ll"],
@@ -26865,7 +22430,7 @@ const DECLARED = [
       "tests/link/std_term_probe/main.ts": ["main.h"],
       "tests/link/std_term_rate/main.ts": ["term-rate.ll"],
       "tests/link/std_term_rate_f64/main.ts": ["term-rate.ll"],
-    },
+    }
   ),
   // WP85 S2: the term modules prove or drop their panic sites.
   ...byFinding(TERM_PANIC_FREE)(
@@ -26881,18 +22446,13 @@ const DECLARED = [
       "tests/link/std_term_probe/main.ts": ["term-probe.ll"],
       "tests/link/std_term_rate/main.ts": ["term-rate.ll"],
       "tests/link/std_term_rate_f64/main.ts": ["term-rate.ll"],
-    },
+    }
   ),
   ...byFinding(TERM_PANIC_FREE)(
     "std/term-pixels.ts and std/term-rate.ts no longer panic in `Framebuffer.get`, `Framebuffer.set`, `FixedStep.advance` and their neighbours (WP85 S2), so an importer's declarations of them take another attribute group and its layout of `RateController` gains three i32 fields",
     {
       "examples/term-probe.ts": ["term-probe.ll"],
-      "src/break-director.ts": [
-        "break-director.ll",
-        "break-game.ll",
-        "break-gfx.ll",
-        "break-menu.ll",
-      ],
+      "src/break-director.ts": ["break-director.ll", "break-game.ll", "break-gfx.ll", "break-menu.ll"],
       "src/break-game.ts": ["break-gfx.ll"],
       "src/break-gfx.ts": ["break-gfx.ll"],
       "src/break-intro.ts": ["break-gfx.ll"],
@@ -26923,7 +22483,7 @@ const DECLARED = [
       "tests/link/std_term_pixels_negative_resize/main.ts": ["main.ll"],
       "tests/link/std_term_pixels_negative_size/main.ts": ["main.ll"],
       "tests/link/std_term_rate_f64/main.ts": ["main.ll"],
-    },
+    }
   ),
   ...byFinding(TERM_PANIC_FREE)(
     "`RateController` gains its fastest, up and level rates as i32 fields (WP85 S2), so each header that lays it out moves",
@@ -26938,9 +22498,9 @@ const DECLARED = [
       "tests/link/break_gfx/main.ts": ["main.h"],
       "tests/link/std_term_rate/main.ts": ["main.h"],
       "tests/link/std_term_rate_f64/main.ts": ["main.h"],
-    },
+    }
   ),
-];
+]
 
 /**
  * The programs that reach one `std/` module by two routes: by a relative path
@@ -26959,11 +22519,11 @@ const TWO_STDS = new Set([
   "tests/link/std_json_tokenizer/main.ts",
   "tests/link/std_yaml_conformance/main.ts",
   "tests/link/std_yaml_write/main.ts",
-]);
+])
 
 /** The reference's refusal of a class or interface reached once through each copy of `std/`. */
 const TWO_STDS_REFUSAL =
-  /^the candidate compiles it and the reference refuses it \(reference: error: (?:Class|Interface) `[^`]+` is declared in package (?:`nish`|the program itself) and again in package (?:`nish`|the program itself);/;
+  /^the candidate compiles it and the reference refuses it \(reference: error: (?:Class|Interface) `[^`]+` is declared in package (?:`nish`|the program itself) and again in package (?:`nish`|the program itself);/
 
 /**
  * Whether one difference is the two-copies refusal in a program `TWO_STDS` names.
@@ -26974,15 +22534,13 @@ const TWO_STDS_REFUSAL =
  * @returns {boolean} true only for that refusal in a listed program
  */
 const isTwoStds = (program, difference, allowed = TWO_STDS) =>
-  allowed.has(program) &&
-  difference.surface === "exit" &&
-  TWO_STDS_REFUSAL.test(difference.detail);
+  allowed.has(program) && difference.surface === "exit" && TWO_STDS_REFUSAL.test(difference.detail)
 
 /** Differing files printed in full before the rest are only counted. */
-const MAX_ROWS = 20;
+const MAX_ROWS = 20
 
 /** The dump flags: they print instead of writing IR, so there is no artefact to compare. */
-const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"]);
+const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"])
 
 /**
  * `.js` / `.mjs` / `.cjs` is a Node entry point and everything else is a
@@ -26993,7 +22551,7 @@ const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"]);
  * arrive without `+x` — and the suffix is what
  * whoever built the seed chose.
  */
-const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
+const NODE_ENTRY = /\.(?:js|mjs|cjs)$/
 
 /**
  * The package root a compiler will answer for itself: the directory holding
@@ -27008,20 +22566,20 @@ const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
  * the compilers use, checked here against the filesystem instead of assumed.
  */
 const packageRootOf = (file) => {
-  const candidates = [path.join(path.dirname(file), "..")];
+  const candidates = [path.join(path.dirname(file), "..")]
   try {
-    candidates.push(path.join(path.dirname(fs.realpathSync(file)), ".."));
+    candidates.push(path.join(path.dirname(fs.realpathSync(file)), ".."))
   } catch {
     // A compiler that cannot be realpath'd is one `resolveCompiler` has already
     // refused; there is simply no second candidate for it.
   }
   for (const candidate of candidates) {
     if (fs.existsSync(path.join(candidate, "scripts", "build.sh"))) {
-      return path.resolve(candidate);
+      return path.resolve(candidate)
     }
   }
-  return path.resolve(root);
-};
+  return path.resolve(root)
+}
 
 /**
  * `text` with one compiler's own package root removed, so a path under it is
@@ -27034,11 +22592,11 @@ const packageRootOf = (file) => {
  */
 const withoutOwnRoot = (text, ownRoot) => {
   if (ownRoot === undefined || ownRoot === null || ownRoot.length === 0) {
-    return text;
+    return text
   }
-  const prefix = ownRoot.endsWith(path.sep) ? ownRoot : `${ownRoot}${path.sep}`;
-  return text.split(prefix).join("");
-};
+  const prefix = ownRoot.endsWith(path.sep) ? ownRoot : `${ownRoot}${path.sep}`
+  return text.split(prefix).join("")
+}
 
 /**
  * The files one compiler wrote, keyed by name with its own package root removed
@@ -27056,29 +22614,27 @@ const withoutOwnRoot = (text, ownRoot) => {
  * it was, so the difference is still reported.
  */
 const withoutOwnRootNames = (files, ownRoot) => {
-  const renamed = new Set();
+  const renamed = new Set()
   if (ownRoot === undefined || ownRoot === null || ownRoot.length === 0) {
-    return { files, renamed };
+    return { files, renamed }
   }
-  const segments = ownRoot
-    .split(path.sep)
-    .filter((segment) => segment.length > 0);
+  const segments = ownRoot.split(path.sep).filter((segment) => segment.length > 0)
   if (segments.length === 0) {
-    return { files, renamed };
+    return { files, renamed }
   }
-  const prefix = `${segments.join("_")}_`;
-  const out = new Map();
+  const prefix = `${segments.join("_")}_`
+  const out = new Map()
   for (const [name, bytes] of files) {
-    const bare = name.startsWith(prefix) ? name.slice(prefix.length) : name;
+    const bare = name.startsWith(prefix) ? name.slice(prefix.length) : name
     if (bare !== name && !files.has(bare) && !out.has(bare)) {
-      out.set(bare, bytes);
-      renamed.add(bare);
+      out.set(bare, bytes)
+      renamed.add(bare)
     } else {
-      out.set(name, bytes);
+      out.set(name, bytes)
     }
   }
-  return { files: out, renamed };
-};
+  return { files: out, renamed }
+}
 
 /**
  * `withoutOwnRoot` over inputs a corpus cannot produce, on every run.
@@ -27090,7 +22646,7 @@ const withoutOwnRootNames = (files, ownRoot) => {
  * Returns the reason it failed, or null.
  */
 const selfCheckRoots = () => {
-  const sep = path.sep;
+  const sep = path.sep
   const cases = [
     [
       `; ModuleID = '${sep}opt${sep}nish${sep}std${sep}text.ts'`,
@@ -27099,11 +22655,7 @@ const selfCheckRoots = () => {
     ],
     // Already relative: a compiler standing in its own root writes this, and it
     // is the form the other side is being brought to.
-    [
-      `; ModuleID = 'std${sep}text.ts'`,
-      `${sep}opt${sep}nish`,
-      `; ModuleID = 'std${sep}text.ts'`,
-    ],
+    [`; ModuleID = 'std${sep}text.ts'`, `${sep}opt${sep}nish`, `; ModuleID = 'std${sep}text.ts'`],
     // A neighbour whose name starts with the root's is not under it.
     [
       `${sep}opt${sep}nish-old${sep}std${sep}a.ts`,
@@ -27111,25 +22663,17 @@ const selfCheckRoots = () => {
       `${sep}opt${sep}nish-old${sep}std${sep}a.ts`,
     ],
     // A trailing separator on the root must not remove one character more.
-    [
-      `${sep}opt${sep}nish${sep}std${sep}a.ts`,
-      `${sep}opt${sep}nish${sep}`,
-      `std${sep}a.ts`,
-    ],
+    [`${sep}opt${sep}nish${sep}std${sep}a.ts`, `${sep}opt${sep}nish${sep}`, `std${sep}a.ts`],
     // No root at all: every caller's fallback, and it must change nothing.
-    [
-      `${sep}opt${sep}nish${sep}std${sep}a.ts`,
-      null,
-      `${sep}opt${sep}nish${sep}std${sep}a.ts`,
-    ],
-  ];
+    [`${sep}opt${sep}nish${sep}std${sep}a.ts`, null, `${sep}opt${sep}nish${sep}std${sep}a.ts`],
+  ]
   for (const [text, ownRoot, want] of cases) {
-    const got = withoutOwnRoot(text, ownRoot);
+    const got = withoutOwnRoot(text, ownRoot)
     if (got !== want) {
-      return `withoutOwnRoot(${JSON.stringify(text)}, ${JSON.stringify(ownRoot)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+      return `withoutOwnRoot(${JSON.stringify(text)}, ${JSON.stringify(ownRoot)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`
     }
   }
-  const nishRoot = `${sep}opt${sep}nish`;
+  const nishRoot = `${sep}opt${sep}nish`
   const names = [
     // The seed's own module, named by its path: the root goes, the rest stays.
     [["opt_nish_std_crypto_x25519.ll"], nishRoot, ["std_crypto_x25519.ll"]],
@@ -27142,20 +22686,17 @@ const selfCheckRoots = () => {
     // No root at all changes nothing, and nor does the filesystem's root.
     [["opt_nish_a.ll"], null, ["opt_nish_a.ll"]],
     [["_a.ll"], sep, ["_a.ll"]],
-  ];
+  ]
   for (const [given, ownRoot, want] of names) {
     const got = [
-      ...withoutOwnRootNames(
-        new Map(given.map((n) => [n, Buffer.alloc(0)])),
-        ownRoot,
-      ).files.keys(),
-    ];
+      ...withoutOwnRootNames(new Map(given.map((n) => [n, Buffer.alloc(0)])), ownRoot).files.keys(),
+    ]
     if (got.join(",") !== want.join(",")) {
-      return `withoutOwnRootNames(${JSON.stringify(given)}, ${JSON.stringify(ownRoot)}) names ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+      return `withoutOwnRootNames(${JSON.stringify(given)}, ${JSON.stringify(ownRoot)}) names ${JSON.stringify(got)}, not ${JSON.stringify(want)}`
     }
   }
-  return null;
-};
+  return null
+}
 
 /**
  * `text` with one compiler's own version removed from the DWARF `producer`, so
@@ -27169,17 +22710,11 @@ const selfCheckRoots = () => {
  * left alone. Nothing else is rewritten.
  */
 const withoutOwnVersion = (text, ownVersion) => {
-  if (
-    ownVersion === undefined ||
-    ownVersion === null ||
-    ownVersion.length === 0
-  ) {
-    return text;
+  if (ownVersion === undefined || ownVersion === null || ownVersion.length === 0) {
+    return text
   }
-  return text
-    .split(`producer: "${ownVersion}"`)
-    .join('producer: "<own version>"');
-};
+  return text.split(`producer: "${ownVersion}"`).join('producer: "<own version>"')
+}
 
 /** The module flags `hardeningModuleFlags` in `src/target.ts` gives every native module, as each line reads. */
 const HARDENING_FLAGS = new Set([
@@ -27188,7 +22723,7 @@ const HARDENING_FLAGS = new Set([
   '!{i32 8, !"branch-target-enforcement", i32 1}',
   '!{i32 8, !"sign-return-address", i32 1}',
   '!{i32 4, !"probe-stack", !"inline-asm"}',
-]);
+])
 
 /**
  * `text` without what the binary hardening adds to a native module: the five
@@ -27200,37 +22735,37 @@ const HARDENING_FLAGS = new Set([
  * reference that already carries the flags still differs.
  */
 const withoutHardening = (text) => {
-  const ids = new Set();
-  const kept = [];
+  const ids = new Set()
+  const kept = []
   for (const line of text.split("\n")) {
-    const m = /^(!\d+) = (.*)$/.exec(line);
+    const m = /^(!\d+) = (.*)$/.exec(line)
     if (m !== null && HARDENING_FLAGS.has(m[2])) {
-      ids.add(m[1]);
+      ids.add(m[1])
     } else {
-      kept.push(line);
+      kept.push(line)
     }
   }
-  const flagsLine = "!llvm.module.flags = !{";
-  const out = [];
+  const flagsLine = "!llvm.module.flags = !{"
+  const out = []
   for (const [i, line] of kept.entries()) {
     if (line.startsWith(flagsLine) && line.endsWith("}")) {
       const refs = line
         .slice(flagsLine.length, -1)
         .split(", ")
-        .filter((ref) => !ids.has(ref));
+        .filter((ref) => !ids.has(ref))
       if (refs.length > 0) {
-        out.push(`${flagsLine}${refs.join(", ")}}`);
+        out.push(`${flagsLine}${refs.join(", ")}}`)
       } else if (out.at(-1) === "" && !kept[i + 1]?.startsWith("!")) {
         // A module with no metadata of its own: the blank line before the
         // flags opened a section the hardening alone wrote.
-        out.pop();
+        out.pop()
       }
     } else {
-      out.push(line.split(' "probe-stack"="inline-asm"').join(""));
+      out.push(line.split(' "probe-stack"="inline-asm"').join(""))
     }
   }
-  return out.join("\n");
-};
+  return out.join("\n")
+}
 
 /**
  * `withoutHardening` over fabricated modules, for the reason
@@ -27238,24 +22773,20 @@ const withoutHardening = (text) => {
  * Returns the reason it failed, or null.
  */
 const selfCheckHardening = () => {
-  const flags = [...HARDENING_FLAGS];
-  const plain =
-    "define i32 @f() #0 {\n  ret i32 0\n}\nattributes #0 = { nounwind }";
+  const flags = [...HARDENING_FLAGS]
+  const plain = "define i32 @f() #0 {\n  ret i32 0\n}\nattributes #0 = { nounwind }"
   const hardened =
     'define i32 @f() #0 {\n  ret i32 0\n}\nattributes #0 = { nounwind "probe-stack"="inline-asm" }\n' +
     "!llvm.module.flags = !{!0, !1, !2, !3, !4}\n" +
-    flags.map((flag, i) => `!${i} = ${flag}`).join("\n");
+    flags.map((flag, i) => `!${i} = ${flag}`).join("\n")
   const debug = (extra) =>
     `!llvm.module.flags = !{!2, !3${extra}}\n!2 = !{i32 7, !"Dwarf Version", i32 5}\n` +
-    '!3 = !{i32 2, !"Debug Info Version", i32 3}';
+    '!3 = !{i32 2, !"Debug Info Version", i32 3}'
   const cases = [
     [hardened, plain],
     // The blank line before flags that end the module goes with them; one
     // before metadata of the module's own stays.
-    [
-      `${plain}\n\n${hardened.slice(hardened.indexOf("!llvm"))}\n`,
-      `${plain}\n`,
-    ],
+    [`${plain}\n\n${hardened.slice(hardened.indexOf("!llvm"))}\n`, `${plain}\n`],
     [
       `${plain}\n\n!llvm.module.flags = !{!1}\n!0 = !{!"nish TBAA"}\n!1 = ${flags[4]}`,
       `${plain}\n\n!0 = !{!"nish TBAA"}`,
@@ -27265,22 +22796,19 @@ const selfCheckHardening = () => {
     // An attribute with no group, on the definition itself.
     ['define void @g() "probe-stack"="inline-asm" {', "define void @g() {"],
     // A flag with another value is not one of these, and stays.
-    [
-      '!llvm.module.flags = !{!0}\n!0 = !{i32 8, !"cf-protection-branch", i32 0}',
-      null,
-    ],
+    ['!llvm.module.flags = !{!0}\n!0 = !{i32 8, !"cf-protection-branch", i32 0}', null],
     // Anything else is left alone.
     [plain, plain],
     ["", ""],
-  ];
+  ]
   for (const [text, want] of cases) {
-    const got = withoutHardening(text);
+    const got = withoutHardening(text)
     if (got !== (want ?? text)) {
-      return `withoutHardening(${JSON.stringify(text)}) gave ${JSON.stringify(got)}`;
+      return `withoutHardening(${JSON.stringify(text)}) gave ${JSON.stringify(got)}`
     }
   }
-  return null;
-};
+  return null
+}
 
 /**
  * `withoutOwnVersion` over inputs a corpus cannot produce, on every run, for
@@ -27290,7 +22818,7 @@ const selfCheckHardening = () => {
  */
 const selfCheckVersions = () => {
   const unit = (producer) =>
-    `!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "${producer}", isOptimized: false)`;
+    `!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "${producer}", isOptimized: false)`
   const cases = [
     [unit("nish 0.6.0"), "nish 0.6.0", unit("<own version>")],
     // Another compiler's version is not this one's to forgive: a candidate
@@ -27307,23 +22835,18 @@ const selfCheckVersions = () => {
     // No version at all: every caller's fallback, and it must change nothing.
     [unit("nish 0.6.0"), null, unit("nish 0.6.0")],
     ["", "", ""],
-  ];
+  ]
   for (const [text, ownVersion, want] of cases) {
-    const got = withoutOwnVersion(text, ownVersion);
+    const got = withoutOwnVersion(text, ownVersion)
     if (got !== want) {
-      return `withoutOwnVersion(${JSON.stringify(text)}, ${JSON.stringify(ownVersion)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+      return `withoutOwnVersion(${JSON.stringify(text)}, ${JSON.stringify(ownVersion)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`
     }
   }
-  return null;
-};
+  return null
+}
 
 /** `git` in the repository, as `spawnSync` answers it: the caller reads the status. */
-const git = (args) =>
-  spawnSync("git", args, {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
+const git = (args) => spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
 
 /**
  * The release section `scripts/changelog-gen.mjs` would write for the commits
@@ -27346,26 +22869,24 @@ const git = (args) =>
  * compare with either, since the seed *is* the last release.
  */
 const pendingNotes = () => {
-  const describe = () =>
-    git(["describe", "--tags", "--abbrev=0", "--match", "v*"]);
-  const shallow = () =>
-    git(["rev-parse", "--is-shallow-repository"]).stdout.trim() === "true";
+  const describe = () => git(["describe", "--tags", "--abbrev=0", "--match", "v*"])
+  const shallow = () => git(["rev-parse", "--is-shallow-repository"]).stdout.trim() === "true"
   if (shallow()) {
-    git(["fetch", "--quiet", "--unshallow", "--tags", "origin"]);
+    git(["fetch", "--quiet", "--unshallow", "--tags", "origin"])
   } else if (describe().status !== 0) {
-    git(["fetch", "--quiet", "--tags", "origin"]);
+    git(["fetch", "--quiet", "--tags", "origin"])
   }
   if (shallow()) {
     return {
       error:
         "the checkout is shallow and `git fetch --unshallow` did not deepen it, so the commits since the last release cannot be read",
-    };
+    }
   }
-  const tag = describe();
+  const tag = describe()
   if (tag.status !== 0) {
     return {
       error: `no v* release tag is reachable from HEAD, even after fetching the tags: ${tag.stderr.trim()}`,
-    };
+    }
   }
   const rendered = spawnSync(
     process.execPath,
@@ -27374,15 +22895,15 @@ const pendingNotes = () => {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
-    },
-  );
+    }
+  )
   if (rendered.status !== 0) {
     return {
       error: `scripts/changelog-gen.mjs could not render ${tag.stdout.trim()}..HEAD: ${rendered.stderr.trim()}`,
-    };
+    }
   }
-  return { text: rendered.stdout };
-};
+  return { text: rendered.stdout }
+}
 
 /**
  * Whether a declaration's words are in the release notes: `CHANGELOG.md`, or
@@ -27401,14 +22922,10 @@ const pendingNotes = () => {
  * subject's opening are never in the notes that subject became.
  */
 const isNamed = (words, changelogText, pending) => {
-  const rendered = words.startsWith("`")
-    ? words
-    : words.charAt(0).toUpperCase() + words.slice(1);
-  const has = (text) => text.includes(words) || text.includes(rendered);
-  return (
-    has(changelogText) || (pending?.text !== undefined && has(pending.text))
-  );
-};
+  const rendered = words.startsWith("`") ? words : words.charAt(0).toUpperCase() + words.slice(1)
+  const has = (text) => text.includes(words) || text.includes(rendered)
+  return has(changelogText) || (pending?.text !== undefined && has(pending.text))
+}
 
 /**
  * `isNamed` over inputs no repository produces, on every run, for the reason
@@ -27417,11 +22934,9 @@ const isNamed = (words, changelogText, pending) => {
  * failed, or null.
  */
 const selfCheckNotes = () => {
-  const words = "Prove bounds through toI32(length)";
-  const released = `## [0.7.0] - 2026-09-22\n\n### Performance\n\n- checker: ${words} (#154)\n`;
-  const pending = {
-    text: `### Performance\n\n- checker: ${words} (\`72a4b16\`)\n`,
-  };
+  const words = "Prove bounds through toI32(length)"
+  const released = `## [0.7.0] - 2026-09-22\n\n### Performance\n\n- checker: ${words} (#154)\n`
+  const pending = { text: `### Performance\n\n- checker: ${words} (\`72a4b16\`)\n` }
   const cases = [
     // Released: the file carries it, whatever the pending notes say.
     [words, released, null, true],
@@ -27429,20 +22944,10 @@ const selfCheckNotes = () => {
     // Unreleased: only the section the generator would render carries it.
     [words, "## [Unreleased]\n", pending, true],
     // In neither: the declaration does not hold.
-    [
-      words,
-      "## [Unreleased]\n",
-      { text: "### Tests\n\n- Something else\n" },
-      false,
-    ],
+    [words, "## [Unreleased]\n", { text: "### Tests\n\n- Something else\n" }, false],
     // The pending notes could not be read: never a pass, even though the
     // error text quotes the words the way the generator's stderr would.
-    [
-      words,
-      "## [Unreleased]\n",
-      { error: `skipped 1 commit: abc1234 ${words}` },
-      false,
-    ],
+    [words, "## [Unreleased]\n", { error: `skipped 1 commit: abc1234 ${words}` }, false],
     // Not asked for at all.
     [words, "## [Unreleased]\n", null, false],
     // Copied from a subject's opening, lower case: the generator raised its
@@ -27452,15 +22957,15 @@ const selfCheckNotes = () => {
     // Only the first letter is raised, and a backtick title keeps its case.
     ["prove Bounds through toI32(length)", released, null, false],
     ["`toI32` bounds", "- checker: `ToI32` bounds\n", null, false],
-  ];
+  ]
   for (const [w, changelogText, notes, want] of cases) {
-    const got = isNamed(w, changelogText, notes);
+    const got = isNamed(w, changelogText, notes)
     if (got !== want) {
-      return `isNamed(${JSON.stringify(w)}, ${JSON.stringify(changelogText)}, ${JSON.stringify(notes)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`;
+      return `isNamed(${JSON.stringify(w)}, ${JSON.stringify(changelogText)}, ${JSON.stringify(notes)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`
     }
   }
-  return null;
-};
+  return null
+}
 
 /**
  * Why a list of declarations may not stand, or null. `declaredFor` matches an
@@ -27472,16 +22977,12 @@ const selfCheckNotes = () => {
  */
 const declarationsProblem = (entries) => {
   for (const entry of entries) {
-    if (
-      entry.program === undefined &&
-      entry.file === undefined &&
-      entry.undo === undefined
-    ) {
-      return `the declaration for "${entry.changelog}" names no program, file or undo, so it excuses every difference in every program`;
+    if (entry.program === undefined && entry.file === undefined && entry.undo === undefined) {
+      return `the declaration for "${entry.changelog}" names no program, file or undo, so it excuses every difference in every program`
     }
   }
-  return null;
-};
+  return null
+}
 
 /**
  * `declarationsProblem` over fabricated lists, then over `DECLARED` itself, on
@@ -27492,10 +22993,10 @@ const declarationsProblem = (entries) => {
  * the reason it failed, or null.
  */
 const selfCheckDeclarations = () => {
-  const words = { changelog: "Stand-in change", why: "a stand-in" };
-  const everything = { ...words };
+  const words = { changelog: "Stand-in change", why: "a stand-in" }
+  const everything = { ...words }
   if (declaredFor("tests/cases/add.ts", "exit", [everything]) !== everything) {
-    return "an entry naming no program, file or undo no longer matches every difference, so the refusal below guards nothing";
+    return "an entry naming no program, file or undo no longer matches every difference, so the refusal below guards nothing"
   }
   const cases = [
     [[{ ...words, program: "tests/cases/add.ts" }], true],
@@ -27504,19 +23005,19 @@ const selfCheckDeclarations = () => {
     [[], true],
     [[everything], false],
     [[{ ...words, program: "tests/cases/add.ts" }, everything], false],
-  ];
+  ]
   for (const [entries, want] of cases) {
-    const got = declarationsProblem(entries) === null;
+    const got = declarationsProblem(entries) === null
     if (got !== want) {
-      return `declarationsProblem(${JSON.stringify(entries)}) ${got ? "accepts" : "refuses"} it`;
+      return `declarationsProblem(${JSON.stringify(entries)}) ${got ? "accepts" : "refuses"} it`
     }
   }
   // The two-copies allowance is a second door past `DECLARED`, so its edges are
   // driven too: only the one refusal, only on the exit, only in a listed program.
-  const listed = new Set(["tests/link/x/main.ts"]);
+  const listed = new Set(["tests/link/x/main.ts"])
   const twice =
     "the candidate compiles it and the reference refuses it (reference: error: Class `Screen` is declared in " +
-    "package `nish` and again in package the program itself; a class or interface name is still program-wide)";
+    "package `nish` and again in package the program itself; a class or interface name is still program-wide)"
   const doors = [
     ["tests/link/x/main.ts", { surface: "exit", detail: twice }, true],
     ["tests/link/y/main.ts", { surface: "exit", detail: twice }, false],
@@ -27525,24 +23026,19 @@ const selfCheckDeclarations = () => {
       "tests/link/x/main.ts",
       {
         surface: "exit",
-        detail:
-          "the candidate compiles it and the reference refuses it (reference: error: x)",
+        detail: "the candidate compiles it and the reference refuses it (reference: error: x)",
       },
       false,
     ],
-    [
-      "tests/link/x/main.ts",
-      { surface: "exit", detail: "the candidate refuses it: error: x" },
-      false,
-    ],
-  ];
+    ["tests/link/x/main.ts", { surface: "exit", detail: "the candidate refuses it: error: x" }, false],
+  ]
   for (const [program, difference, want] of doors) {
     if (isTwoStds(program, difference, listed) !== want) {
-      return `isTwoStds(${JSON.stringify(program)}, ${JSON.stringify(difference)}) is ${!want}, not ${want}`;
+      return `isTwoStds(${JSON.stringify(program)}, ${JSON.stringify(difference)}) is ${!want}, not ${want}`
     }
   }
-  return declarationsProblem(DECLARED);
-};
+  return declarationsProblem(DECLARED)
+}
 
 /**
  * A compiler as something spawnable: `cmd` plus the arguments that come before
@@ -27556,37 +23052,30 @@ const selfCheckDeclarations = () => {
  * that is not a compiler fails in a way that names the path the caller gave.
  */
 const resolveCompiler = (spec, role) => {
-  const file = path.resolve(root, spec);
-  const refuse = (why) => ({ error: `${role} ${spec} ${why}` });
+  const file = path.resolve(root, spec)
+  const refuse = (why) => ({ error: `${role} ${spec} ${why}` })
   if (!fs.existsSync(file)) {
-    return refuse("does not exist");
+    return refuse("does not exist")
   }
   if (!fs.statSync(file).isFile()) {
-    return refuse("is not a file");
+    return refuse("is not a file")
   }
   const compiler = NODE_ENTRY.test(file)
-    ? {
-        label: spec,
-        cmd: process.execPath,
-        prefix: [file],
-        packageRoot: packageRootOf(file),
-      }
-    : { label: spec, cmd: file, prefix: [], packageRoot: packageRootOf(file) };
+    ? { label: spec, cmd: process.execPath, prefix: [file], packageRoot: packageRootOf(file) }
+    : { label: spec, cmd: file, prefix: [], packageRoot: packageRootOf(file) }
   if (compiler.prefix.length === 0) {
     try {
-      fs.accessSync(file, fs.constants.X_OK);
+      fs.accessSync(file, fs.constants.X_OK)
     } catch {
-      return refuse(
-        "is not executable (only .js/.mjs/.cjs are run under node)",
-      );
+      return refuse("is not executable (only .js/.mjs/.cjs are run under node)")
     }
   }
-  const version = compile(compiler, ["--version"]);
+  const version = compile(compiler, ["--version"])
   if (version.status !== 0) {
-    return refuse("is not runnable (`--version` failed)");
+    return refuse("is not runnable (`--version` failed)")
   }
-  return { ...compiler, version: (version.stdout ?? "").trim() };
-};
+  return { ...compiler, version: (version.stdout ?? "").trim() }
+}
 
 /**
  * The seed `NISH_BOOTSTRAP` names, or null when there is none. An empty value
@@ -27594,22 +23083,22 @@ const resolveCompiler = (spec, role) => {
  * off for one run, and reading it as a path would refuse to start instead.
  */
 const seedFromEnvironment = () => {
-  const seed = process.env.NISH_BOOTSTRAP;
-  return seed === undefined || seed === "" ? null : seed;
-};
+  const seed = process.env.NISH_BOOTSTRAP
+  return seed === undefined || seed === "" ? null : seed
+}
 
 /** Both compilers, or the first error. */
 const resolvePair = (referenceSpec, candidateSpec) => {
-  const reference = resolveCompiler(referenceSpec, "reference");
+  const reference = resolveCompiler(referenceSpec, "reference")
   if (reference.error !== undefined) {
-    return { error: reference.error };
+    return { error: reference.error }
   }
-  const candidate = resolveCompiler(candidateSpec, "candidate");
+  const candidate = resolveCompiler(candidateSpec, "candidate")
   if (candidate.error !== undefined) {
-    return { error: candidate.error };
+    return { error: candidate.error }
   }
-  return { reference, candidate };
-};
+  return { reference, candidate }
+}
 
 /**
  * Each side is asked on its own whether it takes `--allow-panics`: the
@@ -27621,29 +23110,27 @@ const compile = (compiler, args) =>
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
-  });
+  })
 
 /** `compile` as a promise, answering the same `{ status, stdout, stderr }` shape `spawnSync` does. */
 const compileAsync = (compiler, args) =>
   new Promise((resolve) => {
-    const child = spawn(compiler.cmd, seedArgs(compiler, args), { cwd: root });
-    const stdout = [];
-    const stderr = [];
-    child.stdout.on("data", (chunk) => stdout.push(chunk));
-    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    const child = spawn(compiler.cmd, seedArgs(compiler, args), { cwd: root })
+    const stdout = []
+    const stderr = []
+    child.stdout.on("data", (chunk) => stdout.push(chunk))
+    child.stderr.on("data", (chunk) => stderr.push(chunk))
     // A compiler that cannot be started answers as `spawnSync` would: no
     // status, and the reason where a diagnostic would be.
-    child.on("error", (error) =>
-      resolve({ status: null, stdout: "", stderr: String(error) }),
-    );
+    child.on("error", (error) => resolve({ status: null, stdout: "", stderr: String(error) }))
     child.on("close", (status) =>
       resolve({
         status,
         stdout: Buffer.concat(stdout).toString("utf8"),
         stderr: Buffer.concat(stderr).toString("utf8"),
-      }),
-    );
-  });
+      })
+    )
+  })
 
 /**
  * `task(item, slot)` over every item with at most `jobs` in flight, answers in
@@ -27651,21 +23138,17 @@ const compileAsync = (compiler, args) =>
  * own a directory no other task in flight writes to.
  */
 const pooled = async (items, jobs, task) => {
-  const results = new Array(items.length);
-  let next = 0;
+  const results = new Array(items.length)
+  let next = 0
   const worker = async (slot) => {
     while (next < items.length) {
-      const index = next++;
-      results[index] = await task(items[index], slot);
+      const index = next++
+      results[index] = await task(items[index], slot)
     }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(jobs, items.length) }, (_, slot) =>
-      worker(slot),
-    ),
-  );
-  return results;
-};
+  }
+  await Promise.all(Array.from({ length: Math.min(jobs, items.length) }, (_, slot) => worker(slot)))
+  return results
+}
 
 /** `--emit-header <dir>/<stem>.h ...`: the flags that ask for all four WP8 sidecars. */
 const sidecarFlags = (dir, stem) => [
@@ -27675,41 +23158,41 @@ const sidecarFlags = (dir, stem) => [
   path.join(dir, `${stem}.d.ts`),
   "--emit-napi",
   path.join(dir, `${stem}.napi.c`),
-];
+]
 
 const fresh = (dir) => {
-  fs.rmSync(dir, { recursive: true, force: true });
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-};
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
 
 /** Every file under `dir` as `relative path -> bytes`, so a missing file is a difference too. */
 const tree = (dir) => {
-  const out = new Map();
+  const out = new Map()
   const walk = (at, prefix) => {
     for (const entry of fs
       .readdirSync(at, { withFileTypes: true })
       .sort((a, b) => (a.name < b.name ? -1 : 1))) {
-      const full = path.join(at, entry.name);
-      const rel = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
+      const full = path.join(at, entry.name)
+      const rel = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name
       if (entry.isDirectory()) {
-        walk(full, rel);
+        walk(full, rel)
       } else {
-        out.set(rel, fs.readFileSync(full));
+        out.set(rel, fs.readFileSync(full))
       }
     }
-  };
-  if (fs.existsSync(dir)) {
-    walk(dir, "");
   }
-  return out;
-};
+  if (fs.existsSync(dir)) {
+    walk(dir, "")
+  }
+  return out
+}
 
 /** The first diagnostic of a compiler's stderr, without its file:line:col prefix. */
 const firstLine = (output) => {
-  const line = output.trim().split("\n")[0] ?? "";
-  return line.replace(/^[^:]*:\d+:\d+: /, "");
-};
+  const line = output.trim().split("\n")[0] ?? ""
+  return line.replace(/^[^:]*:\d+:\d+: /, "")
+}
 
 /**
  * Where two texts differ, as at most `limit` lines with both spellings — the
@@ -27718,32 +23201,29 @@ const firstLine = (output) => {
  * the first line of it, not the two million after.
  */
 const excerpt = (want, got, limit) => {
-  const wantLines = want.split("\n");
-  const gotLines = got.split("\n");
-  const total = Math.max(wantLines.length, gotLines.length);
-  const shown = [];
-  let differing = 0;
+  const wantLines = want.split("\n")
+  const gotLines = got.split("\n")
+  const total = Math.max(wantLines.length, gotLines.length)
+  const shown = []
+  let differing = 0
   for (let i = 0; i < total; i++) {
     if (wantLines[i] === gotLines[i]) {
-      continue;
+      continue
     }
-    differing++;
+    differing++
     if (shown.length < limit) {
       shown.push(
         `line ${i + 1}: reference \`${wantLines[i] ?? "<end>"}\`\n` +
-          `${" ".repeat(String(i + 1).length + 7)}candidate \`${gotLines[i] ?? "<end>"}\``,
-      );
+          `${" ".repeat(String(i + 1).length + 7)}candidate \`${gotLines[i] ?? "<end>"}\``
+      )
     }
   }
   if (differing === 0) {
-    return { differing, total, text: "the bytes differ but no line does" };
+    return { differing, total, text: "the bytes differ but no line does" }
   }
-  const more =
-    differing > shown.length
-      ? `\n... ${differing - shown.length} more differing line(s)`
-      : "";
-  return { differing, total, text: `${shown.join("\n")}${more}` };
-};
+  const more = differing > shown.length ? `\n... ${differing - shown.length} more differing line(s)` : ""
+  return { differing, total, text: `${shown.join("\n")}${more}` }
+}
 
 /**
  * Compile one program with both compilers and compare everything they wrote.
@@ -27763,14 +23243,14 @@ const excerpt = (want, got, limit) => {
  * is not in the comparison at all.
  */
 const compare = (pair, work, file, options = {}) => {
-  const job = prepare(work, file, options);
+  const job = prepare(work, file, options)
   if (job.dump !== undefined) {
-    return job;
+    return job
   }
-  const reference = compile(pair.reference, job.argv(job.referenceDir));
-  const candidate = compile(pair.candidate, job.argv(job.candidateDir));
-  return judge(pair, job, reference, candidate, options.lines ?? 3);
-};
+  const reference = compile(pair.reference, job.argv(job.referenceDir))
+  const candidate = compile(pair.candidate, job.argv(job.candidateDir))
+  return judge(pair, job, reference, candidate, options.lines ?? 3)
+}
 
 /**
  * `compare`, with each compiler run as a child the event loop waits on rather
@@ -27780,42 +23260,34 @@ const compare = (pair, work, file, options = {}) => {
  * and a pair at a time per slot is what keeps four slots inside a 16 GB runner.
  */
 const compareAsync = async (pair, work, file, options = {}) => {
-  const job = prepare(work, file, options);
+  const job = prepare(work, file, options)
   if (job.dump !== undefined) {
-    return job;
+    return job
   }
-  const reference = await compileAsync(
-    pair.reference,
-    job.argv(job.referenceDir),
-  );
-  const candidate = await compileAsync(
-    pair.candidate,
-    job.argv(job.candidateDir),
-  );
-  return judge(pair, job, reference, candidate, options.lines ?? 3);
-};
+  const reference = await compileAsync(pair.reference, job.argv(job.referenceDir))
+  const candidate = await compileAsync(pair.candidate, job.argv(job.candidateDir))
+  return judge(pair, job, reference, candidate, options.lines ?? 3)
+}
 
 /** The output directories and the argv for one program, or `{ dump }` when it writes no artefact. */
 const prepare = (work, file, options) => {
-  const flags = extraArgs(file);
-  const dump = flags.find((flag) => DUMP_FLAGS.has(flag));
+  const flags = extraArgs(file)
+  const dump = flags.find((flag) => DUMP_FLAGS.has(flag))
   if (dump !== undefined) {
-    return { dump: `${dump}: no artefact; the <name>.stdout golden pins it` };
+    return { dump: `${dump}: no artefact; the <name>.stdout golden pins it` }
   }
 
   // Both compilers name each module by the path they resolved it to and write
   // that path into the module header, so the entry has to be spelled the same
   // for both. The output directories differ and may: nothing either compiler
   // writes carries the directory it was written to.
-  const named = path.relative(root, file);
-  const stem = path.basename(file, ".ts");
-  const referenceDir = fresh(path.join(work, "reference"));
-  const candidateDir = fresh(path.join(work, "candidate"));
+  const named = path.relative(root, file)
+  const stem = path.basename(file, ".ts")
+  const referenceDir = fresh(path.join(work, "reference"))
+  const candidateDir = fresh(path.join(work, "candidate"))
   // `--sandbox` refuses `--emit-napi`, so a sandboxed program
   // (`tests/cases/sandbox_hello`) is compared on its IR alone.
-  const sandboxed = flags.some(
-    (flag) => flag === "--sandbox" || flag.startsWith("--sandbox="),
-  );
+  const sandboxed = flags.some((flag) => flag === "--sandbox" || flag.startsWith("--sandbox="))
   const argv = (dir) => [
     named,
     "-o",
@@ -27823,17 +23295,15 @@ const prepare = (work, file, options) => {
     ...flags,
     ...(options.extraFlags ?? []),
     ...(options.sidecars === false || sandboxed ? [] : sidecarFlags(dir, stem)),
-  ];
-  return { referenceDir, candidateDir, argv };
-};
+  ]
+  return { referenceDir, candidateDir, argv }
+}
 
 /** What the two compilers' runs over one prepared program say: agreement, a refusal by both, or the differences. */
 const judge = (pair, job, reference, candidate, limit) => {
-  const { referenceDir, candidateDir } = job;
+  const { referenceDir, candidateDir } = job
   if (reference.status !== 0 && candidate.status !== 0) {
-    return {
-      refused: firstLine(reference.stderr) || `exit ${reference.status}`,
-    };
+    return { refused: firstLine(reference.stderr) || `exit ${reference.status}` }
   }
   if (reference.status !== 0) {
     // A construct HEAD has and the seed does not is what the rolling freeze
@@ -27849,7 +23319,7 @@ const judge = (pair, job, reference, candidate, limit) => {
             `(reference: ${firstLine(reference.stderr) || `exit ${reference.status}`})`,
         },
       ],
-    };
+    }
   }
   if (candidate.status !== 0) {
     return {
@@ -27859,51 +23329,39 @@ const judge = (pair, job, reference, candidate, limit) => {
           detail: `the candidate refuses it: ${firstLine(candidate.stderr) || `exit ${candidate.status}`}`,
         },
       ],
-    };
+    }
   }
 
-  const wantNames = withoutOwnRootNames(
-    tree(referenceDir),
-    pair.reference.packageRoot,
-  );
-  const gotNames = withoutOwnRootNames(
-    tree(candidateDir),
-    pair.candidate.packageRoot,
-  );
-  const want = wantNames.files;
-  const got = gotNames.files;
+  const wantNames = withoutOwnRootNames(tree(referenceDir), pair.reference.packageRoot)
+  const gotNames = withoutOwnRootNames(tree(candidateDir), pair.candidate.packageRoot)
+  const want = wantNames.files
+  const got = gotNames.files
   if (want.size === 0) {
-    return { refused: "the reference wrote no files" };
+    return { refused: "the reference wrote no files" }
   }
-  const differences = [];
-  let lines = 0;
-  let rooted = 0;
-  let versioned = 0;
+  const differences = []
+  let lines = 0
+  let rooted = 0
+  let versioned = 0
   for (const name of [...new Set([...want.keys(), ...got.keys()])].sort()) {
-    const a = want.get(name);
-    const b = got.get(name);
+    const a = want.get(name)
+    const b = got.get(name)
     if (a === undefined) {
-      differences.push({
-        surface: name,
-        detail: "the candidate wrote it and the reference did not",
-      });
-      continue;
+      differences.push({ surface: name, detail: "the candidate wrote it and the reference did not" })
+      continue
     }
     if (b === undefined) {
-      differences.push({
-        surface: name,
-        detail: "the reference wrote it and the candidate did not",
-      });
-      continue;
+      differences.push({ surface: name, detail: "the reference wrote it and the candidate did not" })
+      continue
     }
     if (a.equals(b)) {
       if (wantNames.renamed.has(name) || gotNames.renamed.has(name)) {
-        rooted++;
+        rooted++
       }
       if (name.endsWith(".ll")) {
-        lines += a.toString("utf8").split("\n").length;
+        lines += a.toString("utf8").split("\n").length
       }
-      continue;
+      continue
     }
     // The two compilers are installed in different directories — they have to
     // be — so a module either of them reached through its OWN package is named
@@ -27912,16 +23370,16 @@ const judge = (pair, job, reference, candidate, limit) => {
     // identity the comparison is actually about. Counted rather than folded in:
     // the summary says how many files agreed only this way, because a number
     // that says a comparison happened must say what it set aside.
-    const wantText = a.toString("utf8");
-    const gotText = b.toString("utf8");
-    const wantRooted = withoutOwnRoot(wantText, pair.reference.packageRoot);
-    const gotRooted = withoutOwnRoot(gotText, pair.candidate.packageRoot);
+    const wantText = a.toString("utf8")
+    const gotText = b.toString("utf8")
+    const wantRooted = withoutOwnRoot(wantText, pair.reference.packageRoot)
+    const gotRooted = withoutOwnRoot(gotText, pair.candidate.packageRoot)
     if (wantRooted === gotRooted) {
-      rooted++;
+      rooted++
       if (name.endsWith(".ll")) {
-        lines += wantText.split("\n").length;
+        lines += wantText.split("\n").length
       }
-      continue;
+      continue
     }
     // The reference is the last release and the candidate is HEAD, which
     // carries the next version from the commit that bumps it, so a `-g` build
@@ -27931,35 +23389,33 @@ const judge = (pair, job, reference, candidate, limit) => {
       withoutOwnVersion(wantRooted, pair.reference.version) ===
       withoutOwnVersion(gotRooted, pair.candidate.version)
     ) {
-      versioned++;
+      versioned++
       if (name.endsWith(".ll")) {
-        lines += wantText.split("\n").length;
+        lines += wantText.split("\n").length
       }
-      continue;
+      continue
     }
-    const wantPlain = withoutOwnVersion(wantRooted, pair.reference.version);
-    const gotPlain = withoutOwnVersion(gotRooted, pair.candidate.version);
+    const wantPlain = withoutOwnVersion(wantRooted, pair.reference.version)
+    const gotPlain = withoutOwnVersion(gotRooted, pair.candidate.version)
     // An `undo` is tried on the files as written too: removing a root can
     // rewrite a relative path on one side only (a `--host` import that climbs
     // out of the temporary directory), which no undo can put back.
     const undone = DECLARED.find(
       (entry) =>
-        entry.undo !== undefined &&
-        (entry.undo(gotPlain) === wantPlain ||
-          entry.undo(gotText) === wantText),
-    );
-    const where = excerpt(wantText, gotText, limit);
+        entry.undo !== undefined && (entry.undo(gotPlain) === wantPlain || entry.undo(gotText) === wantText)
+    )
+    const where = excerpt(wantText, gotText, limit)
     differences.push({
       surface: name,
       detail: `differs (${where.differing} of ${where.total} lines)\n${where.text}`,
       ...(undone === undefined ? {} : { undone }),
-    });
+    })
   }
   if (differences.length > 0) {
-    return { differences };
+    return { differences }
   }
-  return { files: want.size, lines, rooted, versioned };
-};
+  return { files: want.size, lines, rooted, versioned }
+}
 
 /**
  * The declaration covering one difference, or null. Keyed on the program and
@@ -27971,18 +23427,18 @@ const declaredFor = (program, surface, entries = DECLARED) => {
     // An `undo` covers a file only when it turns one side into the other,
     // which `compare` decides with both texts in hand.
     if (entry.undo !== undefined) {
-      continue;
+      continue
     }
     if (entry.program !== undefined && entry.program !== program) {
-      continue;
+      continue
     }
     if (entry.file !== undefined && entry.file !== surface) {
-      continue;
+      continue
     }
-    return entry;
+    return entry
   }
-  return null;
-};
+  return null
+}
 
 /**
  * Every positive whole program of the corpus, plus the whole programs of
@@ -27990,10 +23446,7 @@ const declaredFor = (program, surface, entries = DECLARED) => {
  * `ir_oracle.js` walks, from the same module, so the successor compares no
  * less than the oracle it replaces.
  */
-const corpus = () => [
-  ...programs(),
-  ...linkPrograms().map((program) => program.main),
-];
+const corpus = () => [...programs(), ...linkPrograms().map((program) => program.main)]
 
 /**
  * The compiler HEAD builds: `src/compile.ts` linked into `build/self/compile`
@@ -28007,24 +23460,18 @@ const corpus = () => [
  * built yourself and skip this.
  */
 const buildCandidate = (seedSpec) => {
-  const out = path.join(root, "build", "self", "compile");
-  const builder = resolveCompiler(seedSpec, "candidate builder");
+  const out = path.join(root, "build", "self", "compile")
+  const builder = resolveCompiler(seedSpec, "candidate builder")
   if (builder.error !== undefined) {
-    return { error: builder.error };
+    return { error: builder.error }
   }
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  const built = compile(builder, [
-    path.join("src", "compile.ts"),
-    "--link",
-    out,
-  ]);
+  fs.mkdirSync(path.dirname(out), { recursive: true })
+  const built = compile(builder, [path.join("src", "compile.ts"), "--link", out])
   if (built.status !== 0) {
-    return {
-      error: `could not build the candidate with ${builder.label}\n${built.stderr}`,
-    };
+    return { error: `could not build the candidate with ${builder.label}\n${built.stderr}` }
   }
-  return { path: path.relative(root, out) };
-};
+  return { path: path.relative(root, out) }
+}
 
 const HELP = `nish-cmp — compile the corpus with two compilers and compare every byte.
 
@@ -28053,41 +23500,41 @@ the same rule scripts/bootstrap.sh applies to NISH_BOOTSTRAP.
 With no programs named, the whole corpus is compared (tests/self/corpus.js).
 
 exit codes: 0 agreed (or skipped for want of a seed), 1 undeclared difference,
-2 usage or a compiler that would not build`;
+2 usage or a compiler that would not build`
 
 const main = async (argv) => {
-  const options = { lines: 3, sidecars: true };
-  let jobs = os.availableParallelism();
-  let referenceSpec = seedFromEnvironment();
-  let candidateSpec = null;
-  let changelog = "CHANGELOG.md";
-  let verbose = false;
-  const named = [];
+  const options = { lines: 3, sidecars: true }
+  let jobs = os.availableParallelism()
+  let referenceSpec = seedFromEnvironment()
+  let candidateSpec = null
+  let changelog = "CHANGELOG.md"
+  let verbose = false
+  const named = []
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
+    const arg = argv[i]
     if (arg === "-h" || arg === "--help") {
-      process.stdout.write(`${HELP}\n`);
-      return 0;
+      process.stdout.write(`${HELP}\n`)
+      return 0
     }
     if (arg === "-r" || arg === "--reference") {
-      referenceSpec = argv[++i];
+      referenceSpec = argv[++i]
     } else if (arg === "-c" || arg === "--candidate") {
-      candidateSpec = argv[++i];
+      candidateSpec = argv[++i]
     } else if (arg === "--changelog") {
-      changelog = argv[++i];
+      changelog = argv[++i]
     } else if (arg === "--no-sidecars") {
-      options.sidecars = false;
+      options.sidecars = false
     } else if (arg === "--lines") {
-      options.lines = Number(argv[++i]);
+      options.lines = Number(argv[++i])
     } else if (arg === "-j" || arg === "--jobs") {
-      jobs = Number(argv[++i]);
+      jobs = Number(argv[++i])
     } else if (arg === "--verbose") {
-      verbose = true;
+      verbose = true
     } else if (arg.startsWith("-")) {
-      process.stderr.write(`nish-cmp: unknown option: ${arg}\n${HELP}\n`);
-      return 2;
+      process.stderr.write(`nish-cmp: unknown option: ${arg}\n${HELP}\n`)
+      return 2
     } else {
-      named.push(arg);
+      named.push(arg)
     }
   }
   if (
@@ -28097,8 +23544,8 @@ const main = async (argv) => {
     !Number.isInteger(jobs) ||
     jobs < 1
   ) {
-    process.stderr.write(`nish-cmp: an option is missing its value\n${HELP}\n`);
-    return 2;
+    process.stderr.write(`nish-cmp: an option is missing its value\n${HELP}\n`)
+    return 2
   }
 
   // The skip, in the runner's own idiom (`tests/run.js`'s `skip`): one SKIP
@@ -28108,64 +23555,51 @@ const main = async (argv) => {
   if (referenceSpec === null) {
     process.stdout.write(
       "SKIP  nish-cmp: no seed available (no --reference and NISH_BOOTSTRAP is unset), " +
-        "so HEAD was compared against nothing\n",
-    );
-    process.stdout.write(
-      "nish-cmp: 0 programs compared, 1 skipped (no seed available)\n",
-    );
-    return 0;
+        "so HEAD was compared against nothing\n"
+    )
+    process.stdout.write("nish-cmp: 0 programs compared, 1 skipped (no seed available)\n")
+    return 0
   }
 
   // Before anything is compiled: the two pieces of comparison logic here that
   // can make two differing files look equal — each side's own root and each
   // side's own producer version — driven over inputs no corpus produces. A run whose own comparison is broken must say so instead of
   // agreeing about three hundred programs.
-  const selfCheck = selfCheckRoots();
+  const selfCheck = selfCheckRoots()
   if (selfCheck !== null) {
-    process.stderr.write(
-      `nish-cmp: its own package-root comparison is wrong: ${selfCheck}\n`,
-    );
-    return 2;
+    process.stderr.write(`nish-cmp: its own package-root comparison is wrong: ${selfCheck}\n`)
+    return 2
   }
-  const selfCheckVersion = selfCheckVersions();
+  const selfCheckVersion = selfCheckVersions()
   if (selfCheckVersion !== null) {
-    process.stderr.write(
-      `nish-cmp: its own producer-version comparison is wrong: ${selfCheckVersion}\n`,
-    );
-    return 2;
+    process.stderr.write(`nish-cmp: its own producer-version comparison is wrong: ${selfCheckVersion}\n`)
+    return 2
   }
-  const selfCheckUndo = selfCheckHardening();
+  const selfCheckUndo = selfCheckHardening()
   if (selfCheckUndo !== null) {
-    process.stderr.write(
-      `nish-cmp: its own hardening undo is wrong: ${selfCheckUndo}\n`,
-    );
-    return 2;
+    process.stderr.write(`nish-cmp: its own hardening undo is wrong: ${selfCheckUndo}\n`)
+    return 2
   }
-  const selfCheckNote = selfCheckNotes();
+  const selfCheckNote = selfCheckNotes()
   if (selfCheckNote !== null) {
-    process.stderr.write(
-      `nish-cmp: its own release-note lookup is wrong: ${selfCheckNote}\n`,
-    );
-    return 2;
+    process.stderr.write(`nish-cmp: its own release-note lookup is wrong: ${selfCheckNote}\n`)
+    return 2
   }
-  const selfCheckDeclaration = selfCheckDeclarations();
+  const selfCheckDeclaration = selfCheckDeclarations()
   if (selfCheckDeclaration !== null) {
-    process.stderr.write(
-      `nish-cmp: its own declarations are wrong: ${selfCheckDeclaration}\n`,
-    );
-    return 2;
+    process.stderr.write(`nish-cmp: its own declarations are wrong: ${selfCheckDeclaration}\n`)
+    return 2
   }
 
   // The corpus is settled before a compiler is built, so that a mistyped
   // program name costs a message rather than the link that precedes it.
-  const inputs =
-    named.length > 0 ? named.map((file) => path.resolve(file)) : corpus();
-  const missing = inputs.filter((file) => !fs.existsSync(file));
+  const inputs = named.length > 0 ? named.map((file) => path.resolve(file)) : corpus()
+  const missing = inputs.filter((file) => !fs.existsSync(file))
   if (missing.length > 0) {
     process.stderr.write(
-      `nish-cmp: no such program: ${missing.map((f) => path.relative(root, f)).join(", ")}\n`,
-    );
-    return 2;
+      `nish-cmp: no such program: ${missing.map((f) => path.relative(root, f)).join(", ")}\n`
+    )
+    return 2
   }
 
   if (candidateSpec === null) {
@@ -28173,66 +23607,65 @@ const main = async (argv) => {
     // is why the reference is what gets passed on here. A seed too old to
     // compile HEAD's `src/` fails here, naming itself, which is the G4 policy
     // being enforced rather than discovered halfway through a comparison.
-    const built = buildCandidate(referenceSpec);
+    const built = buildCandidate(referenceSpec)
     if (built.error !== undefined) {
-      process.stderr.write(`nish-cmp: ${built.error}\n`);
-      return 2;
+      process.stderr.write(`nish-cmp: ${built.error}\n`)
+      return 2
     }
-    candidateSpec = built.path;
+    candidateSpec = built.path
   }
-  const pair = resolvePair(referenceSpec, candidateSpec);
+  const pair = resolvePair(referenceSpec, candidateSpec)
   if (pair.error !== undefined) {
-    process.stderr.write(`nish-cmp: ${pair.error}\n`);
-    return 2;
+    process.stderr.write(`nish-cmp: ${pair.error}\n`)
+    return 2
   }
 
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-cmp-"));
-  const undeclared = [];
-  const declared = [];
-  const dumps = [];
-  const refused = [];
-  const twoStds = [];
-  let agreed = 0;
-  let files = 0;
-  let lines = 0;
-  let rooted = 0;
-  let versioned = 0;
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-cmp-"))
+  const undeclared = []
+  const declared = []
+  const dumps = []
+  const refused = []
+  const twoStds = []
+  let agreed = 0
+  let files = 0
+  let lines = 0
+  let rooted = 0
+  let versioned = 0
   // Each compile is one process on one core, so the corpus runs `jobs` programs
   // at a time, each in its own slot's directory. The results come back in the
   // corpus's order, so the report reads the same at any `--jobs`.
   const results = await pooled(inputs, jobs, (file, slot) =>
-    compareAsync(pair, path.join(work, String(slot)), file, options),
-  );
+    compareAsync(pair, path.join(work, String(slot)), file, options)
+  )
   for (const [index, file] of inputs.entries()) {
-    const program = path.relative(root, file);
-    const result = results[index];
+    const program = path.relative(root, file)
+    const result = results[index]
     if (result.dump !== undefined) {
-      dumps.push(`${program}: ${result.dump}`);
+      dumps.push(`${program}: ${result.dump}`)
     } else if (result.refused !== undefined) {
-      refused.push(`${program}: both refuse it: ${result.refused}`);
+      refused.push(`${program}: both refuse it: ${result.refused}`)
     } else if (result.differences !== undefined) {
       for (const difference of result.differences) {
         if (isTwoStds(program, difference)) {
-          twoStds.push(program);
-          continue;
+          twoStds.push(program)
+          continue
         }
-        const entry =
-          difference.undone ?? declaredFor(program, difference.surface);
-        const row = { program, ...difference, declared: entry };
-        (entry === null ? undeclared : declared).push(row);
+        const entry = difference.undone ?? declaredFor(program, difference.surface)
+        const row = { program, ...difference, declared: entry }
+        ;(entry === null ? undeclared : declared).push(row)
       }
     } else {
-      agreed++;
-      files += result.files;
-      lines += result.lines;
-      rooted += result.rooted ?? 0;
-      versioned += result.versioned ?? 0;
+      agreed++
+      files += result.files
+      lines += result.lines
+      rooted += result.rooted ?? 0
+      versioned += result.versioned ?? 0
       if (verbose) {
-        process.stdout.write(`  ok   ${program} (${result.files} files)\n`);
+        process.stdout.write(`  ok   ${program} (${result.files} files)\n`)
       }
     }
   }
-  fs.rmSync(work, { recursive: true, force: true });
+  fs.rmSync(work, { recursive: true, force: true })
 
   // A release that changes one attribute changes it in every module, so the
   // report is bounded twice over: `--lines` lines per file, and this many
@@ -28241,16 +23674,11 @@ const main = async (argv) => {
   // is how to look at a single difference closely.
   for (const row of undeclared.slice(0, MAX_ROWS)) {
     process.stdout.write(
-      `  FAIL ${row.program}: ${row.surface} ${row.detail}\n`.replace(
-        /\n(?=.)/g,
-        "\n       ",
-      ),
-    );
+      `  FAIL ${row.program}: ${row.surface} ${row.detail}\n`.replace(/\n(?=.)/g, "\n       ")
+    )
   }
   if (undeclared.length > MAX_ROWS) {
-    process.stdout.write(
-      `  ... ${undeclared.length - MAX_ROWS} more differing file(s), not printed\n`,
-    );
+    process.stdout.write(`  ... ${undeclared.length - MAX_ROWS} more differing file(s), not printed\n`)
   }
   // A declaration is a claim that the release notes name the difference. The
   // claim is checked here rather than trusted, because the whole point of G2's
@@ -28261,33 +23689,26 @@ const main = async (argv) => {
   // history to do it.
   const changelogText = fs.existsSync(path.resolve(root, changelog))
     ? fs.readFileSync(path.resolve(root, changelog), "utf8")
-    : "";
-  const byReason = new Map();
+    : ""
+  const byReason = new Map()
   for (const row of declared) {
-    byReason.set(row.declared, (byReason.get(row.declared) ?? 0) + 1);
+    byReason.set(row.declared, (byReason.get(row.declared) ?? 0) + 1)
   }
-  const reasons = [...byReason.keys()];
-  const pending = reasons.some((r) => !changelogText.includes(r.changelog))
-    ? pendingNotes()
-    : null;
-  const unnamed = reasons.filter(
-    (r) => !isNamed(r.changelog, changelogText, pending),
-  );
+  const reasons = [...byReason.keys()]
+  const pending = reasons.some((r) => !changelogText.includes(r.changelog)) ? pendingNotes() : null
+  const unnamed = reasons.filter((r) => !isNamed(r.changelog, changelogText, pending))
   for (const [reason, count] of byReason) {
-    const where =
-      `${reason.program ?? "every program"} ${reason.file ?? ""}`.trim();
-    process.stdout.write(`declared: ${count} × ${where} — ${reason.why}\n`);
+    const where = `${reason.program ?? "every program"} ${reason.file ?? ""}`.trim()
+    process.stdout.write(`declared: ${count} × ${where} — ${reason.why}\n`)
   }
   for (const reason of unnamed) {
     process.stdout.write(
       `  FAIL neither ${changelog} nor the pending release notes name this difference: the declaration asks ` +
-        `for "${reason.changelog}"\n`,
-    );
+        `for "${reason.changelog}"\n`
+    )
   }
   if (unnamed.length > 0 && pending?.error !== undefined) {
-    process.stdout.write(
-      `  FAIL the pending release notes could not be read: ${pending.error}\n`,
-    );
+    process.stdout.write(`  FAIL the pending release notes could not be read: ${pending.error}\n`)
   }
   // A declaration that covers nothing is not a failure — a single-program run
   // is entitled to match none of them — but it is worth saying on a full run,
@@ -28296,27 +23717,22 @@ const main = async (argv) => {
   if (named.length === 0) {
     for (const entry of DECLARED) {
       if (!byReason.has(entry)) {
-        const where =
-          `${entry.program ?? "every program"} ${entry.file ?? ""}`.trim();
-        process.stdout.write(
-          `note: nothing differs at ${where}; the declaration can go\n`,
-        );
+        const where = `${entry.program ?? "every program"} ${entry.file ?? ""}`.trim()
+        process.stdout.write(`note: nothing differs at ${where}; the declaration can go\n`)
       }
     }
     for (const program of TWO_STDS) {
       if (!twoStds.includes(program)) {
-        process.stdout.write(
-          `note: ${program} no longer reaches two copies of std/; it can leave TWO_STDS\n`,
-        );
+        process.stdout.write(`note: ${program} no longer reaches two copies of std/; it can leave TWO_STDS\n`)
       }
     }
   }
   if (verbose) {
     for (const row of refused) {
-      process.stdout.write(`  refused ${row}\n`);
+      process.stdout.write(`  refused ${row}\n`)
     }
     for (const row of dumps) {
-      process.stdout.write(`  dump ${row}\n`);
+      process.stdout.write(`  dump ${row}\n`)
     }
   }
 
@@ -28328,50 +23744,40 @@ const main = async (argv) => {
       `note: ${rooted} file(s) agree once each compiler's own package root is removed ` +
         `(reference ${pair.reference.packageRoot}, candidate ${pair.candidate.packageRoot}): a module reached ` +
         `as \`nish/<name>\` is named by where that compiler's own \`std/\` is, which two installs cannot agree ` +
-        "about. Every other byte of those files is compared as it stands.\n",
-    );
+        "about. Every other byte of those files is compared as it stands.\n"
+    )
   }
 
   if (versioned > 0) {
     process.stdout.write(
       `note: ${versioned} file(s) agree once each compiler's own version is removed from the DWARF ` +
         `producer (reference "${pair.reference.version}", candidate "${pair.candidate.version}"): a \`-g\` build ` +
-        "records the version of the compiler that wrote it. Every other byte of those files is compared as it stands.\n",
-    );
+        "records the version of the compiler that wrote it. Every other byte of those files is compared as it stands.\n"
+    )
   }
 
-  const compared =
-    inputs.length - refused.length - dumps.length - twoStds.length;
+  const compared = inputs.length - refused.length - dumps.length - twoStds.length
   // Each outcome is counted apart and named, for the reason the oracles count
   // their skips apart (`.claude/selfhost.md`): a program neither compiler
   // compiles proves nothing about either, and must not be able to hide inside
   // a number that reads like agreement.
-  const refusedNote =
-    refused.length > 0 ? `, ${refused.length} refused by both` : "";
-  const dumpNote =
-    dumps.length > 0 ? `, ${dumps.length} dumps (no artefact)` : "";
+  const refusedNote = refused.length > 0 ? `, ${refused.length} refused by both` : ""
+  const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no artefact)` : ""
   const twoStdsNote =
-    twoStds.length > 0
-      ? `, ${twoStds.length} refused by the reference for two copies of std/`
-      : "";
-  const declaredNote =
-    declared.length > 0 ? `, ${declared.length} declared difference(s)` : "";
-  const rootedNote =
-    rooted > 0 ? `, ${rooted} equal after each compiler's own root` : "";
-  const versionedNote =
-    versioned > 0
-      ? `, ${versioned} equal after each compiler's own producer version`
-      : "";
+    twoStds.length > 0 ? `, ${twoStds.length} refused by the reference for two copies of std/` : ""
+  const declaredNote = declared.length > 0 ? `, ${declared.length} declared difference(s)` : ""
+  const rootedNote = rooted > 0 ? `, ${rooted} equal after each compiler's own root` : ""
+  const versionedNote = versioned > 0 ? `, ${versioned} equal after each compiler's own producer version` : ""
   process.stdout.write(
     `nish-cmp: ${agreed}/${compared} programs agree (${files} files, ${lines} IR lines) — ` +
       `reference ${pair.reference.label}, candidate ${pair.candidate.label}` +
-      `${refusedNote}${twoStdsNote}${dumpNote}${rootedNote}${versionedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`,
-  );
-  return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1;
-};
+      `${refusedNote}${twoStdsNote}${dumpNote}${rootedNote}${versionedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
+  )
+  return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1
+}
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  process.exit(await main(process.argv.slice(2)));
+  process.exit(await main(process.argv.slice(2)))
 }
 export {
   buildCandidate,
@@ -28391,4 +23797,4 @@ export {
   withoutHardening,
   withoutOwnRoot,
   withoutOwnVersion,
-};
+}
