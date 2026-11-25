@@ -21,9 +21,11 @@
 //      inflation is that body. /json/abc answers 400, and an `m` of 18
 //      digits is capped, not an overflow.
 //   6. /async-db answers the stand-in's rows priced in [min, max] as the
-//      exact body, past the limit's row; without parameters its defaults;
-//      its limit clamped to 1 .. 50; and, with the query refused, 200
-//      `application/json` with no items.
+//      exact body, past the limit's row; without parameters ids 1 to 5,
+//      the rows its default min 10 and max 50 select; without a limit, 50 of
+//      60 rows in range; its limit clamped to 1 .. 50; and, with the query
+//      refused, 200 `application/json` with no items. pg.ts refuses a Parse of
+//      any text but the spec's query, so a wrong query fails the exact bodies.
 //   7. Another path answers 404.
 //   8. Over h2c with prior knowledge, /baseline2 answers `:status` 200 and the
 //      sum, and /json/2?m=3 the exact body.
@@ -707,8 +709,9 @@ export const main = (): i32 => {
   t.eqStr("with the rows priced in [min, max], up to the limit, as the exact body", rows.text(), DB_BODY);
   t.eqStr("as application/json", rows.field("Content-Type"), "application/json");
   const plainDb: string = once(port, get("/async-db")).text();
-  t.eqI32("without parameters, min 10, max 50 and limit 50", dbItems(plainDb), toI32(5));
+  t.eqI32("without parameters, the 5 rows priced in min 10 .. max 50", dbItems(plainDb), toI32(5));
   t.ok("from the first row", plainDb.startsWith('{"items":[{"id":1,'));
+  t.eqI32("without a limit, 50 of the 60 rows in range", dbItems(once(port, get("/async-db?min=0&max=1000")).text()), toI32(50));
   t.eqI32("a limit of 500 is 50", dbItems(once(port, get("/async-db?min=0&max=1000&limit=500")).text()), toI32(50));
   t.eqI32("and one of 0 is 1", dbItems(once(port, get("/async-db?min=0&max=1000&limit=0")).text()), toI32(1));
   const refused: Response = once(port, get("/async-db?min=13&max=50&limit=5"));

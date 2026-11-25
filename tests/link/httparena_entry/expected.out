@@ -29,8 +29,9 @@ PASS  an m of 18 digits is capped at a million
 PASS  /async-db answers 200
 PASS  with the rows priced in [min, max], up to the limit, as the exact body
 PASS  as application/json
-PASS  without parameters, min 10, max 50 and limit 50
+PASS  without parameters, the 5 rows priced in min 10 .. max 50
 PASS  from the first row
+PASS  without a limit, 50 of the 60 rows in range
 PASS  a limit of 500 is 50
 PASS  and one of 0 is 1
 PASS  with the query refused it answers 200
@@ -43,4 +44,4 @@ PASS  h2c /json/2?m=3 answers :status 200
 PASS  with the exact body
 PASS  SIGTERM stops the server
 PASS  and it exits 0
-httparena entry: 45 passed, 0 failed, 0 skipped
+httparena entry: 46 passed, 0 failed, 0 skipped

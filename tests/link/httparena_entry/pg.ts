@@ -7,7 +7,8 @@
 // query's three int8 parameters and its nine columns, and a Bind and Execute
 // with the rows of `pgItem` whose price is in [$1, $2], the first $3 of them,
 // then `SELECT n`. A Bind whose $1 is 13 is refused instead, with SQLSTATE
-// 42P01, as a missing table is.
+// 42P01, as a missing table is. A Parse of any text but `SPEC_SQL` is refused
+// with 42601, and so is every Bind on that connection after it.
 //
 // It exits once 20 seconds pass with no connection or message, so it
 // outlives a driver that died by that much at most.
@@ -19,6 +20,14 @@ const WOULD_BLOCK: i32 = -11;
 const PG_ROWS: i32 = 60;
 /** A Bind whose $1 is this is refused with 42P01. */
 const PG_REFUSED_MIN: i32 = 13;
+/**
+ * The query HttpArena's spec states for `/async-db`, copied from the
+ * operation's description in `site/static/openapi.json` at HttpArena commit
+ * 3388e4586647ad7d9fd09faec3363f078ded0a9e, not from the entry's db.ts, so a
+ * changed query there fails the exact-body checks.
+ */
+const SPEC_SQL: string =
+  "SELECT id, name, category, price, quantity, active, tags, rating_score, rating_count FROM items WHERE price BETWEEN $1 AND $2 LIMIT $3";
 /** How long the stand-in waits with nothing to do before it exits, in milliseconds. */
 const IDLE_MS: i32 = 20000;
 
@@ -53,6 +62,8 @@ class PgPeer {
   bound: boolean = false;
   params: i32[];
   mark: i32 = 0;
+  /** A Parse on this connection held another query than `SPEC_SQL`. */
+  wrongQuery: boolean = false;
 
   constructor(fd: i32) {
     this.fd = fd;
@@ -128,6 +139,41 @@ class PgPeer {
     return len > 0 ? n : -1;
   }
 
+  /** Parse's query text, past its statement name; anything but `SPEC_SQL` marks the connection. */
+  parse(body: i32): void {
+    let p: i32 = body;
+    while (this.input[p] !== 0) {
+      p += 1;
+    }
+    p += 1;
+    const start: i32 = p;
+    while (this.input[p] !== 0) {
+      p += 1;
+    }
+    const query: u8[] = this.input.slice(start, p);
+    const spec: u8[] = ascii(SPEC_SQL);
+    let same: boolean = query.length === spec.length;
+    for (let k: i32 = 0; same && k < toI32(spec.length); k++) {
+      same = query[k] === spec[k];
+    }
+    if (!same) {
+      this.wrongQuery = true;
+    }
+  }
+
+  /** An ErrorResponse with `code`. */
+  error(code: string, message: string): void {
+    this.begin(69);
+    this.byte(83);
+    this.cstr("ERROR");
+    this.byte(67);
+    this.cstr(code);
+    this.byte(77);
+    this.cstr(message);
+    this.byte(0);
+    this.finish();
+  }
+
   /** Bind's text parameters, past its portal and statement names and its format codes. */
   bind(body: i32): void {
     let p: i32 = body;
@@ -151,6 +197,15 @@ class PgPeer {
 
   /** The answers owed at a Sync, in the order the messages before it came. */
   sync(): void {
+    if (this.wrongQuery && (this.parsed || this.described || this.bound)) {
+      // The first error skips the rest of the group, as a server does up to the Sync.
+      this.error("42601", "not the query HttpArena's spec states");
+      this.ready();
+      this.parsed = false;
+      this.described = false;
+      this.bound = false;
+      return;
+    }
     if (this.parsed) {
       this.begin(49);
       this.finish();
@@ -192,15 +247,7 @@ class PgPeer {
     const ok: boolean = toI32(this.params.length) === 3;
     const min: i32 = ok ? this.params[0] : -1;
     if (!ok || min === PG_REFUSED_MIN) {
-      this.begin(69);
-      this.byte(83);
-      this.cstr("ERROR");
-      this.byte(67);
-      this.cstr("42P01");
-      this.byte(77);
-      this.cstr('relation "items" does not exist');
-      this.byte(0);
-      this.finish();
+      this.error("42P01", 'relation "items" does not exist');
       return;
     }
     let sent: i32 = 0;
@@ -257,6 +304,7 @@ class PgPeer {
       p += 1 + this.at32(p + 1);
       if (type === 80) {
         this.parsed = true;
+        this.parse(body);
       } else if (type === 68) {
         this.described = true;
       } else if (type === 66) {
