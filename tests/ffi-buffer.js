@@ -208,6 +208,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
     // refused before the checker reads it (NL2661), never silently ignored.
     // Written here, not under tests/link: a host module keeps its
     // `export function` spelling, which the arrow-corpus check refuses.
+    // nish-function: a host module: src/host-module.ts reads `export function`
     const countedHost = write(
       "counted-host.ts",
       [

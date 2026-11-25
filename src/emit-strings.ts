@@ -44,6 +44,7 @@ import {
   T_I64,
   T_STRING,
   T_U64,
+  T_U8,
   TypeTable,
 } from "./types"
 
@@ -397,7 +398,10 @@ const emitSlice = (emitter: Emitter, expr: Node, str: string): string => {
   if (hasEnd) {
     to = emitIndex(emitter, args.children[1])
   }
-  emitSliceCheck(emitter, from, to, len, hasEnd, "slice")
+  // `src/bounds.ts` proved the range on the call (`judgeRangeCheck`).
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
+    emitSliceCheck(emitter, from, to, len, hasEnd, "slice")
+  }
   const n = emitter.fn.emitValue(`sub i64 ${to}, ${from}`)
   const at = emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${stringData(emitter, str)}, i64 ${from}`)
   return newString(emitter, at, n)
@@ -616,7 +620,10 @@ export const emitFromBytes = (emitter: Emitter, expr: Node): string => {
   const bytes = emitter.emitExpression(args[0])
   const from = emitIndex(emitter, args[1])
   const to = emitIndex(emitter, args[2])
-  emitSliceCheck(emitter, from, to, loadLength(emitter, bytes), true, "bytes")
+  // `src/bounds.ts` proved the range on the call (`judgeRangeCheck`).
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
+    emitSliceCheck(emitter, from, to, loadLength(emitter, bytes), true, "bytes")
+  }
   const data = loadData(emitter, bytes)
   const at = emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${from}`)
   const n = emitter.fn.emitValue(`sub i64 ${to}, ${from}`)
@@ -643,7 +650,10 @@ export const stringConstructCallees = (name: string, proven: boolean): string[] 
     out.push("nish_str_new")
   } else if (name === "slice") {
     out.push("nish_str_new")
-    out.push("nish_panic_slice")
+    // `emitSlice` leaves out a range `src/bounds.ts` proved.
+    if (!proven) {
+      out.push("nish_panic_slice")
+    }
   } else if (name === "indexOf") {
     out.push("nish_str_index_of")
     out.push("nish_str_index_of_from")
@@ -736,8 +746,9 @@ export const emitForeignString = (
 }
 
 /**
- * WP53 B1.2: the `u8[]` and `readonly u8[]` arguments of the call `call` to the
- * `declare function` `callee`, whose evaluated operands are `operands` and
+ * WP53 B1.2: the buffer arguments (`isForeignBuffer`: a `u8[]`, or since WP89
+ * S2 a `u16[]`, `u32[]`, `i32[]` or `f32[]`, readonly or not) of the call
+ * `call` to the `declare function` `callee`, whose evaluated operands are `operands` and
  * `values`, lowered to the `i8*` C takes: the array's `data`, rewritten into
  * `operands` in place. Each is read here, after every argument is evaluated and
  * with nothing of the program's between the read and the call, because an
@@ -779,8 +790,10 @@ export const emitForeignBuffers = (
           const failBlock = fn.newBlock("ffi.length")
           fn.emit(`br i1 ${fits}, label %${okBlock.label}, label %${failBlock.label}`)
           fn.placeBlock(failBlock)
+          // WP89 S2: the count is in elements, which for a `u8[]` are bytes.
+          const unit = emitter.table.refOf(callee.paramTypes[i]) === T_U8 ? "bytes" : "elements"
           const message =
-            `\`${callee.sourceName}\`: argument ${count + 1} (${callee.paramNames[count]}) counts more bytes than ` +
+            `\`${callee.sourceName}\`: argument ${count + 1} (${callee.paramNames[count]}) counts more ${unit} than ` +
             `argument ${i + 1} (${callee.paramNames[i]}) holds`
           emitPanicTail(emitter, emitter.stringConstant(message))
           fn.placeBlock(okBlock)

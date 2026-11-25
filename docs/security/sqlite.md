@@ -42,8 +42,11 @@ whose 65,535 slots are all live or retired answers `SQLITE_NOMEM`. Tests:
 `tests/link/std_sqlite` (a handle after `close` and after `finalize`, a forged
 handle).
 
-The tables are per thread: a handle passed to another thread names nothing
-there and answers `SQLITE_MISUSE`. A thread's tables are not freed when it
+The tables are per thread: a handle passed to another thread indexes that
+thread's own table. It answers `SQLITE_MISUSE` there unless that thread holds a
+live object in the slot of the same index and generation, which it then names
+(a thread's first connection has the same handle value as another's); it never
+reaches the first thread's memory. A thread's tables are not freed when it
 exits, so connections a thread leaves open stay allocated with their files
 open; that is a leak, not a use after free, since no other thread can name
 them.
@@ -102,9 +105,17 @@ cursor of a connection before that can happen:
   `SQLITE_SELECT`, `SQLITE_READ`, `SQLITE_FUNCTION` and `SQLITE_RECURSIVE`;
 - in the authorizer itself, when an action off that list is authorized
   outside a prepare it classifies (a re-prepare inside `sqlite3_step`);
-- in every cursor call (`cursor_of`), when `sqlite3_get_autocommit` is set or
-  the `main` B-tree's transaction state is `SQLITE_TXN_NONE`: a rollback
-  SQLite made by itself.
+- in the rollback hook (`sqlite3_rollback_hook`) `nishsqlite_open` installs,
+  on every rollback, including one SQLite makes by itself after an
+  `SQLITE_NOMEM`, `SQLITE_IOERR` or `SQLITE_FULL` mid-read.
+
+A cursor call therefore checks only that its handle names a live slot (one
+array index and a generation compare) and locks the mutex the cursor read
+from its connection when it opened. A handle the program carries to another
+thread under `--threads` indexes that thread's own table, since the tables
+are thread-local: it names that thread's cursor of the same index and
+generation if there is one, and otherwise no slot. A closed connection's
+cursor handle names a freed slot.
 
 The authorizer never refuses an action; it only watches. A statement it
 cannot classify as a plain read is treated as one that invalidates.
@@ -146,6 +157,28 @@ Column reads are bounded twice. A column number outside the declared list is
 `SQLITE_SCHEMA`. `columnInto` and `keyTextBytes` bound the caller's buffer as
 `columnInto` and `bindTextBytes` do: an `at` past the buffer, or a window
 outside it, is `SQLITE_MISUSE`, and a value is copied only when it fits.
+`selectRow` and `readRow` keep these bounds, each pinned by a line of
+`tests/link/std_sqlite_cursor_row`'s `expected.out`, so removing it fails
+"link/std_sqlite_cursor_row: exits with 0 and stdout matches
+expected.out":
+
+| Bound | Where | Line that fails without it |
+| --- | --- | --- |
+| A chosen column past the cursor's is `SQLITE_RANGE` when `readRow` reads it, and writes no `ints` or `spans` | `column_mem` in `nishsqlite_cursor_read_row`, `Cursor.readRow` (`n < 0`) | "and readRow is RANGE for column 7", "and leaves ints and spans as they were", "selectRow -1, readRow is RANGE", "selectRow 70000, readRow is RANGE" |
+| An index outside 0..65,535 reaches the adapter as 65,535, not as its low 16 bits, so 65,537 and -65,535 do not read column 1 | `Cursor.selectRow` | "selectRow 65537, readRow is RANGE", "selectRow -65535, readRow is RANGE" |
+| Over 65,535 columns is `SQLITE_MISUSE`, so a column index fits the adapter's `u16` | `Cursor.selectRow` | "selectRow of 65536 columns is MISUSE" |
+| A refused list leaves the chosen one | `Cursor.selectRow` refuses before it replaces its buffer | "and a refused list keeps the one chosen" |
+| `ints` shorter than the list or `spans` shorter than 3 a column is `SQLITE_MISUSE`, and nothing is written | `Cursor.readRow` | "ints shorter than the list is MISUSE", "spans shorter than 3 per column is MISUSE", "and none of them writes" |
+| No `selectRow` before it, no row, or a closed cursor is `SQLITE_MISUSE`, an empty list among them | `Cursor.readRow` (`nsel`), `nishsqlite_cursor_read_row` (`has_row`), `NISH_SQLITE_CURSOR` | "readRow before any selectRow is MISUSE", "and no row with no columns is MISUSE", "even with columns chosen", "which readRow refuses with MISUSE" |
+| A record too short for a chosen column is `SQLITE_SCHEMA`, and writes no `ints` or `spans` | `column_mem` in `nishsqlite_cursor_read_row`, `Cursor.readRow` (`n < 0`) | "a short record is SCHEMA for the row", "and writes nothing" |
+| A row whose bytes exceed `text` writes nothing to `ints` or `spans` | `Cursor.readRow` (`n > text.length`) | "and writes no ints or spans" |
+
+`readRow`'s answers travel in the `Cursor`'s byte buffer, which `selectRow`
+sizes at 11 bytes a column; the adapter takes the column count from its
+length (`n / 11`) and writes only the slots behind the indices. Its text and
+blob bytes are copied into `text` at the running offset, only while they fit,
+so a row longer than `text`, or a refusal, can leave the columns before it
+there.
 
 A record's length is read with `sqlite3BtreePayloadSize`. Over
 `SQLITE_MAX_LENGTH` it is `SQLITE_CORRUPT`, which keeps the decoder's `u32`
@@ -165,7 +198,26 @@ Where the decoded bytes lie:
 
 A seek key is built only with `sqlite3VdbeMemSetInt64` and
 `sqlite3VdbeMemSetStr` (text copied, `SQLITE_TRANSIENT`), and no more key
-parts than the index has key columns: one more is `SQLITE_RANGE`.
+parts than the index has key columns: one more is `SQLITE_RANGE`. The
+`UnpackedRecord` that hands it to SQLite is the cursor's own, filled at open
+and given only `nField`, `default_rc`, `errCode` and `eqSeen` before each use.
+
+`countRange(lo, hi, out)` compares each index entry's record with a one-value
+key by `sqlite3VdbeRecordCompare`, on the same bytes a column read decodes
+(on its page, or copied with the slack above). It stops on the compare's
+`errCode` (a corrupt record) and refuses a zero-length record as
+`SQLITE_CORRUPT`: the compare reads a record's header size from its first
+byte, which an empty one lacks, and an index entry always holds its rowid.
+A column read takes the same empty record as zero fields. Its count buffer
+holds one `i64` per key of the span: a span longer than `out` is
+`SQLITE_RANGE` before any allocation, so the buffer is never larger than the
+caller's own array, and the span is computed in unsigned 64-bit arithmetic,
+so `MIN..MAX` is refused, not wrapped. Nish reads the buffer back one element
+at a time with `nishsqlite_cursor_count_at`, which answers -1 for an index at
+or past the last successful count's span (and for every index once a count
+fails past its refusals); `countRange` reads it only after a count succeeds,
+one call per key and one more that ends the copy when `out` is longer than
+the span, and writes `out` only below the span.
 
 Tests:
 
@@ -195,6 +247,15 @@ Tests:
   both directions, and each seek, checked row by row against the `SELECT`
   that answers the same question, with index keys and records on overflow
   pages and `NULL` keys.
+- `tests/run.js` (`sqlite-link`, "a cursor answers SQLITE_MISUSE after SQLite
+  rolls its read back on its own, on another thread, and after its connection
+  closes"): a C helper whose allocator refuses a large block while a
+  `group_concat` steps, so SQLite rolls the read back by itself; the cursor
+  then answers `SQLITE_MISUSE` from every call. The same handle on another
+  thread under `NISH_THREADS` that has opened no cursor (an empty table), and
+  a closed connection's handle once a later connection opens a cursor, answer
+  it too. Without the rollback hook the
+  helper exits 5.
 - `tests/run.js` (`sqlite-link`): the adapter built with `-DSQLITE_DEBUG` and
   `THREADSAFE=1` under a C helper that calls every exported cursor and key
   function, so SQLite's assertions check that each holds the connection's
@@ -206,6 +267,29 @@ Tests:
   with `-DSQLITE_ENABLE_RTREE`, for an rtree table and its shadow table.
 - `tests/link/std_sqlite_cursor_feed`: a feed read through four cursors,
   equal byte for byte to SQL's.
+- `tests/link/std_sqlite_cursor_count`: `countRange` checked against
+  `SELECT count(*)` for every key of each span, ascending, `DESC`, on a
+  two-column index and under NUMERIC affinity, with NULL, REAL and TEXT
+  values, spans at both ends of `i64` and keys with no entries; every element
+  of `out` past the span is checked untouched. Each refusal: a table cursor
+  (`SQLITE_MISUSE`), a TEXT first column (`SQLITE_MISMATCH`), `lo > hi`, a
+  span one longer than `out`, `MIN..MAX` and an empty `out` (`SQLITE_RANGE`).
+  `tests/run.js` (`sqlite-link`, "std_sqlite_cursor_count's countRange
+  reuses its buffer: no allocation after the first pass") links it with
+  memory statistics on and
+  `-DSQLITE_DEBUG`, and pins `countRange`'s buffer reuse: a second pass of
+  integer seeks and counts leaves SQLite's memory in use and its high-water
+  mark where the first pass left them.
+- `tests/link/std_sqlite_cursor_row`: `readRow` against `columnType`,
+  `columnI64` and `columnInto` on every row of a table with overflow rows,
+  short records, NULLs, the rowid alias, text that reads as a number and a
+  column chosen twice, and through an index; the bounds in the table above.
+  `tests/run.js` (`sqlite-link`) runs it again with `-DSQLITE_DEBUG`, and
+  checks that two `readRow` walks over 2,000 rows, 500 on overflow pages,
+  keep SQLite's memory in use and its high-water mark where a first pass
+  left them. That check reads `sqlite3_memory_used`, SQLite's allocator
+  only: it says nothing of the Nish heap, where `readRow`'s answer buffer
+  lives.
 
 Untested: a read that answers `SQLITE_ABORT` because the row moved under the
 cursor (`sqlite3BtreeCursorHasMoved`; the cursor stays open), `SQLITE_CORRUPT`
@@ -213,8 +297,53 @@ for an oversized record, and the `SQLITE_NOMEM` paths, each of which needs a
 corrupt file or a failing allocator the suite has no harness for; the
 invalidation by a re-prepare whose statement now authorizes an action off the
 allowlist, which needs another connection to change the schema between a
-prepare and its step; and the invalidation `cursor_of` makes when SQLite has
-rolled the transaction back by itself, which needs an I/O error mid-read.
+prepare and its step. `countRange`'s `SQLITE_TOOBIG` past 2,147,483,647
+counted entries, which needs an index that large; its `SQLITE_CORRUPT` and
+`errCode` stops, which need a corrupt file.
+
+Untested bounds of `readRow`, read only from the code:
+
+- The copy into `text` stops at its length: the adapter copies a column's
+  bytes at the running offset only when the offset is within `ntext` and
+  they fit after it. The test passes a buffer one byte short and checks the answer,
+  but nothing in the suite observes a byte written past the buffer's end, so
+  removing the bound fails no check.
+- A row whose text and blob bytes pass 2^31 - 1 is `SQLITE_TOOBIG`: no test
+  builds a 2 GiB row.
+- The adapter reads `n / 11` columns from a buffer of `n` bytes, so it never
+  reads or writes past it; `std/sqlite.ts` always passes 11 bytes a column,
+  so no test passes another length.
+
+Open: under `-DSQLITE_DEBUG`, a rollback SQLite makes by itself while a
+cursor is open trips SQLite's own assertion in `unlockBtreeIfUnused`, inside
+`sqlite3BtreeRollback` (`btreeEndTransaction`), before the hook runs: a read
+cursor stays valid across SQLite's own rollback, so the B-tree still has it
+open there. The trip predates this adapter's rollback hook; a `-DSQLITE_DEBUG`
+build of the adapter without the hook trips it the same way. A release build
+has no such assertion, and the hook frees the cursor before any later call
+reads it;
+the helper above is built without `SQLITE_DEBUG` for that reason. The suite's
+`-DSQLITE_DEBUG` runs do not reach this path.
+
+### The unix-excl VFS
+
+`openDatabase` passes `OPEN_URI` through to `sqlite3_open_v2`, so a
+`file:<path>?vfs=unix-excl` name opens the file on SQLite's `unix-excl` VFS
+([docs/sqlite-vfs.md](https://github.com/amritk/nish/blob/main/docs/sqlite-vfs.md)).
+No adapter code is specific to it. What it changes, each with the check that
+fails without it:
+
+| What | Check |
+| --- | --- |
+| A WAL database makes no `-shm` file, so no other process can map its wal-index | "link/std_sqlite_excl: exits with 0 and stdout matches expected.out" |
+| A second process that reads the file while it is open is refused with `SQLITE_BUSY`; on the default VFS the same read succeeds | the same check |
+| A same-process second connection shares the file and can checkpoint it | "link/std_sqlite_excl_second: exits with 0 and stdout matches expected.out" |
+| Under `--profile wasi` it opens and the first lock answers `SQLITE_IOERR_LOCK`, so a WAL database there takes no write; an unknown VFS name fails the open | ``link/std_sqlite_vfs_wasi: on `--profile wasi` `?vfs=unix-excl` opens and its first lock answers SQLITE_IOERR_LOCK (expected.wasi.out)``; the unknown name natively, "link/std_sqlite_vfs_wasi: exits with 0 and stdout matches expected.out" |
+
+The exclusive lock is advisory, like every SQLite lock: it keeps out another
+SQLite, not a process that writes the file without locking.
+`--capabilities` cannot see the VFS, which is a runtime string handed to C, so
+a program reports the same grants on either one.
 
 ## Findings
 

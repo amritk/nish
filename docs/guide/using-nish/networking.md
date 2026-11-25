@@ -9,7 +9,7 @@ stack on top of it (TLS, HTTP/1.1, HTTP/2, HTTP/3) is in the
 themselves, and [Unix sockets](unix-sockets.md) covers the Unix-domain
 listeners, connections and pairs, passing a descriptor over one, and naming
 the process at the other end. The rules are in the reference,
-[`nish:net`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
+[`nish:net`](../../reference/language/builtins.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
 
 Every function is also a global, as every `nish:` export is, but importing them
 says where they come from. They are native only: a `wasm32` build has no
@@ -50,8 +50,12 @@ its events, and answers how many, `0` when the timeout passed.
 
 The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do). The range of a
-`u8[]` that `netRead` and `netWrite` take is checked while the program runs,
-a check no proof removes yet; the servers built on `nish/net/prefork`, the
+`u8[]` that `netRead` and `netWrite` take is checked while the program runs
+unless the compiler can see the window is inside the buffer (`buf, 0,
+buf.length`, or an offset of 0 and a count tested with
+`n >= 0 && n <= buf.length`, or a window `buf, start, end - start` under
+`start >= 0 && start <= end && end <= buf.length`); the servers built on
+`nish/net/prefork`, the
 HTTP handlers and `nish/net/dns` call standard-library code that keeps
 panic sites until the standard library is made panic-free;
 and some examples index arrays or add numbers without a guard, which a test
@@ -312,6 +316,28 @@ A listener whose rings fail for want of descriptors or memory serves
 descriptors itself, and a later listener asks again.
 On macOS the flag is accepted and does nothing.
 
+To see what a ring server's rings are doing, start it with the environment
+variable `NISH_URING_STATS` set to anything but an empty string or `0`. The
+first ring listener reads it when it opens. Then `kill -USR1` the process and
+the loop's next `pollWait` prints one line a ring listener on stderr:
+
+```text
+uring-stats signal port=8080 sends=3000 pool_new=497 pool_held=0 pool_cached=68 live=3000 slots=3072 enters=9120 windows=410 window_waits=820
+```
+
+`sends` counts the sends the rings have made, `pool_new` the send buffers
+they have allocated, `pool_held` those queued on a connection now and
+`pool_cached` those kept for reuse; `live` is the open connections and
+`slots` the slots the rings hold. `enters` counts the
+`io_uring_enter` calls on the listener's rings, `windows` the
+`pollWaitBatch` calls that opened a batch window on it and `window_waits`
+the sleeps those windows took. Closing a ring listener prints its line
+once more, marked `close`. The handler, once installed, stays for the rest
+of the process; after the last ring listener closes, `SIGUSR1` prints
+nothing. Without the variable the runtime installs no handler and `SIGUSR1`
+ends the process, as it would anyway. `signalFd()` reports only `SIGINT`
+and `SIGTERM`, so it never takes `SIGUSR1` from the dump.
+
 <!-- nish:ok -->
 ```ts
 import { NET_LISTEN_RING, netClose, netRingState, tcpListenFlags } from "nish:net";
@@ -369,6 +395,78 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+### Taking events in batches: `pollWaitBatch`
+
+A busy ring server wakes once per event if its loop waits with `pollWait`:
+each wait answers the one connection that is ready, the program serves it,
+and waits again. `pollWaitBatch(loop, ready, timeoutMs, minEvents,
+maxWaitMs)` waits as `pollWait` does for the first event, up to
+`timeoutMs`, and then up to `maxWaitMs` more for `minEvents` pairs, so one
+wake serves several connections:
+
+<!-- nish:ok -->
+```ts
+import { NET_LISTEN_RING, netClose, pollAdd, pollCreate, pollWaitBatch, tcpListenFlags } from "nish:net";
+
+export const main = (): i32 => {
+  const listener = tcpListenFlags("127.0.0.1", 0, 1024, NET_LISTEN_RING);
+  if (listener < 0) {
+    return 1;
+  }
+  const loop = pollCreate();
+  pollAdd(loop, listener, 1, -1);
+  const ready: i32[] = new Array<i32>(64);
+  // Up to 100 ms for a first event, then up to 2 ms more for 16 of them.
+  const n = pollWaitBatch(loop, ready, 100, 16, 2);
+  console.log(n === 0 ? "idle" : `${n} ready`);
+  netClose(listener);
+  netClose(loop);
+  return 0;
+};
+```
+
+- An idle loop is not woken every `maxWaitMs`: with nothing ready the call
+  sleeps to `timeoutMs` and answers `0`, as `pollWait` does.
+- `ready`'s length caps the batch. A `ready` of 8 answers at most 4 pairs
+  whatever `minEvents` asks for.
+- `maxWaitMs` is what the batch costs in latency. The second wait sleeps
+  in at most eight slices of `maxWaitMs / 8`, rounded up (one more for
+  each signal that interrupts a slice), and takes what
+  the ring finished after each, so the batch can end up to one slice after
+  `minEvents` became ready. It watches no other descriptor, so any other
+  descriptor in the loop, `signalFd()` included, may be reported up to
+  `maxWaitMs` late. On a loop whose only other descriptor is `signalFd()`
+  a signal ends the batch at once, unless `signalFd()` was closed; then it
+  too waits up to `maxWaitMs`.
+- With no ring listener, with a `minEvents` of 1 or a `maxWaitMs` of 0, and
+  on macOS, it is `pollWait`.
+- The runtime fills a batch from at most 64 events, so a `minEvents` above
+  64 waits as 64 does. A process with two or more open ring listeners does
+  not batch: each call answers as `pollWait` would.
+
+`HttpHandler` takes the same two numbers through its limits:
+`HandlerLimits.minEvents` (default 1) and `HandlerLimits.maxWaitMs` (default
+0). With `minEvents` above 1 and `maxWaitMs` above 0, `h.wait(timeout)` is
+`pollWaitBatch(loop, ready, timeout, minEvents, maxWaitMs)`; a `wait(0)`,
+which must not block, and the defaults are `pollWait`, the loop the handler
+always ran. A `minEvents` under 1 or a `maxWaitMs` outside 0 to 1000 is a
+panic in `new HttpHandler` and an `Err` naming both from
+`openHttpHandler`. Set them on a ring
+server whose CPU per request matters more to it than `maxWaitMs` of added
+latency on a quiet connection; leave them at the defaults otherwise. On
+one 4-vCPU box at 30,000 requests a second, `minEvents` 64 with
+`maxWaitMs` 1 cut the server's CPU a request by a quarter to a third at
+18,000 connections across two runs, showed no saving at 96,000 outside the
+run-to-run noise, and added about 2 ms to the median latency at both
+([the benchmarks](../../BENCHMARKS.md#batched-ring-waits-minevents-and-maxwaitms)).
+
+A loop that holds nothing but one ring listener's connections, and at most
+`signalFd()`, waits on the ring itself on Linux 5.11 and later, with either
+call, while the listener has not grown a second ring. With `signalFd()` in
+the loop it also needs a ring `--sandbox` does not restrict and a
+`signalFd()` the program has not closed. Otherwise the call waits as before;
+nothing about the answers changes, only the cost of the wait.
 
 Rings are off by default. What one ring process costs against five processes
 on descriptors, with an SQLite lookup per request, is measured in
@@ -661,7 +759,7 @@ a single worker on a plain socket, with `preforkUdpCount` answering `1`.
 A `serviceWorker` other than `0` has no place in that one-worker run, so
 there the supervisor starts nothing and answers `PREFORK_SPAWN_FAILED`.
 The underlying call is `udpBind` with flag `4`
-([`nish:net`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
+([`nish:net`](../../reference/language/builtins.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
 
 ### QUIC congestion control: `congestion`
 
@@ -674,7 +772,7 @@ built with it closes at once, as one with any other limit out of range does.
 CUBIC regrows the window faster after a loss on a long, lossy path, and on a
 transfer of one bandwidth-delay product the two finish level. The
 measurement is in
-[the QUIC security record](https://github.com/amritk/nish/blob/main/docs/security/quic.md#congestion-control).
+[the QUIC security record](../../security/quic.md#congestion-control).
 
 ### QUIC and ECN: `arrivalEcn`
 

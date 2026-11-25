@@ -328,9 +328,27 @@ nish_newer_than() {
 # a version whose `gh attestation verify` knows every flag the check below
 # passes -- an older one would either fail on a flag it has never heard of or,
 # worse, accept the attestation without pinning what signed it.
+#
+# `gh auth token` answers from the environment and gh's config alone, so no
+# token at all is "signed out" at once. `gh auth status` then asks GitHub's API
+# whether the token works, and a dropped request there failed CI's seed fetches
+# under NISH_REQUIRE_ATTESTATION=1 as "not signed in" with a good GH_TOKEN; so
+# it gets three tries, 1 and 2 seconds apart, and gh's own words if all fail.
+# A failure still ends in this function naming a reason, which is a refusal
+# when the check is required.
 nish_gh_cannot_verify() {
   command -v gh >/dev/null 2>&1 || { echo "gh is not installed"; return 0; }
-  gh auth status >/dev/null 2>&1 || { echo "gh is not signed in (gh auth login)"; return 0; }
+  gh auth token >/dev/null 2>&1 || { echo "gh is not signed in (gh auth login)"; return 0; }
+  nish_gh_try=1
+  while ! nish_gh_auth="$(gh auth status 2>&1)"; do
+    if [ "$nish_gh_try" -ge 3 ]; then
+      printf 'gh has a token but gh auth status failed 3 times; it said: %s\n' \
+        "$(printf '%s' "$nish_gh_auth" | tr '\n' ' ' | sed 's/  */ /g; s/ $//')"
+      return 0
+    fi
+    sleep "$nish_gh_try"
+    nish_gh_try=$((nish_gh_try + 1))
+  done
   nish_gh_help="$(gh attestation verify --help 2>&1)" || nish_gh_help=""
   for nish_gh_flag in --repo --signer-workflow --source-ref --deny-self-hosted-runners; do
     case "$nish_gh_help" in

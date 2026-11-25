@@ -23,7 +23,7 @@ It takes no parameters. Its return value is the program's exit status, so
 a number in its type, and [Coming from TypeScript](from-typescript.md)
 explains why. A `main` with nothing to report can return `void` instead, and
 then exits with 0. The rules for `main` are in the reference's
-[`main`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#main) section.
+[`main`](../../reference/language/declarations.md#main) section.
 
 ### Without `main`
 
@@ -64,7 +64,7 @@ bump()
 
 Only the file you compile may do this, and only when it declares no `main`.
 The details are in the reference's
-[Top-level code](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#top-level-code) section.
+[Top-level code](../../reference/language/declarations.md#top-level-code) section.
 
 ## Run it
 
@@ -127,7 +127,7 @@ export const main = (): i32 => {
 nish run greet.ts
 ```
 
-```
+```log
 greet.ts:8:17: error: Argument 2 of `greet`: expected i32, got string
   8 |   greet("Nish", "3");
     |                 ^~~
@@ -157,8 +157,8 @@ but a code always means the same rule, so search for the code, and key editors
 and scripts on it. The first digit says which stage of the compiler refused the program: `NL1…` for
 syntax Nish forbids outright, `NL2…` for the type checker, `NL3…` for modules
 and packages. The reference's
-[Rejected by the checker](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#rejected-by-the-checker) and
-[Forbidden constructs](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)
+[Rejected by the checker](../../reference/language/rejected-by-the-checker.md) and
+[Forbidden constructs](../../reference/language/forbidden-constructs-phase-0-validator.md)
 sections list the rules.
 
 Change `"3"` to `3`, and `nish run greet.ts` prints `hello, Nish` three times.
@@ -234,7 +234,7 @@ export const main = (): i32 => {
 nish run overflow.ts
 ```
 
-```
+```log
 overflow.ts:4:9: error: `overflow` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), ...
 ```
 

@@ -212,6 +212,21 @@ int32_t nish_signal_fd(void) {
   return (int32_t)(cur >> 32);
 }
 
+/* Set once a closer (`netClose`, `fileClose`) is handed the read end: from
+   then on its number may name any descriptor opened since, so
+   `nish_signal_fd_made` answers -1 rather than a number that is no longer the
+   signal pipe (docs/security/net-uring.md, NURING-48 and NURING-49). */
+static int32_t nish_signal_closed;
+
+int32_t nish_signal_fd_made(void) {
+  int64_t cur = __atomic_load_n(&nish_signal_pipe, __ATOMIC_ACQUIRE);
+  return cur < 0 || __atomic_load_n(&nish_signal_closed, __ATOMIC_ACQUIRE) ? -1 : (int32_t)(cur >> 32);
+}
+
+void nish_signal_fd_closing(int32_t fd) {
+  if (fd >= 0 && fd == nish_signal_fd_made()) __atomic_store_n(&nish_signal_closed, 1, __ATOMIC_RELEASE);
+}
+
 /* Block until a signal's byte arrives and answer it: 15 or 2, or -1 for any
    `fd` that is not the signal descriptor and for a read that fails. */
 int32_t nish_read_signal(int32_t fd) {

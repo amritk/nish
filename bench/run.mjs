@@ -614,6 +614,15 @@ const PINNED_SIMD = "base"
 const PINNED_CRYPTO = { NISH_AES: "soft", NISH_CHACHA20: "soft", NISH_SHA256: "soft" }
 
 /**
+ * The checksum kernels' choice, pinned the same way. runtime-checksum.c takes
+ * the CPU's carry-less multiply for CRC-32 and its vector adds for Adler-32
+ * when it has them, and the Nish walks of std/compress/checksum.ts when it
+ * does not or when the variable says `soft`. The count pins `soft`, so every
+ * x86-64 host runs the same walks and a fix to one of their panic sites shows.
+ */
+const PINNED_CHECKSUM = { NISH_CRC32: "soft", NISH_ADLER32: "soft" }
+
+/**
  * The crypto kernels the count gates: one run of a family's Nish program,
  * bench/crypto/<family>/main.ts, under the contract of bench/crypto/README.md
  * (`main <kernel> <size> <iterations>`), at the size and iterations
@@ -683,6 +692,39 @@ const STD_COUNTED = [
     what: "PgConnection Bind/Execute build and binary/text DataRow decode on canned bytes",
   },
   { name: "pg-carrier", what: "PgCarrier plain and batched queries against a loopback stand-in server" },
+  { name: "std-compress-deflate", what: "Deflater at levels 1, 6 and 9 over 64 KiB of generated text" },
+  { name: "std-compress-inflate", what: "Inflater over the three streams of std-compress-deflate" },
+  { name: "std-compress-checksum", what: "Crc32.update and adler32Update over 64 KiB, whole and in pieces" },
+  {
+    name: "std-compress-gzip",
+    what: "gzip and zlib round trips, one-shot and through GzipWriter and GzipReader",
+  },
+  {
+    name: "std-term-frame",
+    what: "Screen text, clear and flush of an 80x24 frame, half of it changed each frame",
+  },
+  {
+    name: "std-raster",
+    what: "rasterGradient, rects, discs, glows, text, a trail and particles into GAME_FRAME at 320x180",
+  },
+  {
+    name: "std-synth",
+    what: "synthSilence and synthTone buffers through gameWriteSamples, the sound ring and host text",
+  },
+  {
+    name: "std-temporal-arith",
+    what: "PlainDate, PlainDateTime, Duration and Instant add, until and since over 256 values",
+  },
+  { name: "std-temporal-format", what: "toString of 256 dates, times, date-times, durations and instants" },
+  {
+    name: "std-temporal-parse",
+    what: "the five *FromOrNull readers over 256 strings each, one in eight refused",
+  },
+  { name: "std-base64-encode", what: "base64Encode of 4 KiB whole, and base64EncodeInto in pieces" },
+  {
+    name: "std-math-kernel",
+    what: "sin, cos, tan, atan2, hypot, exp, log, pow and fmod, and the exact decimal readers",
+  },
 ]
 
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
@@ -695,7 +737,7 @@ const change = (count, base) => (count - base) / base
  * binary on a host without libc's debug symbols. They are about 120 thousand
  * of a count in the hundreds of millions. What varies with the host is pinned
  * instead: the child's environment is `PINNED_LIBC`, `PINNED_SIMD`,
- * `PINNED_CRYPTO`, `PINNED_THREADS`, `FIXED_KEY` and nothing else, and its argv[0] is relative (`./fib`, run from its own directory), so neither the
+ * `PINNED_CRYPTO`, `PINNED_CHECKSUM`, `PINNED_THREADS`, `FIXED_KEY` and nothing else, and its argv[0] is relative (`./fib`, run from its own directory), so neither the
  * caller's variables nor the checkout's path reach the loader. bench/README.md
  * has the measurements that show what is left.
  */
@@ -717,6 +759,7 @@ const countInstructions = (valgrind, exe, args, name) => {
         GLIBC_TUNABLES: PINNED_LIBC,
         NISH_SIMD: PINNED_SIMD,
         ...PINNED_CRYPTO,
+        ...PINNED_CHECKSUM,
         NISH_NUM_THREADS: PINNED_THREADS,
         LD_PRELOAD: `./${FIXED_KEY}`,
       },
@@ -740,7 +783,7 @@ const countInstructions = (valgrind, exe, args, name) => {
 /**
  * `--instructions`: build the eight counted bench/ programs, the four map layout
  * prototypes, the three `Map` measurements, the seven AWFY ports and the
- * crypto families' programs and the six std/ module programs, and run them at the sizes bench/instructions.json
+ * crypto families' programs and the std/ module programs, and run them at the sizes bench/instructions.json
  * names (each crypto kernel once, at its own size and iterations); count each run, and print the counts against the baseline. `--check` fails on any count above it by more than the
  * tolerance, and `--update` writes the counts back. Answers the exit status.
  */

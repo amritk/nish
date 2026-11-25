@@ -148,6 +148,28 @@ export const GAME_SAMPLES = new Float32Array(96000)
 /** `v` held to `0..most`. */
 const gameClamp = (v: i32, most: i32): i32 => Math.min(Math.max(v, 0), most)
 
+/** Word `word` of `info`, which is `GAME_INFO`, held to `0..most`. */
+const gameInfoWord = (info: Int32Array, word: i32, most: i32): i32 => {
+  // Never true: `word` is one of the `GAME_INFO_*` indices and `GAME_INFO` is
+  // four words for the module's life. The test is what proves the read.
+  if (word < 0 || word >= toI32(info.length)) {
+    return 0
+  }
+  return gameClamp(info[word], most)
+}
+
+/** Store `a` and `b` in words `at` and `at + 1` of `info`, which is `GAME_INFO`. */
+const gameInfoPair = (info: Int32Array, at: i32, a: i32, b: i32): void => {
+  // Never true: `at` is `GAME_INFO_WIDTH` or `GAME_INFO_SAMPLES` and
+  // `GAME_INFO` is four words for the module's life. The test is what proves
+  // the stores.
+  if (at < 0 || at >= toI32(info.length) - 1) {
+    return
+  }
+  info[at] = a
+  info[at + 1] = b
+}
+
 /**
  * Set the frame's size, which the page reads to know how much of `GAME_FRAME`
  * to show. Each side is held to `0..GAME_MAX_WIDTH` and `0..GAME_MAX_HEIGHT`.
@@ -156,24 +178,27 @@ const gameClamp = (v: i32, most: i32): i32 => Math.min(Math.max(v, 0), most)
  * @param width - the frame's width in pixels
  * @param height - the frame's height in pixels
  */
-export const gameSetSize = (width: i32, height: i32): void => {
-  GAME_INFO[GAME_INFO_WIDTH] = gameClamp(width, GAME_MAX_WIDTH)
-  GAME_INFO[GAME_INFO_HEIGHT] = gameClamp(height, GAME_MAX_HEIGHT)
-}
+export const gameSetSize = (width: i32, height: i32): void =>
+  gameInfoPair(
+    GAME_INFO,
+    GAME_INFO_WIDTH,
+    gameClamp(width, GAME_MAX_WIDTH),
+    gameClamp(height, GAME_MAX_HEIGHT)
+  )
 
 /**
  * The frame's width, as `gameSetSize` set it.
  *
  * @returns the width in pixels, held to `0..GAME_MAX_WIDTH` even if the page wrote the word
  */
-export const gameWidth = (): i32 => gameClamp(GAME_INFO[GAME_INFO_WIDTH], GAME_MAX_WIDTH)
+export const gameWidth = (): i32 => gameInfoWord(GAME_INFO, GAME_INFO_WIDTH, GAME_MAX_WIDTH)
 
 /**
  * The frame's height, as `gameSetSize` set it.
  *
  * @returns the height in pixels, held to `0..GAME_MAX_HEIGHT` even if the page wrote the word
  */
-export const gameHeight = (): i32 => gameClamp(GAME_INFO[GAME_INFO_HEIGHT], GAME_MAX_HEIGHT)
+export const gameHeight = (): i32 => gameInfoWord(GAME_INFO, GAME_INFO_HEIGHT, GAME_MAX_HEIGHT)
 
 /** The next record on `GAME_INPUT` as a `TermEvent`, or null for a kind the reader does not know. */
 const gameEventOf = (): TermEvent | null => {
@@ -244,6 +269,25 @@ export const gameReadInput = (input: StepInput, nowMs: f64): void => {
  */
 export const gamePlaySound = (id: i32): boolean => ringPush(GAME_SOUNDS, id)
 
+/** Write the first `n` of `samples` into `out`, which is `GAME_SAMPLES`, clipped to `-1..1`. */
+const gameCopySamples = (out: Float32Array, samples: f64[], n: i32): void => {
+  // `n` is at most `GAME_SAMPLE_LIMIT`, the length of `GAME_SAMPLES`, and at
+  // most `samples.length`: the length tests never end the loop first, and
+  // they are what prove the read and the store.
+  for (let i: i32 = 0; i < n && i < toI32(samples.length) && i < toI32(out.length); i++) {
+    const s: f64 = samples[i]
+    let x: f64 = 0.0
+    if (s > 1.0) {
+      x = 1.0
+    } else if (s < -1.0) {
+      x = -1.0
+    } else if (s >= -1.0) {
+      x = s
+    }
+    out[i] = toF32(x)
+  }
+}
+
 /**
  * Hand one sound's samples to the page: each is clipped to `-1..1` (NaN is
  * 0) and written to `GAME_SAMPLES` as an `f32`, and `GAME_INFO` records how
@@ -255,19 +299,7 @@ export const gamePlaySound = (id: i32): boolean => ringPush(GAME_SOUNDS, id)
  */
 export const gameWriteSamples = (samples: f64[], sampleRate: i32): i32 => {
   const n: i32 = Math.min(toI32(samples.length), GAME_SAMPLE_LIMIT)
-  for (let i: i32 = 0; i < n && i < toI32(samples.length); i++) {
-    const s: f64 = samples[i]
-    let x: f64 = 0.0
-    if (s > 1.0) {
-      x = 1.0
-    } else if (s < -1.0) {
-      x = -1.0
-    } else if (s >= -1.0) {
-      x = s
-    }
-    GAME_SAMPLES[i] = toF32(x)
-  }
-  GAME_INFO[GAME_INFO_SAMPLES] = n
-  GAME_INFO[GAME_INFO_RATE] = sampleRate
+  gameCopySamples(GAME_SAMPLES, samples, n)
+  gameInfoPair(GAME_INFO, GAME_INFO_SAMPLES, n, sampleRate)
   return n
 }

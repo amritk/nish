@@ -8,7 +8,7 @@ that you add to the server's [router](http-router.md). The messages are
 protobuf, which you read and write with
 [`nish/net/protobuf`](standard-library.md#nishnetprotobuf). It is imported like
 any other library module
-([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
+([`export` and `import`](../../reference/language/declarations.md#export-and-import)).
 
 You can write each message's encode and decode by hand on
 `nish/net/protobuf`, as the example below does, or have

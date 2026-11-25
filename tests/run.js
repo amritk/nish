@@ -3154,6 +3154,7 @@ if (dealtHere("netTcp")) {
       "nish_poll_modify",
       "nish_poll_remove",
       "nish_poll_wait",
+      "nish_poll_wait_batch",
     ]
     const used = [
       "nish_net_local_port",
@@ -5183,6 +5184,7 @@ if (dealtHere("diagnostics")) {
   )
 
   const synSrc = path.join(buildDir, "diag_syntax.ts")
+  // nish-function: a syntax-error source the parser must refuse
   fs.writeFileSync(synSrc, "function f( ; {\n  return 1;\n}\n")
   const syn = spawnNish([synSrc, "-o", path.join(buildDir, "diag_syntax.ll")], { cwd: root })
   const synErr = String(syn.stderr)
@@ -6689,7 +6691,52 @@ if (dealtHere("performance")) {
 // sites that stay, by function, with the reason (`docs/LANGUAGE.md`, "Panics
 // the standard library keeps"); the explicit sites of every other function
 // are the ones still to fix, and both counts are pinned.
+//
+// Its `residual` list names, by module, function and kind, the sites of other
+// kinds that stay, with the reason and the docs/security record that gives it
+// (WP83 S5's cipher sites: an `array-length` the prover cannot bound, a
+// constant-time copy's first read, where an early return would be a branch).
+// In a module with an entry the counted sites must equal the entries, function
+// by function and kind by kind, so a site that moves to another function, or
+// one fixed without its entry going, fails; each record must exist and name
+// its function.
 const UPDATE_STD_PANICS = process.argv.includes("--update-std-panics")
+/** The baseline `--update-std-panics` writes: the new counts, with `kept` and `residual` as they were. */
+const rewrittenStdPanics = (baseline, total, explicit, modules) => ({
+  ...baseline,
+  total,
+  explicit,
+  modules,
+  kept: baseline.kept,
+  residual: baseline.residual ?? [],
+})
+/**
+ * The differences between the counted non-`panic` sites and the `residual`
+ * entries, in each module that has an entry: one line per module, function
+ * and kind whose counts differ.
+ */
+const residualMismatches = (sites, residual) => {
+  const key = (module, fn, kind) => `${module} ${fn} ${kind}`
+  const owned = new Set(residual.map((r) => r.module))
+  const got = new Map()
+  for (const site of sites) {
+    if (site.kind !== "panic" && owned.has(site.module)) {
+      const k = key(site.module, site.function, site.kind)
+      got.set(k, (got.get(k) ?? 0) + 1)
+    }
+  }
+  const want = new Map()
+  for (const r of residual) {
+    for (const [kind, n] of Object.entries(r.sites)) {
+      const k = key(r.module, r.function, kind)
+      want.set(k, (want.get(k) ?? 0) + n)
+    }
+  }
+  return [...new Set([...got.keys(), ...want.keys()])]
+    .sort()
+    .filter((k) => (got.get(k) ?? 0) !== (want.get(k) ?? 0))
+    .map((k) => `${k}: ${got.get(k) ?? 0} counted, ${want.get(k) ?? 0} listed as residual`)
+}
 if (dealtHere("stdPanics")) {
   const baselineName = "tests/std-panics.json"
   const baselineFile = path.join(root, baselineName)
@@ -6754,7 +6801,7 @@ if (dealtHere("stdPanics")) {
     for (const module of Object.keys(counts).sort()) {
       modulesOut[module] = sorted(counts[module])
     }
-    const next = { ...baseline, total: sites.size, explicit, modules: modulesOut, kept: baseline.kept }
+    const next = rewrittenStdPanics(baseline, sites.size, explicit, modulesOut)
     fs.writeFileSync(baselineFile, `${JSON.stringify(next, null, 2)}\n`)
     console.log(`std-panics: rewrote ${baselineName} (${sites.size} sites)`)
     Object.assign(baseline, next)
@@ -6818,6 +6865,67 @@ if (dealtHere("stdPanics")) {
       ...keptGone.map((k) => `${k.module} ${k.function}: no explicit panic left; take it off the kept list`),
       ...baseline.kept.filter((k) => !k.reason).map((k) => `${k.module} ${k.function}: no reason`),
     ].join("\n")
+  )
+  const residual = baseline.residual ?? []
+  const residualModules = [...new Set(residual.map((r) => r.module))]
+  const mismatches = residualMismatches(sites.values(), residual)
+  check(
+    `std-panics: in every module with a residual entry, the counted sites are its entries, by function and kind`,
+    unreported.length === 0 && residual.length > 0 && mismatches.length === 0,
+    `${residual.length} entries in ${residualModules.length} modules\n${mismatches.join("\n")}\nA site fixed takes its entry off; a site left gets one, with its reason and record.`
+  )
+  // The comparison itself fails both ways: on a site its entries do not list
+  // (one fabricated extra site in the first entry's function), and on an entry
+  // that lists one site more than the code has (the first entry's first kind
+  // counted one too high).
+  const extra = residual.length > 0 ? { module: residual[0].module, function: residual[0].function, kind: "index" } : null
+  check(
+    `std-panics: the residual comparison fails on one site its entries do not list`,
+    extra !== null && residualMismatches([...sites.values(), extra], residual).length === 1,
+    "residualMismatches did not report a fabricated extra site"
+  )
+  const [overKind, overCount] = Object.entries(residual[0]?.sites ?? {})[0] ?? []
+  const overListed =
+    overKind === undefined
+      ? null
+      : [{ ...residual[0], sites: { ...residual[0].sites, [overKind]: overCount + 1 } }, ...residual.slice(1)]
+  check(
+    `std-panics: the residual comparison fails on an entry that lists one site more than the code has`,
+    overListed !== null && residualMismatches(sites.values(), overListed).length === 1,
+    "residualMismatches did not report a fabricated over-listed entry"
+  )
+  // Each record read once, however many entries cite it; null when missing.
+  const recordText = new Map()
+  const readRecord = (record) => {
+    if (!recordText.has(record)) {
+      const file = path.join(root, record)
+      recordText.set(record, fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null)
+    }
+    return recordText.get(record)
+  }
+  // A record names a residual function only as a backticked name in a table
+  // row, so a short name such as `chacha20` that appears elsewhere in the
+  // file does not count once its row is gone.
+  const namesInRow = (text, fn) =>
+    text !== null && text.split("\n").some((line) => line.startsWith("|") && line.includes(`\`${fn}\``))
+  const badRecords = residual.filter(
+    (r) =>
+      typeof r.reason !== "string" ||
+      r.reason.length === 0 ||
+      !r.record?.startsWith("docs/security/") ||
+      !namesInRow(readRecord(r.record), r.function)
+  )
+  check(
+    `std-panics: every residual entry says why, and its docs/security record exists and names its function`,
+    residual.length > 0 && badRecords.length === 0,
+    badRecords.map((r) => `${r.module} ${r.function}: no reason, or ${r.record} is missing or does not name it`).join("\n")
+  )
+  const rewritten = rewrittenStdPanics(baseline, sites.size, explicit, baseline.modules)
+  check(
+    `std-panics: --update-std-panics keeps the kept and residual lists`,
+    JSON.stringify(rewritten.residual) === JSON.stringify(residual) &&
+      JSON.stringify(rewritten.kept) === JSON.stringify(baseline.kept),
+    "the rewrite drops or changes kept or residual"
   )
   check(
     `std-panics: ${baselineName} counts ${explicit.kept} kept explicit panics and ${explicit.toFix} still to fix`,
@@ -12060,6 +12168,117 @@ int main(void) {
       )
     }
 
+    // A cursor call checks its handle alone, so every route that ends the
+    // read must free the cursor first. Two routes no Nish program can provoke
+    // on demand: SQLite rolling a read back on its own (an allocation failing
+    // inside a statement, as NOMEM, IOERR or FULL do), which only the
+    // connection's rollback hook sees; and a handle carried to another thread,
+    // whose cursor table is its own under --threads (-DNISH_THREADS). A helper with an allocator that refuses
+    // large blocks while one statement runs exits 0 only if the cursor then
+    // answers SQLITE_MISUSE (21, negated where a call answers a row) to every
+    // call, a thread given the handle gets
+    // SQLITE_MISUSE, and a handle of a closed connection's cursor names none
+    // of a later connection's. Built without SQLITE_DEBUG: SQLite's own
+    // assert in unlockBtreeIfUnused fires on an automatic rollback with a
+    // cursor open (docs/security/sqlite.md, open findings).
+    {
+      const helper = path.join(sqDir, "rolled-back.c")
+      const exe = path.join(sqDir, "rolled-back")
+      fs.writeFileSync(
+        helper,
+        `#include <pthread.h>
+#include <stdint.h>
+#include "sqlite3.h"
+int32_t nishsqlite_open(const char *, int32_t);
+int32_t nishsqlite_exec(int32_t, const char *);
+int32_t nishsqlite_close(int32_t);
+int32_t nishsqlite_begin_read(int32_t);
+int32_t nishsqlite_end_read(int32_t);
+int32_t nishsqlite_prepare(int32_t, const char *);
+int32_t nishsqlite_step(int32_t);
+int32_t nishsqlite_finalize(int32_t);
+int32_t nishsqlite_cursor_open(int32_t, const char *, const char *);
+int32_t nishsqlite_cursor_first(int32_t);
+int32_t nishsqlite_cursor_next(int32_t);
+int32_t nishsqlite_cursor_close(int32_t);
+int64_t nishsqlite_cursor_column_i64(int32_t, int32_t);
+int32_t nishsqlite_cursor_column_type(int32_t, int32_t);
+int64_t nishsqlite_cursor_rowid(int32_t);
+int32_t nishsqlite_key_i64(int32_t, int64_t);
+static sqlite3_mem_methods real;
+static int refusing;
+static void *m_malloc(int n) { return refusing && n > 4096 ? 0 : real.xMalloc(n); }
+static void *m_realloc(void *p, int n) { return refusing && n > 4096 ? 0 : real.xRealloc(p, n); }
+static void *other_thread(void *h) {
+  int32_t c = *(int32_t *)h;
+  *(int32_t *)h = nishsqlite_cursor_next(c) == -21 && nishsqlite_cursor_close(c) == 21 ? 0 : 1;
+  return 0;
+}
+static int32_t opened(int32_t db) {
+  if (db <= 0 || nishsqlite_exec(db, "CREATE TABLE t (a INTEGER, b TEXT);"
+      " WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 2000)"
+      " INSERT INTO t SELECT x, printf('%050d', x) FROM c") != 0 || nishsqlite_begin_read(db) != 0) return 0;
+  int32_t c = nishsqlite_cursor_open(db, "t", "a,b");
+  return c > 0 && nishsqlite_cursor_first(c) == 1 ? c : 0;
+}
+int main(void) {
+  sqlite3_config(SQLITE_CONFIG_GETMALLOC, &real);
+  sqlite3_mem_methods m = real;
+  m.xMalloc = m_malloc;
+  m.xRealloc = m_realloc;
+  if (sqlite3_config(SQLITE_CONFIG_MALLOC, &m) != 0) return 2;
+  int32_t db = nishsqlite_open(":memory:", 6);
+  int32_t c = opened(db);
+  if (c == 0) return 3;
+  int32_t s = nishsqlite_prepare(db, "SELECT length(group_concat(b)) FROM t");
+  refusing = 1;
+  int32_t stepped = nishsqlite_step(s);
+  refusing = 0;
+  if (stepped != 7) return 4;
+  if (nishsqlite_cursor_next(c) != -21 || nishsqlite_cursor_rowid(c) != 0 || nishsqlite_cursor_column_i64(c, 0) != 0 ||
+      nishsqlite_cursor_column_type(c, 0) != -21 || nishsqlite_key_i64(c, 1) != 21 || nishsqlite_cursor_close(c) != 21) return 5;
+  if (nishsqlite_finalize(s) != 0 || nishsqlite_close(db) != 0) return 6;
+  db = nishsqlite_open(":memory:", 6);
+  c = opened(db);
+  if (c == 0) return 7;
+  int32_t handed = c;
+  pthread_t t;
+  if (pthread_create(&t, 0, other_thread, &handed) != 0 || pthread_join(t, 0) != 0 || handed != 0) return 8;
+  if (nishsqlite_cursor_next(c) != 1 || nishsqlite_close(db) != 0) return 9;
+  int32_t later = nishsqlite_open(":memory:", 6);
+  int32_t d = opened(later);
+  if (d == 0 || d == c || nishsqlite_cursor_next(c) != -21 || nishsqlite_cursor_next(d) != 1) return 10;
+  if (nishsqlite_cursor_close(d) != 0 || nishsqlite_end_read(later) != 0) return 11;
+  return nishsqlite_close(later) == 0 ? 0 : 12;
+}
+`
+      )
+      const built = spawnSync(
+        "clang",
+        [
+          "-O0",
+          "-w",
+          `-I${path.join(root, "runtime", "sqlite")}`,
+          "-DSQLITE_OMIT_SHARED_CACHE",
+          "-DSQLITE_THREADSAFE=1",
+          "-DNISH_THREADS=1",
+          path.join(root, "runtime", "sqlite", "nish-sqlite.c"),
+          helper,
+          "-o",
+          exe,
+          "-lpthread",
+          "-lm",
+        ],
+        { encoding: "utf8" }
+      )
+      const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      check(
+        "sqlite-link: a cursor answers SQLITE_MISUSE after SQLite rolls its read back on its own, on another thread, and after its connection closes",
+        ran !== null && ran.status === 0,
+        built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stderr}` : "")
+      )
+    }
+
     // What ships of runtime/sqlite/: its units, its headers and its notice.
     // The README's SHA3-256 lines name the two vendored files' bytes, and each
     // of release.yml's presence gates names every shipped file.
@@ -12419,6 +12638,24 @@ int main(void) {
         shapesRun.stdout === fs.readFileSync(path.join(root, shapesDir, "expected.out"), "utf8"),
       shapesDebug.stderr + (shapesRun ? shapesRun.stdout.slice(-2000) + shapesRun.stderr : "")
     )
+    // countRange's program with SQLite's counters and asserts on. Its steady
+    // seek and count loop is then measured, not trivially flat: its last line
+    // says the counters ran, and the rest is the default build's output.
+    const countDir = path.join("tests", "link", "std_sqlite_cursor_count")
+    const countDebug = link(path.join(countDir, "main.ts"), "count-memstatus", [], {
+      NISH_SQLITE_CFLAGS: "-DSQLITE_DEFAULT_MEMSTATUS=1 -DSQLITE_DEBUG",
+    })
+    const countRun = countDebug.status === 0 ? runOut("count-memstatus") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_count's countRange reuses its buffer: no allocation after the first pass (SQLITE_DEFAULT_MEMSTATUS=1, -DSQLITE_DEBUG)",
+      countRun !== null &&
+        countRun.status === 0 &&
+        countRun.stdout ===
+          fs
+            .readFileSync(path.join(root, countDir, "expected.out"), "utf8")
+            .replace("memory counted: false\n", "memory counted: true\n"),
+      countDebug.stderr + (countRun ? countRun.stdout.slice(-2000) + countRun.stderr : "")
+    )
     // The default build has no virtual-table module, so the schema program
     // makes an rtree only when SQLite is built with one.
     const rtree = link(path.join("tests", "link", "std_sqlite_cursor_schema", "main.ts"), "schema-rtree", [], {
@@ -12549,6 +12786,91 @@ int main(void) {
         seekPeak === seekUsed &&
         seekAfter === seekUsed,
       mem.stderr + (memRun ? memRun.stdout + memRun.stderr : "")
+    )
+    // Cursor.readRow under SQLite's asserts: its columns are read through
+    // the same record the per-column calls unpack, overflow copy included.
+    const rowDir = path.join("tests", "link", "std_sqlite_cursor_row")
+    const rowDebug = link(path.join(rowDir, "main.ts"), "row-debug", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEBUG" })
+    const rowDebugRun = rowDebug.status === 0 ? runOut("row-debug") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_row passes with SQLite's asserts on (-DSQLITE_DEBUG)",
+      rowDebugRun !== null &&
+        rowDebugRun.status === 0 &&
+        rowDebugRun.stdout === fs.readFileSync(path.join(root, rowDir, "expected.out"), "utf8"),
+      rowDebug.stderr + (rowDebugRun ? rowDebugRun.stdout.slice(-2000) + rowDebugRun.stderr : "")
+    )
+    // A readRow walk takes no more of SQLite's heap once warm. This watches
+    // sqlite3_memory_used and its highwater only: SQLite's allocator, which
+    // holds the cursor's record buffer and its overflow cache, not the Nish
+    // heap, where selectRow's column list and readRow's answer slots live in
+    // the Cursor's rowIo. The first pass reads every row, the 5,000-byte overflow ones
+    // among them, so those reach their size; two more passes then keep
+    // SQLite's memory where it was, and both the text bytes and the integers
+    // sum to what the rows hold.
+    const rowMemTs = path.join(sqDir, "cursor-row-memory.ts")
+    fs.writeFileSync(
+      rowMemTs,
+      [
+        'import { Cursor, OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";',
+        "",
+        "declare function sqlite3_memory_used(): i64;",
+        "declare function sqlite3_memory_highwater(reset: i32): i64;",
+        "",
+        "const pass = (cur: Cursor, ints: i64[], spans: i32[], text: u8[]): i64 => {",
+        "  let got = toI64(0);",
+        '  let more = cur.first().expect("first");',
+        "  while (more) {",
+        '    got = got + toI64(cur.readRow(ints, spans, text).expect("readRow")) + ints[0] + ints[1];',
+        '    more = cur.next().expect("next");',
+        "  }",
+        "  return got;",
+        "};",
+        "",
+        "export const main = (): i32 => {",
+        '  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");',
+        "  db.exec(",
+        '    "CREATE TABLE w (id INTEGER PRIMARY KEY, a INTEGER, big TEXT, s TEXT);" +',
+        '      "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 2000)" +',
+        "      \" INSERT INTO w SELECT x, x * 3, CASE WHEN x % 4 = 0 THEN printf('%05000d', x) ELSE 'ab' END, NULL FROM c\"",
+        '  ).expect("fill");',
+        '  db.beginRead().expect("beginRead");',
+        '  const cur = db.openCursor("w", "id,a,big,s").expect("open w");',
+        "  const cols: i32[] = [0, 1, 2, 3];",
+        "  const ints = new Array<i64>(4);",
+        "  const spans = new Array<i32>(12);",
+        "  const text = new Array<u8>(8192);",
+        '  cur.selectRow(cols).expect("selectRow");',
+        "  const once = pass(cur, ints, spans, text);",
+        "  const used = sqlite3_memory_used();",
+        "  sqlite3_memory_highwater(1);",
+        "  const twice = pass(cur, ints, spans, text) + pass(cur, ints, spans, text);",
+        "  const peak = sqlite3_memory_highwater(0);",
+        "  const after = sqlite3_memory_used();",
+        "  console.log(`${once} ${twice} ${used} ${peak} ${after}`);",
+        '  cur.close().expect("close");',
+        '  db.endRead().expect("endRead");',
+        '  db.close().expect("close the database");',
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const rowMem = link(rowMemTs, "cursor-row-memory", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEFAULT_MEMSTATUS=1" })
+    const rowMemRun = rowMem.status === 0 ? runOut("cursor-row-memory") : null
+    const [rowOnce, rowTwice, rowUsed, rowPeak, rowAfter] = (rowMemRun ? rowMemRun.stdout.trim() : "").split(" ")
+    // Rows 1..2000: id + 3 * id each, and text of 5,000 bytes on every
+    // fourth row and 2 bytes on the rest.
+    const rowWant = 4 * ((2000 * 2001) / 2) + 500 * 5000 + 1500 * 2
+    check(
+      "sqlite-link: after a first pass, two readRow walks over overflow rows keep SQLite's heap flat (sqlite3_memory_used, not the Nish heap)",
+      rowMemRun !== null &&
+        rowMemRun.status === 0 &&
+        rowOnce === String(rowWant) &&
+        rowTwice === String(2 * rowWant) &&
+        Number(rowUsed) > 0 &&
+        rowPeak === rowUsed &&
+        rowAfter === rowUsed,
+      rowMem.stderr + (rowMemRun ? rowMemRun.stdout + rowMemRun.stderr : "")
     )
 
     // A Node addon links SQLite too, and keeps its API to itself: a Node that
@@ -13881,6 +14203,29 @@ if (dealtHere("cryptoChecks")) {
         return !guard.test(body)
       }).map(([fn]) => fn)
       check(name, c.status === 0 && missing.length === 0, c.status === 0 ? `no guard in: ${missing.join(", ")}` : c.stderr)
+    }
+  }
+
+  // WP83 S5: `chacha20Poly1305Seal` refuses a plaintext whose sealed form, sixteen bytes
+  // longer, would not be an array length. Under `--number-mode f64` a length of 2^31 or
+  // more saturates to 2^31 - 1 in `toI32`, which the guard refuses, so the sum it bounds
+  // (`len + POLY1305_TAG_SIZE`) never wraps. A 2 GiB test is impractical, so this reads
+  // the f64 IR, as the ed25519 check above does: Seal must compare the length against
+  // 2^31 - 17 and answer `null`. Deleting the guard fails it.
+  {
+    const name = "crypto: chacha20Poly1305Seal answers null on a plaintext longer than 2^31 - 17 bytes (--number-mode f64)"
+    if (!only || [name, "crypto_chacha20poly1305"].some((selector) => selector.includes(only))) {
+      const dir = path.join(buildDir, "chacha20poly1305-length-guard")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const c = spawnNish(
+        [path.join(root, "tests/link/crypto_chacha20poly1305_f64/main.ts"), "--number-mode", "f64", "--allow-panics", "-o", `${dir}/`],
+        { cwd: root, encoding: "utf8" }
+      )
+      const ir = c.status === 0 ? fs.readFileSync(path.join(dir, "chacha20poly1305.ll"), "utf8") : ""
+      const body = (ir.match(/^define [^\n]*@"?nish\.chacha20Poly1305Seal"?\([\s\S]*?\n\}/m) ?? [""])[0]
+      const guard = /fptosi\.sat\.i32\.f64[^\n]*\n[^\n]*\n\s+(%\d+) = load i32, i32\* %len\.addr[^\n]*\n\s+(%\d+) = icmp sgt i32 \1, 2147483631\n\s+br i1 \2, label %(if\.then[\w.]*), label[^\n]*\n\n\3:\n\s+ret %struct\.nish_array\* null\n/
+      check(name, c.status === 0 && guard.test(body), c.status === 0 ? `no guard in:\n${body.slice(0, 1500)}` : c.stderr)
     }
   }
 
@@ -18782,16 +19127,17 @@ if (dealtHere("runtimeChecks")) {
       const exe = path.join(buildDir, "uring-test")
       const cc = spawnSync(
         "clang",
-        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/runtime/uring-test.c", "-o", exe],
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/runtime/uring-test.c", "runtime/runtime-net.c", "-Iruntime", "-o", exe],
         { cwd: root, encoding: "utf8" }
       )
-      check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c under -Werror", cc.status === 0, cc.stderr)
+      check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c and runtime-net.c under -Werror", cc.status === 0, cc.stderr)
       const modes = [
         ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
         ["hupheld", "a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)"],
+        ["direct", "a direct wait on the ring (IORING_ENTER_EXT_ARG) sleeps its bound idle, ends early on its minimum, waits the bound out short of it, answers a watched pipe by POLL_ADD, does not sleep while that answer is untaken, and a ring without EXT_ARG is refused it (NURING-45)"],
         ["shutclose", "a close waits for its slot's shutdown, which io-wq resolves late, so the slot's next connection reads no end of the stream (NURING-39)"],
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
@@ -18800,6 +19146,12 @@ if (dealtHere("runtimeChecks")) {
         ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
         ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
         ["reset", "a send the peer resets fails once as SEND_FAILED, and its record is freed once"],
+        ["coalesce", "a head+body response and three back-to-back writes each leave as one SEND (NURING-40)"],
+        ["inflight", "writes behind a SEND in flight join one record and arrive in order across short sends (NURING-40)"],
+        ["pool", "a burst leaves no buffer on an idle slot and exactly UR_SENDPOOL_MAX cached, and steady responses allocate none (NURING-41)"],
+        ["shutpool", "1,000 one-byte writes, each behind a repeated shutdown, hold at most five pool buffers (NURING-43)"],
+        ["bigsend", "steady 64 KiB responses leave as one SEND per chained pool buffer and allocate nothing after a warm-up, a shutdown's included (NURING-51)"],
+        ["netwrite", "netWrite2 through runtime-net.c's ring slots, and three back-to-back netWrites, each leave as one SEND (NURING-40)"],
       ]
       for (const [mode, what] of cc.status === 0 ? modes : []) {
         const run = spawnSync(exe, [mode], { encoding: "utf8", timeout: 180_000 })
@@ -19231,31 +19583,97 @@ if (dealtHere("runtimeChecks")) {
     // to bytes 4 and 8. That mismatch made the wasi profile hand out wild pointers for any
     // program allocating from compiled code. -fsyntax-only needs no sysroot and no linker,
     // so the guard runs wherever clang does.
-    const abiSrc = path.join(buildDir, "abi_layout.c")
+    //
+    // The arena and array assertions are derived, not typed out. The field types come
+    // from `ARENA_TYPE` and `ARRAY_TYPE` in src/runtime.ts, the strings the compiler
+    // writes into every module. They are laid out the way LLVM lays out a non-packed
+    // struct: an `i64` is 8 bytes aligned to 8 on both targets, and an `i8*` is the
+    // target's pointer, which clang reports for each target as `__SIZEOF_POINTER__`.
+    // The C names are pinned here by the index the compiler means them at (the
+    // `inlineAllocator` GEPs in src/runtime.ts, the array GEPs, the wasm loader), not
+    // read from nish.h, so reordering nish.h's fields fails too. Each named field is
+    // asserted at its IR offset and with its IR size, and the struct at its IR size.
+    // The numbers used to be typed out here, so an `ARENA_TYPE` edit that moves fields
+    // only where a pointer is 4 bytes (`off` turned from `i64` into `i8*`) passed every
+    // check: the C side still matched the old numbers, and nothing moves on the host
+    // the smoke run above links for. A type this layout does not know, a definition
+    // the pattern no longer finds, or a field count the names do not cover fails the
+    // derivation check. The clang runs below still run then, with what is left.
+    const abiRuntimeTs = fs.readFileSync(path.join(root, "src", "runtime.ts"), "utf8")
+    const abiIrFields = (constant, struct) => {
+      const m = abiRuntimeTs.match(new RegExp(`${constant}: string = "%struct\\.${struct} = type \\{ ([^}]*) \\}"`))
+      return m === null ? null : m[1].split(", ")
+    }
+    const abiStructs = [
+      { c: "struct nish_arena", ir: abiIrFields("ARENA_TYPE", "nish_arena"), names: ["buf", "off", "cap", "chunks"] },
+      { c: "nish_array", ir: abiIrFields("ARRAY_TYPE", "nish_array"), names: ["len", "cap", "data"] },
+    ]
+    /** The offsets, field sizes and size LLVM gives a non-packed struct of `types` when a pointer is `ptr` bytes, or null for a type it does not know. */
+    const abiIrLayout = (types, ptr) => {
+      let at = 0
+      let align = 1
+      const offsets = []
+      const sizes = []
+      for (const type of types) {
+        const bytes = type === "i64" ? 8 : type.endsWith("*") ? ptr : 0
+        if (bytes === 0) return null
+        at = Math.ceil(at / bytes) * bytes
+        offsets.push(at)
+        sizes.push(bytes)
+        at += bytes
+        align = Math.max(align, bytes)
+      }
+      return { offsets, sizes, size: Math.ceil(at / align) * align }
+    }
     const abiInclude = `-I${path.join(root, "runtime")}`
-    fs.writeFileSync(
-      abiSrc,
+    const abiTargets = ["host", "wasm32-unknown-unknown"].map((target) => {
+      const flags = target === "host" ? [] : [`--target=${target}`]
+      const macros = spawnSync("clang", [...flags, "-dM", "-E", "-x", "c", "/dev/null"], { encoding: "utf8" })
+      const ptr = /#define __SIZEOF_POINTER__ (\d+)/.exec(String(macros.stdout))
+      return { target, flags, ptr: ptr === null ? null : Number(ptr[1]) }
+    })
+    const abiAsserts = (ptr) => {
+      if (ptr === null) return null
+      const lines = []
+      for (const s of abiStructs) {
+        const laid = s.ir === null ? null : abiIrLayout(s.ir, ptr)
+        if (laid === null || s.names.length !== s.ir.length) return null
+        const irType = `{ ${s.ir.join(", ")} }`
+        lines.push(`_Static_assert(sizeof(${s.c}) == ${laid.size}, "${s.c} is the size of ${irType}");`)
+        s.names.forEach((name, i) => {
+          const what = `${s.c}.${name} is field ${i} of ${irType}`
+          lines.push(`_Static_assert(offsetof(${s.c}, ${name}) == ${laid.offsets[i]}, "${what}");`)
+          lines.push(`_Static_assert(sizeof(((${s.c} *)0)->${name}) == ${laid.sizes[i]}, "${what}");`)
+        })
+      }
+      return lines
+    }
+    const abiDerived = abiTargets.map(({ ptr }) => abiAsserts(ptr))
+    check(
+      "the runtime ABI asserts are derived from src/runtime.ts's ARENA_TYPE and ARRAY_TYPE on every target",
+      abiDerived.every((lines) => lines !== null),
       [
-        "/* Generated by tests/run.js: the runtime ABI layouts, asserted per target. */",
-        "#include <stddef.h>",
-        '#include "nish.h"',
-        '_Static_assert(sizeof(struct nish_arena) == 32, "arena: %struct.nish_arena = { i8*, i64, i64, i8* }");',
-        '_Static_assert(offsetof(struct nish_arena, off) == 8, "arena.off is the field the inlined allocator bumps");',
-        '_Static_assert(offsetof(struct nish_arena, cap) == 16, "arena.cap is the field the inlined allocator compares");',
-        '_Static_assert(offsetof(struct nish_arena, chunks) == 24, "arena.chunks");',
-        '_Static_assert(offsetof(nish_str, data) == 8, "nish_str = { i64 len, bytes }");',
-        '_Static_assert(sizeof(nish_array) == 24, "nish_array = { i64, i64, i8* }");',
-        '_Static_assert(offsetof(nish_array, cap) == 8, "nish_array.cap");',
-        '_Static_assert(offsetof(nish_array, data) == 16, "nish_array.data, the offset the wasm loader reads");',
-        "",
+        ...abiStructs.map((s) => `${s.c}: IR fields ${JSON.stringify(s.ir)}, names ${JSON.stringify(s.names)}`),
+        ...abiTargets.map((t) => `${t.target}: __SIZEOF_POINTER__ ${t.ptr}`),
       ].join("\n")
     )
     // Each target twice: the ordinary header, and the one a `--threads` host
     // includes. `-DNISH_THREADS` moves the arena into thread-local storage and
     // must move nothing else, so the same assertions have to hold under it —
     // a storage class is not a layout, and this is where that is written down.
-    for (const target of ["host", "wasm32-unknown-unknown"]) {
-      const flags = target === "host" ? [] : [`--target=${target}`]
+    for (const [at, { target, flags }] of abiTargets.entries()) {
+      const abiSrc = path.join(buildDir, `abi_layout_${target}.c`)
+      fs.writeFileSync(
+        abiSrc,
+        [
+          "/* Generated by tests/run.js: the runtime ABI layouts, asserted per target. */",
+          "#include <stddef.h>",
+          '#include "nish.h"',
+          ...(abiDerived[at] ?? []),
+          '_Static_assert(offsetof(nish_str, data) == 8, "nish_str = { i64 len, bytes }");',
+          "",
+        ].join("\n")
+      )
       for (const threads of [[], ["-DNISH_THREADS=1"]]) {
         const a = spawnSync(
           "clang",
@@ -21490,8 +21908,8 @@ if (dealtHere("simd")) {
   // to a branch on `nish_chacha20_hw`: runtime-chacha20.c's `nish_chacha20_xor` (eight
   // blocks at once on AVX2, four on NEON) on one arm, the Nish loop on the other, and the
   // Nish loop again when the kernel's guard refuses the call (under four blocks, an
-  // offset or window it cannot vouch for), so a bad window panics with the Nish message
-  // on either path (src/kernels.ts). `tests/link/chacha20_hw_agree` holds both arms to
+  // offset or window it cannot vouch for), so a bad window takes the Nish loop on either
+  // path, which stops at the window's end (WP83 S5; src/kernels.ts). `tests/link/chacha20_hw_agree` holds both arms to
   // Node's ChaCha20-Poly1305 and raw ChaCha20 over a seeded corpus whose lengths sit at
   // each of the kernel's block boundaries. It is linked with the kernel wrapped
   // (`-Wl,--wrap`) by a counter that reports its calls on exit, then run with
@@ -22850,6 +23268,7 @@ if (dealtHere("cliChecks")) {
     const stringsDts = fs.existsSync(sidecar("strings", "d.ts"))
       ? fs.readFileSync(sidecar("strings", "d.ts"), "utf8")
       : ""
+    // nish-function: the wasm interop's .d.ts text, not a Nish program
     check(
       "add.d.ts declares `add(a: number, b: number): number` and `load(bytes: BufferSource): Promise<Exports>`",
       addDts.includes("  add(a: number, b: number): number;") &&
@@ -26430,7 +26849,7 @@ if (dealtHere("cliChecks")) {
       "json-doc":
         "std/json-tokenizer.ts:604:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 120 → 120 bytes",
       "zlib-each":
-        "std/compress/deflate.ts:674:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 256 → 256 bytes",
+        "std/compress/deflate.ts:749:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
       "request-slot":
         "std/net/http-server.ts:238:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 200 → 200 bytes",
     }
@@ -27454,7 +27873,7 @@ if (dealtHere("cliChecks")) {
         fs.mkdirSync(libApp, { recursive: true })
         fs.writeFileSync(
           path.join(libApp, "lib.ts"),
-          "declare function pkg_link_triple(x: i32): i32\n\nexport function triple(x: i32): i32 {\n  return pkg_link_triple(x)\n}\n"
+          "declare function pkg_link_triple(x: i32): i32\n\nexport const triple = (x: i32): i32 => {\n  return pkg_link_triple(x)\n};\n"
         )
         fs.writeFileSync(
           path.join(libApp, "main.ts"),
@@ -35282,7 +35701,9 @@ export const main = (): number => {
       return 1
     }
     const day: i64 = 86400000
-    console.log(\`\${releaseCacheFresh(c, 1010, day)} \${releaseCacheFresh(c, 1000 + day - 1, day)} \${releaseCacheFresh(c, 1000 + day, day)} \${releaseCacheFresh(c, 999, day)}\`)
+    const early: ReleaseCache = new ReleaseCache()
+    early.checkedMs = -10
+    console.log(\`\${releaseCacheFresh(c, 1010, day)} \${releaseCacheFresh(c, 1000 + day - 1, day)} \${releaseCacheFresh(c, 1000 + day, day)} \${releaseCacheFresh(c, 999, day)} \${releaseCacheFresh(early, 5, day)}\`)
     console.log(\`\${show(releaseCacheParse("checked 5\\nlatest \\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0/../x\\n"))} \${show(releaseCacheParse("checked x\\nlatest 1.0.0\\n"))} \${show(releaseCacheParse("latest 1.0.0\\nchecked 5\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\nextra\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\n\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0"))}\`)
     console.log(\`\${show(releaseCacheRead(${q(cachePaths.good)}))} \${show(releaseCacheRead(${q(cachePaths.link)}))} \${show(releaseCacheRead(${q(cachePaths.groupWritable)}))} \${show(releaseCacheRead(${q(cachePaths.garbage)}))} \${show(releaseCacheRead(${q(cachePaths.missing)}))} \${releaseFileTrusted(${q(cachePaths.good)})} \${releaseFileTrusted(${q(cachePaths.link)})}\`)
     const newer = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
@@ -35320,7 +35741,7 @@ export const main = (): number => {
           )
           check(
             "nish/release: a cache is fresh for less than its age, never at it, and never when dated ahead",
-            cacheLines[1] === "true true false false",
+            cacheLines[1] === "true true false false false",
             cacheLines[1],
           )
           check(
@@ -35991,6 +36412,130 @@ if (!only || "net_ring".includes(only)) {
       "echo",
       "served 3000 connections with fewer than 64 descriptors\n"
     )
+    // The stats dump (runtime-net.c, NISH_URING_STATS): `echo.ts` again,
+    // driven by a client written here, which reads the server's stderr. Once
+    // all 3,000 connections have echoed it sends SIGUSR1 and one more byte,
+    // so a loop asleep in its wait pumps again, and ends the connections once
+    // the `signal` line is out; closing the listener prints `close`. The
+    // figures pin the struct runtime-net.c declares against runtime-uring.c's:
+    // a field out of place reads another counter. The twin runs without the
+    // knob and sends the same SIGUSR1, which must end the server by its
+    // default action, with nothing on stderr: no handler was installed.
+    if (room >= 1024) {
+      const b = build("net_ring_beyond_limit", "echo.ts")
+      const stats = path.join(dir, "stats.mjs")
+      fs.writeFileSync(
+        stats,
+        `import { spawn } from "node:child_process"
+import net from "node:net"
+const [exe, knob] = process.argv.slice(2)
+const env = { ...process.env }
+delete env.NISH_URING_STATS
+if (knob) env.NISH_URING_STATS = knob
+const server = spawn("bash", ["-c", 'ulimit -n 1024 && exec "$0"', exe], { stdio: ["ignore", "pipe", "pipe"], env })
+let out = "", err = "", echoed = 0, asked = false
+const sockets = []
+const finish = (why) => {
+  process.stdout.write(JSON.stringify({ why, out, err }))
+  process.exit(0)
+}
+const timer = setTimeout(() => {
+  server.kill("SIGKILL")
+  finish("timed out")
+}, 120000)
+server.stderr.setEncoding("utf8")
+server.stderr.on("data", (d) => {
+  err += d
+  if (asked && /^uring-stats signal /m.test(err)) {
+    asked = false
+    for (const s of sockets) s.end()
+  }
+})
+server.stdout.setEncoding("utf8")
+server.stdout.on("data", (d) => {
+  out += d
+  const m = sockets.length > 0 ? null : /^port (\\d+)\\n/.exec(out)
+  if (m === null) return
+  for (let k = 0; k < 3000; k++) {
+    const s = net.connect({ host: "127.0.0.1", port: Number(m[1]) })
+    sockets.push(s)
+    let got = 0
+    s.on("error", () => {})
+    s.on("connect", () => s.write("ping\\n"))
+    s.on("data", (x) => {
+      got += x.length
+      if (got !== 5 || ++echoed !== 3000) return
+      if (!knob) {
+        server.kill("SIGUSR1")
+        return
+      }
+      asked = true
+      server.kill("SIGUSR1")
+      sockets[0].write("x")
+    })
+  }
+})
+server.on("exit", (code, sig) => {
+  clearTimeout(timer)
+  finish(sig === null ? \`exit \${code}\` : \`signal \${sig}\`)
+})
+`
+      )
+      const drive = (knob) => {
+        if (b.exe === null) return null
+        const r = spawnSync(process.execPath, [stats, b.exe, knob], { encoding: "utf8", timeout: 180000 })
+        try {
+          return JSON.parse(r.stdout)
+        } catch {
+          return { why: `the driver failed: ${shown(r)}`, out: "", err: "" }
+        }
+      }
+      const on = drive("1")
+      if (on !== null && on.why === "exit 2" && on.out.includes("rings refused: ")) {
+        skip("net_ring: NISH_URING_STATS: this kernel refuses io_uring")
+      } else {
+        const line = (why) => {
+          const m = new RegExp(
+            `^uring-stats ${why} port=\\d+ sends=(\\d+) pool_new=(\\d+) pool_held=(\\d+) pool_cached=(\\d+) live=(\\d+) slots=(\\d+) enters=(\\d+) windows=(\\d+) window_waits=(\\d+)$`,
+            "m"
+          ).exec(on?.err ?? "")
+          return m === null ? null : m.slice(1).map(Number)
+        }
+        const sig = line("signal")
+        const end = line("close")
+        // [sends, pool_new, pool_held, pool_cached, live, slots, enters, windows, window_waits]
+        check(
+          "net_ring: NISH_URING_STATS=1 prints a ring set's sends, pool buffers, live slots, slots, enters and batch windows on SIGUSR1 and at the listener's close",
+          on !== null &&
+            on.why === "exit 0" &&
+            sig !== null &&
+            end !== null &&
+            sig[0] >= 3000 &&
+            sig[1] >= 1 &&
+            sig[4] === 3000 &&
+            sig[5] >= 3000 &&
+            end[0] >= sig[0] &&
+            end[2] === 0 &&
+            end[3] >= 1 &&
+            end[3] <= end[1] &&
+            end[4] === 0 &&
+            end[5] === sig[5] &&
+            sig[6] >= 1 &&
+            end[6] >= sig[6] &&
+            end[7] >= sig[7] &&
+            end[8] >= sig[8],
+          on === null ? `does not compile and link\n${shown(b.c)}` : `${on.why}\nstdout: ${on.out}\nstderr: ${on.err}`
+        )
+        const off = drive("")
+        check(
+          "net_ring: without NISH_URING_STATS a ring server installs no SIGUSR1 handler: the signal ends it and it prints no ring stats",
+          off !== null && off.why === "signal SIGUSR1" && off.err === "",
+          off === null ? `does not compile and link\n${shown(b.c)}` : `${off.why}\nstdout: ${off.out}\nstderr: ${off.err}`
+        )
+      }
+    } else {
+      skip(`net_ring: NISH_URING_STATS: the hard descriptor limit here is ${hard.stdout.trim()}, under 1,024`)
+    }
     // NURING-38: a slot that read its request to -11 holds no receive queue.
     // Under a limit of 4,096 the 3,000 slots share one ring, whose 2 MiB of
     // provided buffers and the slots' table entries come to about 800 bytes
@@ -36162,6 +36707,132 @@ if (!only || "net_ring".includes(only)) {
         r === null ? `does not build\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
       )
     }
+    // pollWaitBatch (NURING-45). `batch.ts` runs under `noepoll.c`, whose
+    // filter makes every epoll wait answer EPERM: its loop holds only ring
+    // slots, so it must sleep on its ring directly, and a wait that reached
+    // epoll fails the program. Its exit status is the verdict: 2 says rings
+    // were refused, 3 that the kernel takes no filter, 4 that its io_uring has
+    // no IORING_FEAT_EXT_ARG, each a counted skip. `batch.ts signal` adds
+    // signalFd() to the loop, asks for 256 events with a maxWaitMs of 5,000,
+    // and a SIGTERM sent 300 ms in must end the wait within 2,500 ms.
+    const noepoll = path.join(dir, "noepoll")
+    const ne = known
+      ? spawnSync("clang", ["-O1", "-o", noepoll, path.join(linkDir, "net_ring_batch", "noepoll.c")], {
+          encoding: "utf8",
+        })
+      : null
+    const bb = build("net_ring_batch", "batch.ts")
+    const skips = { 2: "the kernel refused rings", 3: "the kernel takes no seccomp filter", 4: "its io_uring has no IORING_FEAT_EXT_ARG" }
+    const batchName =
+      "net_ring: pollWaitBatch on ring slots answers a full batch at once, a short one at maxWaitMs, an idle one at its timeout and caps a batch at ready's room, with every epoll wait refused"
+    const br = bb.exe !== null && ne !== null && ne.status === 0 ? spawnSync(noepoll, [bb.exe], { encoding: "utf8", timeout: 60000 }) : null
+    if (!known) {
+      skip(`${batchName}: noepoll.c names the epoll waits on x86_64 and aarch64 only, not ${process.arch}`)
+    } else if (br !== null && skips[br.status] !== undefined) {
+      skip(`${batchName}: ${skips[br.status]}`)
+    } else {
+      check(
+        batchName,
+        br !== null && br.status === 0 && br.stdout.includes("batch: a ready of 8 capped a wait for 16 at 4\n"),
+        br === null ? `does not build\n${shown(bb.exe === null ? bb.c : ne)}` : `signal ${br.signal}\n${shown(br)}`
+      )
+    }
+    const sr = bb.exe === null ? null : spawnSync(bb.exe, ["signal"], { encoding: "utf8", timeout: 60000 })
+    const sigName = "net_ring: a SIGTERM ends a pollWaitBatch for 256 events long before its maxWaitMs"
+    if (sr !== null && sr.status === 2) {
+      skip(`${sigName}: the kernel refused rings`)
+    } else {
+      check(
+        sigName,
+        sr !== null && sr.status === 0 && sr.stdout.includes("signal: SIGTERM ended a wait for 256 after "),
+        sr === null ? `does not build\n${shown(bb.c)}` : `signal ${sr.signal}\n${shown(sr)}`
+      )
+    }
+    // `batch.ts apart`: a wait for 8 with a maxWaitMs of 3,000 on a loop no
+    // ring source has joined answers its one datagram at once, though a ring
+    // listener is live elsewhere. `batch.ts reuse`: a UDP socket that takes a
+    // closed signalFd()'s number is reported, though the ring's poll is still
+    // armed on the old pipe; `reusefile` closes it with fileClose, the other
+    // closer that takes a program's number (NURING-49). 5 says the socket took
+    // another number.
+    const cases = [
+      ["apart", "net_ring: pollWaitBatch on a loop no ring source joined answers as pollWait does, not at its maxWaitMs", "apart: "],
+      ["reuse", "net_ring: a socket on a closed signalFd()'s number is reported, not taken for the ring's watch", "reuse: "],
+      [
+        "reusefile",
+        "net_ring: a socket on a signalFd() number fileClose freed is reported, not taken for the ring's watch",
+        "reuse: ",
+      ],
+    ]
+    for (const [mode, name, line] of cases) {
+      const r = bb.exe === null ? null : spawnSync(bb.exe, [mode], { encoding: "utf8", timeout: 60000 })
+      if (r !== null && r.status === 2) {
+        skip(`${name}: the kernel refused rings`)
+      } else if (r !== null && r.status === 5) {
+        skip(`${name}: the socket did not take the closed number`)
+      } else {
+        check(
+          name,
+          r !== null && r.status === 0 && r.stdout.includes(line),
+          r === null ? `does not build\n${shown(bb.c)}` : `signal ${r.signal}\n${shown(r)}`
+        )
+      }
+    }
+    // `batch.ts trickle`: 16 bytes arrive 10 ms apart into one wait for 16
+    // with a maxWaitMs of 400. Its two `signal` stats lines, before and after
+    // the wait, bound what the window did: it sleeps in at most eight slices
+    // and pumps once after each, so it waits and pumps at most 8 times, and
+    // the stretch from before the first byte to after the reads enters the
+    // ring fewer than 50 times: 4 waits and 39 enters in each of 10 runs. The
+    // window it replaced, which slept on the ring for the rest of `min`, woke
+    // once per byte: 16 waits and 62 enters in each of 10 runs.
+    const tk = bb.exe === null ? null : spawnSync(bb.exe, ["trickle"], { encoding: "utf8", timeout: 60000, env: { ...process.env, NISH_URING_STATS: "1" } })
+    const tkName = "net_ring: a pollWaitBatch window that bytes trickle into waits and pumps at most 8 times and enters the ring fewer than 50 times"
+    if (tk !== null && tk.status === 2) {
+      skip(`${tkName}: the kernel refused rings`)
+    } else {
+      const lines = [...(tk?.stderr ?? "").matchAll(/^uring-stats signal port=\d+ .* enters=(\d+) windows=(\d+) window_waits=(\d+)$/gm)].map((m) =>
+        m.slice(1).map(Number)
+      )
+      const [a, b] = lines.length === 2 ? lines : [null, null]
+      check(
+        tkName,
+        tk !== null &&
+          tk.status === 0 &&
+          tk.stdout.includes("trickle: one wait for 16 took 16 bytes") &&
+          a !== null &&
+          b[1] - a[1] === 1 &&
+          b[2] - a[2] >= 1 &&
+          b[2] - a[2] <= 8 &&
+          b[0] - a[0] < 50,
+        tk === null ? `does not build\n${shown(bb.c)}` : `signal ${tk.signal}\n${shown(tk)}`
+      )
+    }
+    // `batch.ts unfilled`: one byte into a wait for 16 with a maxWaitMs of
+    // 400, so the window is never filled and sleeps its 400 ms out in slices
+    // of 50: it must wait 6 to 8 times. A window of one 400 ms sleep waits
+    // once and one of 16 slices waits 16 times; both fail.
+    const uf = bb.exe === null ? null : spawnSync(bb.exe, ["unfilled"], { encoding: "utf8", timeout: 60000, env: { ...process.env, NISH_URING_STATS: "1" } })
+    const ufName = "net_ring: a pollWaitBatch window that is never filled sleeps its maxWaitMs out in 6 to 8 slices"
+    if (uf !== null && uf.status === 2) {
+      skip(`${ufName}: the kernel refused rings`)
+    } else {
+      const lines = [...(uf?.stderr ?? "").matchAll(/^uring-stats signal port=\d+ .* windows=(\d+) window_waits=(\d+)$/gm)].map((m) =>
+        m.slice(1).map(Number)
+      )
+      const [a, b] = lines.length === 2 ? lines : [null, null]
+      check(
+        ufName,
+        uf !== null &&
+          uf.status === 0 &&
+          uf.stdout.includes("unfilled: one wait for 16 took 1 byte and slept out its 400 ms") &&
+          a !== null &&
+          b[0] - a[0] === 1 &&
+          b[1] - a[1] >= 6 &&
+          b[1] - a[1] <= 8,
+        uf === null ? `does not build\n${shown(bb.c)}` : `signal ${uf.signal}\n${shown(uf)}`
+      )
+    }
   }
 }
 
@@ -36207,6 +36878,92 @@ if (!only || "net_handler_ring".includes(only)) {
         r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
       )
     }
+  }
+}
+
+// ring-batch-wait: `HandlerLimits.minEvents` and `maxWaitMs` route
+// `HttpHandler.wait` through `pollWaitBatch`. tests/link/net_handler_batch
+// answers 40 connections through a handler at minEvents 64 and maxWaitMs 1
+// (the batched wait must not lose a request), then times one turn with a
+// single request pending: at minEvents 64 and maxWaitMs 400 the turn holds
+// at least 300 ms for a batch that never fills, and at minEvents 1 it does
+// not hold. The second half fails if `wait` ignores the limits; the first if
+// the batched loop drops readiness. Then, still at minEvents 64 and maxWaitMs
+// 400, the longest turn while a request arrives must stay under 200 ms for
+// `wait(0)`, for a deferred queue (whose turns `wait` makes 0), for a
+// descriptor listener beside a live ring set and for a ring listener beside a
+// second live set: each fails at about 400 ms without its guard (`wait`'s
+// `timeout !== 0`, `nr_batch`'s `held` and its one-set rule). 2 says the
+// kernel refused rings, a counted skip.
+if (!only || "net_handler_batch".includes(only)) {
+  const name =
+    "net_handler: minEvents and maxWaitMs batch a ring wait, and minEvents 1, wait(0), a deferred queue, epoll and two live ring sets do not wait"
+  if (!HAS_CLANG || process.platform !== "linux") {
+    skip("net_handler: a batched ring wait is io_uring's, and this host has no clang or is not Linux")
+  } else {
+    const dir = path.join(buildDir, "net_handler_batch")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "batch")
+    const c = spawnNish([path.join(linkDir, "net_handler_batch", "batch.ts"), "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const r = c.status === 0 ? spawnSync(exe, [], { encoding: "utf8", timeout: 60000 }) : null
+    if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+      skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
+    } else {
+      check(
+        name,
+        r !== null &&
+          r.status === 0 &&
+          r.stdout.includes("batch: 40 answered at minEvents 64, a pending request held") &&
+          r.stdout.includes(
+            "prompt at minEvents 64: wait(0), a deferred queue, epoll beside a live ring set, and two live ring sets"
+          ),
+        r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+  }
+}
+
+// ring-batch-wait: bench/handler-ring/run.sh builds ring-base with
+// --base-compiler, a compiler whose std may predate `HandlerLimits.minEvents`
+// and `maxWaitMs`; server.ts sets both and prints them, so that build refused
+// it. run.sh builds ring-base from base-source.sh's copy, which drops the
+// lines between `bench:batch begin` and `end`. The seed (0.45.1) is such a
+// compiler: it must build the copy, and run.sh must build ring-base from it
+// and not ask ring-base for a `batch` line.
+if (!only || "handler-ring base".includes(only)) {
+  const seedBin = path.join(root, "build", "seed", "bin", "nish")
+  const runSh = fs.readFileSync(path.join(root, "bench", "handler-ring", "run.sh"), "utf8")
+  check(
+    "handler-ring: run.sh builds ring-base from base-source.sh's copy and asks only its own builds for a batch line",
+    /bash "\$root\/bench\/handler-ring\/base-source\.sh" "\$out\/server-base\.ts"/.test(runSh) &&
+      /if \[ "\$kind" != ring-base \] && ! grep -q "\^batch/.test(runSh),
+    "run.sh's base build or its batch check moved; this check reads both"
+  )
+  if (!HAS_CLANG || !fs.existsSync(seedBin)) {
+    skip("handler-ring: the seed builds ring-base's source (no clang or no build/seed)")
+  } else {
+    const dir = path.join(buildDir, "handler-ring-base")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const src = path.join(dir, "server-base.ts")
+    const g = spawnSync("bash", [path.join(root, "bench", "handler-ring", "base-source.sh"), src], { encoding: "utf8" })
+    const b =
+      g.status === 0
+        ? spawnSync(seedBin, withAllowPanics(seedBin, [src, "--link", path.join(dir, "server-base")]), {
+            cwd: root,
+            encoding: "utf8",
+            timeout: 300000,
+          })
+        : null
+    check(
+      "handler-ring: the seed builds ring-base's source, server.ts without its batch lines",
+      b !== null && b.status === 0,
+      b === null ? `base-source.sh failed\n${shown(g)}` : shown(b)
+    )
   }
 }
 }
@@ -36978,6 +37735,36 @@ for (const name of [
     )
   }
 }
+// `std_sqlite_vfs_wasi` answers differently on wasi, which is its point
+// (docs/sqlite-vfs.md): `?vfs=unix-excl` opens there, but wasi-libc has no
+// record locks, so WAL and the first write answer SQLITE_IOERR_LOCK (3850).
+// Its native run is held to expected.out by the link section, this one to
+// expected.wasi.out.
+if (!only || "std_sqlite_vfs_wasi".includes(only) || "wasi".includes(only)) {
+  const name = "std_sqlite_vfs_wasi"
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const dir = path.join(buildDir, `wasi_${name}`)
+    const wasm = path.join(dir, "app.wasm")
+    const built = spawnNish(
+      [path.join(linkDir, name, "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : built
+    const want = fs.readFileSync(path.join(linkDir, name, "expected.wasi.out"), "utf8")
+    check(
+      `link/${name}: on \`--profile wasi\` \`?vfs=unix-excl\` opens and its first lock answers SQLITE_IOERR_LOCK (expected.wasi.out)`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the fixture is not run`
+    )
+  }
+}
 }
 
 // ---- WP50 stage 1: a wasm module for a page, loaded without fetch ------------------
@@ -37423,6 +38210,7 @@ if (!only || "vite".includes(only)) {
     // generated module imports the host file whole and passes it as `host`, so the
     // page passes nothing, and Node's type stripping runs the host file as it is.
     const hostFile = path.join(app, "src", "page.ts")
+    // nish-function: a host module: src/host-module.ts reads `export function`
     fs.writeFileSync(
       hostFile,
       'import type { f64 } from "nish"\nexport function twice(x: f64): f64 {\n  return x * 2\n}\n'
@@ -38192,12 +38980,15 @@ if (!only || "host-import".includes(only)) {
         { cwd: root, encoding: "utf8" }
       )
     }
+    // nish-function: a host module: src/host-module.ts reads `export function`
     const marked = read("bom", "\uFEFFexport function first(x: i32): i32 {\n  return x\n}\n")
     check("host-import: a host module that starts with a byte order mark keeps its first export", marked.status === 0, shown(marked))
+    // nish-function: a host module: src/host-module.ts reads `export function`
     const braced = read(
       "constraint",
       "export function first<T extends { id: i32 }>(x: T): T { return x }\n"
     )
+    // nish-function: the host module's text, quoted in the parser's refusal
     check(
       "host-import: a brace in a host function's type parameter is read as a type, and the parser's refusal quotes the page's text",
       braced.status === 1 &&
@@ -38208,6 +38999,7 @@ if (!only || "host-import".includes(only)) {
 
     // The build reads only the host exports a Nish module imports: a page's file
     // may export what the page alone calls, in types no wasm import carries.
+    // nish-function: a host module: src/host-module.ts reads `export function`
     const object = read(
       "object",
       "export function area(r: { w: i32 }): i32 {\n  return r.w\n}\nexport function first(x: i32): i32 {\n  return x\n}\n"
@@ -38303,6 +39095,7 @@ if (!only || "host-import".includes(only)) {
     }
     const whole = typeCheckEntry("whole", hostText)
     check("host-import: the entry and its host module type-check under tsc --strict", whole.ok, whole.output)
+    // nish-function: a host module: src/host-module.ts reads `export function`
     const dropped = typeCheckEntry("dropped", hostText.replace("export function hU16(x: u16): u16 {\n  return x + 70000\n}\n", ""))
     check(
       "host-import: tsc fails the entry when the host module drops an export it imports (TS2305)",
@@ -38321,8 +39114,8 @@ if (!only || "host-import".includes(only)) {
       ],
       [
         "examples/arrays.ts",
-        "9e21b3dc744ca821ec9862c91041dfa03a9b542c733773560b18007c22349de0",
-        "723718bb017e52f311feaab651f9ad32c4cbe2647f03bc641e630c4f7f8f03e9",
+        "7dc834476d88c90760e9de579ad9ae7d2ede58e3e709a0614bd68f7d6b17c89d",
+        "7e3db328ba5975f0ad3a14cd62f4c22660ce254dcfb697ba46a646f6a8921293",
       ],
     ]) {
       const stem = path.basename(src, ".ts")
@@ -41807,6 +42600,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // a corrupted source file. That is the same mistake as the `declare` rule above, one
   // node deeper, so each row is parsed back rather than string-matched: a rewrite whose
   // output does not re-parse is the failure this is watching for.
+  // nish-function: arrowify's own unit cases
   for (const [what, source] of [
     ["an object literal", "function mk(): Pair {\n  return { first: 1, second: 2 };\n}\n"],
     ["an object literal in a cast", "function mk(): Pair {\n  return { first: 1, second: 2 } as Pair;\n}\n"],
@@ -41833,6 +42627,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // reading line by line. Where the comment sits in the one region the rewrite discards
   // -- between `function` and the parameter list, which becomes `const NAME = ` -- there
   // is nowhere to put it, so the declaration is refused instead of quietly losing it.
+  // nish-function: arrowify's own unit cases
   for (const [what, source, expected] of [
     [
       "the keyword inside a leading comment",
@@ -41878,6 +42673,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // a corpus file as the subject would take this check red exactly when the migration
   // succeeds.
   const oneFunction = path.join(buildDir, "arrow-flags.ts")
+  // nish-function: arrowify's own unit cases
   fs.writeFileSync(oneFunction, "export function twice(n: i32): i32 {\n  return n * 2;\n}\n")
   check(
     "WP22: the codemod refuses a flag it does not have, and a pair of flags it cannot answer both of",
@@ -42394,6 +43190,104 @@ if (selects("ci-scope", "ci.yml")) {
     "ci-scope: the backtest replays at least 40 merged pull requests with no miss, excusing only #1666's fuzz-smoke",
     replay.status === 0 && /^misses: 0$/m.test(replay.stdout) && excusedFlakes.join() === "#1666 fuzz-smoke",
     `excused: ${excusedFlakes.join(", ") || "none"}\n${replay.stdout}${replay.stderr}`
+  )
+}
+
+if (selects("workflow-permissions", "release.yml", "ci.yml", "interop.yml")) {
+  // A called workflow's token gets no more than the calling job grants, and a
+  // callee job asking for more fails the caller's whole run at startup: no
+  // job runs and no log says which. 0.45.0's first release run died that way
+  // when ci.yml's ci-gate took `statuses: write` and release.yml's `ci` job
+  // did not grant it. Every local `uses: ./.github/workflows/*.yml` caller is
+  // checked against its callee's top-level block and each job's own.
+  const rank = { none: 0, read: 1, write: 2 }
+  /**
+   * The `permissions:` block at exactly `indent` spaces among `lines`, as a
+   * scope-to-level map; `null` when there is none. A shorthand (`read-all`,
+   * `write-all`, `{}`) maps the scope `*`.
+   */
+  const permsAt = (lines, indent) => {
+    const pad = " ".repeat(indent)
+    const at = lines.findIndex((l) => l.startsWith(`${pad}permissions:`) && !/^\s/.test(l.slice(indent)))
+    if (at < 0) {
+      return null
+    }
+    const inline = lines[at].slice(indent + "permissions:".length).replace(/#.*/, "").trim()
+    if (inline !== "") {
+      return new Map([["*", inline === "write-all" ? "write" : inline === "read-all" ? "read" : "none"]])
+    }
+    const out = new Map()
+    for (const l of lines.slice(at + 1)) {
+      if (l.trim() === "" || l.trimStart().startsWith("#")) {
+        continue
+      }
+      const m = new RegExp(`^${pad} {2,}([\\w-]+):\\s*(\\w+)`).exec(l)
+      if (!m) {
+        break
+      }
+      out.set(m[1], m[2])
+    }
+    return out
+  }
+  const granted = (perms, scope) => perms.get(scope) ?? perms.get("*") ?? "none"
+  /** What `caller` grants that `asked` needs and it does not, as `scope: level` strings. */
+  const shortfall = (caller, asked) =>
+    [...asked]
+      .filter(([scope, level]) =>
+        scope === "*" ? level !== "none" : (rank[granted(caller, scope)] ?? -1) < (rank[level] ?? Infinity)
+      )
+      .map(([scope, level]) => `${scope}: ${level}`)
+  const jobsOf = (lines) => {
+    const start = lines.indexOf("jobs:")
+    return start < 0
+      ? []
+      : lines
+          .slice(start + 1)
+          .map((l) => /^ {2}([\w-]+):\s*$/.exec(l)?.[1])
+          .filter((id) => id !== undefined)
+  }
+  const wfDir = path.join(root, ".github", "workflows")
+  const wfLines = (file) => fs.readFileSync(path.join(wfDir, file), "utf8").split("\n")
+  const callers = []
+  const gaps = []
+  for (const file of fs.readdirSync(wfDir).filter((f) => /\.ya?ml$/.test(f))) {
+    const lines = wfLines(file)
+    const top = permsAt(lines, 0)
+    for (const id of jobsOf(lines)) {
+      const job = ciJob(lines.join("\n"), id).split("\n")
+      const callee = /^ {4}uses: \.\/\.github\/workflows\/([\w.-]+)\s*$/m.exec(job.join("\n"))?.[1]
+      if (callee === undefined) {
+        continue
+      }
+      callers.push(`${file}:${id} -> ${callee}`)
+      // A caller job without a block hands on its workflow's; with neither,
+      // the repository default, which this check does not read: count it as
+      // granting nothing so a callee that asks for anything is flagged.
+      const grant = permsAt(job, 4) ?? top ?? new Map()
+      const calleeLines = wfLines(callee)
+      const asked = [["(top)", permsAt(calleeLines, 0)]]
+      for (const cid of jobsOf(calleeLines)) {
+        asked.push([cid, permsAt(ciJob(calleeLines.join("\n"), cid).split("\n"), 4)])
+      }
+      for (const [where, perms] of asked) {
+        const short = perms === null ? [] : shortfall(grant, perms)
+        if (short.length > 0) {
+          gaps.push(`${file}:${id} grants ${callee}'s ${where} too little: ${short.join(", ")}`)
+        }
+      }
+    }
+  }
+  // The comparison itself, on the shape that broke 0.45.0, so a parser that
+  // stopped reading job-level blocks cannot pass by finding nothing.
+  const brokeCaller = permsAt(["    permissions:", "      contents: read", "      attestations: read"], 4)
+  const brokeCallee = permsAt(["    permissions:", "      contents: read", "      # why", "      statuses: write"], 4)
+  check(
+    "workflow-permissions: every job calling a local workflow grants what the callee and each of its jobs ask for",
+    callers.length >= 2 &&
+      gaps.length === 0 &&
+      shortfall(brokeCaller, brokeCallee).join() === "statuses: write" &&
+      shortfall(new Map([["*", "write"]]), brokeCallee).length === 0,
+    `callers: ${callers.join(", ")}\n${gaps.join("\n")}`
   )
 }
 
@@ -47835,8 +48729,10 @@ if (selects("arrow-corpus")) {
       fs.mkdirSync(path.dirname(path.join(scratch, file)), { recursive: true })
       fs.writeFileSync(path.join(scratch, file), text)
     }
+    // nish-function: the arrow-corpus proof's fixtures
     put("tests/cases/kept.ts", "function kept(): number {\n  return 1\n}\n")
     put("tests/cases/arrow.ts", "const arrow = (): number => {\n  return 1\n};\n")
+    // nish-function: the arrow-corpus proof's fixtures
     put(
       "tests/cases/declared.ts",
       "declare function puts(s: string): number\nasync function later(): Promise<void> {}\nfunction sig(): number;\n"
@@ -47844,14 +48740,17 @@ if (selects("arrow-corpus")) {
     const list = "tests/cases/kept.ts  # the subject\n"
     const base = ["tests/cases/kept.ts", "tests/cases/arrow.ts", "tests/cases/declared.ts"]
     const clean = arrowCorpusProblems(scratch, base, list)
+    // nish-function: the arrow-corpus proof's fixtures
     put("tests/cases/probe.ts", "function probe(): number {\n  return 2\n}\n")
     const added = arrowCorpusProblems(scratch, [...base, "tests/cases/probe.ts"], list)
     fs.rmSync(path.join(scratch, "tests/cases/probe.ts"))
     const removed = arrowCorpusProblems(scratch, base, list)
     put("tests/cases/kept.ts", "const kept = (): number => {\n  return 1\n};\n")
     const stale = arrowCorpusProblems(scratch, base, list)
+    // nish-function: the arrow-corpus proof's fixtures
     put("tests/cases/unparsed.ts", "function catch(x: number): number {\n  return x\n}\n")
     const unparsed = arrowCorpusProblems(scratch, [...base, "tests/cases/unparsed.ts"], list)
+    // nish-function: the arrow-corpus proof's fixtures
     put("tests/cases/misread.ts", "function made(): keyof {\n  return new keyof()\n}\n")
     const misread = arrowCorpusProblems(scratch, [...base, "tests/cases/misread.ts"], list)
     const noReason = arrowCorpusProblems(scratch, base, "tests/cases/kept.ts\n")
@@ -47875,6 +48774,80 @@ if (selects("arrow-corpus")) {
     )
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true })
+  }
+
+  // The Nish programs the harnesses carry as string literals are not
+  // tests/**/*.ts files, so the check above cannot see them (#1743 and #1748
+  // spelled such programs as arrows by hand). `scripts/inline-functions.mjs`
+  // reads every tests/**/*.{js,mjs,cjs} file and refuses a top-level
+  // `function` definition in a literal's text unless a
+  // `// nish-function: <reason>` comment leads the literal or its statement.
+  const inlineScript = path.join(root, "scripts/inline-functions.mjs")
+  const inline = spawnSync(process.execPath, [inlineScript], { cwd: root, encoding: "utf8" })
+  check(
+    "WP22 arrow-corpus: no unmarked inline `function` program in the test harnesses",
+    inline.status === 0 && /in \d+ harness files/.test(inline.stdout),
+    `${inline.stdout}${inline.stderr}`
+  )
+
+  // Its negative proof, on a scratch repository holding a copy of one harness:
+  // it passes, fails on an inline `function` program and names the file, the
+  // line and the fix, passes again once the program is gone, and fails on a
+  // marker with no reason, a marker that covers nothing, and a file the parser
+  // cannot read. A marked program passes.
+  const inlineScratch = fs.mkdtempSync(path.join(buildDir, "inline-functions-"))
+  try {
+    fs.mkdirSync(path.join(inlineScratch, "scripts"), { recursive: true })
+    fs.mkdirSync(path.join(inlineScratch, "tests"), { recursive: true })
+    fs.copyFileSync(inlineScript, path.join(inlineScratch, "scripts/inline-functions.mjs"))
+    fs.symlinkSync(path.join(root, "node_modules"), path.join(inlineScratch, "node_modules"))
+    const harness = path.join(inlineScratch, "tests/ffi-string.js")
+    const original = fs.readFileSync(path.join(root, "tests/ffi-string.js"), "utf8")
+    fs.writeFileSync(harness, original)
+    // The scratch's own repository, so the script's `git ls-files` lists the
+    // copy and never the checkout this suite runs in.
+    const init = spawnSync("git", ["init", "-q", inlineScratch], { encoding: "utf8" })
+    const run = (text) => {
+      fs.writeFileSync(harness, text)
+      return spawnSync(process.execPath, [path.join(inlineScratch, "scripts/inline-functions.mjs")], {
+        cwd: inlineScratch,
+        encoding: "utf8",
+      })
+    }
+    const probeLine = original.split("\n").length + (original.endsWith("\n") ? 0 : 1)
+    const sep = original.endsWith("\n") ? "" : "\n"
+    const probe = 'const probe = "export function probe(): i32 {\\n  return 1\\n}\\n"\n'
+    const clean = run(original)
+    const added = run(`${original}${sep}${probe}`)
+    const removed = run(original)
+    const marked = run(`${original}${sep}// nish-function: the probe's reason\n${probe}`)
+    const noReason = run(`${original}${sep}// nish-function:\n${probe}`)
+    const stale = run(`${original}${sep}// nish-function: covers nothing\nconst arrow = "const f = (): i32 => 1"\n`)
+    const unparsed = run(`${original}${sep}const = \n`)
+    check(
+      "WP22 arrow-corpus: an inline `function` program fails, naming the file, the line and the fix; removing it passes",
+      init.status === 0 &&
+        clean.status === 0 &&
+        added.status === 1 &&
+        added.stderr.includes(`tests/ffi-string.js:${probeLine}: `) &&
+        added.stderr.includes("const name = (...): T =>") &&
+        added.stderr.includes("// nish-function: <reason>") &&
+        removed.status === 0 &&
+        marked.status === 0,
+      JSON.stringify({ init: init.stderr, clean, added, removed, marked }, null, 2)
+    )
+    check(
+      "WP22 arrow-corpus: a reasonless marker, a stale marker and an unparsable harness each fail the inline check",
+      noReason.status === 1 &&
+        noReason.stderr.includes("gives no reason") &&
+        stale.status === 1 &&
+        stale.stderr.includes("covers no inline `function` definition") &&
+        unparsed.status === 1 &&
+        unparsed.stderr.includes("the parser cannot read it"),
+      JSON.stringify({ noReason, stale, unparsed }, null, 2)
+    )
+  } finally {
+    fs.rmSync(inlineScratch, { recursive: true, force: true })
   }
 
   // The re-key's refusal path and its positive control, on a scratch copy of
@@ -48280,7 +49253,7 @@ if (!only || "c-import".includes(only)) {
     fs.writeFileSync(
       sqliteModule,
       `${sqliteText}
-export function main(): i32 {
+export const main = (): i32 => {
   const out = new OutPtr()
   if (sqlite3_open(":memory:", out) !== SQLITE_OK) {
     return 1
@@ -48293,7 +49266,7 @@ export function main(): i32 {
   console.log(v === null ? "none" : v === SQLITE_VERSION ? "version matches" : "version differs")
   console.log(\`close \${sqlite3_close(db)}\`)
   return 0
-}
+};
 `
     )
     const sqliteRun = spawnNish(["run", sqliteModule], { encoding: "utf8" })
@@ -48687,7 +49660,7 @@ export function main(): i32 {
     fs.writeFileSync(
       tripTs,
       `${tripText}
-export function main(): i32 {
+export const main = (): i32 => {
   const c = conn_open(42)
   if (c === null) {
     return 1
@@ -48701,7 +49674,7 @@ export function main(): i32 {
   const bytes: u8[] = [1, 2, 3, 250]
   console.log(\`sum \${sum_bytes(4, bytes)}\`)
   return 0
-}
+};
 `
     )
     const tripLl = path.join(cImportDir, "trip.ll")
@@ -48762,7 +49735,7 @@ export function main(): i32 {
     fs.writeFileSync(
       outTs,
       `${outText}
-export function main(): i32 {
+export const main = (): i32 => {
   const small: u8[] = [0, 0, 0, 0]
   const n8 = new OutU8()
   n8.value = 4
@@ -48774,7 +49747,7 @@ export function main(): i32 {
   const r32 = fill_u32(big, n32)
   console.log(\`u32 \${r32} got \${n32.value} \${big[0]} \${big[4]} \${big[5]}\`)
   return 0
-}
+};
 `
     )
     const outLl = path.join(cImportDir, "outcount.ll")
@@ -48826,7 +49799,7 @@ export function main(): i32 {
     const modelDir = path.join(cImportDir, "model")
     fs.mkdirSync(modelDir, { recursive: true })
     const modelMain = path.join(modelDir, "main.ts")
-    fs.writeFileSync(modelMain, 'import { LIMIT } from "./limits"\n\nexport function main(): i32 {\n  return LIMIT\n}\n')
+    fs.writeFileSync(modelMain, 'import { LIMIT } from "./limits"\n\nexport const main = (): i32 => {\n  return LIMIT\n};\n')
     const modelModule = (model) =>
       `// Generated by nish c-import from limits.h. Do not edit; regenerate it.\r\n` +
       `// Target: x\r\n// Data model: ${model}\r\n\r\nexport const LIMIT: i32 = 7\r\n`

@@ -17,18 +17,20 @@ function synthXorshift(x: i32): i32 -> @synthXorshift
   stackSites=0 stackLocals=0
   local +0:7 y: i32 (let)
 function synthTone(out: f64[], sampleRate: i32, start: f64, length: f64, f0: f64, f1: f64, wave: i32, volume: f64, decay: f64): void -> @synthTone [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: llvm.exp.f64 llvm.fptosi.sat.i32.f64 llvm.log.f64 llvm.minimum.f64 nish_floor nish_panic_index nish_panic_overflow synthXorshift
+  calls: llvm.exp.f64 llvm.fptosi.sat.i32.f64 llvm.log.f64 llvm.minimum.f64 nish_floor synthXorshift
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -36:9 rate: f64 (const)
-  local -29:9 from: i32 (const)
-  local -28:9 n: i32 (const)
-  local -27:9 ratio: f64 (const)
-  local -26:7 phase: f64 (let)
-  local -25:7 noise: i32 (let)
-  local -24:7 held: f64 (let)
+  local -44:9 rate: f64 (const)
+  local -37:9 from: i32 (const)
+  local -36:9 n: i32 (const)
+  local -30:9 size: i32 (const)
+  local -29:9 ratio: f64 (const)
+  local -28:7 phase: f64 (let)
+  local -27:7 noise: i32 (let)
+  local -26:7 held: f64 (let)
+  local -24:7 at: i32 (let)
   local -23:12 i: i32 (let)
   local -22:11 t: f64 (const)
   local -21:11 f: f64 (const)

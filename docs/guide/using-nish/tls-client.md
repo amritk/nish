@@ -8,7 +8,7 @@ done application data flows both ways. Both are *sans-IO*: they never read a
 socket or a clock, so you drive them from your own loop over
 [`nish:net`](networking.md). They are written in Nish and imported like any
 other library module
-([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
+([`export` and `import`](../../reference/language/declarations.md#export-and-import)).
 
 Most programs want neither directly: `nish/net/tls-tcp`'s `tlsConnect` opens
 a TCP connection, runs the handshake, checks the server and hands you a
@@ -135,7 +135,7 @@ randomness: 32 random bytes for the ClientHello and a 32-byte private key per
 key-exchange group. Use a fresh key from a secure random source for every
 connection; the fixed bytes below are only for the example:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/tls/client.ts` code that reaches `std/crypto/x25519.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/tls/client.ts` code that reaches `std/crypto/sha512.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { TLS_LEVEL_INITIAL } from "nish/net/tls";

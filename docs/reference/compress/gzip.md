@@ -8,6 +8,7 @@ The gzip file format (RFC 1952) around `nish/compress/deflate`: a ten-byte heade
 import {
   GZIP_END,
   GZIP_ERR_CRC,
+  GZIP_ERR_FINISHED,
   GZIP_ERR_HEADER,
   GZIP_ERR_SIZE,
   GZIP_NEED_INPUT,
@@ -263,7 +264,8 @@ The length of the input, in bytes; a negative `n` answers the
 <scalar-field name="returns" type="i32">
 
 A size in bytes, not a position: a `room` of this many always
-  holds the member.
+  holds the member. Or `DEFLATE_NO_ROOM` when `n` is over 1,908,874,323,
+  where the size is more than 2^31 - 1 and no array holds it.
 
 </scalar-field>
 
@@ -349,8 +351,10 @@ It buffers up to 64 KB of input (and 32 KB of history to match against),
 compressing whenever that fills, so output arrives in bursts. Every call
 writes into a caller window and answers where its output ends, or
 `DEFLATE_NO_ROOM` when the window is shorter than `bound(len)`, the most
-that call can produce; nothing is consumed then. About 430 KB, allocated
-once; `start` begins the next body.
+that call can produce; nothing is consumed then. After `finish`, and
+after a call whose output overran `bound`, every call answers
+`GZIP_ERR_FINISHED` until `start`. About 430 KB, allocated once; `start`
+begins the next body.
 
 ```ts
 class GzipWriter
@@ -360,10 +364,10 @@ class GzipWriter
 | --- | --- |
 | `new GzipWriter(level: i32)` | A writer at `level`, 0 to 9; another level panics. It is ready for a first body without a call to `start`. |
 | `bound(len: i32): i32` | The most bytes a `write` of `len` bytes, or a `flush` or `finish` after it, can produce. Less than 64 KB is pending before the call, and the call compresses once per 64 KB pending: `deflateBound` of all of it, with the constant part of `deflateBound` again for each compression after the first. |
-| `finish(out: u8[], at: i32): i32` | Compresses everything pending as the final block and writes the trailer; answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`. `start` begins another body; until then `write`, `flush` and `finish` panic, as does a window outside `out`. |
-| `flush(out: u8[], at: i32): i32` | Compresses everything pending and ends with an empty stored block, so a reader can decode every byte written so far (zlib's `Z_SYNC_FLUSH`). Answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`. Flushing after `finish` panics, as does a window outside `out`. |
+| `finish(out: u8[], at: i32): i32` | Compresses everything pending as the final block and writes the trailer; answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`. `start` begins another body; until then `write`, `flush` and `finish` answer `GZIP_ERR_FINISHED`. A window outside `out` panics. |
+| `flush(out: u8[], at: i32): i32` | Compresses everything pending and ends with an empty stored block, so a reader can decode every byte written so far (zlib's `Z_SYNC_FLUSH`). Answers the new end of `out`, or `DEFLATE_NO_ROOM` below `bound(0)`. Flushing after `finish` answers `GZIP_ERR_FINISHED`; a window outside `out` panics. |
 | `start(): void` | Begins a new body: the next output starts with a header. |
-| `write(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Takes `src[off .. off + len)` and answers where the output it produced in `out` from `at` ends (often `at`: input waits until 64 KB are pending), or `DEFLATE_NO_ROOM` when `out` has less than `bound(len)` bytes from `at`. Writing after `finish` panics, as does a window outside its array. |
+| `write(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32` | Takes `src[off .. off + len)` and answers where the output it produced in `out` from `at` ends (often `at`: input waits until 64 KB are pending), or `DEFLATE_NO_ROOM` when `out` has less than `bound(len)` bytes from `at`. Writing after `finish` answers `GZIP_ERR_FINISHED`; a window outside its array panics. |
 
 ## Constants
 
@@ -382,6 +386,19 @@ class GzipWriter
 `GZIP_ERR_CRC: i32`
 
 The trailer's CRC-32 is not the CRC-32 of the data.
+
+</scalar-card>
+
+<scalar-card title="-20" icon="phosphor/regular/hash">
+
+`GZIP_ERR_FINISHED: i32`
+
+`GzipWriter`: the body is finished, so `write`, `flush` and `finish` take
+nothing more until `start` begins another. Answered after `finish` has
+returned the trailer, and from a call whose compression overran the room
+`bound` promised, which leaves the body cut short: its output so far is
+not a gzip member. Codes from -16 to -19 are left to
+`nish/compress/deflate`.
 
 </scalar-card>
 

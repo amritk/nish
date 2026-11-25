@@ -266,6 +266,7 @@ class Cursor
 | `columnI64(c: i32): i64` | Column `c` of the current row as an integer, converted as SQLite converts. |
 | `columnInto(c: i32, buf: u8[], at: i32): Result<i32, i32>` | Copies a text or blob column's stored bytes into `buf` at `at`, and answers their length, as `Statement.columnInto` does: it copies only when all of them fit, so a length larger than `buf.length - at` means nothing was written. It converts no number to text. |
 | `columnType(c: i32): Result<i32, i32>` | The type the current row stores for column `c`, as written: a REAL column holding a whole number stores an integer, where a query would answer a float. |
+| `countRange(lo: i64, hi: i64, out: i64[]): Result<i32, i32>` | Counts an index's entries whose first key column is `k`, for each `k` from `lo` to `hi`, into `out[k - lo]`, in one seek and one walk of the index, for an index whose first column has INTEGER or NUMERIC affinity. On a full index that is what `SELECT count(*) ... WHERE col = k` answers for each `k`; a partial index holds only the rows its WHERE admits, and counts only those. A count that reaches its walk clears the seek key and leaves the cursor on no row, whatever it answers; one refused first leaves both as they were. Copying the counts into `out` takes one call per key, and one more when `out` is longer than the span. `out` past the span, and all of it on an `Err`, is left as it was. |
 | `error(code: i32): SqliteError` | The error for `code`, which this cursor's last call answered. Allocates the `SqliteError`. |
 | `first(): Result<boolean, i32>` | Moves to the first row, in the index's order for an index. |
 | `keyI64(v: i64): Result<void, i32>` | Appends an integer to the seek key, for the index's next key column. |
@@ -275,9 +276,11 @@ class Cursor
 | `last(): Result<boolean, i32>` | Moves to the last row. |
 | `next(): Result<boolean, i32>` | Moves to the next row. |
 | `previous(): Result<boolean, i32>` | Moves to the row before. |
+| `readRow(ints: i64[], spans: i32[], text: u8[]): Result<i32, i32>` | Reads the current row's `selectRow` columns in one call. For the `k`th of them it writes `spans[3k]`, `spans[3k + 1]` and `spans[3k + 2]`: the type `columnType` answers, then where its bytes start in `text` and how many there are, which are the bytes `columnInto` copies (0 and 0 for a number or NULL); and `ints[k]`, the value `columnI64` answers for an INTEGER or FLOAT column and 0 for TEXT, BLOB and NULL, which it does not convert. The row's text and blob bytes sit in `text` in column order. A refusal, or an answer larger than `text.length`, writes no `ints` or `spans`, and `text` may hold the first columns' bytes: grow `text` and call again. An empty list answers `Ok(0)` on a row, and `SQLITE_MISUSE` with no row or a closed cursor, as any list does. It allocates nothing. |
 | `rowid(): i64` | The current row's rowid: a table row's key, an index entry's `rowid`. |
 | `seek(op: i32): Result<boolean, i32>` | Moves an index cursor by its seek key, compared with each entry's first key columns, so a key with fewer values than the index is a prefix: `SEEK_GE` and `SEEK_GT` land on the first entry at or after the key, `SEEK_LE` and `SEEK_LT` on the last at or before it, the `E` forms counting an equal entry. The key stays, for the next seek. |
 | `seekRowid(rowid: i64): Result<boolean, i32>` | Moves a table cursor to the row whose rowid is `rowid`. |
+| `selectRow(cols: readonly i32[]): Result<void, i32>` | Chooses the columns `readRow` reads, in order; a column may repeat. The list holds until the next `selectRow`, so a loop chooses it once and calls `readRow` per row. It allocates one buffer of 11 bytes per column and checks no index: `readRow` answers `SQLITE_RANGE` for one outside the cursor's columns. |
 
 ### Database
 

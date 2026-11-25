@@ -1,0 +1,122 @@
+[
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "mix_f64": {
+          "out": {
+            "buffer": "n"
+          }
+        }
+      }
+    },
+    "message": "overrides: `mix_f64` parameter `out` is a buffer, so it must be a `void *` or `char *`, or a pointer to `uint16_t`, `uint32_t`, `int32_t` or `float`"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "mix_i16": {
+          "out": {
+            "buffer": "n"
+          }
+        }
+      }
+    },
+    "message": "overrides: `mix_i16` parameter `out` is a buffer, so it must be a `void *` or `char *`, or a pointer to `uint16_t`, `uint32_t`, `int32_t` or `float`"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "mix_i64": {
+          "out": {
+            "buffer": "n"
+          }
+        }
+      }
+    },
+    "message": "overrides: `mix_i64` parameter `out` is a buffer, so it must be a `void *` or `char *`, or a pointer to `uint16_t`, `uint32_t`, `int32_t` or `float`"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "upload_f32": {
+          "verts": {
+            "buffer": "n",
+            "readonly": true
+          }
+        }
+      }
+    },
+    "message": "overrides: `upload_f32` parameter `verts` is `const` in the header, so it is bound `readonly f32[]` already and \"readonly\" changes nothing"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "upload_u16": {
+          "indices": {
+            "buffer": "n",
+            "readonly": true
+          }
+        }
+      }
+    },
+    "message": "overrides: `upload_u16` parameter `indices` is `const` in the header, so it is bound `readonly u16[]` already and \"readonly\" changes nothing"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "mix_enum": {
+          "out": {
+            "buffer": "n"
+          }
+        }
+      }
+    },
+    "message": "overrides: `mix_enum` parameter `out` is a buffer, so it must be a `void *` or `char *`, or a pointer to `uint16_t`, `uint32_t`, `int32_t` or `float`; an enum's size is the C compiler's choice, so it is no buffer element"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "mix_aligned": {
+          "out": {
+            "buffer": "n"
+          }
+        }
+      }
+    },
+    "message": "overrides: `mix_aligned` parameter `out` is a buffer, so it must be a `void *` or `char *`, or a pointer to `uint16_t`, `uint32_t`, `int32_t` or `float`; a typedef with its own `aligned` attribute is not its scalar's layout"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "mix_aligned_ptr": {
+          "out": {
+            "buffer": "n"
+          }
+        }
+      }
+    },
+    "message": "overrides: `mix_aligned_ptr` parameter `out` is a buffer, so it must be a `void *` or `char *`, or a pointer to `uint16_t`, `uint32_t`, `int32_t` or `float`; a typedef with its own `aligned` attribute is not its scalar's layout"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "fill_f32": {
+          "out": {
+            "buffer": "n",
+            "nullable": true
+          }
+        }
+      }
+    },
+    "message": "overrides: `fill_f32` parameter `out` is a buffer, a `f32[]` that cannot be null, so it cannot be nullable"
+  }
+]

@@ -577,8 +577,8 @@ outputs to one.
 
 </scalar-detail>
 
-Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishsimd-sixteen-byte-vectors
-and https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishsimd-lane-operations-and-masks
+Rules: [`nish:simd`: sixteen-byte vectors](language/builtins.md#nishsimd-sixteen-byte-vectors)
+and [`nish:simd`: lane operations and masks](language/builtins.md#nishsimd-lane-operations-and-masks)
 
 ## Functions
 

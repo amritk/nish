@@ -3809,6 +3809,144 @@ Medians of 3 (min to max), and `box MB` from the last round of each design, as a
 Medians of 3 (min to max). These rounds also predate the `send_failed` and `closed` counters; each answered 29,998 a second of the offered 30,000. One process held 300,000 connections in every round, under a limit of 20,000, with 47 descriptors. Its PSS was 435.9 to 436.3 MB, about 1.5 KB a connection, about the same as at 96,000. A request cost 23.73 µs against 20.86 at 96,000, though at a different rate, so the two are not a like-for-like comparison.
 
 Opening the connections took 90.6 to 123.7 s. The first run, at `d603893d`, answered no requests at all: past the handler's 60-second default `idleTimeout` the server closed the first connections before the window opened, and the load generator does not reopen a closed connection. `bench/handler-ring/server.ts` now sets `limits.http.idleTimeout` to ten minutes. That is a setting of the bench, not of the ring.
+
+### Batched ring waits: `minEvents` and `maxWaitMs`
+
+**What a batch saves, and what it costs.** `HandlerLimits.minEvents` and `HandlerLimits.maxWaitMs` make the handler's wait `pollWaitBatch` (in [the networking guide](guide/using-nish/networking.md)): after the first event it waits up to `maxWaitMs` more for `minEvents` of them. Two runs, both with the bench code at commit `003910b4`, one after the other on an Intel Xeon @ 2.30GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000, at 30,000 req/s, a 3-second warm-up and a 10-second window, the server on CPU 0 and the load on CPUs 1 to 3, a SQLite lookup a request:
+
+- **Run A**, the batch and the release before it: `bash bench/handler-ring/run.sh --conns "18000 96000" --designs "ring ring-copy ring-base" --min-events "1 64 256" --max-wait-ms 1 --rounds 5 --base-compiler build/seed/bin/nish`, the seed being the 0.45.1 release, `fa9894be`.
+- **Run B**, the commit before the direct wait: the same with `--min-events "1"` and `--base-compiler` a compiler built at `f935868b`, the parent of the direct ring wait (#2256).
+
+`ring@N` is the ring server with `minEvents` N and `maxWaitMs` 1; `ring@1` is the handler's default wait, `pollWait`. `ring-copy` is a second, byte-identical build of the same server, so each `ring@N` against its `ring-copy@N` is a noise band. `ring-base@1` is the same server built by the base compiler from its own `std/` and runtime, from `bench/handler-ring/base-source.sh`'s copy of `server.ts` without the lines that set the batch fields, which neither base has. So `ring@1` against run B's `ring-base@1` is the direct wait (#2256) and the batch's code at its default; against run A's it is also `fa9894be` to `f935868b`: coalesced ring sends (#2252) and two SQLite cursor changes (#2255, #2257). `ring@64` and `ring@256` against `ring@1` is the batch itself. Server µs a request, per round:
+
+| run | C | round | ring@1 | ring-copy@1 | ring@64 | ring-copy@64 | ring@256 | ring-copy@256 | ring-base@1 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A | 18,000 | 1 | 22.63 | 22.37 | 17.77 | 15.50 | 17.63 | 15.97 | 22.43 |
+| A | 18,000 | 2 | 24.20 | 23.37 | 17.33 | 16.30 | 15.37 | 17.50 | 23.30 |
+| A | 18,000 | 3 | 23.30 | 22.43 | 17.63 | 16.20 | 17.17 | 16.40 | 23.20 |
+| A | 18,000 | 4 | 22.47 | 22.40 | 18.14 | 17.10 | 18.57 | 16.03 | 24.50 |
+| A | 18,000 | 5 | 26.77 | 22.97 | 18.67 | 18.77 | 17.53 | 17.70 | 24.24 |
+| A | 96,000 | 1 | 20.80 | 20.36 | 21.06 | 22.13 | 22.70 | 20.87 | 19.40 |
+| A | 96,000 | 2 | 20.10 | 21.57 | 20.73 | 20.33 | 21.47 | 20.83 | 20.77 |
+| A | 96,000 | 3 | 18.53 | 20.60 | 19.90 | 21.07 | 20.50 | 18.97 | 19.50 |
+| A | 96,000 | 4 | 20.90 | 20.40 | 19.40 | 19.70 | 19.50 | 21.80 | 20.50 |
+| A | 96,000 | 5 | 19.87 | 19.50 | 19.30 | 19.70 | 19.64 | 18.85 | 21.43 |
+| B | 18,000 | 1 | 21.50 | 22.13 | | | | | 22.07 |
+| B | 18,000 | 2 | 21.63 | 22.73 | | | | | 21.47 |
+| B | 18,000 | 3 | 23.03 | 21.67 | | | | | 21.77 |
+| B | 18,000 | 4 | 22.00 | 22.70 | | | | | 22.97 |
+| B | 18,000 | 5 | 21.87 | 22.53 | | | | | 22.10 |
+| B | 96,000 | 1 | 21.40 | 21.63 | | | | | 20.63 |
+| B | 96,000 | 2 | 20.33 | 21.30 | | | | | 21.07 |
+| B | 96,000 | 3 | 19.83 | 20.53 | | | | | 20.53 |
+| B | 96,000 | 4 | 20.17 | 18.87 | | | | | 19.10 |
+| B | 96,000 | 5 | 20.07 | 20.40 | | | | | 19.67 |
+
+| run | C | design | held | fds | server µs/req | user | sys | box µs/req | req/s | PSS MB | box MB | p50 ms | p99 ms | p99.9 ms |
+| --- | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| A | 18,000 | ring@1 | 18,000 | 13 | 23.30 (22.47–26.77) | 5.97 | 17.63 | 38.43 | 30,000 | 13.2 | 832 | 0.06 | 0.79 (0.60–21.25) | 4.16 |
+| A | 18,000 | ring-copy@1 | 18,000 | 13 | 22.43 (22.37–23.37) | 5.77 | 17.17 | 36.87 | 30,000 | 13.3 | 834 | 0.06 | 1.58 (0.58–4.80) | 13.44 |
+| A | 18,000 | ring@64 | 18,000 | 13 | 17.77 (17.33–18.67) | 5.03 | 13.17 | 29.37 | 30,002 | 13.5 | 847 | 2.27 | 5.70 (3.62–6.98) | 14.98 |
+| A | 18,000 | ring-copy@64 | 18,000 | 13 | 16.30 (15.50–18.77) | 4.77 | 12.23 | 25.90 | 30,000 | 13.2 | 855 | 2.21 | 3.74 (3.23–12.16) | 8.32 |
+| A | 18,000 | ring@256 | 18,000 | 13 | 17.53 (15.37–18.57) | 4.73 | 12.77 | 28.23 | 29,999 | 13.2 | 856 | 2.21 | 4.80 (3.36–5.82) | 11.39 |
+| A | 18,000 | ring-copy@256 | 18,000 | 13 | 16.40 (15.97–17.70) | 4.40 | 11.97 | 25.97 | 30,001 | 13.2 | 847 | 2.21 | 4.42 (4.16–4.80) | 10.37 |
+| A | 18,000 | ring-base@1, `fa9894be` | 18,000 | 13 | 23.30 (22.43–24.50) | 6.10 | 17.23 | 37.80 | 30,000 | 12.5 | 822 | 0.06 | 1.10 (0.78–1.65) | 6.46 |
+| A | 96,000 | ring@1 | 96,000 | 21 | 20.10 (18.53–20.90) | 5.00 | 15.00 | 29.47 | 30,001 | 35.9 | 1,367 | 0.26 | 3.17 (0.89–10.88) | 7.49 |
+| A | 96,000 | ring-copy@1 | 96,000 | 21 | 20.40 (19.50–21.57) | 4.90 | 15.30 | 30.50 | 30,000 | 35.8 | 1,382 | 0.27 | 6.21 (1.65–7.23) | 17.15 |
+| A | 96,000 | ring@64 | 96,000 | 21 | 19.90 (19.30–21.06) | 3.17 | 16.66 | 30.10 | 30,000 | 35.2 | 1,390 | 2.08 | 7.23 (4.06–13.18) | 15.49 |
+| A | 96,000 | ring-copy@64 | 96,000 | 21 | 20.33 (19.70–22.13) | 3.40 | 16.93 | 29.50 | 29,999 | 35.6 | 1,402 | 2.14 | 5.06 (3.81–6.59) | 14.72 |
+| A | 96,000 | ring@256 | 96,000 | 21 | 20.50 (19.50–22.70) | 3.63 | 16.93 | 30.94 | 29,998 | 35.4 | 1,408 | 2.21 | 6.98 (4.42–22.27) | 18.69 |
+| A | 96,000 | ring-copy@256 | 96,000 | 21 | 20.83 (18.85–21.80) | 3.63 | 17.20 | 29.00 | 29,998 | 35.1 | 1,393 | 2.08 | 6.46 (3.42–19.20) | 14.46 |
+| A | 96,000 | ring-base@1, `fa9894be` | 96,000 | 21 | 20.50 (19.40–21.43) | 4.70 | 15.83 | 30.07 | 30,001 | 33.6 | 1,384 | 0.27 | 2.46 (1.55–27.90) | 18.69 |
+| B | 18,000 | ring@1 | 18,000 | 13 | 21.87 (21.50–23.03) | 4.93 | 17.03 | 36.07 | 30,000 | 13.2 | 838 | 0.05 | 0.58 (0.48–3.81) | 3.94 |
+| B | 18,000 | ring-copy@1 | 18,000 | 13 | 22.53 (21.67–22.73) | 5.70 | 17.03 | 35.77 | 30,000 | 13.2 | 836 | 0.05 | 1.17 (0.63–1.30) | 4.54 |
+| B | 18,000 | ring-base@1, `f935868b` | 18,000 | 13 | 22.07 (21.47–22.97) | 5.33 | 16.53 | 36.07 | 30,000 | 13.1 | 822 | 0.05 | 0.97 (0.54–3.49) | 8.13 |
+| B | 96,000 | ring@1 | 96,000 | 21 | 20.17 (19.83–21.40) | 4.73 | 15.43 | 30.27 | 29,999 | 35.6 | 1,377 | 0.26 | 3.62 (1.71–5.57) | 10.37 |
+| B | 96,000 | ring-copy@1 | 96,000 | 21 | 20.53 (18.87–21.63) | 4.70 | 15.83 | 29.63 | 30,000 | 35.3 | 1,363 | 0.27 | 3.74 (2.08–16.64) | 11.39 |
+| B | 96,000 | ring-base@1, `f935868b` | 96,000 | 21 | 20.53 (19.10–21.07) | 4.63 | 15.83 | 30.77 | 29,999 | 35.3 | 1,387 | 0.27 | 5.44 (2.14–11.39) | 13.44 |
+
+Medians of 5 (min to max) for the server µs and the p99, medians of 5 for the other figures, and `PSS MB` and `box MB` from the last round of each design. Every row is one process; every round held every connection (`up` equal to C, 13 descriptors at 18,000 and 21 at 96,000), and lost no timed request (`lat_lost`), failed no send and closed no connection. Each response sent a median of 3.000 segments out (`outsegs_rsp`) at 18,000 and 3.020 to 3.024 at 96,000; one round, `ring-copy@1`'s first at 96,000 in run A, read 3.267.
+
+The noise band is the widest spread between two identical builds in the same run, as a share of the `ring@N` median. In run A that is 8.3% at 18,000 (`ring@64` 17.77 against `ring-copy@64` 16.30; the `@1` pair is 3.7% apart and the `@256` pair 6.4%) and 2.2% at 96,000 (`ring@64` 19.90 against `ring-copy@64` 20.33; the `@1` pair 1.5%, the `@256` pair 1.6%). In run B, whose only identical pair is `@1`, it is 3.0% at 18,000 and 1.8% at 96,000. `run.sh`'s comparison lines:
+
+| run | C | against | side | less CPU a request | p50 added | p99 added | widest identical-build spread |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: |
+| A | 18,000 | `ring@1` | `minEvents` 64 | 23.7% | +2.22 ms | +4.90 ms | 8.3% |
+| A | 18,000 | `ring@1` | `minEvents` 256 | 24.8% | +2.15 ms | +4.01 ms | 8.3% |
+| A | 96,000 | `ring@1` | `minEvents` 64 | 1.0% | +1.82 ms | +4.06 ms | 2.2% |
+| A | 96,000 | `ring@1` | `minEvents` 256 | −2.0% | +1.95 ms | +3.81 ms | 2.2% |
+| A | 18,000 | `ring-base@1`, `fa9894be` | `ring@1` | 0.0% | | | 8.3% |
+| A | 96,000 | `ring-base@1`, `fa9894be` | `ring@1` | 2.0% | | | 2.2% |
+| B | 18,000 | `ring-base@1`, `f935868b` | `ring@1` | 0.9% | | | 3.0% |
+| B | 96,000 | `ring-base@1`, `f935868b` | `ring@1` | 1.8% | | | 1.8% |
+
+**The direct wait (#2256).** Neither base reads a CPU difference from `ring@1`. Against `f935868b` it is 0.9% at 18,000 and 1.8% at 96,000, inside run B's 3.0% and at its 1.8%, and the per-round ranges overlap at both Cs. Against `fa9894be`, which adds #2252 and the SQLite changes, it is 0.0% at 18,000 and 2.0% at 96,000, inside run A's 2.2%, with overlapping ranges. So the direct wait, and the batch's code at its default `minEvents` 1, cost nothing the runs can read, and save nothing they can read either.
+
+**The batch.** At 18,000 connections a batch saves about a quarter of the server's CPU a request, 23.7% at `minEvents` 64 and 24.8% at 256, far outside the 8.3% band: every round of `ring@64` and `ring@256`, and of their copies, at most 18.77 µs, was cheaper than every `@1` round of `ring@1`, `ring-copy@1` and `ring-base@1`, at least 22.37 µs. The saving is mostly system time, 17.63 to 13.17 µs at 64, with user time 5.97 to 5.03, and the box's CPU a request falls with it, 38.43 to 29.37 µs. At 96,000 run A reads no saving: 1.0% less at 64 and 2.0% more at 256, both inside the 2.2% band, with every batch range overlapping `ring@1`'s. The run does not say why the saving goes at the higher C; what the two Cs share is the rate, so the higher C's connections each send less often.
+
+`minEvents` 256 takes the same code path as 64, because the runtime fills a batch from at most 64 events (`NISH_POLL_CHUNK` in `runtime/runtime-net.c`); what separates the two in the tables is noise. At 18,000 the server µs read 17.53 against 17.77, and the box µs 28.23 against 29.37, while the two builds of `minEvents` 64 alone read 17.77 and 16.30.
+
+The cost is latency. A batch adds 1.8 to 2.2 ms to the median at both Cs, more than the 1 ms of `maxWaitMs`; the run does not measure where the rest goes. At 18,000 the p99 medians add 4.0 to 4.9 ms, but not round by round: four of `ring@1`'s five rounds read 1.27 ms or less and every round of `ring@64` and `ring@256` read 3.36 ms or more, while `ring@1`'s fifth round read 21.25 ms. At 96,000 the p99 column is too noisy to read a difference from: `ring@1` alone read 0.89 to 10.88 ms across its rounds.
+
+An earlier run of this bench, with its code at commit `0f851051` and no base side, read the batch at 33.4% and 34.5% less CPU a request at 18,000, and 4.1% and 5.0% less at 96,000. Its widest identical-build spreads were 1.6% at 18,000 and 3.3% at 96,000 (`ring@256` 18.43 against `ring-copy@256` 19.03), so its 96,000 saving was barely outside its own noise, and run A, which reads none, does not confirm it. Profile shares (the share of time in the wait, the handler and the kernel) are not measured: the box has no `perf`.
+### A sliced batch window against a 1 ms nap
+
+**Why the window was rebuilt.** With 0.46.0 the owner measured `pollWaitBatch(loop, ready, 1000, 64, 1)` at 90,000 connections and about 20,000 req/s on one core. It cost more CPU a request than plain `pollWait`, 29.1 µs against about 27.9, and more than a 1 ms nap after a short pass, 25.7. In that release the batch's second wait went back into the ring for each completion that trickled in. One round of this bench at 18,000 connections, built before the change, counted 69,998 ring enters for `ring@64` against 87,397 for `ring@1`, with 8,589 window waits in 6,804 windows. The window now sleeps out its `maxWaitMs` in `poll(2)` slices of an eighth of it, at most 8 (one at `maxWaitMs` 1). It runs the send pump and collects once after each slice, and it ends early only when the batch fills or a signal arrives (`docs/security/net-uring.md`, NURING-46).
+
+`ring-nap` is the nap the batch is measured against (`bench/handler-ring/server.ts`, `BENCH_NAP=1`). It is `ring@1`'s plain `pollWait` turn and, after a pass that answered fewer than 64 requests, a 1 ms `pollWait` on an empty loop. The run is closed-loop: each connection waits 4.5 s after its answer before it sends again. Each request is a SQLite lookup, and the server runs on CPU 0 with the load on CPUs 1 to 3. The box is an Intel Xeon @ 2.30GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000. The bench code is that of this section's commit, the squash commit of the pull request that added it:
+
+`BENCH_URING_STATS=1 bash bench/handler-ring/run.sh --conns "18000 90000" --think 4.5 --warmup 5 --designs "ring ring-copy ring-nap" --min-events "1 64" --max-wait-ms 1`
+
+The run used a 5 s warm-up and a 10 s window over 5 rounds. `run.sh` refuses a warm-up shorter than the think time, so a 4 s warm-up is not possible. Server µs a request, per round:
+
+| C | round | ring@64 | ring-copy@64 | ring-nap | ring@1 | ring-copy@1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 18,000 | 1 | 23.75 | 24.51 | 28.76 | 22.75 | 31.26 |
+| 18,000 | 2 | 25.51 | 26.00 | 30.26 | 31.75 | 26.50 |
+| 18,000 | 3 | 30.26 | 21.75 | 23.51 | 34.25 | 34.76 |
+| 18,000 | 4 | 26.00 | 21.76 | 32.76 | 27.25 | 28.75 |
+| 18,000 | 5 | 22.26 | 23.51 | 32.76 | 23.00 | 29.01 |
+| 90,000 | 1 | 17.31 | 20.76 | 22.66 | 22.65 | 21.05 |
+| 90,000 | 2 | 16.45 | 22.56 | 22.16 | 22.15 | 18.90 |
+| 90,000 | 3 | 18.51 | 21.81 | 21.35 | 22.55 | 21.55 |
+| 90,000 | 4 | 22.37 | 20.31 | 21.01 | 22.10 | 23.70 |
+| 90,000 | 5 | 20.21 | 21.56 | 21.15 | 17.70 | 18.90 |
+
+| C | design | held | fds | server µs/req | user | sys | box µs/req | req/s | PSS MB | box MB | p50 ms | p99 ms | p99.9 ms |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 18,000 | ring@64 | 18,000 | 13 | 25.51 (22.26–30.26) | 7.75 | 17.00 | 38.76 | 3,999 | 13.0 | 762 | 1.26 | 1.62 (1.52–1.68) | 2.85 |
+| 18,000 | ring-copy@64 | 18,000 | 13 | 23.51 (21.75–26.00) | 6.75 | 17.00 | 36.76 | 3,999 | 12.9 | 770 | 1.26 | 1.68 (1.52–1.71) | 3.49 |
+| 18,000 | ring-nap | 18,000 | 14 | 30.26 (23.51–32.76) | 9.00 | 20.00 | 49.01 | 3,999 | 12.9 | 767 | 1.17 | 1.65 (1.58–1.65) | 2.98 |
+| 18,000 | ring@1 | 18,000 | 13 | 27.25 (22.75–34.25) | 8.50 | 18.75 | 46.01 | 3,999 | 12.7 | 780 | 0.15 | 0.42 (0.35–0.50) | 1.26 |
+| 18,000 | ring-copy@1 | 18,000 | 13 | 29.01 (26.50–34.76) | 9.00 | 21.75 | 48.01 | 3,999 | 13.1 | 776 | 0.16 | 0.48 (0.42–2.08) | 1.26 |
+| 90,000 | ring@64 | 90,000 | 21 | 18.51 (16.45–22.37) | 4.30 | 14.21 | 26.91 | 19,990 | 34.2 | 1,294 | 1.62 | 3.42 (2.66–4.00) | 4.80 |
+| 90,000 | ring-copy@64 | 90,000 | 21 | 21.56 (20.31–22.56) | 4.70 | 16.86 | 30.86 | 19,991 | 34.2 | 1,285 | 1.81 | 3.87 (3.23–5.06) | 5.31 |
+| 90,000 | ring-nap | 90,000 | 22 | 21.35 (21.01–22.66) | 4.70 | 16.70 | 30.66 | 19,995 | 34.5 | 1,277 | 0.95 | 2.85 (2.53–4.29) | 9.09 |
+| 90,000 | ring@1 | 90,000 | 21 | 22.15 (17.70–22.65) | 5.10 | 16.35 | 31.71 | 19,996 | 34.4 | 1,291 | 0.14 | 0.66 (0.42–0.90) | 3.10 |
+| 90,000 | ring-copy@1 | 90,000 | 21 | 21.05 (18.90–23.70) | 5.00 | 15.55 | 31.65 | 19,997 | 34.4 | 1,284 | 0.14 | 0.86 (0.57–11.65) | 3.68 |
+
+The server µs and the p99 are medians of 5, with the min to max in brackets; the other figures are medians of 5 too. `PSS MB` and `box MB` come from each design's last round. Every round held every connection and lost no timed request. The nap's server has one more descriptor: its empty loop. Each response sent a median of about 3.00 segments out (`outsegs_rsp`).
+
+`run.sh`'s band is `ring@1` against `ring-copy@1`: 6.5% at 18,000 and 5.0% at 90,000. The widest spread between two identical builds is wider, in the `@64` pair: 7.8% at 18,000 (25.51 against 23.51) and 16.5% at 90,000 (18.51 against 21.56). `run.sh`'s comparison lines:
+
+| C | side | against `ring@1` | p50 added | p99 added | band |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 18,000 | `minEvents` 64 | 6.4% less CPU | +1.11 ms | +1.20 ms | 6.5% |
+| 18,000 | `ring-nap` | 11.0% more CPU | +1.01 ms | +1.23 ms | 6.5% |
+| 90,000 | `minEvents` 64 | 16.4% less CPU | +1.47 ms | +2.76 ms | 5.0% |
+| 90,000 | `ring-nap` | 3.6% less CPU | +0.81 ms | +2.18 ms | 5.0% |
+
+**The batch against the nap.** At 18,000 both `@64` builds cost less than the nap a request: 25.51 and 23.51 µs against 30.26, which is 15.7% and 22.3% less. At 90,000 `ring@64` costs 13.3% less than the nap, 18.51 against 21.35 µs, and `ring-copy@64` costs 1.0% more, 21.56. That spread is the 16.5% between the two identical builds, so at 90,000 the batch is level with the nap within noise, not cheaper than it. The per-round ranges overlap at both Cs. Against `ring@1` the batch reads 6.4% less CPU at 18,000, inside the 7.8% identical-build spread. At 90,000 it reads 16.4% less, inside the 16.5% spread too, since `ring-copy@64` is 2.7% under `ring@1`. The cost is latency: the batch adds 1.1 to 1.5 ms to the median, and the nap adds 0.8 to 1.0 ms.
+
+**What the window now does.** Each server's `NISH_URING_STATS=1` line is printed on the `SIGUSR1` that `run.sh` sends halfway through the window, and counts from the server's start to then, warm-up included. At 18,000, `ring@64` entered the ring 34,199 to 42,761 times across its rounds, against 80,920 to 92,623 for `ring@1` and 32,476 to 61,928 for the nap. It counted one window wait per window (6,631 to 7,472 windows): each window sleeps its one 1 ms slice and pumps once. At 90,000 the figures are 57,866 to 92,410 enters for `ring@64`, 104,061 to 194,938 for `ring@1` and 42,393 to 54,134 for the nap, with window waits again equal to windows (6,210 to 6,781). The window enters the ring about as often as the nap does, which is where the CPU went in 0.46.0.
+
+**Memory.** The `PSS MB` column is read by `bench/fd-limit/loadgen.c` from `smaps_rollup` after the window ends. At 18,000 every design's PSS reads 12.7 to 13.1 MB. At 90,000 it reads 34.2 to 34.5 MB in the last rounds, and the batch carries no PSS the nap does not. What the batch does change is the send pool: `ring@64` made up to 2,690 pool buffers at 90,000 (`pool_new`) against at most 182 for `ring@1`, and kept at most 160 of them cached (16 KiB each, 2.5 MiB). The nap made up to 2,516 (`docs/security/net-uring.md`, "The send pool's PSS at 90,000").
+
+**No regression at a slower think.** `bash bench/handler-ring/run.sh --conns 18000 --think 30 --warmup 31 --designs "ring ring-copy ring-nap" --min-events "1 64" --max-wait-ms 1`, 600 requests a second: `ring@64` cost 63.34 µs a request against 61.66 for `ring@1`, 2.7% more inside a 2.7% band, with p50 +1.11 ms and p99 +1.15 ms. The nap cost 80.00, 29.7% more than `ring@1`.
+
+**Near saturation.** `bash bench/handler-ring/run.sh --conns 4000 --rate 120000 --rounds 7 --designs "ring ring-copy ring-nap" --min-events "1 64" --max-wait-ms 1`, seven rounds, the offered 120,000 a second above what one core answers. The medians were 76,313 requests a second for `ring@64`, 72,242 for `ring@1`, 76,164 for `ring-copy@1`, 75,243 for `ring-copy@64` and 75,729 for the nap. CPU a request was 12.99, 13.73, 13.00, 13.16 and 13.10 µs: `ring@64` 5.4% below `ring@1` against a 5.3% band, p50 -4.10 ms, p99 -1.02 ms. At saturation the window fills before its millisecond is out, and the batch answers as many requests as plain `pollWait` within noise.
+
+**`ring@1` against main.** `bash bench/handler-ring/run.sh --conns 18000 --think 4.5 --warmup 5 --rounds 9 --base-compiler <main build> --designs "ring ring-copy ring-base" --min-events 1`, main at e274b99e, this branch's merge base, built in a worktree. The medians of nine rounds were 24.00 µs for `ring@1` (18.75 to 30.25), 24.50 for `ring-copy@1` (17.75 to 29.00) and 22.25 for `ring-base@1` (20.25 to 33.00): `ring@1` 7.9% above main, outside the 2.1% band its copy gives, inside main's own range. An earlier five-round run gave 27.00, 24.00 and 23.75, with the two copies of one build 11.1% apart. A `minEvents` of 1 never reaches `nr_batch`; what this branch adds on that path is one counter increment per `io_uring_enter`, for the stats line's `enters`. The difference is recorded as measured and not explained: neither run separates it from the round-to-round spread.
 <!-- handler-ring:end -->
 
 <!-- handler-wins:begin -->
@@ -3857,6 +3995,64 @@ The noise band is 0.6% at the medians (epoll against its copy) and at most 6.0% 
 What this does not say: the stand-in is not the entry, and its one route is a read; writes go through the WAL and an mmap gains them nothing (design §9). Only 18,000 connections were measured. Rerun `wins.sh` on the entry before it adopts either.
 <!-- handler-wins:end -->
 
+<!-- handler-coalesce:begin -->
+## Coalesced ring sends, before and after (uring-send-coalesce S2)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. The stand-in is S4's ([above](#io_uring-under-the-handler-wp63-s4)): `bench/handler-ring/server.ts` on rings (`ring`), and the `Http1Server` design on rings (`h1-ring`: `bench/http1-server.ts`, the HTTP/1.1 load-test server, as one process under `BENCH_RING=1`, so its head and body go out through the ring's sends). The change measured is #2252 (`c12ccb0f`), whose only `src/`, `std/` or `runtime/` file is `runtime/runtime-uring.c`: a ring slot's queued sends go out as one SEND from a per-ring buffer pool. `src/` is the same on both sides, so the two compilers build the same code and link different runtimes:
+
+- **ring**, **h1-ring**: built by `build/nish` at the bench commit, whose `runtime/` is `c12ccb0f`'s (after).
+- **ring-copy**, **h1-ring-copy**: a byte-identical copy of the after build; its gap to the after build is the noise band.
+- **ring-base**, **h1-ring-base**: built by a compiler from a worktree at `b2c55694` (`c12ccb0f^`, before), passed as `--base-compiler`. `run.sh` builds the base binary of each requested `-base` design and refuses to go on if it matches its after build byte for byte.
+
+`run.sh` runs the arms in interleaved rounds, with the order rotated each round. `out/rsp` and `in/rsp` are the TCP segments `/proc/net/snmp` counted (`OutSegs`, `InSegs`) over loadgen's window, divided by the responses in it, as `bench/handler-ring/segs.c` samples them every 10 ms. The counters belong to the network namespace, so they count the server's segments and the load generator's, data and pure ACKs alike, on loopback.
+
+Bench code as #2251 adds it (`bench/handler-ring/run.sh` and `segs.c`; the run used them at that pull request's branch commit `c664c0ed`, and the one later change, which narrows `run.sh`'s identical-build check to the requested `-base` designs, changes no binary or printed field), on an Intel Xeon @ 2.10GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, with a hard `RLIMIT_NOFILE` of 20,000 that every server runs under. The server is pinned to CPU 0 and the load to CPUs 1 to 3, with `--nodb` (`BENCH_NODB=1`: every server answers `/plaintext`'s 129 bytes without a query). 5 rounds at each count:
+
+```sh
+bash bench/handler-ring/run.sh --nodb --conns 18000 --base-compiler <before>/build/nish \
+  --designs "ring ring-copy ring-base h1-ring h1-ring-copy h1-ring-base h1"
+bash bench/handler-ring/run.sh --nodb --conns 96000 --think 4 --warmup 4 --base-compiler <before>/build/nish \
+  --designs "ring ring-copy ring-base h1-ring h1-ring-copy h1-ring-base"
+```
+
+At 18,000 connections the load is 30,000 requests a second, a 3-second warm-up and a 10-second window. At 96,000 it is a closed loop with 4 seconds' think time, about 24,000 requests a second, with a 4-second warm-up. The epoll `h1` design runs only at 18,000: one process under the 20,000 limit cannot hold 96,000 descriptors. Every arm held every connection in every round, and none lost a request (`send_failed`, `closed` and `lat_lost` were 0 in every round).
+
+Medians of 5 (min to max). `user` and `sys` are medians of the server's user and system CPU a request. `PSS MB` is the median of the five rounds' `srv_pss_mb` (MiB) with its range, read from the per-round lines; the summary's own `PSS MB` column is the last round's. `p99` is the median of the rounds' p99 latency, and no latency comparison is claimed from it (below):
+
+| C | design | server µs/req | user | sys | out/rsp | in/rsp | box µs/req | req/s | PSS MB | p99 ms |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 18,000 | ring | 17.07 (16.30–17.44) | 2.23 | 14.57 | 3.000 | 3.000 | 33.07 | 30,000 | 11.1 (11.1–11.2) | 0.73 |
+| 18,000 | ring-copy | 16.60 (16.00–18.17) | 2.30 | 14.23 | 3.000 | 3.000 | 32.64 | 29,998 | 11.2 (11.0–11.3) | 0.73 |
+| 18,000 | ring-base | 17.00 (16.27–18.00) | 2.40 | 14.60 | 3.000 | 3.000 | 33.27 | 30,000 | 10.7 (10.6–10.7) | 1.68 |
+| 18,000 | h1-ring | 17.13 (16.17–18.20) | 2.23 | 14.70 | 3.000 | 3.000 | 31.57 | 30,000 | 10.0 (9.9–10.0) | 1.04 |
+| 18,000 | h1-ring-copy | 16.37 (15.93–18.03) | 2.53 | 13.79 | 3.000 | 3.000 | 32.57 | 30,000 | 10.1 (9.9–10.6) | 0.70 |
+| 18,000 | h1-ring-base | 16.73 (16.53–17.67) | 3.00 | 14.23 | 3.000 | 3.000 | 32.07 | 30,000 | 9.6 (9.5–9.7) | 1.00 |
+| 18,000 | h1 (epoll) | 11.90 (10.87–13.27) | 1.57 | 10.20 | 3.000 | 3.000 | 27.73 | 30,000 | 3.0 (3.0–3.0) | 0.76 |
+| 96,000 | ring | 14.26 (14.25–15.71) | 2.25 | 12.13 | 3.002 | 3.002 | 27.25 | 23,995 | 33.3 (32.9–33.8) | 2.66 |
+| 96,000 | ring-copy | 14.75 (13.75–15.09) | 2.33 | 12.21 | 3.003 | 3.003 | 27.96 | 23,995 | 32.8 (32.5–34.5) | 2.27 |
+| 96,000 | ring-base | 14.84 (14.38–15.97) | 2.29 | 12.54 | 3.002 | 3.002 | 27.63 | 23,995 | 31.4 (31.1–31.5) | 1.36 |
+| 96,000 | h1-ring | 15.00 (14.50–15.50) | 2.21 | 12.88 | 3.001 | 3.001 | 28.84 | 23,996 | 32.0 (31.5–32.5) | 2.66 |
+| 96,000 | h1-ring-copy | 14.42 (13.71–14.97) | 2.17 | 12.51 | 3.001 | 3.001 | 27.17 | 23,994 | 31.9 (31.8–32.0) | 1.65 |
+| 96,000 | h1-ring-base | 14.92 (14.80–15.29) | 2.25 | 12.63 | 3.001 | 3.001 | 28.46 | 23,995 | 30.4 (30.3–30.8) | 1.94 |
+
+After against before, as `run.sh` prints it (the change in server CPU a request at the medians, and the noise band, the after build against its copy):
+
+| C | design | after vs before | band |
+| ---: | --- | ---: | ---: |
+| 18,000 | ring | 0.4% more | 2.8% |
+| 18,000 | h1-ring | 2.4% more | 4.4% |
+| 96,000 | ring | 3.9% less | 3.4% |
+| 96,000 | h1-ring | 0.5% more | 3.9% |
+
+**Packets per response: no change.** The before and after builds counted the same segments per response at each count: 3.000 at 18,000 connections, and 3.001 to 3.002 at 96,000 (the copy, 3.001 to 3.003). On this loopback route, before #2252 already sent no more segments a response than after it, so this run shows nothing the coalescing removed from the wire. The run does not count SENDs (it reads no `nish_uring_stats`), so it does not show how many the after build coalesced on this route either. These counts are the namespace's, request and ACKs included; a route that splits a response's sends across segments, which this one does not show, is where a change would appear.
+
+**CPU per request: three of four comparisons inside the noise band, and no gain claimed.** The fourth, `ring` at 96,000, is 3.9% less against a 3.4% band; the same design at 18,000 is 0.4% more, and the per-round figures overlap (after 14.25 to 15.71 µs, before 14.38 to 15.97), so this run does not claim it as a gain.
+
+**PSS: up after #2252, in every round.** At 96,000 connections `ring` rose 1.9 MiB at the medians (33.3 against 31.4, 6.1%) and `h1-ring` 1.6 MiB (32.0 against 30.4, 5.3%); at 18,000 both rose 0.4 MiB (11.1 against 10.7, and 10.0 against 9.6). At both counts and in both designs, every after round is above every before round, and the copy's range sits with the after build's, not the before's. The rise grows with the connection count, about 16 to 22 bytes a connection at 96,000 and 18 to 29 at 18,000 (PSS is printed to 0.1 MiB, so each difference is ±0.1 MiB). The send buffer pool #2252 adds is capped at 32 buffers of 16 KiB, 0.5 MiB a ring (`UR_SENDPOOL_MAX`, `UR_CHUNK`), so it alone does not account for 1.9 MiB; #2252 also adds per-slot state. This run measures that the process is larger; it does not attribute the bytes.
+
+What this does not say: these are one server process each on loopback, and only `--nodb`; a route over a real network, or a response large enough to need more than one segment, was not measured. Nor does it claim a latency change either way. The `p99` medians flip direction between the counts (`ring` 0.73 against `ring-base` 1.68 ms at 18,000, 2.66 against 1.36 at 96,000), and a build and its byte-identical copy differ by as much (`h1-ring` 2.66 against its copy's 1.65 ms at 96,000, 1.04 against 0.70 at 18,000), so the column is inside its own noise.
+<!-- handler-coalesce:end -->
+
 <!-- mul-high:begin -->
 ## The `mulHigh` builtin in P-256 and the JSON tokenizer (WP41 S1)
 
@@ -3892,13 +4088,14 @@ The wasm32 build of the tokenizer was not timed and is not byte-identical. After
 <!-- sqlite-cursor:begin -->
 ## The feed through cursors against SQL
 
-Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs` ([bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#sqlite)) times the challenge's feed three ways through `nish/sqlite`. All three read the 20 newest posts with each author's username and like count, and fold them the same way:
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs` ([bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#sqlite)) times the challenge's feed four ways through `nish/sqlite`. All four read the 20 newest posts with each author's username and like count, and fold them the same way:
 
 - **`feed`** is SQL. One statement is prepared once; each call steps it 21 times, reads every column and resets. The statement has no parameters, so nothing is bound.
-- **`feed-cursor-walk`** reads through the [cursor API](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md) and no SQL. One read transaction and four cursors are opened before the timed loop and closed after it, so a call is the walk alone: it walks `posts_created_at_id_idx` newest first, seeks each post and its author by rowid, and counts the post's entries in `likes_post_id_idx`.
-- **`feed-cursor`** is the same walk with what a request adds: each call runs `beginRead`, four `openCursor` calls, the walk, and `endRead`.
+- **`feed-cursor-walk`** reads through the [cursor API](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md) and no SQL. One read transaction and four cursors are opened before the timed loop and closed after it, so a call is the walk alone: it walks `posts_created_at_id_idx` newest first, seeks each post and its author by rowid, and counts the post's entries in `likes_post_id_idx` by a `seek` and then a `next` and a `columnI64` per like.
+- **`feed-cursor-count`** is the same walk with the likes counted in one `countRange` call for the whole feed ([below](#like-counts-in-one-call)).
+- **`feed-cursor`** is the `feed-cursor-walk` walk with what a request adds: each call runs `beginRead`, four `openCursor` calls, the walk, and `endRead`.
 
-Every run of all three printed `rows 200000 checksum 1510587328` (10,000 calls of 20 rows), and `--validate` refuses a cursor workload whose line differs from `feed`'s. The C and Rust twins have no cursor path, so the two cursor workloads run on the build and its byte-identical copy only. Each workload's noise band is the build against that copy.
+Every run of every workload printed `rows 200000 checksum 1510587328` (10,000 calls of 20 rows), and `--validate` refuses a cursor workload whose line differs from `feed`'s. The C and Rust twins have no cursor path, so the cursor workloads run on the build and its byte-identical copy only. Each workload's noise band is the build against that copy. The first two tables predate `feed-cursor-count` and time the other three.
 
 `node bench/sqlite/run.mjs` (12 rounds after a warm-up round) with the bench code of commit `c940ecb3`, which includes #1801 (`9996c9b1`): `openCursor` caches checked cursor shapes, and `beginRead`/`endRead` keep `BEGIN`, the schema read and `COMMIT` prepared. The machine is an Intel Xeon @ 2.10GHz with 4 logical cores, Linux 6.18.44, Ubuntu clang 18.1.3 and SQLite 3.54.1. ns per call:
 
@@ -3920,7 +4117,94 @@ The verdict statistic is the median.
 **With a request's setup on every call, the cursors are still faster than the SQL: 3,434 ns less a call.** That is larger than both noise bands (564 and 46) and the four IQRs (1,208, 624, 2,346 and 1,370).
 
 **The setup a per-request open adds is derived, not measured: `feed-cursor` less `feed-cursor-walk` is 2,116 ns at the median (1,676 ns at the min).** It is the difference of two rows of the table, not a timed row of its own. It is larger than both of their noise bands (54 and 46) but smaller than the IQRs of `feed-cursor` (2,346) and of `feed-cursor-walk`'s copy (2,809), so this run does not resolve it beyond those spreads.
+
+### One slot lookup per cursor call
+
+A cursor call used to look its handle up and then ask SQLite whether the read had ended (`sqlite3_get_autocommit` and the `main` B-tree's transaction state). It now looks the slot up once and locks the mutex the cursor kept at open; a rollback hook invalidates the cursors when SQLite rolls a read back on its own ([docs/sqlite-cursor.md](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md#transactions-and-invalidation)). Both cursor workloads reach it on every call of the walk: `first`, `next`, `rowid`, `seekRowid`, `keyReset`, `keyI64`, `seek` and `columnInto` (`bench/sqlite/main.ts`, `walkFeed`).
+
+`node bench/sqlite/run.mjs --rounds 12 --base origin/main` with the bench code of commit `6685b628`, base `99d670d3` (`main.ts` built on that commit's `std/` and `runtime/`, timed in the same rounds), on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Base min / median (IQR) | Noise band, min / median | Base less build, min / median |
+| --- | --- | --- | --- | --- | --- |
+| `feed` (SQL) | 20,312 / 21,963 (3,247) | 20,604 / 21,564 (1,245) | 20,686 / 22,020 (2,718) | 292 / 398 | +374 / +58 |
+| `feed-cursor-walk` | 13,671 / 14,338 (1,775) | 13,760 / 14,963 (2,428) | 14,417 / 15,932 (4,323) | 89 / 625 | +745 / +1,594 |
+| `feed-cursor` | 16,384 / 17,397 (2,162) | 16,472 / 17,711 (4,657) | 16,912 / 18,113 (3,476) | 88 / 315 | +529 / +716 |
+
+**The walk's median is 1,594 ns a call below the base's (11.1 % of the build's median), outside the 625 ns noise band but inside the IQRs of the copy (2,428) and the base (4,323), so this run does not resolve the gain beyond those spreads.** At the min the gap is 745 ns, outside its 89 ns band.
+
+**With a request's setup on every call, the gain is 716 ns at the median (4.1 %) and 529 ns at the min.** Both are larger than the noise band (315 and 88) and smaller than every IQR of the row. `feed`, which makes no cursor call, moved 58 ns at the median, inside its 398 ns band.
+
+The whole machine ran slower in this run than in the one above (`feed` 21,963 against 18,082 ns at the median), so its figures compare with each other, not with that table.
+
+### Like counts in one call
+
+`feed-cursor-count` reads the posts and authors as `feed-cursor-walk` does, then counts all 20 posts' likes in one `Cursor.countRange(minId, maxId, counts)` call over the posts' id span and reads each post's count as `counts[id - minId]`: one seek and one walk of `likes_post_id_idx` inside the adapter for the whole feed, where `feed-cursor-walk` makes a `seek` and then a `next` and a `columnI64` per like from Nish (`bench/sqlite/main.ts`, `walkFeedCounted` and `walkFeed`). When the span does not fit the 1,024-entry buffer it falls back to one `countRange(id, id, counts)` per post. The bench database's 20 newest posts are ids 499,981 to 500,000, so every call, timed or `--validate`, takes the one-call path: the fallback is unexercised. `feed-cursor-walk` is the per-like walk, unchanged from `main`.
+
+`node bench/sqlite/run.mjs --rounds 12 --no-rust` with the bench code of commit `a2f87c15`, on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Noise band, min / median |
+| --- | --- | --- | --- |
+| `feed` (SQL) | 17,739 / 18,900 (2,323) | 17,763 / 18,909 (3,385) | 25 / 9 |
+| `feed-cursor-walk` | 12,534 / 13,311 (1,406) | 11,341 / 13,033 (958) | 1,193 / 277 |
+| `feed-cursor-count` | 9,758 / 10,567 (979) | 7,821 / 10,484 (1,218) | 1,936 / 82 |
+| `feed-cursor` | 12,380 / 16,660 (2,618) | 14,979 / 15,953 (3,090) | 2,599 / 706 |
+
+The noise bands are as the script printed them, from unrounded timings, so one can differ by 1 ns from the difference of the rounded figures.
+
+**`feed-cursor-count` less `feed-cursor-walk` is −2,744 ns at the median and −2,776 ns at the min, both on the build.** This is derived: it is the difference of two rows of the table, not a timed row of its own. The median gap is larger than both noise bands (277 and 82) and every IQR of the two rows (1,406, 958, 979 and 1,218), and the walk's copy (13,033 ns) is slower than the count's build (10,567 ns). The min gap is larger than both min bands (1,193 and 1,936).
+
+Against `feed` in the same rounds, `feed-cursor-count` is 8,333 ns less a call at the median (−44.1 % of `feed`'s median, 18,900 ns), and `feed-cursor-walk` is 5,589 ns less (−29.6 %).
+
+#### The integer seek against `main`
+
+An integer seek now reuses the cursor's own `UnpackedRecord`, made at open, setting only its `nField`, `default_rc`, `errCode` and `eqSeen` before each seek, instead of building one per seek ([docs/sqlite-cursor.md](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md)). `main`'s seek also builds its record on the stack and allocates nothing, so what changes is the per-seek setup, not an allocation. `feed-cursor-walk` and `feed-cursor` reach it on every like count's `seek`.
+
+`node bench/sqlite/run.mjs --base origin/main --rounds 12 --no-rust`, base `b2c55694`, with this branch's `std/` and `runtime/` at commit `88a30a8a` and `main`'s `bench/sqlite/main.ts` and `run.mjs` checked out for the run: `--base` builds this tree's `main.ts` against the base's `std/`, which has no `countRange`. `walkFeed` is byte-identical on both sides. The build, its copy and the base were timed in the same rounds, on the machine above. Every row printed `rows 200000 checksum 1510587328`. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Base min / median (IQR) | Noise band, min / median | Base less build, min / median |
+| --- | --- | --- | --- | --- | --- |
+| `feed` (SQL) | 15,065 / 19,846 (3,481) | 13,837 / 21,088 (5,025) | 16,876 / 21,021 (4,824) | 1,228 / 1,242 | +1,811 / +1,175 |
+| `feed-cursor-walk` | 9,994 / 13,291 (2,065) | 9,816 / 12,868 (856) | 12,128 / 13,241 (2,881) | 179 / 422 | +2,134 / −50 |
+| `feed-cursor` | 11,520 / 17,408 (3,913) | 14,847 / 16,183 (2,660) | 14,205 / 17,268 (4,011) | 3,327 / 1,226 | +2,685 / −141 |
+
+The last two columns are as the script printed them, from unrounded timings, so one can differ by 1 ns from the difference of the rounded figures: from the table's medians `feed-cursor` is −140.
+
+**A gain for the walk is not shown.** At the median, the verdict statistic, the base is 50 ns faster than the build, inside the 422 ns noise band. At the min the base is 2,134 ns slower, outside the 179 ns band but inside the base's IQR (2,881). `feed-cursor` moved −141 ns at the median, inside its 1,226 ns band. `feed`, which makes no cursor call, moved +1,175 ns at the median, inside its 1,242 ns band.
+
+### One call per row: `readRow`
+
+`feed-cursor-row` is `feed-cursor-walk` with each post's `user_id`, `body` and `created_at` read by one `Cursor.readRow` call, and its author's `username` by another (`bench/sqlite/main.ts`, `walkFeedRows`). Each cursor's `selectRow` runs once, before the timed loop. The per-column walk makes four column calls a post: `columnI64` and two `columnInto` on the post, one `columnInto` on the author. The rowid seeks and the likes count are the same in both. All three feed walks run in the same rounds, and every run printed `rows 200000 checksum 1510587328`, `feed`'s line.
+
+`node bench/sqlite/run.mjs --rounds 12 --no-rust` with the bench and adapter code of commit `07f7b51a`, where `readRow` finds each column's `Mem` once under one lock, SQLite 3.54.1, on the machine above. ns per call; the band is the build against its byte-identical copy:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Noise band, min / median |
+| --- | --- | --- | --- |
+| `feed` (SQL) | 13,902 / 18,090 (3,331) | 15,638 / 19,825 (7,345) | 1,737 / 1,734 |
+| `feed-cursor-walk` | 10,900 / 13,167 (3,638) | 10,567 / 12,867 (1,797) | 333 / 300 |
+| `feed-cursor-count` | 10,264 / 12,112 (532) | 7,906 / 9,965 (2,048) | 2,358 / 2,148 |
+| `feed-cursor-row` | 10,936 / 15,003 (3,041) | 11,752 / 14,096 (2,963) | 816 / 907 |
+
+**A gain from `readRow` is not shown.** `feed-cursor-row` less `feed-cursor-walk` is +1,836 ns at the median and +36 ns at the min; between the copies it is +1,229 and +1,185. At the median the build's difference is more than both noise bands (300 and 907) but less than both builds' IQRs (3,041 and 3,638), so this run shows `readRow` no faster and does not resolve the slowdown beyond that spread. This run was noisier than the one at `143cf516` (`feed`'s band went from 49 to 1,734 ns at the median), so it does not show whether reading each `Mem` once moved the time either. What the row walk still does that the per-column walk does not is decode a 9-byte slot a column into `ints` and `spans`; this run does not measure how much of the time that is.
 <!-- sqlite-cursor:end -->
+
+<!-- sqlite-vfs:begin -->
+## SQLite's unix-excl VFS against the default
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs --variant unix-excl` adds a byte-identical copy of the Nish build to the rounds and opens the seed through it as `file:<db>?vfs=unix-excl`, with `OPEN_URI`; the build itself opens the plain path on SQLite's default `unix` VFS. Both keep the seed's WAL and `synchronous=NORMAL`. The decision this feeds is [docs/sqlite-vfs.md](https://github.com/amritk/nish/blob/main/docs/sqlite-vfs.md).
+
+12 rounds with the bench code of commit `f3a10584`, SQLite 3.54.1, on a 4-core cloud container (Intel Xeon @ 2.10GHz). Every workload's rows and checksum match across the binaries. ns per call; the band is the build against its copy.
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | unix-excl min / median (IQR) | unix-excl − build, min / median | Band, min / median |
+| --- | --- | --- | --- | --- | --- |
+| `lookup` | 5,290 / 6,206 (574) | 5,930 / 6,284 (334) | 5,231 / 5,611 (338) | −59 / −595 (−9.6%) | 640 / 78 |
+| `feed` | 14,124 / 18,281 (3,320) | 14,995 / 17,916 (1,175) | 13,474 / 17,632 (1,269) | −649 / −649 (−3.6%) | 871 / 365 |
+| `feed-cursor-walk` | 10,491 / 12,704 (526) | 12,310 / 12,811 (2,490) | 10,572 / 12,692 (2,285) | +81 / −12 (−0.1%) | 1,819 / 107 |
+| `feed-cursor` | 11,802 / 16,981 (5,562) | 12,883 / 15,012 (3,115) | 11,207 / 14,241 (1,624) | −595 / −2,740 (−16.1%) | 1,081 / 1,969 |
+| `insert` | 14,584 / 16,992 (1,308) | 16,338 / 18,215 (1,098) | 13,755 / 15,394 (788) | −829 / −1,599 (−9.4%) | 1,754 / 1,223 |
+| `insert-txn` | 4,463 / 5,336 (478) | 4,552 / 5,392 (462) | 4,670 / 5,451 (423) | +207 / +115 (+2.2%) | 89 / 56 |
+
+The verdict statistic is the median. `lookup` and `insert` are faster on unix-excl by more than the band and both IQRs. `feed` and `feed-cursor` are faster by more than the band but by less than the build's IQR, so this run does not separate them from noise. `feed-cursor-walk` holds one read transaction for the whole loop and does not move. `insert-txn` is 115 ns slower, past its 56 ns band but inside both IQRs; it makes the same system calls on both VFSes, so the run shows no cost and does not bound one smaller than its spread.
+<!-- sqlite-vfs:end -->
 
 <!-- sqlite-pgo:begin -->
 ## PGO and the CPU level on the SQLite feed

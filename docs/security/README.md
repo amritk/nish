@@ -58,14 +58,14 @@ the record that found it. The notes below the table name each such finding.
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
 | `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts`; the spawn handed to the sandbox in `runtime/runtime-os.c` | 0 / 1 / 0 / 0 | 0 / 0 / 0 / 0 |
-| io_uring ring layer | [net-uring.md](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md) | `runtime/runtime-uring.c`; the ring slot layer in `runtime/runtime-net.c` | 0 / 2 / 8 / 10 | 0 / 0 / 0 / 2 |
+| io_uring ring layer | [net-uring.md](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md) | `runtime/runtime-uring.c`; the ring slot layer in `runtime/runtime-net.c` | 0 / 2 / 9 / 16 | 0 / 0 / 0 / 3 |
 | Shared memory between processes | [shm.md](shm.md) | `runtime/runtime-shm.c`, `std/sync/shm.ts`, `std/sync/ring.ts`, `src/shm-window.ts`, `src/emit-shm-window.ts` | 0 / 0 / 1 / 3 | 0 / 0 / 0 / 1 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
 | A package's C link | [package-link.md](package-link.md) | `src/manifest.ts` (`manifestNish`'s `link` key, `manifestLink`, `manifestReadLinkObject`, `manifestReadLinkList`, `manifestReadLinkGrants`, `manifestLinkLibrary`, `manifestPrintableAscii`, `manifestLinkSourceProblem`), `src/compile.ts` (`readLinkSet`, `linkPackages`, `refuseUngranted`, `addLinkRequest`, `readLinkIncludes`, `linkProgram`), `src/run-cache.ts` (`LinkSet`, `makeRulePaths`, `linkSetLines`, `runCacheKey`), `scripts/build.sh` (`--link-lib`, `--link-source`, `--link-depends`) | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ³⁰ |
 | PostgreSQL client, its handler carrier and async pool | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts`, `std/crypto/scram.ts` | 0 / 0 / 10 / 7 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
-| Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
+| Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 1 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 6 | 0 / 0 / 1 / 8 ²⁴ |
@@ -82,7 +82,7 @@ the record that found it. The notes below the table name each such finding.
 | Header import, `nish c-import` | [c-import.md](c-import.md) | `src/c-import.ts`, `src/c-import-model.ts`, `src/c-import-json.ts`; the NL3062 data-model refusal in `src/compilation.ts` | 0 / 0 / 3 / 5 | 0 / 0 / 0 / 1 ³¹ |
 | Protobuf wire format | [protobuf.md](https://github.com/amritk/nish/blob/main/docs/security/protobuf.md) | `std/net/protobuf.ts`; `src/proto-lex.ts`, `src/proto-parse.ts`, `src/proto-emit.ts`, `src/proto-cli.ts` and the `decode` methods they write | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | gRPC calls, unary and streaming | [grpc.md](https://github.com/amritk/nish/blob/main/docs/security/grpc.md) | `std/net/grpc.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ³³ |
-| **Total** ⁸ | | | **3 / 19 / 109 / 228** | **0 / 0 / 2 / 46** |
+| **Total** ⁸ | | | **3 / 19 / 109 / 229** | **0 / 0 / 2 / 47** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -391,13 +391,18 @@ the record that found it. The notes below the table name each such finding.
 19. COMP-11, COMP-12 and COMP-13 (Medium), stale bytes queued by
     `respondEncoded` after `H1_AGAIN`, a `GzipWriter` panic inside its own
     bound, and the AArch64 CRC-32 kernel reading four bytes past its window,
-    were found by a review of the first version and fixed. COMP-8 (Low), COMP-9
-    (Medium) and COMP-17 (Low), a stream of small dynamic blocks rebuilding the decoder's
-    tables, the BREACH class of length leaks and deflate with `identity;q=0`
-    answered as identity, are accepted, with the reason
-    in their record, and are not counted. COMP-1 to COMP-7, COMP-10 and
-    COMP-16 (the Adler-32 kernels' window and sums) are properties checked
-    and found to hold.
+    were found by a review of the first version and fixed. COMP-19 (Low),
+    `GzipWriter.bound`, `gzipFixedBound` and a `GzipWriter` used after
+    `finish` panicking, was found by WP84's panic-site work and fixed. COMP-8
+    (Low), COMP-9 (Medium) and COMP-17 (Low), a stream of small dynamic blocks
+    rebuilding the decoder's tables, the BREACH class of length leaks and
+    deflate with `identity;q=0` answered as identity, are accepted, with the
+    reason in their record, and are not counted. COMP-1 to COMP-7, COMP-10 and
+    COMP-16 (the Adler-32 kernels' window and sums) are properties checked and
+    found to hold. COMP-20 (Low), an `HttpCompressor` built with a
+    `maxLength` past `compressBound`'s largest input declining every body
+    instead of refusing the length, is open. The Total moves by COMP-19:
+    fixed +1 Low, and by COMP-20: open +1 Low.
 20. P384-1 to P384-3 are properties checked and recorded, not findings: high
     `s` accepted, variable time on public input, and digest truncation.
 21. PKI-R6 to PKI-R8 (Low) are accepted, with the reason in their record, and
@@ -541,11 +546,11 @@ only.
 | SHA256HW-2 | Low | `runtime/runtime-sha256.c` (`nish_sha256_compress`) | On the SHA-NI and ARMv8 SHA-256 path the state, the message words and every round's intermediates pass through vector registers, and on x86-64 seven spills of them, which no store from C or the language can wipe; the kernel keeps no buffer and writes only the new state to `h`, which HMAC wipes (K1-7). Recorded rather than reached, as AEAD-4 | — |
 | CHACHAHW-2 | Low | `runtime/runtime-chacha20.c` (`nish_chacha20_xor`) | On the AVX2 and NEON path the state, every round's working words and the keystream pass through vector registers, and `clang -O2` spills some to the stack, which no store from C or the language can wipe; the stack buffers the kernel names are wiped by volatile stores, and the caller's state is the caller's to wipe. Recorded rather than reached, as AEAD-4 | — |
 | RT-38 | Low | `runtime/runtime-net.c` (`nish_recv_fd`) | On Darwin a descriptor `recvFd` keeps is made close-on-exec by an `fcntl` after `recvmsg`, so a child another thread spawns in between inherits it; Linux marks it in the receive. The window RT-30 records for pipes, recorded rather than reached | — |
-| NURING-12 | Low | `runtime/runtime-net.c` (`nr_close`, `nr_pump`) | A lingering close has no deadline: a peer that keeps its window shut holds the slot and up to 256 KiB of queued sends; bounded by the set's slots, and a full set ends lingering closes | — |
+| NURING-12 | Low | `runtime/runtime-net.c` (`nr_close`, `nr_pump`) | A lingering close has no deadline: a peer that keeps its window shut holds the slot, up to 256 KiB of unsent bytes and the pool buffers carrying them (at most 368 KiB by a reading of the code, untested); bounded by the set's slots, and a full set ends lingering closes | — |
 | NURING-13 | Low | `runtime/runtime-uring.c` (`ur_top_up`), `runtime/runtime-net.c` (`nr_dispatch`) | Accepts stay queued whether or not the program calls `tcpAccept`, so the listen backlog no longer bounds held peers; bounded by the set's slots (NURING-6) | — |
 | TLS-7 | Low | `std/net/tls/client.ts` | TLS 1.2 and below are refused by design (`protocol_version`, or `illegal_parameter` for the downgrade sentinel); client certificates, 0-RTT and client resumption are not offered | — |
 | TLS-9 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | A handshake that fails within the `receive` that delivered the ServerHello seals its fatal alert in the clear, before the client's handshake write keys are installed | — |
-| CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
+| CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](../reference/language/builtins.md#constant-time-ctselect-and-cteq) | — |
 | JSON-2 | Low | `std/json-tokenizer.ts` (`reset`, `JsonTokEnd`) | A window ending within 64 bytes of 2^31 − 1 is refused so that no offset can overflow; no test reaches it, since it takes a 2 GiB array | — |
 | SQL-2 | Low | `std/sqlite.ts` (`columnText`) | `sqlite3_column_text` answers NULL both for SQL `NULL` and when converting the value to text runs out of memory, and `columnText` reads either as `null`. A program can take a value it failed to read for an empty column. `columnInto` tells the two apart and answers `SQLITE_NOMEM`. | — |
 | X509-12 | Low | `std/crypto/x509.ts` (`x509NameEqual`, `x509NameIsPrefix`) | Names compare as DER byte for byte, not after RFC 5280 §7.1's stringprep, so a re-encoded issuer Name does not chain and a re-encoded directoryName constraint does not match. Fails closed | — |

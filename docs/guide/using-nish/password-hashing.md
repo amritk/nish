@@ -6,7 +6,7 @@ PHP's `password_hash` and the bcrypt packages for Node, Python and Go all read
 and write. A hash made here verifies there, and the other way round, but for
 the few unusual passwords [below](#what-bcrypt-reads-of-a-password).
 
-The password is a `Secret<u8[]>` ([Secrets](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#secrets-nishsecret)),
+The password is a `Secret<u8[]>` ([Secrets](../../reference/language/builtins.md#secrets-nishsecret)),
 so the compiler keeps it out of logs and templates. The hash is computed inside
 `exposeWith`, and the Blowfish state it builds (about 4 KB) is wiped before the
 function returns. A verify compares the two hashes in constant time.
@@ -18,16 +18,16 @@ bytes, fresh for every password, from `crypto.getRandomValues`, and the hash
 carries it, so you store only the hash. `bcryptVerify(password, hash)` answers
 whether the password is the one the hash was made from.
 
-The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do).
-`nish/crypto/bcrypt` keeps panic sites no proof removes yet, so a call to it
-is refused by default until the standard library is made panic-free, and
+`nish/crypto/bcrypt` and `nish/crypto/bcrypt-batch` keep no panic sites,
+so a program that only calls them builds under the default. The first two
+examples build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do) because
 `crypto.getRandomValues` exits the program when the system has no random
-bytes to give, a check no proof removes. The indexes and sums in the later
-examples build under the default once a guard proves each, such as
+bytes to give, a check no proof removes. The indexes and sums in the second
+example build under the default once a guard proves each, such as
 `i < xs.length` before an index.
 
-<!-- allow-panics: calls a file or entropy builtin that exits on failure; calls `std/crypto/bcrypt.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls a file or entropy builtin that exits on failure -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { bcryptHash, bcryptVerify } from "nish/crypto/bcrypt";
@@ -122,7 +122,7 @@ the thread that opened the scope waits for the slowest hash rather than for
 all of them in turn. Here three sign-ups that arrived together are hashed side
 by side, given a free core for each:
 
-<!-- allow-panics: builds an array whose length it does not bound; calls a file or entropy builtin that exits on failure; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/crypto/bcrypt.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; calls a file or entropy builtin that exits on failure; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { bcryptHash } from "nish/crypto/bcrypt";
@@ -216,8 +216,7 @@ each width from one to six on throwaway passwords and returns the fastest. It
 takes a few tens of milliseconds and keeps nothing, so call it once, at
 startup, and keep the answer:
 
-<!-- allow-panics: calls `std/crypto/bcrypt.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { bcryptCalibrate } from "nish/crypto/bcrypt";
 
@@ -258,8 +257,7 @@ itself. `nish/crypto/bcrypt-batch` holds them until it can:
   for one that was an `Err`. A run is due when `width` requests are queued or
   the oldest has waited `holdNanos`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/crypto/bcrypt.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { bcryptCalibrate, bcryptHash } from "nish/crypto/bcrypt";
 import { BcryptAnswer, BcryptBatchConfig, BcryptBatcher, bcryptBatcher } from "nish/crypto/bcrypt-batch";

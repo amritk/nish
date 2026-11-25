@@ -199,7 +199,7 @@ argument or writes anything else its caller can see is refused at the call
 (NL2345 for output), because every thread would make that write at once and
 the order would be the scheduler's. So is a reduce whose arrow is plainly not
 associative, because the blocks are combined in a fixed order. The rules are
-in the reference, [Data parallelism](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#data-parallelism-nishthreads).
+in the reference, [Data parallelism](../../reference/language/declarations.md#data-parallelism-nishthreads).
 
 <!-- nish:err NL2345 -->
 ```ts
@@ -463,7 +463,7 @@ export const main = (): i32 => {
   `for (let i = 0; i < out.length; i++) s.spawn(task, i, out, i)`, or under a
   guard `at >= 0 && at < out.length`, has its slot proven, and builds under
   the no-panic default when its task cannot panic either
-  ([Panic sites](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites)).
+  ([Panic sites](../../reference/language/semantics-decisions.md#panic-sites)).
 - **A task follows the rules of a parallel `f` above:** it writes nothing
   another thread can see (except through a `Mutex` or a `Channel`, below) and
   prints nothing (`console.log`, `console.error`, `write`, `writeError` and
@@ -1264,7 +1264,7 @@ argument of the call names, or one a `for` header declares; and a channel arrow
 that captures a local or leaves a parameter's or its result's type out, which
 would not check at the top level; those stay refused for you to fix by hand.
 The reference lists each case: [What `nish --fix` writes for a thread
-program](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#what-nish---fix-writes-for-a-thread-program).
+program](../../reference/language/declarations.md#what-nish---fix-writes-for-a-thread-program).
 
 ## Refused, and what to write instead
 
@@ -1483,8 +1483,8 @@ export const main = (): i32 => {
 ```
 
 The full rules, and the code each one is refused with, are in the reference:
-[Data parallelism](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#data-parallelism-nishthreads),
-[Scoped tasks](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#scoped-tasks-using-s--scope),
-[`Mutex<T>`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-lock-that-owns-its-data-mutext),
-[Atomics](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#atomics-atomici32-and-atomici64) and
-[`Channel<T>`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#channels-channelt).
+[Data parallelism](../../reference/language/declarations.md#data-parallelism-nishthreads),
+[Scoped tasks](../../reference/language/declarations.md#scoped-tasks-using-s--scope),
+[`Mutex<T>`](../../reference/language/declarations.md#a-lock-that-owns-its-data-mutext),
+[Atomics](../../reference/language/declarations.md#atomics-atomici32-and-atomici64) and
+[`Channel<T>`](../../reference/language/declarations.md#channels-channelt).

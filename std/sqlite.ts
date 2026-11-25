@@ -80,14 +80,14 @@
 // runtime's (NL2202). scripts/build.sh links SQLite for a module that declares
 // an `sqlite3_` or a `nishsqlite_` function, as this one does.
 declare function nishsqlite_open(path: string, flags: i32): i32
-declare function nishsqlite_open_errmsg(): string
+declare function nishsqlite_open_errmsg(): string | null
 declare function nishsqlite_close(h: i32): i32
 declare function nishsqlite_exec(h: i32, sql: string): i32
-declare function nishsqlite_errmsg(h: i32): string
+declare function nishsqlite_errmsg(h: i32): string | null
 declare function nishsqlite_last_insert_rowid(h: i32): i64
 declare function nishsqlite_changes(h: i32): i64
 declare function nishsqlite_prepare(h: i32, sql: string): i32
-declare function nishsqlite_stmt_errmsg(h: i32): string
+declare function nishsqlite_stmt_errmsg(h: i32): string | null
 declare function nishsqlite_finalize(h: i32): i32
 declare function nishsqlite_step(h: i32): i32
 declare function nishsqlite_reset(h: i32): i32
@@ -130,8 +130,8 @@ declare function nishsqlite_cursor_column_type(h: i32, c: i32): i32
 declare function nishsqlite_cursor_column_i64(h: i32, c: i32): i64
 declare function nishsqlite_cursor_column_into(h: i32, c: i32, buf: u8[], n: u64, at: i32): i32
 declare function nishsqlite_cursor_rowid(h: i32): i64
-declare function sqlite3_errstr(code: i32): string
-declare function sqlite3_libversion(): string
+declare function sqlite3_errstr(code: i32): string | null
+declare function sqlite3_libversion_number(): i32
 
 /** Success. */
 export const SQLITE_OK: i32 = 0
@@ -216,7 +216,12 @@ export const SEEK_LT: i32 = 4
  *
  * @returns The version string, such as `3.50.4`.
  */
-export const sqliteVersion = (): string => sqlite3_libversion()
+export const sqliteVersion = (): string => {
+  // SQLite numbers 3.50.4 as 3050004, the major times a million plus the minor
+  // times a thousand plus the patch.
+  const n: i32 = sqlite3_libversion_number()
+  return `${n / 1000000}.${(n / 1000) % 1000}.${n % 1000}`
+}
 
 /** A failure, with SQLite's message for it. Built only when asked for, by `error(code)`. */
 export class SqliteError {
@@ -250,15 +255,31 @@ const done = (rc: i32): Result<void, i32> => {
 }
 
 /**
+ * SQLite's description of `code`, such as `constraint failed`. The C type lets
+ * `sqlite3_errstr` answer NULL, so the code stands in for the text then, as
+ * `error 19`, rather than stop the program over a message.
+ */
+const describe = (code: i32): string => {
+  const text = sqlite3_errstr(code)
+  return text === null ? `error ${code}` : text
+}
+
+/**
  * The message for `code`: the connection's own, unless the code is one the
  * adapter can answer without SQLite (`MISUSE`, `RANGE`, `NOMEM` for a full
  * handle table or a failed conversion), where the connection's message may
- * still be that of some earlier failure.
+ * still be that of some earlier failure, or the connection has no message
+ * (NULL), where SQLite's description of the code stands in.
  */
-const messageFor = (code: i32, connection: string): string => {
+const messageFor = (code: i32, connection: string | null): string => {
   const primary: i32 = code & 0xff
-  if (primary === SQLITE_MISUSE || primary === SQLITE_RANGE || primary === SQLITE_NOMEM) {
-    return sqlite3_errstr(code)
+  if (
+    connection === null ||
+    primary === SQLITE_MISUSE ||
+    primary === SQLITE_RANGE ||
+    primary === SQLITE_NOMEM
+  ) {
+    return describe(code)
   }
   return connection
 }
@@ -286,7 +307,9 @@ const moved = (r: i32): Result<boolean, i32> => {
 export const openDatabase = (path: string, flags: i32): Result<Database, SqliteError> => {
   const h: i32 = nishsqlite_open(path, flags)
   if (h < 0) {
-    return Err(new SqliteError(-h, nishsqlite_open_errmsg()))
+    const code: i32 = -h
+    const message = nishsqlite_open_errmsg()
+    return Err(new SqliteError(code, message === null ? describe(code) : message))
   }
   return Ok(new Database(h))
 }
@@ -391,12 +414,13 @@ export class Database {
   openCursor(name: string, columns: string): Result<Cursor, SqliteError> {
     const h: i32 = nishsqlite_cursor_open(this.handle, name, columns)
     if (h < 0) {
-      if (-h === SQLITE_SCHEMA) {
+      const code: i32 = -h
+      if (code === SQLITE_SCHEMA) {
         return Err(
-          new SqliteError(-h, `no table or index ${name} with columns "${columns}" that a cursor reads`)
+          new SqliteError(code, `no table or index ${name} with columns "${columns}" that a cursor reads`)
         )
       }
-      return Err(this.error(-h))
+      return Err(this.error(code))
     }
     return Ok(new Cursor(h))
   }
@@ -719,6 +743,11 @@ export class Statement {
   }
 }
 
+// Cursor.countRange's two calls: the count, then each count read back.
+declare function nishsqlite_cursor_count_range(h: i32, lo: i64, hi: i64, n: u64): i32
+declare function nishsqlite_cursor_count_at(h: i32, i: u64): i64
+declare function nishsqlite_cursor_read_row(h: i32, io: u8[], n: u64, text: u8[], ntext: u64): i32
+
 /**
  * A B-tree cursor on a table or index, which reads rows without a statement.
  * Columns count from 0 in the order `openCursor` named them. A call on a
@@ -726,8 +755,12 @@ export class Statement {
  * `columnI64`).
  */
 export class Cursor {
+  /** `readRow`'s answers from the adapter, sized by `selectRow`. */
+  private rowIo: u8[]
   /** The adapter's handle. */
   private handle: i32
+  /** The columns `selectRow` chose, -1 before it. */
+  private nsel: i32
 
   /**
    * Wraps an adapter handle. A program gets a `Cursor` from
@@ -737,6 +770,8 @@ export class Cursor {
    */
   constructor(handle: i32) {
     this.handle = handle
+    this.rowIo = []
+    this.nsel = -1
   }
 
   /**
@@ -855,6 +890,46 @@ export class Cursor {
   }
 
   /**
+   * Counts an index's entries whose first key column is `k`, for each `k`
+   * from `lo` to `hi`, into `out[k - lo]`, in one seek and one walk of the
+   * index, for an index whose first column has INTEGER or NUMERIC affinity.
+   * On a full index that is what `SELECT count(*) ... WHERE col = k` answers
+   * for each `k`; a partial index holds only the rows its WHERE admits, and
+   * counts only those. A count that reaches its walk clears the seek key and
+   * leaves the cursor on no row, whatever it answers; one refused first leaves
+   * both as they were. Copying the counts into `out` takes one call per key,
+   * and one more when `out` is longer than the span. `out` past the span, and
+   * all of it on an `Err`, is left as it was.
+   *
+   * @param lo The first key counted.
+   * @param hi The last key counted, at least `lo`.
+   * @param out Where the counts go; at least `hi - lo + 1` long.
+   * @returns The number of entries counted, or `Err` with `SQLITE_MISUSE` for
+   *   a table cursor, `SQLITE_MISMATCH` for an index whose first column has
+   *   another affinity, `SQLITE_RANGE` when `lo > hi` or the span is longer
+   *   than `out`, or the code SQLite fails with, as for `first`.
+   */
+  countRange(lo: i64, hi: i64, out: i64[]): Result<i32, i32> {
+    const n: i32 = nishsqlite_cursor_count_range(this.handle, lo, hi, toU64(out.length))
+    if (n < 0) {
+      // The adapter answers minus a SQLite result code: `~n + 1` is `-n`,
+      // spelled in u32 so no negation of an i32 can overflow.
+      return Err(toI32(toU32(~n) + toU32(1)))
+    }
+    for (let i = 0; i < out.length; i++) {
+      const c: i64 = nishsqlite_cursor_count_at(this.handle, toU64(i))
+      if (c < 0) {
+        break
+      }
+      // The call above ends what the loop proved of `i`.
+      if (i < out.length) {
+        out[i] = c
+      }
+    }
+    return Ok(n)
+  }
+
+  /**
    * The current row's rowid: a table row's key, an index entry's `rowid`.
    *
    * @returns The rowid, or 0 when the cursor has no row.
@@ -915,6 +990,126 @@ export class Cursor {
   }
 
   /**
+   * Chooses the columns `readRow` reads, in order; a column may repeat. The
+   * list holds until the next `selectRow`, so a loop chooses it once and
+   * calls `readRow` per row. It allocates one buffer of 11 bytes per column
+   * and checks no index: `readRow` answers `SQLITE_RANGE` for one outside the
+   * cursor's columns.
+   *
+   * @param cols The columns' indices, from 0.
+   * @returns `Ok()`, or `Err` with `SQLITE_MISUSE` for over 65535 columns,
+   *   which leaves the earlier list chosen.
+   */
+  selectRow(cols: readonly i32[]): Result<void, i32> {
+    const k: i32 = toI32(cols.length)
+    if (k > 0xffff) {
+      return Err(SQLITE_MISUSE)
+    }
+    // Each index goes to the adapter as a little-endian u16; one outside
+    // 0..65535 is sent as 65535, which no cursor has, so it is RANGE there.
+    // A slot of 9 bytes per column follows, which `readRow` fills.
+    const io: u8[] = []
+    for (let i: i32 = 0; i < k && i < toI32(cols.length); i++) {
+      const c: i32 = cols[i] < 0 || cols[i] > 0xffff ? 0xffff : cols[i]
+      io.push(toU8(c & 0xff))
+      io.push(toU8(c >> 8))
+    }
+    for (let i: i32 = 0; i < k; i++) {
+      for (let b: i32 = 0; b < 9; b++) {
+        io.push(0)
+      }
+    }
+    this.rowIo = io
+    this.nsel = k
+    return Ok()
+  }
+
+  /**
+   * Reads the current row's `selectRow` columns in one call. For the `k`th
+   * of them it writes `spans[3k]`, `spans[3k + 1]` and `spans[3k + 2]`: the
+   * type `columnType` answers, then where its bytes start in `text` and how
+   * many there are, which are the bytes `columnInto` copies (0 and 0 for a
+   * number or NULL); and `ints[k]`, the value `columnI64` answers for an
+   * INTEGER or FLOAT column and 0 for TEXT, BLOB and NULL, which it does not
+   * convert. The row's text and blob bytes sit in `text` in column order. A
+   * refusal, or an answer larger than `text.length`, writes no `ints` or
+   * `spans`, and `text` may hold the first columns' bytes: grow `text` and
+   * call again. An empty list answers `Ok(0)` on a row, and `SQLITE_MISUSE`
+   * with no row or a closed cursor, as any list does. It allocates nothing.
+   *
+   * @param ints Receives each column's integer; at least as long as the list.
+   * @param spans Receives each column's type, offset and length; at least
+   *   three times as long as the list.
+   * @param text Receives the text and blob bytes.
+   * @returns The text and blob bytes the row holds, or `Err` with the code
+   *   `columnType` answers for the first column it refuses (`SQLITE_RANGE`
+   *   for an index outside the cursor's columns, `SQLITE_SCHEMA` for a
+   *   record too short for it, `SQLITE_MISUSE` with no row or a closed
+   *   cursor), or `SQLITE_MISUSE` before `selectRow` or when `ints` or
+   *   `spans` is too short, or `SQLITE_TOOBIG` for over 2^31 - 1 bytes.
+   */
+  readRow(ints: i64[], spans: i32[], text: u8[]): Result<i32, i32> {
+    const k: i32 = this.nsel
+    const ni: i32 = toI32(ints.length)
+    const ns: i32 = toI32(spans.length)
+    if (k < 0 || ni < k || ns / 3 < k) {
+      return Err(SQLITE_MISUSE)
+    }
+    const io: u8[] = this.rowIo
+    const n: i32 = nishsqlite_cursor_read_row(this.handle, io, toU64(io.length), text, toU64(text.length))
+    if (n < 0) {
+      // The adapter answers minus a SQLite result code: `~n + 1` is `-n`,
+      // spelled in u32 so no negation of an i32 can overflow.
+      return Err(toI32(toU32(~n) + toU32(1)))
+    }
+    if (n > toI32(text.length)) {
+      return Ok(n)
+    }
+    // The slots follow the 2k index bytes: a column's type, then 8
+    // little-endian bytes, the integer, or a TEXT or BLOB column's length,
+    // under 2^31 since the row's bytes fit `text`. Those bytes sit in `text`
+    // one column after another, so each starts where the last one ended.
+    const nio: i32 = toI32(io.length)
+    let at: i32 = toI32(toI64(k) + toI64(k))
+    let s: i32 = 0
+    let off: i32 = 0
+    for (
+      let i: i32 = 0;
+      i < k && i < toI32(ints.length) && s >= 0 && s <= toI32(spans.length) - 3 && at >= 0 && at <= nio - 9;
+      i++
+    ) {
+      const ty: i32 = toI32(io[at])
+      spans[s] = ty
+      if (ty === SQLITE_TEXT || ty === SQLITE_BLOB) {
+        const len: i32 =
+          toI32(io[at + 1]) | (toI32(io[at + 2]) << 8) | (toI32(io[at + 3]) << 16) | (toI32(io[at + 4]) << 24)
+        ints[i] = 0
+        spans[s + 1] = off
+        spans[s + 2] = len
+        const end: i64 = toI64(off) + toI64(len)
+        off = len >= 0 && end <= toI64(n) ? toI32(end) : n
+      } else {
+        ints[i] =
+          ty === SQLITE_NULL
+            ? 0
+            : toI64(
+                toU64(io[at + 1]) |
+                  (toU64(io[at + 2]) << toU64(8)) |
+                  ((toU64(io[at + 3]) << toU64(16)) | (toU64(io[at + 4]) << toU64(24))) |
+                  ((toU64(io[at + 5]) << toU64(32)) |
+                    (toU64(io[at + 6]) << toU64(40)) |
+                    ((toU64(io[at + 7]) << toU64(48)) | (toU64(io[at + 8]) << toU64(56))))
+              )
+        spans[s + 1] = 0
+        spans[s + 2] = 0
+      }
+      s += 3
+      at += 9
+    }
+    return Ok(n)
+  }
+
+  /**
    * Closes the cursor; the handle names nothing after.
    *
    * @returns `Ok()`, or `Err` with `SQLITE_MISUSE` for a cursor already
@@ -932,6 +1127,6 @@ export class Cursor {
    * @returns The error, with SQLite's description of the code.
    */
   error(code: i32): SqliteError {
-    return new SqliteError(code, sqlite3_errstr(code))
+    return new SqliteError(code, describe(code))
   }
 }

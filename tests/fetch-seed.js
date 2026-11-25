@@ -309,13 +309,23 @@ cp "$file" "$out"
 // A stand-in `gh` too, because the real one is on PATH here and in CI and its
 // answer would depend on who is signed in. What it does is read from `gh-mode`
 // in the sandbox: `signed-out` (the default, so no other test checks an
-// attestation), `old` (signed in, but its `attestation verify` lacks a flag
-// install.sh needs), `pass` and `fail`. Every call is logged to `gh.log`.
+// attestation: no token, so `auth token` fails too), `old` (signed in, but its
+// `attestation verify` lacks a flag install.sh needs), `pass` and `fail`, and
+// two whose token is there but whose `auth status` fails as a dropped API
+// request would: `flaky` once and then passes, `down` every time. Every call is
+// logged to `gh.log`.
 const fakeGh = `#!/bin/sh
 printf '%s\\n' "$*" >> "$GH_LOG"
 mode="$(cat "$GH_MODE")"
 case "$1 $2" in
-  "auth status") [ "$mode" = signed-out ] && exit 1; exit 0 ;;
+  "auth token") [ "$mode" = signed-out ] && exit 1; echo stand-in-token; exit 0 ;;
+  "auth status")
+    [ "$mode" = signed-out ] && exit 1
+    if [ "$mode" = down ] || { [ "$mode" = flaky ] && [ ! -e "$GH_MODE.tried" ]; }; then
+      : > "$GH_MODE.tried"
+      echo "stand-in gh: error connecting to api.github.com" >&2; exit 1
+    fi
+    exit 0 ;;
   "attestation verify")
     case " $* " in
       *" --help "*)
@@ -323,7 +333,7 @@ case "$1 $2" in
           echo "--repo --signer-workflow --source-ref --deny-self-hosted-runners"; fi
         exit 0 ;;
     esac
-    [ "$mode" = pass ] && exit 0
+    { [ "$mode" = pass ] || [ "$mode" = flaky ]; } && exit 0
     echo "stand-in gh: no matching attestation" >&2; exit 1 ;;
 esac
 exit 1
@@ -567,6 +577,45 @@ for (const [mode, reason] of [
   check(
     "install.sh with NISH_REQUIRE_ATTESTATION=1 installs a release whose attestation gh accepts",
     r.status === 0 && ran(box) && r.stdout.includes("verified:"),
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+// A token whose `gh auth status` fails because GitHub's API did not answer is
+// not "signed out": one failure is tried again and the release is checked and
+// installed, and three in a row refuse it, quoting gh, not calling it signed out.
+{
+  const box = installSandbox("9.9.9")
+  withSums(box)
+  ghMode(box, "flaky")
+  const r = install(box, ["9.9.9", "--dir", box.home], { NISH_REQUIRE_ATTESTATION: "1" })
+  const statuses = ghCalls(box)
+    .split("\n")
+    .filter((call) => call === "auth status").length
+  check(
+    "install.sh with NISH_REQUIRE_ATTESTATION=1 tries gh auth status again after a failure, then checks and installs",
+    r.status === 0 && ran(box) && r.stdout.includes("verified:") && statuses === 2,
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+{
+  const box = installSandbox("9.9.9")
+  withSums(box)
+  ghMode(box, "down")
+  const r = install(box, ["9.9.9", "--dir", box.home], { NISH_REQUIRE_ATTESTATION: "1" })
+  const statuses = ghCalls(box)
+    .split("\n")
+    .filter((call) => call === "auth status").length
+  check(
+    "install.sh with NISH_REQUIRE_ATTESTATION=1 refuses after gh auth status fails 3 times, quoting gh, without running it",
+    refused(box, r) &&
+      r.stderr.includes("NISH_REQUIRE_ATTESTATION=1 refuses") &&
+      r.stderr.includes("failed 3 times") &&
+      r.stderr.includes("error connecting to api.github.com") &&
+      !r.stderr.includes("not signed in") &&
+      statuses === 3 &&
+      !ghCalls(box)
+        .split("\n")
+        .some((call) => call.startsWith("attestation verify ") && call !== "attestation verify --help"),
     `${told(box, r)}\ngh:\n${ghCalls(box)}`
   )
 }

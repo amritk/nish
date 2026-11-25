@@ -1,0 +1,11 @@
+PASS  a wasm32 build reads the twin's file
+PASS  a wasm32 build names the module by the twin
+PASS  a native build reads the module's own file
+PASS  a native build names the module by its own name
+PASS  a module with no twin is the same file under wasm32
+PASS  a pair that agrees is not refused under wasm32
+PASS  a pair that agrees is not refused natively
+PASS  a drifted pair is refused under wasm32
+PASS  a drifted pair is refused natively
+PASS  a module with no twin is never compared
+module_target_std_twin: 10 passed, 0 failed, 0 skipped

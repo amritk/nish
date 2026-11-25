@@ -103,19 +103,19 @@ stages:
     todos:
       - id: s6-router
         content: Land the router rework so std/net/router.ts keeps only its kept explicit panics (std-router +4.3% accepted on #2204) — see WP80 S6
-        status: in_progress
+        status: completed
       - id: s6-sites
         content: Clear the std sites outside the prover gaps (the shm ffi-nul site, prefork.ts:1170 slice, bytes.ts:592) — see WP80 S6
-        status: pending
+        status: in_progress
       - id: s6-twins
         content: Route constructor and contract panics through checked twins (http1-server.ts:498/:506, handler.ts:908, routerOutside, routerNoRoute) and clear respondEncoded, HttpHandler.put and HttpServer.carry — see WP80 S6
         status: pending
       - id: s6-bench
         content: Lower each instruction count that fell to CI's printed figure, with the before and after table in the PR body — see WP80 S6
-        status: pending
+        status: completed
       - id: s6-optout
         content: After #2206, #2207 and #2208, drop the opt-out headers and smoke args of histogram-atomic, merge-patch, prefork-jobs, file-server, prefork-server and http-app, and the guide markers and sentences about them — see WP80 S6
-        status: pending
+        status: in_progress
 ---
 
 # WP80 — std panic-free for threads, CLI, sync and the HTTP/1 server stack

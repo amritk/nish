@@ -1115,6 +1115,16 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `pollWaitBatch` waits as `pollWait` does, and then up to `maxWaitMs`
+    // more for a batch, so it is `nounwind` alone and writes `ready` too.
+    this.add(
+      new RuntimeFunction(
+        "nish_poll_wait_batch",
+        `declare noundef i32 @nish_poll_wait_batch(i32 noundef, ${NET_BUFFER}, i32 noundef, i32 noundef, i32 noundef)`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // The Unix-domain calls. Listening, connecting and the pair never wait
     // (the connect is non-blocking, as `tcpConnect`'s is); the accept is
     // `nounwind` alone, as `tcpAccept` is.

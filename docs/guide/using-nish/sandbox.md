@@ -9,7 +9,7 @@ reach — for your Nish code, your dependencies, every C function you call and
 every C constructor alike.
 
 The rules are in the reference, under
-[The sandbox](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-sandbox).
+[The sandbox](../../reference/language/builtins.md#the-sandbox).
 
 ## Building a sandboxed program
 
@@ -150,7 +150,7 @@ your own `package.json` says it may. Those six, `fs.read`, `fs.write`,
 capabilities. Without a grant, the build stops in the dependency's source,
 naming the package, the capability and the chain of calls that reaches it:
 
-```text
+```log
 node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
 ```
 
@@ -182,7 +182,7 @@ new stops the build.
 ## Narrowing what a dependency is granted
 
 The specification's rules are in
-[A dependency's capabilities](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-dependencys-capabilities).
+[A dependency's capabilities](../../reference/language/builtins.md#a-dependencys-capabilities).
 A grant can name what it is for, after an `=`: a directory for `fs.read`
 and `fs.write`, a program for `process.spawn`, an IP address (or a Unix
 socket's absolute path, such as `net=/run/app.sock`) for `net`.
@@ -207,7 +207,7 @@ capability, as it always did.
 The build checks what it can see. A dependency that passes a fixed path,
 program or address outside its grant stops the build, at that string:
 
-```text
+```log
 node_modules/pkg_conf/src/index.ts:2:38: error: the dependency `pkg_conf` hands `readFileSync` "/etc/passwd", which its `fs.read` grant does not cover: it is granted fs.read=data; name it in the grant, or grant `fs.read` whole
 ```
 
@@ -351,7 +351,7 @@ ring listener serves through plain descriptors, and `netRingState()`
 answers why. A ring listener that falls back because the rings made are all
 taken does not change `netRingState()`: once a ring listener has opened, it
 stays `1`. Any other value of `netRings` is refused with NL3058. The rules are in
-[The sandbox](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-sandbox).
+[The sandbox](../../reference/language/builtins.md#the-sandbox).
 
 ## When the sandbox cannot be applied
 

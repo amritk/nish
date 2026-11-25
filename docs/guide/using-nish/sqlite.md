@@ -16,7 +16,7 @@ of it.
 | what went wrong | [`SqliteError`](#errors) |
 
 The reference is
-[SQLite: `nish/sqlite`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#sqlite-nishsqlite).
+[SQLite: `nish/sqlite`](../../reference/language/declarations.md#sqlite-nishsqlite).
 
 ## Opening a database
 
@@ -60,6 +60,45 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+### A database only this program opens
+
+When no other process reads the file while the program has it open, SQLite's
+`unix-excl` VFS skips work the default one does for them. It locks the file
+once, at the first statement, and holds the lock until the last connection
+to it in this program closes.
+A WAL database then keeps its index in memory, so there is no `-shm` file
+beside it. Name the VFS in a `file:` URI and add `OPEN_URI`:
+
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
+import { OPEN_CREATE, OPEN_READWRITE, OPEN_URI, openDatabase } from "nish/sqlite";
+
+export const main = (): i32 => {
+  const db = openDatabase("file:app.db?vfs=unix-excl", OPEN_READWRITE | OPEN_CREATE | OPEN_URI).expect("open");
+  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL").expect("pragmas");
+  db.close().expect("close");
+  return 0;
+};
+```
+
+Three things change:
+
+- **Another process cannot use the file.** While it is open, any other process
+  that reads it gets `SQLITE_BUSY`. That includes the `sqlite3` shell and a
+  backup tool.
+- **The log is checkpointed from inside the program.** Two things can do it:
+  the connection's automatic checkpoint, or a second connection on the same
+  thread that runs `PRAGMA wal_checkpoint`. A `nish:threads` task cannot open a
+  connection.
+- **It does not work under `--profile wasi`.** The open succeeds, then the
+  first statement that locks answers `SQLITE_IOERR_LOCK`.
+
+It saves the lock calls of each short transaction. That is about two system
+calls per read and six per single-statement write, and nothing inside an
+explicit transaction. The figures and the reasons it is not the default are in
+[the VFS decision](https://github.com/amritk/nish/blob/main/docs/sqlite-vfs.md).
 
 ## Running SQL: `exec`
 
@@ -107,7 +146,7 @@ call. `reset()` keeps the bindings; `clearBindings()` sets them all back to
 `openDatabase` that holds a NUL byte is a check the module keeps at run time,
 one reason a call to it needs `--allow-panics` for now; there it stops the
 program with the
-[`ffi-nul` panic](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites) rather than cutting the SQL
+[`ffi-nul` panic](../../reference/language/semantics-decisions.md#panic-sites) rather than cutting the SQL
 short; bind text with NUL bytes in it through `bindTextBytes`.
 
 <!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
@@ -251,12 +290,34 @@ export const main = (): i32 => {
   entry at or past it, or the last at or before it.
   A key gets no column affinity: `keyText("5")` on an `INTEGER` column sorts
   after every number, so seek a number with `keyI64`.
+- **`countRange` counts an index's keys in one walk.** On an index whose
+  first column is `INTEGER` or `NUMERIC`, `countRange(lo, hi, out)` writes
+  how many entries have each key `lo`, `lo + 1`, ... `hi` into
+  `out[0..hi - lo]` and answers their total: on a full index, what
+  `SELECT count(*) ... WHERE col = k` answers for each key, and on a partial
+  index only the rows its `WHERE` admits. `lo > hi` or a span longer than
+  `out` is `Err(SQLITE_RANGE)`, a table cursor `Err(SQLITE_MISUSE)`, and
+  another first column `Err(SQLITE_MISMATCH)`; a refusal leaves `out`, the
+  seek key and the cursor's row as they were. A count that runs leaves the
+  cursor on no row, so seek again before reading.
 - **Reads take the stored value.** `columnI64` reads an integer.
   `columnInto` copies text or blob bytes into a buffer, the way
   `Statement.columnInto` does; for a number it answers
   `Err(SQLITE_MISMATCH)`. `columnType` answers what the row stores. A row
   written before `ALTER TABLE ADD COLUMN` added the column answers
   `Err(SQLITE_SCHEMA)` there, not the column's default.
+- **`readRow` reads several columns in one call.**
+  Choose the columns once with `selectRow(cols)`; each `readRow(ints, spans,
+  text)` after it reads them from the current row. For column `cols[i]`,
+  `spans[3 * i]` is its type, `ints[i]` its integer for `INTEGER` and `REAL`
+  and 0 for text, blob and `NULL` (`readRow` does not turn the text `'42'`
+  into 42 the way `columnI64` does), and for text or blob, `spans[3 * i + 1]`
+  and `spans[3 * i + 2]` are the offset and length of its bytes in `text`.
+  It answers the bytes the row needs; when that is more than `text.length`
+  it writes nothing to `ints` or `spans`, so grow `text` and call again. A
+  refusal is the code `columnType` gives the first column it refuses, so a
+  column the cursor does not have is `Err(SQLITE_RANGE)` here, not from
+  `selectRow`; `readRow` before any `selectRow` is `Err(SQLITE_MISUSE)`.
 - **Anything that could change what a cursor reads closes it.** That includes
   `exec`, `commit`, `rollback`, stepping a statement that writes, and
   `endRead`. A closed cursor answers `Err(SQLITE_MISUSE)`, and `rowid` and
@@ -360,7 +421,8 @@ module's own checks.
 
 - **A connection belongs to the thread that opened it.** Its statements do too:
   the handles live in tables kept per thread, so a handle passed to another
-  thread names nothing there. Open one connection per thread that needs the
+  thread is read against that thread's table: it names nothing there, or that
+  thread's own object with the same handle value. Open one connection per thread that needs the
   database, and close it before the thread ends: a thread's open connections
   are not closed when it exits, and stay allocated.
 - **It uses `ffi`.** The module calls SQLite's C code, so `--capabilities`

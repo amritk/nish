@@ -5,7 +5,7 @@ script, the images and fonts a page loads. You give it the rest of the path a
 `*` route matched, and it answers the request through the same server that
 answers your API: [`nish/net/http-server`](http-server.md) on HTTP/1.1,
 HTTP/2 and HTTP/3, or `nish/net/handler` on HTTP/1.1. It is imported like any
-other library module ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)),
+other library module ([`export` and `import`](../../reference/language/declarations.md#export-and-import)),
 and is native only.
 
 It sends each file with its content type, an ETag and a Last-Modified, so a

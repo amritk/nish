@@ -4,8 +4,8 @@ A Nish program can be split across files with TypeScript's `import` and
 `export`. Each file is a module, and an import names one of four things:
 another file of your program, a built-in `nish:` module, a module of the
 standard library, or a package installed in `node_modules`. The rules are in
-the reference under [`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)
-and [Builtin modules](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#builtin-modules-nish).
+the reference under [`export` and `import`](../../reference/language/declarations.md#export-and-import)
+and [Builtin modules](../../reference/language/builtins.md#builtin-modules-nish).
 
 ## Exporting and importing
 
@@ -284,6 +284,22 @@ export const main = (): i32 => {
   `nish-f64` instead of, or beside, `nish`. The compiler takes the one for its
   own mode first, and a package that offers only the other mode is an error
   at the import rather than a wrong answer at run time.
+- A package whose source differs for a
+  [wasm32 build](../using-nish/cli.md#compiling-ir-and-binaries) can name its wasm32 file with
+  `nish-wasm32`. A wasm32 build asks for it first, before the number mode's
+  condition and `nish`, and a native build ignores it, so the native file can
+  reach the operating system while the wasm32 file reaches only the host. The
+  standard library does the same by file name: under a wasm32 target,
+  `nish/<name>` compiles `<name>.wasm32.ts` in place of `<name>.ts` when the
+  library has one.
+- The two files of such a pair must export the same names with the same
+  signatures, since your code compiles against whichever one its build
+  picked. Both builds check this at the import, and a difference is an error
+  (`NL3063`) that names the first export the files disagree on. Bodies,
+  initializers and a class's `private` members may differ; its public members
+  are compared in the order they are written. A constant with no type
+  annotation is compared with its initializer, because that is where its type
+  comes from, so annotate it when the two files' initializers differ.
 - `engines.nish` is the lowest compiler version the package needs, written
   `>=X.Y.Z` or `>=X.Y`. An older compiler refuses the package and says which version it
   asked for.
@@ -304,7 +320,7 @@ export const main = (): i32 => {
   it upstream rather than look in your own code; under `--json` the object
   carries the package's name in `package`:
 
-  ```text
+  ```log
   node_modules/pkg_broken/src/index.ts:2:39: error: Return type mismatch: function returns i32 but expression is string
     2 | export const twice = (n: i32): i32 => `${n * 2}`;
       |                                       ^~~~~~~~~~

@@ -553,6 +553,10 @@ class CType {
   nonnull: boolean = false
   /** A typedef with its own `aligned` attribute, held by value: not the scalar's natural layout. */
   aligned: boolean = false
+  /** The innermost pointed-to type is a typedef with its own `aligned` attribute (kept when `aligned` is cleared for a pointer). */
+  alignedBase: boolean = false
+  /** The scalar is an enum's: its size is the C compiler's choice (`-fshort-enums`), so it is no buffer element. */
+  enumBase: boolean = false
   /** For `BASE_ARRAY`: the element count of `T [N]`, or -1 when it is not one plain length. */
   length: i32 = -1
   /** For `BASE_ARRAY` with a `length`: the element's spelling, `T`. */
@@ -638,6 +642,47 @@ const refusedType = (reason: string): CType => {
   t.reason = reason
   return t
 }
+
+/**
+ * The element of the Nish buffer a C pointer `t` is bound as under a
+ * `"buffer"` override, or "" when it cannot be one: `u8` for a `void *` or a
+ * `char *` of any sign (WP53 B1.1), and since WP89 S2 the scalar a single
+ * pointer to `uint16_t`, `uint32_t`, `int32_t` or `float` names, the elements
+ * `isForeignBuffer` in `src/types.ts` lends. A typedef with its own `aligned`
+ * attribute is not the scalar's layout, and an enum's size is the C
+ * compiler's choice, so neither is a buffer.
+ */
+const bufferElement = (t: CType): string => {
+  if (t.pointers !== 1) {
+    return ""
+  }
+  if (t.base === BASE_VOID || t.base === BASE_CHAR) {
+    return "u8"
+  }
+  const s = t.scalar
+  const lent = s === "u16" || s === "u32" || s === "i32" || s === "f32"
+  return t.base === BASE_SCALAR && !t.aligned && !t.alignedBase && !t.enumBase && lent ? s : ""
+}
+
+/**
+ * Why a single pointer to a scalar is still no buffer, as a clause the
+ * refusal appends: an enum's or an aligned typedef's. "" for any other type.
+ */
+const bufferWhy = (t: CType): string => {
+  if (t.pointers !== 1 || t.base !== BASE_SCALAR) {
+    return ""
+  }
+  if (t.enumBase) {
+    return "; an enum's size is the C compiler's choice, so it is no buffer element"
+  }
+  if (t.aligned || t.alignedBase) {
+    return "; a typedef with its own `aligned` attribute is not its scalar's layout"
+  }
+  return ""
+}
+
+/** How the nullable refusal names a buffer: its own array type when it has one. */
+const nonNullBuffer = (element: string): string => (element.length > 0 ? `a \`${element}[]\`` : "an array")
 
 /** A struct or union declared in the header or one it includes. */
 class CRecord {
@@ -1640,6 +1685,7 @@ class Importer {
       t = refusedType("a type the generator cannot read")
     } else if (tagWord === "enum") {
       t = this.enumType(tagName)
+      t.enumBase = true
     } else if (tagWord.length > 0 && tagName.startsWith("__va_list")) {
       // A `va_list` parameter decays to a pointer to clang's own tag: the
       // pointer is the decay, not the C type the header wrote.
@@ -1676,6 +1722,7 @@ class Importer {
         // spelled here; the typedef's own qualifies a pointer further in.
         t.nullable = nullable
         t.nonnull = nonnull
+        t.alignedBase = t.alignedBase || t.aligned || (t.pointers === 0 && this.typedefAligned[index])
         t.aligned = false
       } else {
         if (nullable || nonnull) {
@@ -2675,7 +2722,7 @@ class Importer {
     }
     if (nullable && buffer.length > 0) {
       this.fail(
-        `overrides: ${this.paramWhere(f, param)} is a buffer, a \`u8[]\` that cannot be null, so it cannot be nullable`,
+        `overrides: ${this.paramWhere(f, param)} is a buffer, ${nonNullBuffer(bufferElement(t))} that cannot be null, so it cannot be nullable`,
         1
       )
       return
@@ -2702,9 +2749,10 @@ class Importer {
       }
     }
     if (buffer.length > 0) {
-      if (t.pointers !== 1 || (t.base !== BASE_VOID && t.base !== BASE_CHAR)) {
+      const element = bufferElement(t)
+      if (element.length === 0) {
         this.fail(
-          `overrides: ${this.paramWhere(f, param)} is a buffer, so it must be a \`void *\` or \`char *\``,
+          `overrides: ${this.paramWhere(f, param)} is a buffer, so it must be a \`void *\` or \`char *\`, or a pointer to \`uint16_t\`, \`uint32_t\`, \`int32_t\` or \`float\`${bufferWhy(t)}`,
           1
         )
         return
@@ -2718,7 +2766,7 @@ class Importer {
       }
       if (readonly) {
         this.fail(
-          `overrides: ${this.paramWhere(f, param)} is \`const\` in the header, so it is bound \`readonly u8[]\` already and "readonly" changes nothing`,
+          `overrides: ${this.paramWhere(f, param)} is \`const\` in the header, so it is bound \`readonly ${element}[]\` already and "readonly" changes nothing`,
           1
         )
         return
@@ -2878,9 +2926,11 @@ class Importer {
       const countAt = this.countOf(f, o, name)
       let type = ""
       if (o !== null && countAt >= 0 && countAt < outNames.length) {
-        type = o.readonlys[p] ? "readonly u8[]" : "u8[]"
+        const countName = outNames[countAt]
+        const element = bufferElement(this.resolve(f.paramTypes[i]))
+        type = o.readonlys[p] ? `readonly ${element}[]` : `${element}[]`
         if (named.has(name)) {
-          type = `CountedBy<${type}, "${this.word(outNames[countAt], AS_IDENT)}">`
+          type = `CountedBy<${type}, "${this.word(countName, AS_IDENT)}">`
         }
       } else if (counts.has(name)) {
         type = "u64"

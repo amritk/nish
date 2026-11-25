@@ -2,7 +2,7 @@
 
 # NL3xxx\: modules and the driver
 
-The 61 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 62 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL3001
 
@@ -756,4 +756,26 @@ The message of an error contains:
 
 ```text
 …: a C type's size differs between the two data models, so regenerate the module with `nish c-import --target` for this build
+```
+
+## NL3063
+
+The message of an error contains:
+
+```text
+…` and must export the same names with the same signatures, because a wasm32 build compiles it in its place: …
+```
+
+[`nl3063_target_twin_mismatch.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3063_target_twin_mismatch.ts):
+
+```ts
+// NL3063: `pkg_twin`'s `nish` and `nish-wasm32` files disagree on `scale`'s
+// parameter type, and a native build refuses the pair as a wasm32 one does.
+import { run } from "./nl3_twin/lib";
+
+export const main = (): i32 => run();
+```
+
+```text
+`tests/wordings/nl3_twin/node_modules/pkg_twin/wasm.ts` is the wasm32 twin of `tests/wordings/nl3_twin/node_modules/pkg_twin/native.ts` and must export the same names with the same signatures, because a wasm32 build compiles it in its place: `scale` is `export const scale = (x: i32): i32 =>` in `tests/wordings/nl3_twin/node_modules/pkg_twin/native.ts` and `export const scale = (x: f64): i32 =>` in `tests/wordings/nl3_twin/node_modules/pkg_twin/wasm.ts`
 ```

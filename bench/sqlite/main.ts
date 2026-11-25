@@ -1,6 +1,6 @@
 // The challenge's three queries through `nish/sqlite`, `count` calls each:
 //
-//   main <lookup|feed|feed-cursor-walk|feed-cursor|insert|insert-txn> <db> <count>
+//   main <lookup|feed|feed-cursor-walk|feed-cursor-count|feed-cursor-row|feed-cursor|insert|insert-txn> <db> <count>
 //
 // `bench/sqlite/run.mjs` builds it with `--link` (the speed profile) and runs
 // it beside `twin.c`, the same loop written against SQLite's own API. Each
@@ -20,6 +20,17 @@
 // - feed-cursor-walk: the same walk on one read transaction and four cursors
 //   opened once, before the timed loop, and closed after it, so a call is the
 //   seeks and steps alone. feed-cursor less it is what the per-call opens cost.
+// - feed-cursor-count: feed-cursor-walk with the 20 posts' likes counted in
+//   one call, `Cursor.countRange(minId, maxId, out)`: one seek and one walk of
+//   the likes index inside the adapter, instead of a seek and a `next` per
+//   like from Nish. It reads the 20 ids from the posts index first, then each
+//   post's count at `out[id - minId]`. The 20 newest posts are consecutive
+//   ids on this seed; a span wider than COUNT_SPAN falls back to one
+//   `countRange(id, id, out)` per post.
+// - feed-cursor-row: feed-cursor-walk with each post's and each author's
+//   columns read by one `Cursor.readRow` call instead of one call a column,
+//   the column lists chosen by `selectRow` once, before the timed loop; the
+//   likes count still reads its key with `columnI64`.
 // - insert: `INSERT … RETURNING id, created_at` in autocommit, WAL with
 //   `synchronous=NORMAL`; `insert-txn` the same calls inside one transaction,
 //   which tells a call's cost from its commit's.
@@ -29,18 +40,24 @@
 // `rows R checksum S failed F count N ns T`, the line `twin.c` prints for the
 // same arguments, T the timed loop alone.
 //
+// <db> is opened with OPEN_URI, so a path opens as it always has and a
+// `file:<path>?vfs=unix-excl` URI opens the same file on SQLite's unix-excl
+// VFS: run.mjs's `--variant unix-excl` (docs/sqlite-vfs.md).
+//
 // USERS and POSTS are the sizes of the twelve-dollar server challenge's
 // seed/generate.mjs (https://github.com/arjaythedev/twelve-dollar-server-challenge),
 // which twin.c's seed ports; POST_SQL and INSERT_SQL are the queries of its
 // SPEC.md.
 // Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
 // see bench/sqlite/LICENSE.md.
-import { OPEN_READWRITE, SEEK_GE, Cursor, Database, Statement, openDatabase } from "nish/sqlite"
+import { OPEN_READWRITE, OPEN_URI, SEEK_GE, Cursor, Database, Statement, openDatabase } from "nish/sqlite"
 
 const USERS: i32 = 50000
 const POSTS: i32 = 500000
 /** The rows a feed answers: POST_SQL's LIMIT. */
 const FEED: i32 = 20
+/** The widest id span feed-cursor-count counts in one call: its buffer's length. */
+const COUNT_SPAN: i32 = 1024
 const POST_SQL: string =
   "SELECT p.id, p.body, p.created_at, u.username, (SELECT count(*) FROM likes l WHERE l.post_id = p.id) FROM posts p JOIN users u ON u.id = p.user_id"
 const INSERT_SQL: string = "INSERT INTO posts (user_id, body) VALUES (?, ?) RETURNING id, created_at"
@@ -91,6 +108,22 @@ class Fold {
     this.sum = sum
   }
 
+  /**
+   * The `n` bytes of `text` at `at` folded, as `bytes` folds `buf`'s: the
+   * span's end is checked once, so the loop tests one bound per byte, as
+   * `bytes`'s does.
+   */
+  span(text: u8[], at: i32, n: i32): void {
+    const len: i32 = toI32(text.length)
+    const start: i32 = at < 0 ? 0 : at
+    const end: i32 = at >= 0 && n >= 0 && n <= len - at ? at + n : start
+    let sum: u32 = this.sum * 31 + toU32(n)
+    for (let k: i32 = start; k < end && k < len; k += 1) {
+      sum = sum * 31 + toU32(text[k])
+    }
+    this.sum = sum
+  }
+
   /** One row of POST_SQL: id, body, created_at, username, like count. */
   post(st: Statement): boolean {
     this.add(toU32(st.columnI64(0)))
@@ -137,6 +170,132 @@ const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold)
   return ok && r.isOk() ? rows : -1
 }
 
+/** What `walkFeedRows` reads a row into: the column lists `Cursor.selectRow` chooses and the buffers `Cursor.readRow` fills. */
+class RowReads {
+  /** posts' user_id, body and created_at. */
+  post: i32[]
+  /** users' username. */
+  user: i32[]
+  ints: i64[]
+  spans: i32[]
+  text: u8[]
+
+  constructor() {
+    this.post = [1, 2, 3]
+    this.user = [1]
+    this.ints = new Array<i64>(3)
+    this.spans = new Array<i32>(9)
+    this.text = new Array<u8>(1024)
+  }
+}
+
+/** Whether a `readRow` answer read the row: `Ok` with its text bytes all in `text`. */
+const fits = (r: Result<i32, i32>, text: u8[]): boolean => r.isOk() && r.value <= toI32(text.length)
+
+/**
+ * `walkFeed` with each post's and each author's columns read by one
+ * `readRow` call, the lists chosen by `selectRow` before the walk; it folds
+ * the same values in the same order.
+ */
+const walkFeedRows = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold, rr: RowReads): i32 => {
+  let rows: i32 = 0
+  let ok: boolean = true
+  const sp: i32[] = rr.spans
+  let r = ix.first()
+  while (ok && r.isOk() && r.value && rows < FEED) {
+    const id: i64 = ix.rowid()
+    const p = post.seekRowid(id)
+    ok = p.isOk() && p.value && fits(post.readRow(rr.ints, sp, rr.text), rr.text)
+    f.add(toU32(id))
+    if (ok && sp.length >= 9) {
+      f.span(rr.text, sp[4], sp[5])
+      f.span(rr.text, sp[7], sp[8])
+      const u = user.seekRowid(rr.ints[0])
+      ok = u.isOk() && u.value && fits(user.readRow(rr.ints, sp, rr.text), rr.text)
+      if (ok) {
+        f.span(rr.text, sp[1], sp[2])
+      }
+    }
+    let n: i64 = 0
+    ok = ok && like.keyReset().isOk() && like.keyI64(id).isOk()
+    if (ok) {
+      let l = like.seek(SEEK_GE)
+      while (l.isOk() && l.value && like.columnI64(0) === id) {
+        n += 1
+        l = like.next()
+      }
+      ok = l.isOk()
+    }
+    f.add(toU32(n))
+    rows += 1
+    r = ix.next()
+  }
+  return ok && r.isOk() ? rows : -1
+}
+
+/**
+ * The 20 newest posts as `walkFeed` reads them, their likes counted in one
+ * `Cursor.countRange` over the posts' [min, max] id span into `counts` (one
+ * call per post when the span is wider than `counts`, which the bench
+ * database, its ids contiguous, never makes: that fallback is unexercised).
+ * `ids` holds the posts' ids, read from `ix` first. Answers the rows read,
+ * or -1 when a read failed.
+ */
+const walkFeedCounted = (
+  ix: Cursor,
+  post: Cursor,
+  user: Cursor,
+  like: Cursor,
+  ids: i64[],
+  counts: i64[],
+  f: Fold
+): i32 => {
+  let rows: i32 = 0
+  let r = ix.first()
+  while (r.isOk() && r.value && rows < FEED) {
+    ids[rows] = ix.rowid()
+    rows += 1
+    r = ix.next()
+  }
+  let ok: boolean = r.isOk()
+  let lo: i64 = 0
+  let hi: i64 = -1
+  for (let i: i32 = 0; i < rows; i += 1) {
+    if (i === 0 || ids[i] < lo) {
+      lo = ids[i]
+    }
+    if (i === 0 || ids[i] > hi) {
+      hi = ids[i]
+    }
+  }
+  // One seek and one walk in C, post id k's count left in `counts[k - lo]`.
+  const one: boolean = rows > 0 && hi - lo < toI64(counts.length)
+  if (ok && one) {
+    ok = like.countRange(lo, hi, counts).isOk()
+  }
+  for (let i: i32 = 0; ok && i < rows; i += 1) {
+    const id: i64 = ids[i]
+    const p = post.seekRowid(id)
+    ok = p.isOk() && p.value
+    if (ok) {
+      const u = user.seekRowid(post.columnI64(1))
+      ok = u.isOk() && u.value
+    }
+    // The fold order is POST_SQL's: id, body, created_at, username, likes.
+    f.add(toU32(id))
+    ok = ok && f.cursorText(post, 2) && f.cursorText(post, 3) && f.cursorText(user, 1)
+    let n: i64 = 0
+    if (one) {
+      n = counts[toI32(id - lo)]
+    } else {
+      ok = ok && like.countRange(id, id, counts).isOk()
+      n = counts[0]
+    }
+    f.add(toU32(n))
+  }
+  return ok ? rows : -1
+}
+
 /**
  * One feed call through cursors, as a request makes it: `beginRead`, open the
  * four cursors, walk them, `endRead`, which closes them. Answers the rows
@@ -162,12 +321,14 @@ const feedByCursors = (db: Database, f: Fold): i32 => {
 
 export const main = (): number => {
   if (toI32(process.argv.length) !== 4) {
-    console.error("usage: main <lookup|feed|feed-cursor-walk|feed-cursor|insert|insert-txn> <db> <count>")
+    console.error(
+      "usage: main <lookup|feed|feed-cursor-walk|feed-cursor-count|feed-cursor-row|feed-cursor|insert|insert-txn> <db> <count>"
+    )
     return 2
   }
   const mode: string = process.argv[1]
   const count: i32 = toI32(parseInt(process.argv[3]))
-  const opened = openDatabase(process.argv[2], OPEN_READWRITE)
+  const opened = openDatabase(process.argv[2], OPEN_READWRITE | OPEN_URI)
   if (opened.isErr()) {
     console.error(`main: ${opened.error.message}`)
     return 2
@@ -258,7 +419,11 @@ export const main = (): number => {
       }
     }
     t1 = monotonicNanos()
-  } else if (mode === "feed-cursor-walk") {
+  } else if (mode === "feed-cursor-walk" || mode === "feed-cursor-row" || mode === "feed-cursor-count") {
+    const counted: boolean = mode === "feed-cursor-count"
+    const byRow: boolean = mode === "feed-cursor-row"
+    const ids: i64[] = new Array<i64>(FEED)
+    const counts: i64[] = new Array<i64>(COUNT_SPAN)
     if (db.beginRead().isErr()) {
       return 2
     }
@@ -266,10 +431,24 @@ export const main = (): number => {
     const posts = db.openCursor("posts", "id,user_id,body,created_at")
     const users = db.openCursor("users", "id,username,created_at")
     const likes = db.openCursor("likes_post_id_idx", "post_id,rowid")
-    if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk()) {
+    const rr = new RowReads()
+    const chosen: boolean =
+      !byRow ||
+      (posts.isOk() &&
+        users.isOk() &&
+        posts.value.selectRow(rr.post).isOk() &&
+        users.value.selectRow(rr.user).isOk())
+    if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk() && chosen) {
       t0 = monotonicNanos()
       for (let i: i32 = 0; i < count; i += 1) {
-        const n: i32 = walkFeed(recent.value, posts.value, users.value, likes.value, f)
+        let n: i32 = 0
+        if (counted) {
+          n = walkFeedCounted(recent.value, posts.value, users.value, likes.value, ids, counts, f)
+        } else if (byRow) {
+          n = walkFeedRows(recent.value, posts.value, users.value, likes.value, f, rr)
+        } else {
+          n = walkFeed(recent.value, posts.value, users.value, likes.value, f)
+        }
         if (n < 0) {
           failed += 1
         } else {

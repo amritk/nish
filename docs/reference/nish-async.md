@@ -157,7 +157,7 @@ output resumes in Node's order, not the native one.
 
 </scalar-detail>
 
-Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#async-functions-async-and-await
+Rules: [Async functions: `async` and `await`](language/declarations.md#async-functions-async-and-await)
 
 ## Functions
 

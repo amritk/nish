@@ -523,14 +523,19 @@ const routedFiles = (config, generated) => {
   return out
 }
 
+// This repository's files on github.com at main, as docs/check-links.mjs reads them.
+const repoFileUrl = /^https:\/\/github\.com\/amritk\/nish\/(?:blob|tree)\/main\/([^#?]*)(#.*)?$/
+
 /**
- * A link written in a source comment, relative to that source, as the page at
- * `page` must write it: relatively to a routed page, by GitHub URL to any
- * other file, and null when the target does not exist.
+ * A link written in a source comment, relative to that source or as this
+ * repository's GitHub URL, as the page at `page` must write it: relatively to
+ * a routed page, by GitHub URL to any other file, and null when the target
+ * does not exist.
  */
 const makeLinker = (routed) => (target, source, page) => {
-  const [file, frag] = target.split("#")
-  const rel = path.posix.normalize(path.posix.join(path.posix.dirname(source), file))
+  const repo = repoFileUrl.exec(target)
+  const [file, frag] = repo === null ? target.split("#") : [repo[1].replace(/\/$/, ""), repo[2]?.slice(1)]
+  const rel = repo === null ? path.posix.normalize(path.posix.join(path.posix.dirname(source), file)) : file
   if (rel.startsWith("..") || !fs.existsSync(path.join(root, rel))) {
     return null
   }
@@ -549,15 +554,44 @@ const makeLinker = (routed) => (target, source, page) => {
   return `${repoUrl}/${rel}${hash}`
 }
 
-/** Rewrite the relative `[text](target)` links of prose; an unresolvable one loses its brackets' meaning. */
+/**
+ * Rewrite the relative `[text](target)` links of prose; an unresolvable one
+ * loses its brackets' meaning. A link to this repository on GitHub, bare or
+ * bracketed, that names a page of the site becomes a link to that page, so a
+ * doc comment can keep the URL an editor's hover opens while the site stays on
+ * the site; a bare one takes the heading it names (or the path) as its text.
+ */
 const relinkProse = (s, link, source, page) =>
-  s.replace(/\[([^\]\n]*)\]\(([^)\s]+)\)/g, (whole, label, target) => {
-    if (/^(https?:|mailto:|#)/.test(target)) {
-      return whole
+  s.replace(
+    /\[([^\]\n]*)\]\(([^)\s]+)\)|https:\/\/github\.com\/amritk\/nish\/(?:blob|tree)\/main\/[^\s)<>]*[^\s)<>.,;:!?]/g,
+    (whole, label, target) => {
+      if (label === undefined) {
+        const to = link(whole, source, page)
+        return to === null || to.startsWith("https:") ? whole : `[${bareLinkText(whole)}](${to})`
+      }
+      if (/^(mailto:|#)/.test(target) || (/^https?:/.test(target) && !repoFileUrl.test(target))) {
+        return whole
+      }
+      const to = link(target, source, page)
+      if (repoFileUrl.test(target)) {
+        return to === null ? whole : `[${label}](${to})`
+      }
+      return to === null ? `[${label}]\\(${target})` : `[${label}](${to})`
     }
-    const to = link(target, source, page)
-    return to === null ? `[${label}]\\(${target})` : `[${label}](${to})`
-  })
+  )
+
+/** The words a bare GitHub URL to `docs/LANGUAGE.md#frag` stands for: that heading; else the file's path. */
+const bareLinkText = (url) => {
+  const [, file, hash] = repoFileUrl.exec(url)
+  if (file === languageSource && hash !== undefined) {
+    const { lines } = languageParts()
+    const h = headings(lines.join("\n")).find((x) => x.github === hash.slice(1).toLowerCase())
+    if (h !== undefined) {
+      return lines[h.index].replace(/^#+\s+/, "").trim()
+    }
+  }
+  return `\`${file}\``
+}
 
 // ---- TypeDoc comments to Markdown -----------------------------------------
 
@@ -1635,6 +1669,9 @@ const languageLink = (frag, page) => {
 const renderLanguage = (link) => {
   const { lines, parts } = languageParts()
   const relink = (target, page) => {
+    if (repoFileUrl.test(target)) {
+      return link(target, languageSource, page) ?? target
+    }
     if (/^(https?:|mailto:)/.test(target)) {
       return target
     }

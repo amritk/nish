@@ -74,8 +74,7 @@ struct TfbServer (class) size=120 align=8 exported
   method close -> @TfbServer.close
   method serve -> @TfbServer.serve
 function tfbBytes(s: string): u8[] -> @tfbBytes
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 k: i32 (let)

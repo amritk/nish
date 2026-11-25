@@ -14,7 +14,7 @@ $ nish c-import wc.h -o wc.ts
 The declarations it writes are the ones
 [Calling Nish from other languages](interop.md#calling-c-from-nish-declare-function)
 describes, under the rules of
-[LANGUAGE.md → Calling C](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#calling-c).
+[LANGUAGE.md → Calling C](../../reference/language/declarations.md#calling-c).
 The command needs `clang`: it is clang that reads the header, with the same
 preprocessor and the same answers about sizes your C compiler gives. Set `CC`
 to use another clang.
@@ -272,7 +272,9 @@ says so; pass it with `--overrides`:
     bind as never null (only `true` changes anything), and
     `"buffer": "<length parameter>"`, which binds a `void *` or `char *` and
     its length as a `u8[]` (a `readonly u8[]` when the header says
-    `const void *`, so `"readonly"` is never needed and is refused). A
+    `const void *`, so `"readonly"` is never needed and is refused), and a
+    `uint16_t *`, `uint32_t *`, `int32_t *` or `float *` as a `u16[]`,
+    `u32[]`, `i32[]` or `f32[]` whose length counts elements. A
     `size_t` length straight after the buffer on a 64-bit target keeps the
     plain form, `(data: u8[], len: u64)`. Any other length -- a `uint32_t`,
     `uint16_t` or `uint8_t`, one before the buffer, or a `uint32_t *` the

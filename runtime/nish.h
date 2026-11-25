@@ -793,6 +793,15 @@ double nish_stat_mtime(const nish_str *path);
  * or a read that fails. */
 int32_t nish_signal_fd(void);
 int32_t nish_read_signal(int32_t fd);
+/* The runtime's own, with no builtin: the read end `signalFd()` made, or -1
+ * while none is made, without making one. A loop's wait asks it to tell the
+ * signal descriptor from any other (runtime-net.c, the direct ring wait). */
+int32_t nish_signal_fd_made(void);
+/* Every closer that takes a program's descriptor number calls this first:
+ * once the signal read end is closed, `nish_signal_fd_made` answers -1 for
+ * good, since its number may be reused (docs/security/net-uring.md,
+ * NURING-49). */
+void nish_signal_fd_closing(int32_t fd);
 /* Who owns a path, and whether it runs (docs/security/runtime.md, RT-9; the
  * builtins `lstatOwnerModeSync`, `geteuid` and `isExecutableSync`, #386).
  * `nish_lstat_owner_mode(path)`: `lstat`, so a
@@ -927,6 +936,7 @@ int32_t nish_poll_add(int32_t loop, int32_t fd, int32_t events, int32_t token);
 int32_t nish_poll_modify(int32_t loop, int32_t fd, int32_t events, int32_t token);
 int32_t nish_poll_remove(int32_t loop, int32_t fd);
 int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms);
+int32_t nish_poll_wait_batch(int32_t loop, nish_array *ready, int32_t timeout_ms, int32_t min_events, int32_t max_wait_ms);
 int32_t nish_unix_listen(const nish_str *path, int32_t backlog, int32_t flags);
 int32_t nish_unix_listen_mode(const nish_str *path, int32_t backlog, int32_t flags, int32_t mode);
 int32_t nish_unix_connect(const nish_str *path);

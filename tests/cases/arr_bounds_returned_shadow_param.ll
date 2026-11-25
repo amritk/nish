@@ -47,49 +47,41 @@ if.then:
   store i32 1, i32* %n.addr, align 4
   %0 = load i32, i32* %n.addr, align 4
   %1 = sext i32 %0 to i64
-  %2 = icmp ule i64 %1, 2147483647
-  br i1 %2, label %len.ok, label %len.fail
+  %2 = call i8* @nish_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.nish_array*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  store i64 %1, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
+  store i64 %1, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = mul i64 %1, 4
+  %7 = call i8* @nish_alloc_struct(i64 %6)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 %6, i1 false), !alias.scope !4, !noalias !3
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
+  store i8* %7, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  ret %struct.nish_array* %3
+
+if.end:
+  %9 = sext i32 %n to i64
+  %10 = icmp ule i64 %9, 2147483647
+  br i1 %10, label %len.ok, label %len.fail
 
 len.fail:
   call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*))
   unreachable
 
 len.ok:
-  %3 = call i8* @nish_alloc_struct(i64 24)
-  %4 = bitcast i8* %3 to %struct.nish_array*
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 0
-  store i64 %1, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 1
-  store i64 %1, i64* %6, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %7 = mul i64 %1, 4
-  %8 = call i8* @nish_alloc_struct(i64 %7)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %8, i8 0, i64 %7, i1 false), !alias.scope !4, !noalias !3
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 2
-  store i8* %8, i8** %9, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  ret %struct.nish_array* %4
-
-if.end:
-  %10 = sext i32 %n to i64
-  %11 = icmp ule i64 %10, 2147483647
-  br i1 %11, label %len.ok.1, label %len.fail.1
-
-len.fail.1:
-  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*))
-  unreachable
-
-len.ok.1:
-  %12 = call i8* @nish_alloc_struct(i64 24)
-  %13 = bitcast i8* %12 to %struct.nish_array*
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 0
-  store i64 %10, i64* %14, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 1
-  store i64 %10, i64* %15, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %16 = mul i64 %10, 4
-  %17 = call i8* @nish_alloc_struct(i64 %16)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %17, i8 0, i64 %16, i1 false), !alias.scope !4, !noalias !3
-  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 2
-  store i8* %17, i8** %18, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  ret %struct.nish_array* %13
+  %11 = call i8* @nish_alloc_struct(i64 24)
+  %12 = bitcast i8* %11 to %struct.nish_array*
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 0
+  store i64 %9, i64* %13, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 1
+  store i64 %9, i64* %14, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %15 = mul i64 %9, 4
+  %16 = call i8* @nish_alloc_struct(i64 %15)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %16, i8 0, i64 %15, i1 false), !alias.scope !4, !noalias !3
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
+  store i8* %16, i8** %17, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  ret %struct.nish_array* %12
 }
 
 define noundef i32 @nish_main() #0 {

@@ -5,11 +5,11 @@ under the names and the rules of JavaScript's
 [`Temporal`](https://tc39.es/proposal-temporal/docs/). A program that uses it
 reads them the same way natively and under Node. It is written in Nish and
 imported like any other library module
-([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
+([`export` and `import`](../../reference/language/declarations.md#export-and-import)).
 Its reference is [`nish/temporal`](../../reference/temporal.md).
 
 The language has no `Date` object: `Date.now()` is the only member it keeps
-([the clock](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals)).
+([the clock](../../reference/language/builtins.md#the-host-the-wall-clock-entropy-file-times-and-signals)).
 For anything beyond a timestamp in milliseconds, use this module.
 
 ## Five types
@@ -90,6 +90,30 @@ export const main = (): number => {
 The last input is refused because a `Z` names an exact time in UTC, and a
 `PlainDate` has no zone to read one into.
 
+When the reason matters, the `try...` forms answer a `Result` whose `Err`
+carries the text the `RangeError` would have. `tryPlainDateFrom` reads a
+string, `tryPlainDate` checks the fields the constructor takes, and a date's
+`tryAdd` refuses a sum that leaves Temporal's range, which runs from
+-271821-04-19 to +275760-09-13:
+
+<!-- allow-panics: calls `std/temporal.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
+import { Duration, PlainDate, tryPlainDate, tryPlainDateFrom } from "nish/temporal";
+
+const show = (r: Result<PlainDate, string>): void => {
+  console.log(r.ok ? r.value.toString() : r.error);
+};
+
+export const main = (): number => {
+  show(tryPlainDateFrom("2024-13-45")); // PlainDate: cannot parse "2024-13-45"
+  show(tryPlainDate(2023, 2, 29)); // PlainDate: day 29 is outside 1 to 28
+  show(new PlainDate(275760, 9, 13).tryAdd(new Duration(0, 0, 0, 1)));
+  // PlainDate: the date is outside Temporal's range
+  return 0;
+};
+```
+
 ## Arithmetic and differences
 
 Here is what `add` and `subtract` do to each type:
@@ -159,3 +183,7 @@ These parts of `Temporal` are not in this module yet:
   `new Instant(seconds, nanoseconds)` is this module's own, so build an
   instant with `instantFrom` or `instantFromEpochMilliseconds` in a program
   meant to run under Node too.
+- **The least `i64` as `microseconds` or `nanoseconds`.** `new Duration`
+  refuses it with a `RangeError`, because its negation does not fit in an
+  `i64`, so `negated()` and `abs()` could not answer it. Temporal takes it, as
+  a JavaScript number.

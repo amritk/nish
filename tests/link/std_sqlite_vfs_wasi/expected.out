@@ -1,0 +1,4 @@
+unix-excl: journal_mode=WAL answers 0
+unix-excl: a write answers 0
+unix-excl: close true
+no such vfs: open refused, 1: no such vfs: nish-none

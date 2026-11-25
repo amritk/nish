@@ -1,1 +1,1 @@
-Parameter `argv` of `declare function execvp` is string[], and the only array a declared C function takes is a `u8[]` or a `readonly u8[]`
+Parameter `argv` of `declare function execvp` is string[], and the only arrays a declared C function takes are of `u8`, `u16`, `u32`, `i32` or `f32`, readonly or not

@@ -34,7 +34,6 @@
                 ]
               },
               "panics": [
-                { "kind": "call", "at": "caps_file_read.ts:18:13", "callee": "readWindow", "via": "slice" },
                 { "kind": "oom", "at": "caps_file_read.ts:19:15", "allowed": true },
                 { "kind": "index", "at": "caps_file_read.ts:19:23", "proven": false }
               ]
@@ -60,7 +59,7 @@
                 ]
               },
               "panics": [
-                { "kind": "slice", "at": "caps_file_read.ts:8:67", "proven": false }
+                { "kind": "slice", "at": "caps_file_read.ts:8:67", "proven": true }
               ]
             },
             {

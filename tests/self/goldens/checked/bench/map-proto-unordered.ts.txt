@@ -120,7 +120,7 @@ function StrMap.delete(this: StrMap, key: string): boolean -> @StrMap.delete [me
 function StrMap.grow(this: StrMap): void -> @StrMap.grow [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: home nish_panic nish_panic_index nish_panic_overflow
+  calls: home nish_panic_index nish_panic_overflow
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:11 oldHashes: u32[] (const)
@@ -209,7 +209,7 @@ function IntMap.delete(this: IntMap, key: i32): boolean -> @IntMap.delete [metho
 function IntMap.grow(this: IntMap): void -> @IntMap.grow [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: home nish_panic nish_panic_index nish_panic_overflow
+  calls: home nish_panic_index nish_panic_overflow
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:11 oldHashes: u32[] (const)

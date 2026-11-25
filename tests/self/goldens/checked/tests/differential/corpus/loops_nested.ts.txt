@@ -4,7 +4,7 @@ entry: tests/differential/corpus/loops_nested.ts
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32
+  calls: nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   local +0:9 limit: i32 (const)
   local +1:9 composite: boolean[] (const)

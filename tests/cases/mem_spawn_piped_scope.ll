@@ -21,7 +21,6 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noundef i32 @nish_spawn_piped(%struct.nish_array* noundef nonnull align 8, %struct.nish_array* noundef nonnull align 8 nocapture readonly, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
 entry:
@@ -193,50 +192,26 @@ for.end:
   %60 = load i64, i64* %59, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %61 = trunc i64 %60 to i32
   %62 = sext i32 %61 to i64
-  %63 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %57, i64 0, i32 0
-  %64 = load i64, i64* %63, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %65 = icmp ule i64 0, %62
-  %66 = icmp ule i64 %62, %64
-  %67 = and i1 %65, %66
-  br i1 %67, label %bytes.ok, label %bytes.fail
-
-bytes.fail:
-  call void @nish_panic_slice(i64 0, i64 %62, i64 %64)
-  unreachable
-
-bytes.ok:
-  %68 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %57, i64 0, i32 2
-  %69 = load i8*, i8** %68, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %70 = getelementptr inbounds i8, i8* %69, i64 0
-  %71 = sub i64 %62, 0
-  %72 = call i8* @nish_str_new(i8* %70, i64 %71)
-  %73 = call i8* @nish_str_concat(i8* %56, i8* %72)
-  %74 = call i8* @nish_str_concat(i8* %73, i8* bitcast ({ i64, [4 x i8] }* @.str.6 to i8*))
-  %75 = load %struct.nish_array*, %struct.nish_array** %err.addr, align 8
-  %76 = load %struct.nish_array*, %struct.nish_array** %err.addr, align 8
-  %77 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %76, i64 0, i32 0
-  %78 = load i64, i64* %77, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %79 = trunc i64 %78 to i32
-  %80 = sext i32 %79 to i64
-  %81 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %75, i64 0, i32 0
-  %82 = load i64, i64* %81, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %83 = icmp ule i64 0, %80
-  %84 = icmp ule i64 %80, %82
-  %85 = and i1 %83, %84
-  br i1 %85, label %bytes.ok.1, label %bytes.fail.1
-
-bytes.fail.1:
-  call void @nish_panic_slice(i64 0, i64 %80, i64 %82)
-  unreachable
-
-bytes.ok.1:
-  %86 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %75, i64 0, i32 2
-  %87 = load i8*, i8** %86, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %88 = getelementptr inbounds i8, i8* %87, i64 0
-  %89 = sub i64 %80, 0
-  %90 = call i8* @nish_str_new(i8* %88, i64 %89)
-  %91 = call i8* @nish_str_concat(i8* %74, i8* %90)
-  call void @nish_print(i8* %91)
+  %63 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %57, i64 0, i32 2
+  %64 = load i8*, i8** %63, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %65 = getelementptr inbounds i8, i8* %64, i64 0
+  %66 = sub i64 %62, 0
+  %67 = call i8* @nish_str_new(i8* %65, i64 %66)
+  %68 = call i8* @nish_str_concat(i8* %56, i8* %67)
+  %69 = call i8* @nish_str_concat(i8* %68, i8* bitcast ({ i64, [4 x i8] }* @.str.6 to i8*))
+  %70 = load %struct.nish_array*, %struct.nish_array** %err.addr, align 8
+  %71 = load %struct.nish_array*, %struct.nish_array** %err.addr, align 8
+  %72 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %71, i64 0, i32 0
+  %73 = load i64, i64* %72, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %74 = trunc i64 %73 to i32
+  %75 = sext i32 %74 to i64
+  %76 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %70, i64 0, i32 2
+  %77 = load i8*, i8** %76, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %78 = getelementptr inbounds i8, i8* %77, i64 0
+  %79 = sub i64 %75, 0
+  %80 = call i8* @nish_str_new(i8* %78, i64 %79)
+  %81 = call i8* @nish_str_concat(i8* %69, i8* %80)
+  call void @nish_print(i8* %81)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

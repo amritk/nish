@@ -4,7 +4,7 @@ Every value in a Nish program has one type, fixed when the program is
 compiled, and that type never changes. There is no `any`, no boxing and no
 implicit conversion of any kind: two values are compatible only when their
 types are identical. The normative rules are in the reference's
-[Types](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#types) section.
+[Types](../../reference/language/types.md) section.
 
 ## Numbers
 
@@ -78,7 +78,7 @@ written asks for another type: an annotated declaration, a `return`, an
 argument to a function, or the other side of an operator whose type is
 known. That is why `const big: i64 = 9000000000` above compiles. The full
 list of those places is under
-[Numeric literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#numeric-literals).
+[Numeric literals](../../reference/language/types.md#numeric-literals).
 
 Integer arithmetic is checked: what happens when a value overflows is on the
 [Control flow](control-flow.md#checked-arithmetic) page.
@@ -100,8 +100,7 @@ JavaScript. `Math.min`, `max` and `hypot` take exactly two arguments.
 `std/math.ts` rather than called from the C library, so they answer the same
 on every target, WebAssembly included, within one unit in the last place.
 
-<!-- allow-panics: calls `std/math.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 export const main = (): i32 => {
   const angle: f64 = Math.atan2(1.0, 1.0);
@@ -135,7 +134,7 @@ export const main = (): i32 => {
 
 `f64ToBits(x)` and `f32ToBits(x)` give a float's raw IEEE-754 bits, as an
 `i64` and an `i32`; the whole list of builtins is in the reference's
-[Math table](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#builtins).
+[Math table](../../reference/language/builtins.md).
 
 ## Booleans
 
@@ -317,7 +316,7 @@ Three rules keep it honest:
 - **`?.` needs something that can be `null`.** On a value that never is,
   write `.`.
 
-The reference's [Nullable types](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nullable-types) section
+The reference's [Nullable types](../../reference/language/types.md#nullable-types) section
 has every form a test may take. A function that can *fail*, rather than find
 nothing, returns a `Result` instead — see
 [Errors and `Result`](errors.md).
@@ -338,7 +337,7 @@ index can also spare the bounds check:
 const digit: integer<0, 9> = 12;
 ```
 
-The reference's [Types](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#types) section lists every rule
+The reference's [Types](../../reference/language/types.md) section lists every rule
 for `integer<Lo, Hi>`.
 
 ## Enums
@@ -436,13 +435,13 @@ const label = (r: Role): string => {
 
 An enum can't be `| null`; keep a `boolean` beside it, or give the enum a
 member for "none". The reference's
-[Enums](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#enums) section lists every rule, and
+[Enums](../../reference/language/declarations.md#enums) section lists every rule, and
 [Standard library](../using-nish/standard-library.md) shows a string enum read
 from JSON.
 
 ## Enum member types
 
-A member of an [enum](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#enums) is also a type. Written as an
+A member of an [enum](../../reference/language/declarations.md#enums) is also a type. Written as an
 annotation, `Kind.Array` is a slot that holds that one member and nothing
 else, which is how a class records which of an enum's cases it is: a
 `readonly` field of the member's type, set to the member.
@@ -548,4 +547,4 @@ export const main = (): i32 => {
 };
 ```
 
-The reference's [Enums](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#enums) section has every rule.
+The reference's [Enums](../../reference/language/declarations.md#enums) section has every rule.

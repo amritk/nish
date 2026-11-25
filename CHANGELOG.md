@@ -16,6 +16,137 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-24
+
+### Added
+
+- runtime: PollWaitBatch and the direct ring wait for ring-only loops ([#2256](https://github.com/amritk/nish/pull/2256))
+
+### Performance
+
+- runtime: A nish/sqlite cursor call looks its handle up once ([#2255](https://github.com/amritk/nish/pull/2255))
+- runtime: Coalesce a ring slot's queued sends into one SEND, from a per-ring buffer pool ([#2252](https://github.com/amritk/nish/pull/2252))
+- runtime: Integer index seeks reuse one key, and Cursor.countRange counts an index's keys in one walk ([#2257](https://github.com/amritk/nish/pull/2257))
+- runtime: Cursor.readRow decodes the columns selectRow chose in one call ([#2259](https://github.com/amritk/nish/pull/2259))
+- runtime: Batched ring waits on HttpHandler, measured on bench/handler-ring ([#2261](https://github.com/amritk/nish/pull/2261))
+- runtime: Send large ring writes from pool buffers, print ring stats, attribute the PSS rise ([#2271](https://github.com/amritk/nish/pull/2271))
+
+### Documentation
+
+- plan: Add WP89, GPU graphics and a 2D game layer in std/ ([#2246](https://github.com/amritk/nish/pull/2246))
+- guide: Link the language reference on the docs site, not GitHub ([#2254](https://github.com/amritk/nish/pull/2254))
+- runtime: SQLite's unix-excl VFS is opt-in through openDatabase's URI route ([#2253](https://github.com/amritk/nish/pull/2253))
+- bench: Ring sends per response, packets per response and CPU at 18k and 96k ([#2251](https://github.com/amritk/nish/pull/2251))
+- self: Every property a security row states has its own failing check ([#2264](https://github.com/amritk/nish/pull/2264))
+- CLAUDE.md names the bench goldens and the sqlite adapter's size check ([#2265](https://github.com/amritk/nish/pull/2265))
+- Pin the runtime budget to a runtime change and BENCHMARKS commits to main ([#2266](https://github.com/amritk/nish/pull/2266))
+- plan: Reopen WP38 with fast-math, simd128, v4 and recipe stages ([#2234](https://github.com/amritk/nish/pull/2234))
+
+### Tests
+
+- runtime: Derive the per-target runtime layout asserts from ARENA_TYPE and ARRAY_TYPE ([#2258](https://github.com/amritk/nish/pull/2258))
+
+
+## [0.45.1] - 2026-11-24
+
+### Fixed
+
+- runtime: Prove deflate and inflate's panic sites ([#2217](https://github.com/amritk/nish/pull/2217))
+
+### Documentation
+
+- plan: File the router prover performance plan ([#2227](https://github.com/amritk/nish/pull/2227))
+- guide: Space code blocks inside steps and details ([#2228](https://github.com/amritk/nish/pull/2228))
+
+### CI
+
+- release: Grant ci-gate's statuses: write to the release run ([#2229](https://github.com/amritk/nish/pull/2229))
+
+
+## [0.45.0] - 2026-11-23
+
+### Added
+
+- net: Add nish/net/protobuf, protobuf's wire format, with its security record ([#2106](https://github.com/amritk/nish/pull/2106))
+- runtime: Trailers on the nish/net/http-server façade's HTTP/2 answers ([#2110](https://github.com/amritk/nish/pull/2110))
+- runtime: Add nish/net/grpc, unary gRPC calls on the HTTP/2 listeners, with its security record (WP72 S3) ([#2117](https://github.com/amritk/nish/pull/2117))
+- checker: Lend(x) reads a spawner's object in place (design B) ([#2118](https://github.com/amritk/nish/pull/2118))
+- runtime: Answer Accept-Encoding: deflate with a zlib body ([#2127](https://github.com/amritk/nish/pull/2127))
+- checker: A mulHigh builtin for the 64×64→128 high product ([#1808](https://github.com/amritk/nish/pull/1808))
+- net: WP43 S5 — middleware, steps that run before and after route bodies ([#2165](https://github.com/amritk/nish/pull/2165))
+- cli: Nish proto writes message classes from a .proto file (WP72 S5) ([`60cdbc1`](https://github.com/amritk/nish/commit/60cdbc1))
+- runtime: Serve static files with MIME types, ETag, Range and traversal refused ([#2166](https://github.com/amritk/nish/pull/2166))
+- net: Streaming request bodies on the façade's HTTP/2 listeners (WP72 S6a) ([#2167](https://github.com/amritk/nish/pull/2167))
+- runtime: Decode request bodies under a decompression-bomb limit ([#2169](https://github.com/amritk/nish/pull/2169))
+- net: Streaming gRPC calls on the façade's HTTP/2 listeners (WP72 S6) ([#2170](https://github.com/amritk/nish/pull/2170))
+
+### Fixed
+
+- runtime: Make std/ panic-free for strict modules ([#2103](https://github.com/amritk/nish/pull/2103))
+- runtime: Make json-typed, cli-args, cli-flags and cli panic-free (WP80 S1) ([#2186](https://github.com/amritk/nish/pull/2186))
+- runtime: Make the std/net QUIC wire layer panic-free ([#2189](https://github.com/amritk/nish/pull/2189))
+- crypto: WP83 S1 — hashes, MACs and key derivation ([#2182](https://github.com/amritk/nish/pull/2182))
+- runtime: Std/ panic-free for strict modules: std/sync, bytes, buffer-pool and prefork ([#2183](https://github.com/amritk/nish/pull/2183))
+- runtime: Make the std/net TLS codec and record layer panic-free ([#2192](https://github.com/amritk/nish/pull/2192))
+- runtime: Make the std/net TLS, fetch and outbound client side panic-free ([#2190](https://github.com/amritk/nish/pull/2190))
+- runtime: Make the std/net QUIC engine and relay panic-free ([#2194](https://github.com/amritk/nish/pull/2194))
+- runtime: WP81 S1 — postgres-carrier and postgres-async panic-free ([#2178](https://github.com/amritk/nish/pull/2178))
+- runtime: Make the std/net HTTP/3 stack panic-free ([#2196](https://github.com/amritk/nish/pull/2196))
+- runtime: Make the HTTP/1 wire layer panic-free (WP80 S3) ([#2193](https://github.com/amritk/nish/pull/2193))
+- self: Match nish-cmp's changelog words as the generator renders them ([#2201](https://github.com/amritk/nish/pull/2201))
+- runtime: Make the std/net HTTP/2 stack and HPACK panic-free ([#2199](https://github.com/amritk/nish/pull/2199))
+- runtime: Make the HTTP/1 server panic-free (WP80 S4) ([#2187](https://github.com/amritk/nish/pull/2187))
+- runtime: Make handler, serve and static panic-free for http-app (WP80 S5) ([#2198](https://github.com/amritk/nish/pull/2198))
+- runtime: WP83 S2 — ciphers, curves, signatures and password hashing ([#2184](https://github.com/amritk/nish/pull/2184))
+- runtime: WP83 S3 — P-256, P-384, RSA and JWT ([#2188](https://github.com/amritk/nish/pull/2188))
+- runtime: Make std/net/router.ts panic-free (WP80 S6) ([#2210](https://github.com/amritk/nish/pull/2210))
+- runtime: Bound the DNS query deadline and record what WP82 S9 leaves (WP82 S9) ([#2211](https://github.com/amritk/nish/pull/2211))
+- runtime: WP83 S4 — X.509 and the PKI ([#2185](https://github.com/amritk/nish/pull/2185))
+- runtime: Make WebTransport, WebSocket, gRPC and OIDC panic-free (WP82 S8) ([#2212](https://github.com/amritk/nish/pull/2212))
+- runtime: WP81 S2 — postgres panic-free ([#2200](https://github.com/amritk/nish/pull/2200))
+- runtime: Make checksum, zlib and gzip panic-free ([#2216](https://github.com/amritk/nish/pull/2216))
+
+### Performance
+
+- runtime: Read emit-ts strings without re-encoding them per byte ([#2108](https://github.com/amritk/nish/pull/2108))
+- codegen: Inline integer conversions under --emit-ts ([#2121](https://github.com/amritk/nish/pull/2121))
+- runtime: Count std/net instructions and extend std/ panic-free for strict modules to DNS ([#2181](https://github.com/amritk/nish/pull/2181))
+
+### Documentation
+
+- Record the cookbook regen check and nish-cmp --no-sidecars for wasm32 in CLAUDE.md ([#1752](https://github.com/amritk/nish/pull/1752))
+- Plan WP74 to WP79, the std and toolchain gaps a generated API CLI meets ([#2098](https://github.com/amritk/nish/pull/2098))
+- Check a record's cited checks and figures against their source before the PR ([#1719](https://github.com/amritk/nish/pull/1719))
+- guide: Find the Threads page for multithreading searches and wrap code headings on phones ([#2173](https://github.com/amritk/nish/pull/2173))
+- Require a test for every bound a security record lists ([#2175](https://github.com/amritk/nish/pull/2175))
+- Replace the vibe-coded badge with a built-with-Claude badge ([#2191](https://github.com/amritk/nish/pull/2191))
+- plan: Bring the refined WP72 plan to main ([#2195](https://github.com/amritk/nish/pull/2195))
+
+### Tests
+
+- std: Pin vector 0.6.0 and regenerate the spec tests ([#2109](https://github.com/amritk/nish/pull/2109))
+- std: Cover the HMAC and HKDF Secret exports in their RFC contracts ([#2112](https://github.com/amritk/nish/pull/2112))
+- std: State the PBKDF2 and SCRAM laws and record why their vectors keep commands ([#2113](https://github.com/amritk/nish/pull/2113))
+- std: Record why the RFC 8439 quarter-round positions stay uncited ([#2111](https://github.com/amritk/nish/pull/2111))
+- std: Specify base64 and base64url from RFC 4648 ([#2114](https://github.com/amritk/nish/pull/2114))
+- std: Specify P-256 ECDSA signing from RFC 6979 ([#2116](https://github.com/amritk/nish/pull/2116))
+- std: Specify SHA-1 and SHA-2 from RFC 6234 ([#2115](https://github.com/amritk/nish/pull/2115))
+- self: Std/ panic ratchet, kept-panic rule and caller-proven spawn slots ([#2164](https://github.com/amritk/nish/pull/2164))
+- self: Match the panic ratchet's nish-cmp declarations to its release note ([#2174](https://github.com/amritk/nish/pull/2174))
+- runtime: Pin the date in net_handler_steps' warm arena rounds ([#2197](https://github.com/amritk/nish/pull/2197))
+- Refuse a new inline function program in the test harnesses ([#2215](https://github.com/amritk/nish/pull/2215))
+
+### CI
+
+- Delete the Release PR's runs that wait for approval ([#2099](https://github.com/amritk/nish/pull/2099))
+- Report the dispatched CI gate as a ci-gate commit status ([#2101](https://github.com/amritk/nish/pull/2101))
+- interop: Call the gRPC server with pinned grpcurl and ghz over TLS and h2c (WP72 S4) ([#2119](https://github.com/amritk/nish/pull/2119))
+
+### Internal
+
+- Name break-web's build as a --help input, and refresh apt before the compiler-rt install ([#1806](https://github.com/amritk/nish/pull/1806))
+
+
 ## [0.44.0] - 2026-11-21
 
 ### Breaking changes
@@ -2196,3 +2327,6 @@ file per release, and each release's notes and downloads are on the
 [0.42.0]: https://github.com/amritk/nish/releases/tag/v0.42.0
 [0.43.0]: https://github.com/amritk/nish/releases/tag/v0.43.0
 [0.44.0]: https://github.com/amritk/nish/releases/tag/v0.44.0
+[0.45.0]: https://github.com/amritk/nish/releases/tag/v0.45.0
+[0.45.1]: https://github.com/amritk/nish/releases/tag/v0.45.1
+[0.46.0]: https://github.com/amritk/nish/releases/tag/v0.46.0

@@ -1,0 +1,65 @@
+PASS  asc: countRange(-2, 14) is count(*) for every k
+PASS  asc: countRange(-2, 14) answers the sum
+PASS  asc: countRange(-2, 14) leaves out past the span
+PASS  asc: countRange(0, 0) is count(*) for every k
+PASS  asc: countRange(0, 0) answers the sum
+PASS  asc: countRange(0, 0) leaves out past the span
+PASS  asc: countRange(12, 12) is count(*) for every k
+PASS  asc: countRange(12, 12) answers the sum
+PASS  asc: countRange(12, 12) leaves out past the span
+PASS  asc: countRange(4, 4) is count(*) for every k
+PASS  asc: countRange(4, 4) answers the sum
+PASS  asc: countRange(4, 4) leaves out past the span
+PASS  asc: countRange(10, 40) is count(*) for every k
+PASS  asc: countRange(10, 40) answers the sum
+PASS  asc: countRange(10, 40) leaves out past the span
+PASS  asc: countRange(9223372036854775804, 9223372036854775807) is count(*) for every k
+PASS  asc: countRange(9223372036854775804, 9223372036854775807) answers the sum
+PASS  asc: countRange(9223372036854775804, 9223372036854775807) leaves out past the span
+PASS  asc: countRange(-9223372036854775808, -9223372036854775805) is count(*) for every k
+PASS  asc: countRange(-9223372036854775808, -9223372036854775805) answers the sum
+PASS  asc: countRange(-9223372036854775808, -9223372036854775805) leaves out past the span
+PASS  desc: countRange(-2, 14) is count(*) for every k
+PASS  desc: countRange(-2, 14) answers the sum
+PASS  desc: countRange(-2, 14) leaves out past the span
+PASS  desc: countRange(12, 12) is count(*) for every k
+PASS  desc: countRange(12, 12) answers the sum
+PASS  desc: countRange(12, 12) leaves out past the span
+PASS  desc: countRange(0, 0) is count(*) for every k
+PASS  desc: countRange(0, 0) answers the sum
+PASS  desc: countRange(0, 0) leaves out past the span
+PASS  desc: countRange(10, 40) is count(*) for every k
+PASS  desc: countRange(10, 40) answers the sum
+PASS  desc: countRange(10, 40) leaves out past the span
+PASS  desc: countRange(9223372036854775804, 9223372036854775807) is count(*) for every k
+PASS  desc: countRange(9223372036854775804, 9223372036854775807) answers the sum
+PASS  desc: countRange(9223372036854775804, 9223372036854775807) leaves out past the span
+PASS  desc: countRange(-9223372036854775808, -9223372036854775805) is count(*) for every k
+PASS  desc: countRange(-9223372036854775808, -9223372036854775805) answers the sum
+PASS  desc: countRange(-9223372036854775808, -9223372036854775805) leaves out past the span
+PASS  two columns: countRange(-2, 14) is count(*) for every k
+PASS  two columns: countRange(-2, 14) answers the sum
+PASS  two columns: countRange(-2, 14) leaves out past the span
+PASS  numeric: countRange(-1, 8) is count(*) for every k
+PASS  numeric: countRange(-1, 8) answers the sum
+PASS  numeric: countRange(-1, 8) leaves out past the span
+PASS  refused: a table cursor is SQLITE_MISUSE
+PASS  refused: a table cursor is SQLITE_MISUSE, out untouched
+PASS  refused: a TEXT first column is SQLITE_MISMATCH
+PASS  refused: a TEXT first column is SQLITE_MISMATCH, out untouched
+PASS  refused: lo > hi is SQLITE_RANGE
+PASS  refused: lo > hi is SQLITE_RANGE, out untouched
+PASS  refused: a span longer than out is SQLITE_RANGE
+PASS  refused: a span longer than out is SQLITE_RANGE, out untouched
+PASS  refused: MIN..MAX is SQLITE_RANGE
+PASS  refused: MIN..MAX is SQLITE_RANGE, out untouched
+PASS  refused: an empty out is SQLITE_RANGE
+PASS  refused: an empty out is SQLITE_RANGE, out untouched
+PASS  after a count, a seek with no key part is SQLITE_MISUSE
+PASS  and the cursor is on no row
+PASS  an integer seek after a count lands on its key
+PASS  the loop ran
+PASS  the steady loop allocates nothing
+PASS  close
+memory counted: false
+std_sqlite_cursor_count: 63 passed, 0 failed, 0 skipped

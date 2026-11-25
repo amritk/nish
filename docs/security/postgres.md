@@ -8,8 +8,8 @@ wiped, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the database layer starts
 from evidence.
 
-Anchors are function names in `std/net/postgres.ts` at the commit that adds
-connection targets (`pgTarget`, `pgTargetUrl`), the last to change it;
+Anchors are function names in `std/net/postgres.ts` at the commit that makes
+it panic-free (WP81 S2), the last to change it;
 those in `std/net/postgres-carrier.ts` and `std/net/postgres-async.ts` are at
 the commit that makes both panic-free (WP81 S1), the last to change them.
 PG-23 and PG-24 were found at the commit that adds `PgCarrier`, which also
@@ -174,7 +174,7 @@ PG-41 is accepted.
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
 | PG-1 | High if it failed | `next`, `received`, `receive`, `compact` | A message's length must not make the client read past its buffer or hold more than `maxMessage`. | **Holds.** A length under 4 is `PG_ERR_FRAME`, one over `maxMessage` is `PG_ERR_TOO_BIG` before its body is read, and the input buffer grows by doubling to one message at most. `receive` panics on a window outside its source, as `received` does on a count past `inputRoom()`. A message split into 1-byte pieces frames the same as one whole. |
-| PG-2 | High if it failed | `dispatch`, `readRow`, `readDescription`, `readError` | A field inside a message must not be read past the message's end: a column longer than its row, a length of `-2`, a string without its NUL, a count short of its fields. | **Holds.** Each is `PG_ERR_FRAME`; a row with bytes after its last column is too. A `PgCarrier` query that meets one fails `PG_CARRIER_FAILED` with that failure, and the next query runs on a new connection: "a DataRow with a truncated length is the program's 503", "a DataRow with a column count past the frame is the program's 503", "a DataRow with a cell cut short is the program's 503", each followed by "as PG_CARRIER_FAILED with failure PG_ERR_FRAME" and "the next query is answered on a new connection" (`link/std_postgres_carrier`). |
+| PG-2 | High if it failed | `dispatch`, `readRow`, `readDescription`, `readError` | A field inside a message must not be read past the message's end: a column longer than its row, a length of `-2`, a string without its NUL, a count short of its fields. | **Holds.** Each is `PG_ERR_FRAME`; a row with bytes after its last column is too, as are a `DataRow` or `RowDescription` whose count runs past its frame and a `DataRow` cut inside its column count or a column's length ("a DataRow whose column count runs past its frame" and the three checks after it, `link/std_postgres`). A `PgCarrier` query that meets one fails `PG_CARRIER_FAILED` with that failure, and the next query runs on a new connection: "a DataRow with a truncated length is the program's 503", "a DataRow with a column count past the frame is the program's 503", "a DataRow with a cell cut short is the program's 503", each followed by "as PG_CARRIER_FAILED with failure PG_ERR_FRAME" and "the next query is answered on a new connection" (`link/std_postgres_carrier`). |
 | PG-3 | Medium if it failed | `readRow`, `readDescription`, `reserveColumns` | A row or description must not make the client allocate without bound. | **Holds.** Over `maxColumns` (1664, PostgreSQL's own) is `PG_ERR_TOO_BIG` before the column arrays grow. |
 | PG-4 | Medium if it failed | `dispatch`, `authenticate` | A message at the wrong point — a row before authentication, `BackendKeyData` once ready, `ReadyForQuery` or an `ErrorResponse` for no group, COPY, an unknown type — must not be acted on. | **Holds.** Each is `PG_ERR_UNEXPECTED`. A `NotificationResponse` is read and dropped. |
 | PG-5 | High if it failed | `scramContinue` | The server's SCRAM nonce must extend the client's, so an old exchange cannot be replayed into a new one. | **Holds.** A nonce that does not start with ours, adds nothing, or holds a byte outside `!`..`~` is `PG_ERR_SCRAM`. |
@@ -321,6 +321,13 @@ Before the fix it freed the seat alone and left the unread answer in front of
 every later seat on the connection: "live: 1". `PgCarrier`'s lookup of a
 batcher's slot no longer panics: an id `attach` never gave is still refused
 by `runInt` and `runText`, as above.
+
+Two more are gone since WP81 S2, both guards on an internal helper's
+window. `pgFind` read past its buffer as a panic; it now reads a window past
+`b`'s end as one without the byte, which every caller refuses as a malformed
+message. `pgPutDecimal` panicked on a decimal outside its room; it now
+answers -1 and writes nothing. Every caller bounds the window before the
+call, so no test reaches either path.
 
 `PgCarrier.close()` is not a panic site either. Queries in flight when it is
 called get no further event: their requests are the program's to answer,

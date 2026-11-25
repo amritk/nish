@@ -20,10 +20,10 @@ function stepTo(lo: i32, step: i32, n: i32): i32 -> @nish.stepTo
   escaping: n
   stackSites=0 stackLocals=0
 function sortWith<i32, ordered>(xs: i32[], cmp: void): i32[] -> @nish.sortWith$i32$fn.7.ordered [exported instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.copyRun$i32
   escaping: xs
-  calls: nish.copyRun$i32 nish.insertionRun$i32$fn.7.ordered nish.mergePass$i32$fn.7.ordered nish.stepTo nish_arena_mark nish_arena_release nish_panic
+  calls: nish.copyRun$i32 nish.insertionRun$i32$fn.7.ordered nish.mergePass$i32$fn.7.ordered nish.stepTo nish_arena_mark nish_arena_release
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$i32#0 nish.insertionRun$i32$fn.7.ordered#1 nish.mergePass$i32$fn.7.ordered#1 nish.mergePass$i32$fn.7.ordered#0 nish.copyRun$i32#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
@@ -43,7 +43,7 @@ function sortWith<i32, difference>(xs: i32[], cmp: void): i32[] -> @nish.sortWit
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.copyRun$i32
   escaping: xs
-  calls: nish.copyRun$i32 nish.insertionRun$i32$fn.10.difference nish.mergePass$i32$fn.10.difference nish.stepTo nish_arena_mark nish_arena_release nish_panic
+  calls: nish.copyRun$i32 nish.insertionRun$i32$fn.10.difference nish.mergePass$i32$fn.10.difference nish.stepTo nish_arena_mark nish_arena_release
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$i32#0 nish.insertionRun$i32$fn.10.difference#1 nish.mergePass$i32$fn.10.difference#1 nish.mergePass$i32$fn.10.difference#0 nish.copyRun$i32#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)

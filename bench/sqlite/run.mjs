@@ -3,7 +3,7 @@
 // through SQLite's own C API (twin.c) and through rusqlite (twin.rs), on the
 // same database, and how much of a difference this machine can see at all.
 //
-//   npm run build && node bench/sqlite/run.mjs [--validate] [--rounds N] [--no-rust] [--variant V] [--compiler <nish>]
+//   npm run build && node bench/sqlite/run.mjs [--validate] [--rounds N] [--no-rust] [--variant V | --base REV] [--compiler <nish>]
 //     --validate  one run of each side at small counts: rows, checksums and
 //                 failures must agree, nothing is timed
 //     --rounds N  timed rounds, rounded up to a multiple of the number of
@@ -22,7 +22,21 @@
 //                   c-native       the C twin compiled and linked with
 //                                  -march=native, against the C twin (nish
 //                                  refuses --cpu native, so this is C only)
+//                   unix-excl      a byte-identical copy of the build that
+//                                  opens the database as
+//                                  `file:<db>?vfs=unix-excl`: SQLite's
+//                                  unix-excl VFS, the wal-index in heap and
+//                                  no -shm, against the default unix VFS,
+//                                  still WAL and synchronous=NORMAL
+//                                  (docs/sqlite-vfs.md)
 //                 With --validate, the variant must read what every side reads.
+//     --base REV  the variant is main.ts built by the same compiler against
+//                 commit REV's std/ and runtime/ (and its scripts/build.sh),
+//                 checked out in a git worktree under build/bench/sqlite/ and
+//                 removed after the build: what a change to the module or
+//                 the adapter moves, timed in the same rounds as the build
+//                 and its copy. It runs every Nish workload, so main.ts's
+//                 calls must be ones REV's module has. Not with --variant.
 //
 // PGO's training: an instrumented build (`--link --pgo-generate`, with the
 // variant's --cpu) runs lookup, feed, insert and insert-txn on a database
@@ -58,8 +72,8 @@
 //
 // Each round runs every workload on every binary, in an order that rotates by
 // round, so over a multiple of their number each goes first equally often;
-// feed-cursor-walk and feed-cursor, which the twins have no path for, run on
-// the build and its copy alone, which alternate, so balance needs an even
+// the feed-cursor workloads, which the twins have no path for, run on the
+// build and its copy alone, which alternate, so balance needs an even
 // count: the timed count is rounded up to a multiple of both, and their lines
 // are set against feed's. A run times its own loop and prints a checksum of
 // every value it read; every run of a workload must print the same rows and
@@ -102,6 +116,7 @@ let rounds = 12
 let validate = false
 let rust = true
 let variant = null
+let baseRev = null
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === "--rounds") {
@@ -110,6 +125,11 @@ for (let i = 2; i < argv.length; i++) {
     validate = true
   } else if (argv[i] === "--no-rust") {
     rust = false
+  } else if (argv[i] === "--base") {
+    baseRev = argv[++i]
+    if (baseRev === undefined) {
+      fail("--base needs a commit")
+    }
   } else if (argv[i] === "--variant") {
     variant = argv[++i]
     if (variant === undefined) {
@@ -129,21 +149,37 @@ const VARIANTS = {
   "x86-64-v3": { pgo: false, cpu: ["--cpu", "x86-64-v3"] },
   "pgo-x86-64-v3": { pgo: true, cpu: ["--cpu", "x86-64-v3"] },
   "c-native": { native: true },
+  "unix-excl": { vfs: "unix-excl" },
 }
 if (variant !== null && !Object.hasOwn(VARIANTS, variant)) {
   fail(`--variant takes ${Object.keys(VARIANTS).join(", ")}, not ${variant}`)
 }
+if (baseRev !== null) {
+  if (variant !== null) {
+    fail("--base and --variant each add the one variant; pass one of them")
+  }
+  // The rest of the script reads a base build as one more Nish variant.
+  variant = "base"
+  VARIANTS.base = { base: baseRev, pgo: false, cpu: [] }
+}
 
 // Calls a run: each timed run is a fraction of a second on a 2020s core.
-// feed-cursor-walk and feed-cursor read feed's rows through cursors instead
-// of SQL: they run at feed's count and must print feed's line (`same`), and
-// neither twin has a cursor path, so they run on the build and its copy only
-// (`noTwin`). feed-cursor-walk opens its transaction and cursors once, outside
-// the timed loop; feed-cursor opens and closes them on every call.
+// feed-cursor-walk, feed-cursor-count and feed-cursor read feed's rows
+// through cursors instead of SQL: they run at feed's count and must print
+// feed's line (`same`), and neither twin has a cursor path, so they run on the
+// build and its copy only (`noTwin`). feed-cursor-walk opens its transaction
+// and cursors once, outside the timed loop; feed-cursor opens and closes them
+// on every call; feed-cursor-count is feed-cursor-walk with the 20 posts'
+// likes counted in one `Cursor.countRange` over their id span.
+// feed-cursor-row is feed-cursor-walk with each post's and author's columns
+// read by one Cursor.readRow call, each cursor's columns chosen by
+// Cursor.selectRow once, outside the timed loop, timed in the same rounds.
 const WORKLOADS = [
   { name: "lookup", count: validate ? 2000 : 200000 },
   { name: "feed", count: validate ? 50 : 10000 },
   { name: "feed-cursor-walk", count: validate ? 50 : 10000, same: "feed", noTwin: true },
+  { name: "feed-cursor-count", count: validate ? 50 : 10000, same: "feed", noTwin: true },
+  { name: "feed-cursor-row", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "feed-cursor", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "insert", count: validate ? 500 : 20000 },
   { name: "insert-txn", count: validate ? 2000 : 100000 },
@@ -227,12 +263,12 @@ const twinNative = path.join(outDir, "twin-native")
 for (const f of [exe, copy, twin, exeMt, twinMt, twinRs, exeVariant, twinCopy, twinNative]) {
   fs.rmSync(f, { force: true })
 }
-const nishBuild = (out, extra, what) => {
+const nishBuild = (out, extra, what, compiler = nishc) => {
   const ir = `${out}.ir`
   fs.rmSync(ir, { recursive: true, force: true })
   run(
-    nishc.cmd,
-    compileArgv(nishc, [path.join(here, "main.ts"), "-o", `${ir}${path.sep}`, "--link", out, ...extra]),
+    compiler.cmd,
+    compileArgv(compiler, [path.join(here, "main.ts"), "-o", `${ir}${path.sep}`, "--link", out, ...extra]),
     what
   )
 }
@@ -332,10 +368,42 @@ const trainedProfile = (cpu) => {
     fs.rmSync(tmp, { recursive: true, force: true })
   }
 }
+/**
+ * main.ts built against commit `rev`'s std/ and runtime/: the compiler reads
+ * its package root from its own path (`<root>/build/nish`), so a copy of it
+ * inside a worktree of `rev` compiles and links with that commit's library,
+ * adapter and scripts/build.sh. The worktree goes once the build is done.
+ */
+const baseBuild = (rev, out) => {
+  if (nishc.prefix.length > 0) {
+    fail("--base needs a native compiler, not a Node entry point, to copy into the base's tree")
+  }
+  const tree = path.join(outDir, "base-tree")
+  const git = (args, what) => run("git", args, what)
+  fs.rmSync(tree, { recursive: true, force: true })
+  git(["worktree", "prune"], "git worktree prune")
+  git(["worktree", "add", "--detach", "--force", tree, rev], `git worktree add ${rev}`)
+  try {
+    const at = git(["-C", tree, "rev-parse", "--short=12", "HEAD"], "git rev-parse").trim()
+    const compiler = path.join(tree, "build", "nish")
+    fs.mkdirSync(path.dirname(compiler), { recursive: true })
+    fs.copyFileSync(nishc.cmd, compiler)
+    fs.chmodSync(compiler, 0o755)
+    nishBuild(out, [], `the base build (${rev})`, { cmd: compiler, prefix: [] })
+    return at
+  } finally {
+    git(["worktree", "remove", "--force", tree], "git worktree remove")
+  }
+}
 const spec = variant === null ? null : VARIANTS[variant]
-if (spec?.native === true) {
+let baseAt = null
+if (spec?.base !== undefined) {
+  baseAt = baseBuild(spec.base, exeVariant)
+} else if (spec?.native === true) {
   copyOf(twin, twinCopy)
   cTwin("st", twinNative, ["-march=native"])
+} else if (spec?.vfs !== undefined) {
+  copyOf(exe, exeVariant)
 } else if (spec !== null) {
   const pgo = spec.pgo ? ["--pgo-use", trainedProfile(spec.cpu)] : []
   nishBuild(exeVariant, [...pgo, ...spec.cpu], `the ${variant} build`)
@@ -344,7 +412,9 @@ if (spec?.native === true) {
 // The THREADSAFE=2 group, when there is a cargo to build twin.rs with, and no
 // variant to time instead.
 if (rust && variant !== null) {
-  console.error(`note: --variant ${variant} leaves out the THREADSAFE=2 group (rusqlite)`)
+  console.error(
+    `note: ${baseRev !== null ? "--base" : `--variant ${variant}`} leaves out the THREADSAFE=2 group (rusqlite)`
+  )
 }
 const cargo =
   rust && variant === null
@@ -424,9 +494,16 @@ if (!fs.existsSync(db) || !fs.existsSync(stamp) || fs.readFileSync(stamp, "utf8"
   fs.writeFileSync(stamp, want)
 }
 
+// What the variant binary opens: the seed as a `file:` URI on its VFS, the
+// path's `?` and `#` escaped so they stay in it. Every other binary opens
+// the path.
+const dbVariant =
+  spec?.vfs === undefined
+    ? db
+    : `file:${encodeURI(db).replace(/\?/g, "%3F").replace(/#/g, "%23")}?vfs=${spec.vfs}`
 /** One run of `bin` on workload `w`: what it read, and its ns per call. */
 const runOnce = (bin, w) => {
-  const m = parsed(bin, w.name, runWorkload(bin, w.name, db, w.count))
+  const m = parsed(bin, w.name, runWorkload(bin, w.name, bin === exeVariant ? dbVariant : db, w.count))
   return { answer: `rows ${m[1]} checksum ${m[2]} count ${m[4]}`, ns: Number(m[5]) / w.count }
 }
 
@@ -539,7 +616,8 @@ const version = /#define SQLITE_VERSION\s+"([^"]+)"/.exec(
 )
 console.log(`sqlite: ${timed} rounds; SQLite ${version?.[1] ?? "of unknown version"}`)
 if (variant !== null) {
-  console.log(`  variant: ${variant}, against ${labels[against.base]} and its copy`)
+  const what = baseAt === null ? variant : `base, main.ts on ${baseRev}'s std/ and runtime/ (${baseAt})`
+  console.log(`  variant: ${what}, against ${labels[against.base]} and its copy`)
 }
 if (rustVersions !== null) {
   console.log(`  mt: SQLITE_THREADSAFE=2; ${rustVersions}`)

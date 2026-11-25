@@ -1,0 +1,2 @@
+error: `slice` may panic here
+`slice` panics when `n` is outside `xs`, and nothing proves it in range here: guard the call — `if (n >= 0 && n <= xs.length)` proves it

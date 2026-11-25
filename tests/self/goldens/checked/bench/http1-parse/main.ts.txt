@@ -1801,8 +1801,7 @@ function urlIsUtf8(buf: u8[], off: i32, len: i32): boolean -> @nish.urlIsUtf8
   local +46:13 c: i32 (const)
   local +55:13 c: i32 (const)
 function urlBytesOf(s: string): u8[] | null -> @nish.urlBytesOf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 bytes: u8[] (const)
@@ -2125,8 +2124,7 @@ function requestOf(head: i32): u8[] -> @requestOf
   local +41:7 text: string (let)
   callee +45:10 toBytes -> @toBytes
 function toBytes(text: string): u8[] -> @toBytes
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 i: i32 (let)

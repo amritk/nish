@@ -3,10 +3,10 @@
 An array holds values of one type and can grow; a string is immutable
 bytes, usually UTF-8 text. Both have a short, fixed list of methods — far
 fewer than in JavaScript — and both are bounds-checked. The normative rules are in the
-reference's [Array literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#array-literals),
-[Element access](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#element-access),
-[Arrays and strings as receivers](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-and-strings-as-receivers)
-and [Template literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#template-literals) sections.
+reference's [Array literals](../../reference/language/expressions.md#array-literals),
+[Element access](../../reference/language/expressions.md#element-access),
+[Arrays and strings as receivers](../../reference/language/builtins.md#arrays-and-strings-as-receivers)
+and [Template literals](../../reference/language/expressions.md#template-literals) sections.
 
 ## Arrays
 
@@ -14,11 +14,12 @@ and [Template literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.m
 one type, and an empty literal `[]` needs a type to take from its context.
 Several examples on this page build with
 [`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): they
-index, pop and add without the guards the compiler reads, and `sort`, `map`,
-`filter`, `slice` and `String.fromBytes` keep checks no proof removes yet.
-Testing `i < xs.length` before an index and `xs.length > 0` before a `pop`,
-and bounding the arithmetic, builds the rest under the default; the others
-will once the standard library is made panic-free and a range can be proved:
+index, pop and add without the guards the compiler reads, and `sort`, `map`
+and `filter` keep checks no proof removes yet. Testing `i < xs.length` before
+an index, `xs.length > 0` before a `pop` and
+`start >= 0 && start <= end && end <= xs.length` before a `slice` or a
+`String.fromBytes`, and bounding the arithmetic, builds the rest under the
+default; the others will once the standard library is made panic-free:
 
 <!-- allow-panics: pops an array it does not test for empty; indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
@@ -147,8 +148,9 @@ its own loop that calls it directly. Three things differ from JavaScript:
 - **A callback takes at most two parameters.** JavaScript passes the array as
   a third; read the array you called the method on instead.
 - **`slice` checks its range**, as string `slice` does:
-  `xs.slice(start, end)` needs `0 <= start <= end <= xs.length`. No guard
-  proves that to the compiler yet, so a call is refused by default; under
+  `xs.slice(start, end)` needs `0 <= start <= end <= xs.length`. A guard that
+  says so, `if (start >= 0 && start <= end && end <= xs.length)`, proves it to
+  the compiler; a call nothing proves is refused by default, and under
   `--allow-panics` a bad range stops the program. A negative
   index does not count from the end, and an end past the length is not
   clamped. `xs.slice()` copies the whole array, and `xs.slice(start)` copies
@@ -237,7 +239,7 @@ that no class implements stores the records themselves back to back, which
 is why holding one of its elements across a `push` onto the same array is
 refused. An array of class instances, of an interface some class implements,
 or of a `T | null` holds a pointer to each element instead
-([Arrays of records are contiguous](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-of-records-are-contiguous)).
+([Arrays of records are contiguous](../../reference/language/expressions.md#arrays-of-records-are-contiguous)).
 
 ### Lookup tables
 
@@ -245,7 +247,7 @@ A top-level `const` declared `readonly u8[]` (or `u16`, `u32`, `i32`, `i64`
 or `f64`) and given an array literal of constants is a *constant table*. Its
 elements are worked out when the program compiles and kept as read-only
 data in the binary: nothing runs to build it, and nothing can write it
-([Constant tables](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#constant-tables)).
+([Constant tables](../../reference/language/declarations.md#constant-tables)).
 
 <!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
@@ -291,7 +293,7 @@ A top-level `const` holding a `new` array of a constant length is *module
 storage*: a fixed block of memory, zero-filled when the program starts, that
 keeps its values from one call to the next. It is the one piece of state a
 module keeps, and no code runs to set it up.
-([Module storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#module-storage)).
+([Module storage](../../reference/language/declarations.md#module-storage)).
 
 <!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
@@ -398,6 +400,27 @@ way to turn what a file or a socket handed you into a string, where a
 const bytes: u8[] = [99, 97, 102, 195, 169];
 console.log(String.fromBytes(bytes, 0, 5));   // café
 console.log(String.fromBytes(bytes, 0, 3));   // caf
+```
+
+The range is checked as `slice`'s is, `0 <= start <= end <= bytes.length`. A
+guard on it proves it, and so does a start the end is known not to pass: a
+copy, `const start = i`, before a loop that only counts `i` up. Without one
+the call is refused by default:
+
+<!-- nish:ok -->
+```ts
+const word = (buf: u8[], start: i32, end: i32): string => {
+  if (start >= 0 && start <= end && end <= buf.length) {
+    return String.fromBytes(buf, start, end);
+  }
+  return "";
+};
+
+export const main = (): i32 => {
+  const line: u8[] = [104, 105, 32, 116, 104, 101, 114, 101];
+  console.log(word(line, 3, 8));   // there
+  return 0;
+};
 ```
 
 The bytes are copied as they are, so `é`'s two bytes are `é` again. Under

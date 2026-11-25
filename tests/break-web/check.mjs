@@ -226,9 +226,10 @@ check(
 // too; the rest comes with the shell. The baseline is theme.css on main
 // (c6c797f9b) before the terminal took keys, plus 404 B for the inline-code
 // style added after it, 180 B for the tables' column layout and the hero
-// name's unfold and 50 B for the current header link's single underline, none
-// of which is part of the terminal.
-const THEME_GZIP_BEFORE = 8956 + 404 + 180 + 50
+// name's unfold, 50 B for the current header link's single underline, 91 B
+// for the block spacing inside steps and details and 134 B for the visited
+// link colour, none of which is part of the terminal.
+const THEME_GZIP_BEFORE = 8956 + 404 + 180 + 50 + 91 + 134
 const THEME_GZIP_GROWTH = 250
 const themeGzipped = zlib.gzipSync(fs.readFileSync(path.join(root, "docs", "site", "theme.css")), { level: 9 }).length
 check(

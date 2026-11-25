@@ -432,9 +432,13 @@ export class TermProbe {
         sgrRead = sgrRead || toI32(e.text.indexOf("48:2:")) >= 0 || toI32(e.text.indexOf("48;2;")) >= 0
       }
     }
-    if (caps.cellWidthPx <= 0 && areaW > 0 && this.cols > 0 && areaH > 0 && this.rows > 0) {
-      caps.cellWidthPx = (areaW / this.cols) | 0
-      caps.cellHeightPx = (areaH / this.rows) | 0
+    // The grid size is read into locals: a divisor the prover clears is a
+    // local behind `d > 0`, which a field read twice is not.
+    const cols: i32 = this.cols
+    const rows: i32 = this.rows
+    if (caps.cellWidthPx <= 0 && areaW > 0 && cols > 0 && areaH > 0 && rows > 0) {
+      caps.cellWidthPx = (areaW / cols) | 0
+      caps.cellHeightPx = (areaH / rows) | 0
     }
     if (caps.cellWidthPx <= 0 || caps.cellHeightPx <= 0) {
       caps.cellWidthPx = 0

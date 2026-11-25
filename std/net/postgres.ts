@@ -462,8 +462,10 @@ export class PgError {
 
 /** A fresh copy of `bytes`; the password holder keeps one. */
 const pgCopyBytes = (bytes: u8[]): u8[] => {
-  const copy: u8[] = new Array<u8>(toI32(bytes.length))
-  copy.set(bytes, 0)
+  const copy: u8[] = []
+  for (const b of bytes) {
+    copy.push(b)
+  }
   return copy
 }
 
@@ -550,13 +552,14 @@ const pgBytesOf = (text: string): u8[] => {
 /** How many bytes `value` takes in decimal, its sign included. */
 const pgDecimalLength = (value: i64): i32 => {
   // Counted on the negative side, where the most negative i64 fits, two digits a step.
-  let n: i32 = value < 0 ? 2 : 1
+  // A `u32` count wraps rather than checks; it never passes 20.
+  let n: u32 = value < 0 ? 2 : 1
   let v: i64 = value < 0 ? value : -value
   while (v <= -100) {
     v = v / 100
     n += 2
   }
-  return v <= -10 ? n + 1 : n
+  return toI32(v <= -10 ? n + 1 : n)
 }
 
 /**
@@ -564,12 +567,13 @@ const pgDecimalLength = (value: i64): i32 => {
  * `pgDecimalLength(value)`, and answers `at + n`. The digits go once, into
  * their places, from the last, two a step from the magnitude as a `u64`
  * (which holds the most negative i64's, and whose `/` and `%` are never
- * checked). Panics unless the window is inside `out`; each step's guard
- * restates it in the shape that proves its two stores.
+ * checked). Answers -1, and writes nothing, unless the window is inside
+ * `out`; each step's guard restates it in the shape that proves its two
+ * stores.
  */
 const pgPutDecimal = (out: u8[], at: i32, value: i64, n: i32): i32 => {
   if (!(at >= 0 && at < 2147483620 && n >= 1 && n <= 20 && at + n <= toI32(out.length))) {
-    panic("nish/net/postgres: a decimal outside its room")
+    return -1
   }
   const first: i32 = value < 0 ? at + 1 : at
   let m: u64 = value < 0 ? toU64(0) - toU64(value) : toU64(value)
@@ -661,28 +665,33 @@ const pgIsText = (b: u8[], from: i32, end: i32): boolean => {
     } else {
       return false
     }
-    if (more > end - i - 1) {
+    // `more` bytes must follow `i` before `end`.
+    if (toI64(more) >= toI64(end) - toI64(i)) {
       return false
     }
-    for (let j: i32 = 1; j <= more && i + j < toI32(b.length); j++) {
-      const d: i32 = toI32(b[i + j])
+    // `k` walks the continuation bytes, `i + 1` to `i + more`.
+    let k: i32 = i + 1
+    while (k < toI32(b.length) && k - i <= more) {
+      const d: i32 = toI32(b[k])
       if (d < low || d > high) {
         return false
       }
       low = 0x80
       high = 0xbf
+      k++
     }
-    i += more + 1
+    i = k
   }
   return true
 }
 
-/** The first `byte` in `b[from, end)`, or `end`. */
+/**
+ * The first `byte` in `b[from, end)`, or `end` when there is none; past
+ * `b`'s end nothing is found, so a window outside it reads as one without
+ * the byte, which every caller refuses as a malformed message.
+ */
 const pgFind = (b: u8[], from: i32, end: i32, byte: i32): i32 => {
-  if (from < 0 || end > toI32(b.length)) {
-    panic("nish/net/postgres: pgFind outside the buffer")
-  }
-  for (let i: i32 = from; i < end; i++) {
+  for (let i: i32 = from; i >= 0 && i < end && i < toI32(b.length); i++) {
     if (toI32(b[i]) === byte) {
       return i
     }
@@ -696,10 +705,13 @@ const pgBytesAre = (b: u8[], start: i32, length: i32, text: string): boolean => 
   if (length !== n || start < 0 || start > toI32(b.length) - n) {
     return false
   }
+  // `k` walks `b` from `start`, which the guard keeps `n` bytes from the end.
+  let k: i32 = start
   for (let i: i32 = 0; i < n; i++) {
-    if (toI32(b[start + i]) !== toI32(text.charCodeAt(i))) {
+    if (k >= toI32(b.length) || toI32(b[k]) !== toI32(text.charCodeAt(i))) {
       return false
     }
+    k++
   }
   return true
 }
@@ -724,8 +736,17 @@ export class PgText {
    *   window, a byte that is not a digit, or an overflow.
    */
   int(b: u8[], start: i32, length: i32): i64 {
-    const end: i32 = start + length
-    if (length <= 0 || start < 0 || end < start || end > toI32(b.length)) {
+    // Two `i32`s summed in `i64` cannot overflow; past the buffer is refused,
+    // and the test on `end` states for the prover what the one on `last` proves.
+    const last: i64 = toI64(start) + toI64(length)
+    const end: i32 = toI32(last)
+    if (
+      length <= 0 ||
+      start < 0 ||
+      start >= toI32(b.length) ||
+      last > toI64(b.length) ||
+      end > toI32(b.length)
+    ) {
       this.failed = true
       return 0
     }
@@ -782,26 +803,28 @@ export class PgText {
       const v: i64 = head * scale + tail
       return negative ? -v : v
     }
-    // Accumulated as a negative number, so that the most negative i64 fits.
-    const lastDigit: i64 = negative ? 8 : 7
-    // The most negative i64 divided by ten, which a literal cannot spell exactly.
-    const minTenth: i64 = toI64(-922337203) * 1000000000 - 685477580
-    let acc: i64 = 0
+    // The magnitude is accumulated in `u64`, which wraps rather than checks,
+    // and is held to 2^63 for a negative value and 2^63 - 1 otherwise, so
+    // that the most negative i64 fits.
+    const lastDigit: u64 = negative ? toU64(8) : toU64(7)
+    // 2^63 divided by ten, which a literal cannot spell exactly.
+    const maxTenth: u64 = toU64(922337203) * toU64(1000000000) + toU64(685477580)
+    let acc: u64 = toU64(0)
     while (i < end) {
       const d: i32 = toI32(b[i]) - 48
       if (d < 0 || d > 9) {
         this.failed = true
         return 0
       }
-      const digit: i64 = toI64(d)
-      if (acc < minTenth || (acc === minTenth && digit > lastDigit)) {
+      const digit: u64 = toU64(d)
+      if (acc > maxTenth || (acc === maxTenth && digit > lastDigit)) {
         this.failed = true
         return 0
       }
-      acc = acc * 10 - digit
+      acc = acc * toU64(10) + digit
       i++
     }
-    return negative ? acc : -acc
+    return negative ? toI64(toU64(0) - acc) : toI64(acc)
   }
 
   /**
@@ -841,12 +864,19 @@ export class PgText {
    *   for a column it does not read or no room in `out`.
    */
   timestamp(b: u8[], start: i32, length: i32, out: u8[], at: i32): i32 {
+    // Two `i32`s summed in `i64` cannot overflow. The tests against
+    // `length - 19` and `length - 24` are what the prover reads the fixed
+    // part's and the output's reach from; the others refuse the rest.
+    const last: i64 = toI64(start) + toI64(length)
+    const end: i32 = toI32(last)
     if (
       start < 0 ||
       length < 19 ||
-      start > toI32(b.length) - length ||
+      start > toI32(b.length) - 19 ||
+      last > toI64(b.length) ||
+      end > toI32(b.length) ||
       at < 0 ||
-      at + 24 > toI32(out.length)
+      at > toI32(out.length) - 24
     ) {
       this.failed = true
       return -1
@@ -855,15 +885,10 @@ export class PgText {
     // belong and are not digits, so the other fourteen bytes are digits
     // exactly when the part holds five non-digits.
     let p: i32 = start + 19
-    const end: i32 = start + length
-    if (p < 0 || end > toI32(b.length)) {
-      this.failed = true
-      return -1
-    }
     let others: i32 = 0
     for (let i: i32 = start; i < p && i < toI32(b.length); i++) {
       const c: i32 = toI32(b[i])
-      if (c < 48 || c > 57) {
+      if ((c < 48 || c > 57) && others < 19) {
         others++
       }
     }
@@ -878,18 +903,24 @@ export class PgText {
       this.failed = true
       return -1
     }
-    let millis: i32 = 0
+    // Three digits at most, so the `u32` (which wraps rather than checks)
+    // stays below 1000.
+    let millis: u32 = 0
     if (p < end && toI32(b[p]) === 46) {
       p++
       let digits: i32 = 0
       while (p < end && toI32(b[p]) >= 48 && toI32(b[p]) <= 57) {
+        if (digits >= 6) {
+          this.failed = true
+          return -1
+        }
         if (digits < 3) {
-          millis = millis * 10 + toI32(b[p]) - 48
+          millis = millis * 10 + toU32(b[p]) - 48
         }
         digits++
         p++
       }
-      if (digits < 1 || digits > 6) {
+      if (digits < 1) {
         this.failed = true
         return -1
       }
@@ -898,7 +929,13 @@ export class PgText {
         digits++
       }
     }
-    if (p + 3 === end && toI32(b[p]) === 43 && toI32(b[p + 1]) === 48 && toI32(b[p + 2]) === 48) {
+    if (
+      p < toI32(b.length) - 2 &&
+      p + 3 === end &&
+      toI32(b[p]) === 43 &&
+      toI32(b[p + 1]) === 48 &&
+      toI32(b[p + 2]) === 48
+    ) {
       p = end
     }
     // The year's four bytes are digits, so their OR is '0' exactly when the year is 0000.
@@ -918,20 +955,19 @@ export class PgText {
   }
 }
 
-// The days from 0000-03-01, where the civil calendar's year starts for the
-// conversion below, to 2000-01-01, where PostgreSQL's binary times count from.
-const PG_EPOCH_DAYS: i64 = 730425
-// The first and last days `PgBinary.iso` writes, counted from 2000-01-01:
-// 0001-01-01 and 9999-12-31, the years four digits spell.
-const PG_FIRST_DAY: i64 = -730119
-const PG_LAST_DAY: i64 = 2921939
-
-/** `value`'s last `width` decimal digits into `out[at, at + width)`. */
-const pgDigits = (out: u8[], at: i32, value: i32, width: i32): void => {
-  let v: i32 = value
-  for (let i: i32 = width - 1; i >= 0; i--) {
-    out[at + i] = toU8((v % 10) + 48)
+/**
+ * `value`'s last `width` decimal digits into `out[at, at + width)`; the part
+ * of the window outside `out` is not written, and every caller's is inside.
+ */
+const pgDigits = (out: u8[], at: i32, value: u32, width: i32): void => {
+  // A `u32` wraps rather than checks; the digits are its remainders.
+  let v: u32 = value
+  // Two `i32`s summed in `i64` cannot overflow.
+  let k: i32 = toI32(toI64(at) + toI64(width) - 1)
+  while (k >= at && k >= 0 && k < toI32(out.length)) {
+    out[k] = toU8((v % 10) + 48)
     v = v / 10
+    k--
   }
 }
 
@@ -992,7 +1028,7 @@ export class PgBinary {
    * @returns True for 1, false for 0; false with `failed` set otherwise.
    */
   bool(b: u8[], start: i32, length: i32): boolean {
-    if (length === 1 && this.inside(b, start, length)) {
+    if (length === 1 && start >= 0 && start < toI32(b.length)) {
       const c: i32 = toI32(b[start])
       if (c === 1) {
         return true
@@ -1058,35 +1094,40 @@ export class PgBinary {
       this.failed = true
       return -1
     }
-    // Floored, so that a time before 2000 keeps its day and is cut toward the past.
-    const dayMicros: i64 = toI64(86400000) * 1000
-    let days: i64 = micros / dayMicros
-    let rest: i64 = micros % dayMicros
-    if (rest < 0) {
-      days -= 1
-      rest += dayMicros
-    }
-    if (days < PG_FIRST_DAY || days > PG_LAST_DAY) {
+    // Shifted by 730120 days, a whole number of them, so that every day
+    // written, from 0001-01-01 (day -730119 counted from 2000-01-01) to
+    // 9999-12-31 (day 2921939), is non-negative and plain division floors:
+    // a time before 2000 keeps its day and is cut toward the past. `u64`
+    // wraps rather than checks; a time more than 730120 days before 2000
+    // wraps past 2^63 and is refused with every other day outside that span.
+    const shifted: u64 = toU64(micros) + toU64(730120) * toU64(86400000) * toU64(1000)
+    const ms: u64 = shifted / 1000
+    const day0: u64 = ms / 86400000
+    if (day0 < 1 || day0 > 3652059) {
       this.failed = true
       return -1
     }
     // The civil date of a day count: eras of 400 years (146097 days), each
-    // year starting on 1 March so that a leap day is its last.
-    const z: i64 = days + PG_EPOCH_DAYS
-    const era: i64 = z / 146097
-    const doe: i64 = z - era * 146097
-    const yoe: i64 = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
-    const doy: i64 = doe - (365 * yoe + yoe / 4 - yoe / 100)
-    const mp: i64 = (5 * doy + 2) / 153
-    const day: i64 = doy - (153 * mp + 2) / 5 + 1
-    const month: i64 = mp < 10 ? mp + 3 : mp - 9
-    const year: i64 = yoe + era * 400 + (month <= 2 ? 1 : 0)
-    const millis: i32 = toI32(rest / 1000)
-    pgDigits(out, at, toI32(year), 4)
+    // year starting on 1 March so that a leap day is its last. The days from
+    // 0000-03-01, where that year starts, to 2000-01-01, where PostgreSQL's
+    // binary times count from, are 730425: 305 more than the shift.
+    // Every value below is a small non-negative number, so `u32`, which wraps
+    // rather than checks, computes it exactly.
+    const z: u32 = toU32(day0) + 305
+    const era: u32 = z / 146097
+    const doe: u32 = z - era * 146097
+    const yoe: u32 = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    const doy: u32 = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    const mp: u32 = (5 * doy + 2) / 153
+    const day: u32 = doy - (153 * mp + 2) / 5 + 1
+    const month: u32 = mp < 10 ? mp + 3 : mp - 9
+    const year: u32 = yoe + era * 400 + (month <= 2 ? 1 : 0)
+    const millis: u32 = toU32(ms % 86400000)
+    pgDigits(out, at, year, 4)
     out[at + 4] = toU8(45)
-    pgDigits(out, at + 5, toI32(month), 2)
+    pgDigits(out, at + 5, month, 2)
     out[at + 7] = toU8(45)
-    pgDigits(out, at + 8, toI32(day), 2)
+    pgDigits(out, at + 8, day, 2)
     out[at + 10] = toU8(84)
     pgDigits(out, at + 11, millis / 3600000, 2)
     out[at + 13] = toU8(58)
@@ -1159,8 +1200,17 @@ export class PgBinaryArray {
     this.seen = 0
     this.start = 0
     this.length = 0
-    this.bad = !(start >= 0 && length >= PG_ARRAY_HEADER && start <= toI32(b.length) - length)
-    if (this.bad) {
+    // Two `i32`s summed in `i64` cannot overflow; the test on `end` and the
+    // one against the header state for the prover what the one on `last` proves.
+    const last: i64 = toI64(start) + toI64(length)
+    const end: i32 = toI32(last)
+    if (
+      start < 0 ||
+      length < PG_ARRAY_HEADER ||
+      last > toI64(b.length) ||
+      end > toI32(b.length) ||
+      start > toI32(b.length) - 12
+    ) {
       this.refuse()
       return
     }
@@ -1185,16 +1235,19 @@ export class PgBinaryArray {
     }
     this.elementOid = oid
     this.hasNull = hasNull === 1
-    this.pos = start + PG_ARRAY_HEADER
-    this.end = start + length
+    const pos: i32 = start + PG_ARRAY_HEADER
+    this.pos = pos
+    this.end = end
     if (ndim === 1) {
-      const dim: i32 = getI32BE(b, start + PG_ARRAY_HEADER)
-      if (dim < 0) {
+      const dim: i32 = getI32BE(b, pos)
+      // The length test above keeps the dimension inside the column; this one
+      // states that bound for the prover.
+      if (dim < 0 || pos > toI32(b.length) - 8) {
         this.refuse()
         return
       }
       this.count = dim
-      this.pos += PG_ARRAY_DIM
+      this.pos = pos + PG_ARRAY_DIM
     }
   }
 
@@ -1215,32 +1268,40 @@ export class PgBinaryArray {
     if (this.bad) {
       return PG_ARRAY_BAD
     }
-    if (this.seen === this.count) {
-      if (this.pos === this.end) {
+    const seen: i32 = this.seen
+    const pos: i32 = this.pos
+    const end: i32 = this.end
+    if (seen < 0 || seen >= this.count) {
+      if (seen >= 0 && pos === end) {
         return PG_ARRAY_END
       }
       return this.refuse()
     }
-    if (this.end - this.pos < 4) {
+    // `begin` keeps `seen` and `pos` from going negative; summed in `i64`,
+    // a length cannot overflow on its way to the test against `end`.
+    const p: i64 = toI64(pos) + toI64(4)
+    if (pos < 0 || p > toI64(end)) {
       return this.refuse()
     }
-    const n: i32 = getI32BE(this.b, this.pos)
-    this.pos += 4
-    this.seen += 1
+    const n: i32 = getI32BE(this.b, pos)
+    const at: i32 = toI32(p)
+    this.pos = at
+    this.seen = seen + 1
     if (n === -1) {
       if (!this.hasNull) {
         return this.refuse()
       }
-      this.start = this.pos
+      this.start = at
       this.length = 0
       return PG_ARRAY_NULL
     }
-    if (n !== this.size || this.end - this.pos < n) {
+    const q: i64 = toI64(at) + toI64(n)
+    if (n !== this.size || q > toI64(end)) {
       return this.refuse()
     }
-    this.start = this.pos
+    this.start = at
     this.length = n
-    this.pos += n
+    this.pos = toI32(q)
     return PG_ARRAY_ELEMENT
   }
 
@@ -1298,12 +1359,26 @@ export class PgArrayWalker {
   begin(b: u8[], start: i32, length: i32): void {
     this.b = b
     this.first = true
-    this.bad = !(start >= 0 && length >= 2 && start + length <= toI32(b.length))
-    if (!this.bad) {
-      this.bad = toI32(b[start]) !== 123 || toI32(b[start + length - 1]) !== 125
+    this.pos = 0
+    this.end = 0
+    // Two `i32`s summed in `i64` cannot overflow; the tests on `end` state for
+    // the prover what the ones on `start`, `length` and `last` prove.
+    const last: i64 = toI64(start) + toI64(length)
+    const end: i32 = toI32(last)
+    if (
+      start < 0 ||
+      length < 2 ||
+      last > toI64(b.length) ||
+      end > toI32(b.length) ||
+      end < 2 ||
+      start >= toI32(b.length)
+    ) {
+      this.bad = true
+      return
     }
+    this.bad = toI32(b[start]) !== 123 || toI32(b[end - 1]) !== 125
     this.pos = start + 1
-    this.end = start + length - 1
+    this.end = end - 1
   }
 
   private refuse(): i32 {
@@ -1323,49 +1398,50 @@ export class PgArrayWalker {
     }
     const b: u8[] = this.b
     const end: i32 = this.end
-    if (this.pos < 0 || end > toI32(b.length)) {
+    let p: i32 = this.pos
+    if (p < 0 || p > end || end > toI32(b.length)) {
       return this.refuse()
+    }
+    if (p >= end) {
+      this.first = false
+      return PG_ARRAY_END
     }
     if (this.first) {
       this.first = false
-      if (this.pos === end) {
-        return PG_ARRAY_END
-      }
     } else {
-      if (this.pos === end) {
-        return PG_ARRAY_END
-      }
-      if (toI32(b[this.pos]) !== 44) {
+      if (toI32(b[p]) !== 44) {
         return this.refuse()
       }
-      this.pos += 1
-    }
-    let p: i32 = this.pos
-    if (p < 0) {
-      return this.refuse()
+      p++
     }
     this.escaped = false
     if (p < end && toI32(b[p]) === 34) {
       p++
-      this.start = p
+      const first: i32 = p
       while (p < end && toI32(b[p]) !== 34) {
         if (toI32(b[p]) === 92) {
           this.escaped = true
           p++
+          // An escape needs a byte after it before the closing quote.
+          if (p >= end) {
+            return this.refuse()
+          }
         }
         p++
       }
       if (p >= end) {
         return this.refuse()
       }
-      this.length = p - this.start
-      this.pos = p + 1
-      if (this.pos !== end && toI32(b[this.pos]) !== 44) {
+      this.start = first
+      this.length = p - first
+      p++
+      this.pos = p
+      if (p < end && toI32(b[p]) !== 44) {
         return this.refuse()
       }
       return PG_ARRAY_ELEMENT
     }
-    this.start = p
+    const first: i32 = p
     while (p < end && toI32(b[p]) !== 44) {
       const c: i32 = toI32(b[p])
       if (c === 123 || c === 125 || c === 34 || c === 92 || c === 32) {
@@ -1373,12 +1449,15 @@ export class PgArrayWalker {
       }
       p++
     }
-    this.length = p - this.start
+    this.start = first
+    this.length = p - first
     this.pos = p
-    if (this.length === 0) {
+    if (p === first) {
       return this.refuse()
     }
-    if (this.length === 4 && p >= 4) {
+    // The scan stopped at or before `end`, inside the buffer; the test on `p`
+    // states that bound for the prover.
+    if (this.length === 4 && p >= 4 && p <= toI32(b.length)) {
       const n: i32 = toI32(b[p - 4]) | 32
       const u: i32 = toI32(b[p - 3]) | 32
       const l1: i32 = toI32(b[p - 2]) | 32
@@ -1400,24 +1479,25 @@ export class PgArrayWalker {
    */
   copy(out: u8[], at: i32): i32 {
     const b: u8[] = this.b
-    let n: i32 = 0
     let p: i32 = this.start
-    const end: i32 = this.start + this.length
-    if (p < 0 || end > toI32(b.length)) {
+    const last: i64 = toI64(p) + toI64(this.length)
+    const end: i32 = toI32(last)
+    if (p < 0 || at < 0 || last > toI64(b.length) || end > toI32(b.length)) {
       return -1
     }
+    let k: i32 = at
     while (p < end) {
       if (toI32(b[p]) === 92) {
         p++
       }
-      if (p >= end || at + n >= toI32(out.length) || at < 0) {
+      if (p >= end || k >= toI32(out.length)) {
         return -1
       }
-      out[at + n] = b[p]
-      n++
+      out[k] = b[p]
+      k++
       p++
     }
-    return n
+    return k - at
   }
 }
 
@@ -1531,7 +1611,7 @@ export class PgConnection {
     }
     this.clientNonce = base64StdPadEncode(head)
 
-    const at: i32 = this.outEnd
+    const at: i32 = 0
     this.putI32(PG_ZERO)
     this.putI32(PG_PROTOCOL)
     this.putParam("user", config.user)
@@ -1548,7 +1628,8 @@ export class PgConnection {
       this.putParam("options", config.options)
     }
     this.putByte(PG_ZERO)
-    setI32BE(this.out, at, this.outEnd - at)
+    // The message is the first in the buffer, so its length is the buffer's end.
+    setI32BE(this.out, at, this.outEnd)
   }
 
   // --- Buffers -----------------------------------------------------------------
@@ -1577,7 +1658,12 @@ export class PgConnection {
    *   is full, which `next()` mends by compacting or growing it.
    */
   inputRoom(): i32 {
-    return toI32(this.input.length) - this.inEnd
+    const end: i32 = this.inEnd
+    // `inEnd` stays inside the buffer; the test states that bound for the prover.
+    if (end < 0 || end > toI32(this.input.length)) {
+      return 0
+    }
+    return toI32(this.input.length) - end
   }
 
   /**
@@ -1586,10 +1672,12 @@ export class PgConnection {
    * @param n The bytes the read wrote, from 0 to `inputRoom()`.
    */
   received(n: i32): void {
-    if (n < 0 || n > this.inputRoom()) {
+    // Summed in `i64`, the end cannot overflow on its way to the test.
+    const last: i64 = toI64(this.inEnd) + toI64(n)
+    if (n < 0 || n > this.inputRoom() || last > toI64(this.input.length)) {
       panic("nish/net/postgres: received more than inputRoom()")
     }
-    this.inEnd += n
+    this.inEnd = toI32(last)
   }
 
   /**
@@ -1603,13 +1691,14 @@ export class PgConnection {
    *   caller's to give again after `next()`.
    */
   receive(src: u8[], start: i32, length: i32): i32 {
-    if (start < 0 || length < 0 || length > toI32(src.length) - start) {
+    if (start < 0 || length < 0 || toI64(start) + toI64(length) > toI64(src.length)) {
       panic("nish/net/postgres: receive() outside its source")
     }
     const room: i32 = this.inputRoom()
     const n: i32 = length < room ? length : room
     copyBytes(this.input, this.inEnd, src, start, n)
-    this.inEnd += n
+    // `inputRoom` keeps the end inside the buffer, so the sum fits an `i32`.
+    this.inEnd = toI32(toI64(this.inEnd) + toI64(n))
     return n
   }
 
@@ -1647,10 +1736,12 @@ export class PgConnection {
    * @param n The bytes the write took.
    */
   sent(n: i32): void {
-    if (n < 0 || n > this.outputEnd() - this.outStart) {
+    // Summed in `i64`, the start cannot overflow on its way to the test.
+    const last: i64 = toI64(this.outStart) + toI64(n)
+    if (n < 0 || last > toI64(this.outputEnd())) {
       panic("nish/net/postgres: sent more than was queued")
     }
-    this.outStart += n
+    this.outStart = toI32(last)
     if (this.outStart === this.outEnd) {
       this.outStart = 0
       this.outEnd = 0
@@ -1724,15 +1815,20 @@ export class PgConnection {
       if (this.state === PG_STATE_FAILED) {
         return PG_FAILED
       }
-      const avail: i32 = this.inEnd - this.inStart
+      const at: i32 = this.inStart
+      const inEnd: i32 = this.inEnd
+      const b: u8[] = this.input
+      // inStart and inEnd stay within the buffer, so these tests never fail;
+      // they prove the subtraction and the indices.
+      if (at < 0 || inEnd < 0 || inEnd < at || inEnd > toI32(b.length)) {
+        return this.fail(PG_ERR_FRAME)
+      }
+      const avail: i32 = inEnd - at
       if (avail < 5) {
         this.compact()
         return PG_NEED_MORE
       }
-      const at: i32 = this.inStart
-      const b: u8[] = this.input
-      // inStart and inEnd stay within the buffer, so this test never fails; it proves the indices.
-      if (at < 0 || at + 4 >= toI32(b.length)) {
+      if (at > toI32(b.length) - 5) {
         return this.fail(PG_ERR_FRAME)
       }
       const type: i32 = toI32(b[at])
@@ -1748,18 +1844,23 @@ export class PgConnection {
       if (avail - 1 < length) {
         this.compact()
         const size: i32 = toI32(this.input.length)
-        if (size < length + 1) {
-          // Doubled, up to one message of maxMessage, so that a run of growing messages copies each byte a bounded number of times.
-          const cap: i32 = this.config.maxMessage + 1
-          const doubled: i32 = size < cap / 2 ? size * 2 : cap
-          const grown: u8[] = new Array<u8>(doubled > length + 1 ? doubled : length + 1)
+        if (size <= length) {
+          // Doubled, up to one message of maxMessage, so that a run of growing
+          // messages copies each byte a bounded number of times. Reckoned in
+          // `i64`, where no `i32` doubled or plus one overflows.
+          const cap: i64 = toI64(this.config.maxMessage) + toI64(1)
+          const want: i64 = toI64(length) + toI64(1)
+          const doubled: i64 = toI64(size) * toI64(2) < cap ? toI64(size) * toI64(2) : cap
+          const grown: u8[] = new Array<u8>(toI32(doubled > want ? doubled : want))
           grown.set(this.input, 0)
           this.input = grown
         }
         return PG_NEED_MORE
       }
-      this.inStart = at + 1 + length
-      const event: i32 = this.dispatch(type, at + 5, at + 1 + length)
+      // The whole message is in `[at, inEnd)`, so its end fits an `i32`.
+      const end: i32 = toI32(toI64(at) + toI64(1) + toI64(length))
+      this.inStart = end
+      const event: i32 = this.dispatch(type, at + 5, end)
       if (event !== PG_NEED_MORE) {
         return event
       }
@@ -1769,10 +1870,12 @@ export class PgConnection {
   /** Moves the unread input, at most one partial message, to the start of the buffer. */
   private compact(): void {
     const start: i32 = this.inStart
-    if (start === 0) {
+    const end: i32 = this.inEnd
+    // `inEnd` never falls below `inStart`; the test states that for the prover.
+    if (start <= 0 || end < 0 || end < start) {
       return
     }
-    const n: i32 = this.inEnd - start
+    const n: i32 = end - start
     copyBytes(this.input, 0, this.input, start, n)
     this.inStart = 0
     this.inEnd = n
@@ -1791,12 +1894,21 @@ export class PgConnection {
   /** One message, `[body, end)` its contents; answers its event, or `PG_NEED_MORE` when it has none. */
   private dispatch(type: i32, body: i32, end: i32): i32 {
     const state: i32 = this.state
+    const b: u8[] = this.input
+    // `next` hands over a message inside the buffer; the test states that bound for the prover.
+    if (body < 0 || end < 0 || end < body || end > toI32(b.length)) {
+      return this.fail(PG_ERR_FRAME)
+    }
+    const size: i32 = end - body
     if (type === 82) {
       // 'R': an authentication request.
-      if (state >= PG_STATE_STARTING || end - body < 4) {
-        return this.fail(end - body < 4 ? PG_ERR_FRAME : PG_ERR_UNEXPECTED)
+      if (state >= PG_STATE_STARTING || size < 4) {
+        return this.fail(size < 4 ? PG_ERR_FRAME : PG_ERR_UNEXPECTED)
       }
-      return this.authenticate(getI32BE(this.input, body), body + 4, end)
+      if (body > toI32(b.length) - 4) {
+        return this.fail(PG_ERR_FRAME)
+      }
+      return this.authenticate(getI32BE(b, body), body + 4, end)
     }
     if (type === 69 || type === 78) {
       // 'E' and 'N': an error or a notice.
@@ -1805,8 +1917,9 @@ export class PgConnection {
         return this.fail(PG_ERR_FRAME)
       }
       if (type === 78) {
-        if (this.notices < 2147483647) {
-          this.notices += 1
+        const notices: i32 = this.notices
+        if (notices >= 0 && notices < 2147483647) {
+          this.notices = notices + 1
         }
         this.lastNotice = error
         return PG_NOTICE
@@ -1823,27 +1936,42 @@ export class PgConnection {
     }
     if (type === 83) {
       // 'S': ParameterStatus, name and value.
-      const nameEnd: i32 = pgFind(this.input, body, end, 0)
-      if (nameEnd === end || pgFind(this.input, nameEnd + 1, end, 0) !== end - 1) {
+      const nameEnd: i32 = pgFind(b, body, end, 0)
+      // pgFind answers inside `[body, end]`; the test states that bound for the prover.
+      if (nameEnd < 0 || nameEnd < body || nameEnd >= end) {
         return this.fail(PG_ERR_FRAME)
       }
-      if (pgBytesAre(this.input, body, nameEnd - body, "client_encoding")) {
-        if (!pgBytesAre(this.input, nameEnd + 1, end - 2 - nameEnd, "UTF8")) {
+      const value: i32 = nameEnd + 1
+      const valueEnd: i32 = end - 1
+      if (valueEnd < 0 || valueEnd < value || pgFind(b, value, end, 0) !== valueEnd) {
+        return this.fail(PG_ERR_FRAME)
+      }
+      const nameLength: i32 = nameEnd - body
+      const valueLength: i32 = valueEnd - value
+      if (pgBytesAre(b, body, nameLength, "client_encoding")) {
+        if (!pgBytesAre(b, value, valueLength, "UTF8")) {
           return this.fail(PG_ERR_ENCODING)
         }
-      } else if (pgBytesAre(this.input, body, nameEnd - body, "DateStyle")) {
+      } else if (pgBytesAre(b, body, nameLength, "DateStyle")) {
         // "ISO, MDY": the output style comes first, the input order after the comma.
-        const valueLength: i32 = end - 2 - nameEnd
-        const iso: boolean = valueLength >= 3 && pgBytesAre(this.input, nameEnd + 1, 3, "ISO")
-        if (!iso || (valueLength > 3 && toI32(this.input[nameEnd + 4]) !== PG_COMMA)) {
+        if (valueLength < 3 || !pgBytesAre(b, value, 3, "ISO")) {
           return this.fail(PG_ERR_SETTING)
         }
-      } else if (pgBytesAre(this.input, body, nameEnd - body, "TimeZone")) {
-        if (!pgBytesAre(this.input, nameEnd + 1, end - 2 - nameEnd, "UTC")) {
+        if (valueLength > 3) {
+          // The value runs past its fourth byte; the test states that bound for the prover.
+          if (value > toI32(b.length) - 4) {
+            return this.fail(PG_ERR_SETTING)
+          }
+          if (toI32(b[value + 3]) !== PG_COMMA) {
+            return this.fail(PG_ERR_SETTING)
+          }
+        }
+      } else if (pgBytesAre(b, body, nameLength, "TimeZone")) {
+        if (!pgBytesAre(b, value, valueLength, "UTC")) {
           return this.fail(PG_ERR_SETTING)
         }
-      } else if (pgBytesAre(this.input, body, nameEnd - body, "server_version")) {
-        this.serverVersion = String.fromBytes(this.input, nameEnd + 1, end - 1)
+      } else if (pgBytesAre(b, body, nameLength, "server_version")) {
+        this.serverVersion = String.fromBytes(b, value, valueEnd)
       }
       return PG_NEED_MORE
     }
@@ -1856,18 +1984,18 @@ export class PgConnection {
     }
     if (type === 75) {
       // 'K': BackendKeyData, the process id and the cancel key.
-      if (state !== PG_STATE_STARTING || end - body !== 8) {
+      if (state !== PG_STATE_STARTING || size !== 8) {
         return this.fail(state !== PG_STATE_STARTING ? PG_ERR_UNEXPECTED : PG_ERR_FRAME)
       }
-      this.backendPid = getI32BE(this.input, body)
+      this.backendPid = getI32BE(b, body)
       return PG_NEED_MORE
     }
     if (type === 90) {
       // 'Z': ReadyForQuery, and the transaction status.
-      if (end - body !== 1) {
+      if (size !== 1 || body >= toI32(b.length)) {
         return this.fail(PG_ERR_FRAME)
       }
-      const status: i32 = toI32(this.input[body])
+      const status: i32 = toI32(b[body])
       if (status !== 73 && status !== 84 && status !== 69) {
         return this.fail(PG_ERR_FRAME)
       }
@@ -1876,10 +2004,11 @@ export class PgConnection {
         this.state = PG_STATE_READY
         return PG_READY
       }
-      if (this.inFlight === 0 || (this.inFlight === 1 && this.groupOpen)) {
+      const inFlight: i32 = this.inFlight
+      if (inFlight <= 0 || (inFlight === 1 && this.groupOpen)) {
         return this.fail(PG_ERR_UNEXPECTED)
       }
-      this.inFlight -= 1
+      this.inFlight = inFlight - 1
       this.groupFailed = this.errorInGroup
       this.errorInGroup = false
       return PG_GROUP_DONE
@@ -1892,11 +2021,11 @@ export class PgConnection {
     }
     if (type === 67) {
       // 'C': CommandComplete, the tag.
-      if (end - body < 1 || pgFind(this.input, body, end, 0) !== end - 1) {
+      if (size < 1 || pgFind(b, body, end, 0) !== end - 1) {
         return this.fail(PG_ERR_FRAME)
       }
       this.tagStart = body
-      this.tagLength = end - 1 - body
+      this.tagLength = size - 1
       return PG_COMPLETE
     }
     if (type === 73) {
@@ -1914,7 +2043,7 @@ export class PgConnection {
     }
     if (type === 116) {
       // 't': ParameterDescription.
-      if (end - body < 2 || end - body !== toI32(getU16BE(this.input, body)) * 4 + 2) {
+      if (size < 2 || size !== toI32(getU16BE(b, body)) * 4 + 2) {
         return this.fail(PG_ERR_FRAME)
       }
       return PG_NEED_MORE
@@ -1935,10 +2064,13 @@ export class PgConnection {
 
   /** Makes the column arrays hold at least `n`. */
   private reserveColumns(n: i32): void {
-    if (n <= toI32(this.colStarts.length)) {
+    const have: i32 = toI32(this.colStarts.length)
+    // A row or description holds at most `maxColumns`, 65535, so the arrays
+    // stay under it too; the test states that for the prover.
+    if (n <= have || have > 65535) {
       return
     }
-    const size: i32 = n < 2 * toI32(this.colStarts.length) ? 2 * toI32(this.colStarts.length) : n
+    const size: i32 = n < have * 2 ? have * 2 : n
     const starts: i32[] = new Array<i32>(size)
     const lengths: i32[] = new Array<i32>(size)
     const types: i32[] = new Array<i32>(size)
@@ -1952,35 +2084,40 @@ export class PgConnection {
 
   /** 'D': DataRow, each column's length (-1 for NULL) and bytes, which must fill the message exactly. */
   private readRow(body: i32, end: i32): i32 {
+    const b: u8[] = this.input
+    // dispatch hands over a frame inside the buffer; the test states that bound for the prover.
+    if (body < 0 || end < 0 || end < body || end > toI32(b.length) || body > toI32(b.length) - 2) {
+      return this.fail(PG_ERR_FRAME)
+    }
     if (end - body < 2) {
       return this.fail(PG_ERR_FRAME)
     }
-    const b: u8[] = this.input
     const n: i32 = toI32(getU16BE(b, body))
+    let p: i32 = body + 2
     if (n > this.config.maxColumns) {
       return this.fail(PG_ERR_TOO_BIG)
     }
     this.reserveColumns(n)
     const starts: i32[] = this.colStarts
     const lengths: i32[] = this.colLengths
-    let p: i32 = body + 2
     // reserveColumns made both arrays hold n; the length tests prove the indices.
     for (let c: i32 = 0; c < n && c < toI32(starts.length) && c < toI32(lengths.length); c++) {
       // The buffer tests never fail on a frame next() cut from it; they prove the indices.
-      if (end - p < 4 || p < 0 || p + 3 >= toI32(b.length)) {
+      if (p < 0 || end < p || end - p < 4 || p > toI32(b.length) - 4) {
         return this.fail(PG_ERR_FRAME)
       }
       // getI32BE written out: a call per column was a fifth of the row's cost.
       const length: i32 =
         (toI32(b[p]) << 24) | (toI32(b[p + 1]) << 16) | (toI32(b[p + 2]) << 8) | toI32(b[p + 3])
-      p += 4
+      p = p + 4
       if (length < -1 || length > end - p) {
         return this.fail(PG_ERR_FRAME)
       }
       starts[c] = p
       lengths[c] = length
       if (length > 0) {
-        p += length
+        // The value ends inside the frame, so the sum fits an `i32`.
+        p = toI32(toI64(p) + toI64(length))
       }
     }
     if (p !== end) {
@@ -1992,22 +2129,29 @@ export class PgConnection {
 
   /** 'T': RowDescription; each field is a name and 18 bytes, the type's OID 6 bytes into them. */
   private readDescription(body: i32, end: i32): i32 {
+    const b: u8[] = this.input
+    // dispatch hands over a frame inside the buffer; the test states that bound for the prover.
+    if (body < 0 || end < 0 || end < body || end > toI32(b.length) || body > toI32(b.length) - 2) {
+      return this.fail(PG_ERR_FRAME)
+    }
     if (end - body < 2) {
       return this.fail(PG_ERR_FRAME)
     }
-    const b: u8[] = this.input
     const n: i32 = toI32(getU16BE(b, body))
+    let p: i32 = body + 2
     if (n > this.config.maxColumns) {
       return this.fail(PG_ERR_TOO_BIG)
     }
     this.reserveColumns(n)
-    let p: i32 = body + 2
-    for (let c: i32 = 0; c < n; c++) {
+    const types: i32[] = this.colTypes
+    // reserveColumns made the array hold n; the length test proves the index.
+    for (let c: i32 = 0; c < n && c < toI32(types.length); c++) {
       const nameEnd: i32 = pgFind(b, p, end, 0)
-      if (end - nameEnd < 19) {
+      // pgFind answers at or past `p`, so `nameEnd` is not negative; the test states that for the prover.
+      if (nameEnd < 0 || end < 0 || end - nameEnd < 19 || nameEnd > toI32(b.length) - 19) {
         return this.fail(PG_ERR_FRAME)
       }
-      this.colTypes[c] = getI32BE(b, nameEnd + 7)
+      types[c] = getI32BE(b, nameEnd + 7)
       p = nameEnd + 19
     }
     if (p !== end) {
@@ -2020,7 +2164,7 @@ export class PgConnection {
   /** 'E' and 'N': the fields, each a type byte and a string, then a 0; `null` when they do not fill the message exactly. */
   private readError(body: i32, end: i32): PgError | null {
     const b: u8[] = this.input
-    if (body < 0 || end > toI32(b.length)) {
+    if (body < 0 || end < 0 || end > toI32(b.length)) {
       return null
     }
     let severity: string = ""
@@ -2044,7 +2188,7 @@ export class PgConnection {
         break
       }
       const valueEnd: i32 = pgFind(b, p + 1, end, 0)
-      if (valueEnd === end) {
+      if (valueEnd < 0 || valueEnd >= end) {
         return null
       }
       const value: string = String.fromBytes(b, p + 1, valueEnd)
@@ -2116,7 +2260,7 @@ export class PgConnection {
   /** AuthenticationSASL: the mechanisms, each NUL-terminated, then a 0; SCRAM-SHA-256 must be among them. */
   private scramStart(body: i32, end: i32): i32 {
     const b: u8[] = this.input
-    if (body < 0 || end > toI32(b.length)) {
+    if (body < 0 || end < 0 || end < body || end > toI32(b.length)) {
       return this.fail(PG_ERR_FRAME)
     }
     let offered: boolean = false
@@ -2132,7 +2276,7 @@ export class PgConnection {
         break
       }
       const nameEnd: i32 = pgFind(b, p, end, 0)
-      if (nameEnd === end) {
+      if (nameEnd < 0 || nameEnd < p || nameEnd >= end) {
         return this.fail(PG_ERR_FRAME)
       }
       if (pgBytesAre(b, p, nameEnd - p, "SCRAM-SHA-256")) {
@@ -2167,16 +2311,23 @@ export class PgConnection {
    */
   private scramContinue(body: i32, end: i32): i32 {
     const b: u8[] = this.input
-    if (body < 0 || end > toI32(b.length)) {
+    if (body < 0 || end < 0 || end < body || end > toI32(b.length)) {
       return this.fail(PG_ERR_FRAME)
     }
+    // Each comma lies inside the body, the salt's after the nonce's, so every
+    // position below is inside the body; the tests state that for the prover.
     const nonceEnd: i32 = pgFind(b, body, end, 44)
-    const saltEnd: i32 = pgFind(b, nonceEnd + 1 < end ? nonceEnd + 1 : end, end, 44)
+    if (nonceEnd < 0 || nonceEnd < body || nonceEnd >= end || body > toI32(b.length) - 2) {
+      return this.fail(PG_ERR_SCRAM)
+    }
+    const saltStart: i32 = nonceEnd + 1
+    const saltEnd: i32 = pgFind(b, saltStart, end, 44)
     if (
-      nonceEnd === end ||
-      saltEnd === end ||
+      saltEnd < 0 ||
+      saltEnd < saltStart ||
+      saltEnd >= end ||
       !pgBytesAre(b, body, 2, "r=") ||
-      !pgBytesAre(b, nonceEnd + 1, 2, "s=") ||
+      !pgBytesAre(b, saltStart, 2, "s=") ||
       end - saltEnd < 4 ||
       !pgBytesAre(b, saltEnd + 1, 2, "i=")
     ) {
@@ -2184,12 +2335,14 @@ export class PgConnection {
     }
     // The nonce extends ours with printable characters other than a comma.
     const ours: i32 = toI32(this.clientNonce.length)
-    if (nonceEnd - body - 2 <= ours || !pgBytesAre(b, body + 2, ours, this.clientNonce)) {
+    const nonceAt: i32 = body + 2
+    if (ours < 0 || nonceEnd - nonceAt <= ours || !pgBytesAre(b, nonceAt, ours, this.clientNonce)) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const nonceStart: i32 = body + 2 + ours
-    const digitsStart: i32 = saltEnd + 3
-    if (nonceStart < 0 || nonceEnd > toI32(b.length)) {
+    // Both lie before a comma inside the body, so they fit an `i32`.
+    const nonceStart: i32 = toI32(toI64(nonceAt) + toI64(ours))
+    const digitsStart: i32 = toI32(toI64(saltEnd) + toI64(3))
+    if (nonceStart < 0) {
       return this.fail(PG_ERR_SCRAM)
     }
     for (let i: i32 = nonceStart; i < nonceEnd && i < toI32(b.length); i++) {
@@ -2207,12 +2360,18 @@ export class PgConnection {
       if (d < 0 || d > 9 || iterations > this.config.maxIterations) {
         return this.fail(PG_ERR_SCRAM)
       }
+      // The digits are bounded by `PG_MAX_ITERATIONS` (written out so the prover sees it), so this fits.
+      if (iterations < 0 || iterations > 214748363) {
+        return this.fail(PG_ERR_SCRAM)
+      }
       iterations = iterations * 10 + d
     }
     if (iterations < this.config.minIterations || iterations > this.config.maxIterations) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const salt: u8[] | null = base64StdPadDecode(String.fromBytes(b, nonceEnd + 3, saltEnd))
+    const salt: u8[] | null = base64StdPadDecode(
+      String.fromBytes(b, toI32(toI64(saltStart) + toI64(2)), saltEnd)
+    )
     if (salt === null || salt.length === 0) {
       return this.fail(PG_ERR_SCRAM)
     }
@@ -2224,7 +2383,7 @@ export class PgConnection {
     if (salted === null) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const withoutProof: string = `c=biws,r=${String.fromBytes(b, body + 2, nonceEnd)}`
+    const withoutProof: string = `c=biws,r=${String.fromBytes(b, nonceAt, nonceEnd)}`
     const authMessage: u8[] = pgBytesOf(
       `${this.firstBare()},${String.fromBytes(b, body, end)},${withoutProof}`
     )
@@ -2245,10 +2404,10 @@ export class PgConnection {
   /** AuthenticationSASLFinal: exactly `v=` and the ServerSignature, compared in constant time. */
   private scramFinal(body: i32, end: i32): i32 {
     const b: u8[] = this.input
-    if (end - body < 2 || !pgBytesAre(b, body, 2, "v=")) {
+    if (body < 0 || end < 0 || end - body < 2 || !pgBytesAre(b, body, 2, "v=")) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const signature: u8[] | null = base64StdPadDecode(String.fromBytes(b, body + 2, end))
+    const signature: u8[] | null = base64StdPadDecode(String.fromBytes(b, toI32(toI64(body) + toI64(2)), end))
     if (signature === null || signature.length !== 32) {
       return this.fail(PG_ERR_SCRAM)
     }
@@ -2268,12 +2427,21 @@ export class PgConnection {
    * buffer, the unsent bytes move to its start first: a builder call asks
    * before it takes any offset into the buffer, so nothing it holds moves.
    */
-  private room(size: i32): boolean {
-    const queued: i32 = this.outEnd - this.outStart
-    if (size < 0 || size > this.config.maxOutput - PG_TAIL - this.bindOwed - queued) {
+  private room(size: i64): boolean {
+    const start: i32 = this.outStart
+    const end: i32 = this.outEnd
+    if (size < toI64(0) || size > toI64(PG_MAX_CAP)) {
       return false
     }
-    if (this.outStart > 0 && this.outEnd + size > toI32(this.out.length)) {
+    const n: i32 = toI32(size)
+    // Summed in `i64`, where no `i32` term overflows on its way to the test.
+    if (
+      toI64(n) + toI64(end) - toI64(start) + toI64(PG_TAIL) + toI64(this.bindOwed) >
+      toI64(this.config.maxOutput)
+    ) {
+      return false
+    }
+    if (start > 0 && toI64(n) + toI64(end) > toI64(this.out.length)) {
       this.compactOutput()
     }
     return true
@@ -2284,8 +2452,13 @@ export class PgConnection {
    * `terminate`) the way `room` does for the rest, so that the buffer is not
    * grown past `maxOutput` while sent bytes still fill its start.
    */
-  private tailRoom(size: i32): void {
-    if (this.outStart > 0 && this.outEnd + size > toI32(this.out.length)) {
+  private tailRoom(size: i64): void {
+    // A tail message is a few bytes and what the bind owes, which `room` held
+    // under `maxOutput`; the test states that bound for the prover.
+    if (size < toI64(0) || size > toI64(PG_MAX_CAP)) {
+      return
+    }
+    if (this.outStart > 0 && toI64(toI32(size)) + toI64(this.outEnd) > toI64(this.out.length)) {
       this.compactOutput()
     }
   }
@@ -2293,24 +2466,31 @@ export class PgConnection {
   /** Moves the unsent output to the start of the buffer, the open bind's offsets with it. */
   private compactOutput(): void {
     const shift: i32 = this.outStart
-    if (shift === 0) {
+    const end: i32 = this.outEnd
+    // The sent bytes end at or before the queued ones; the test states that for the prover.
+    if (shift <= 0 || end < 0 || end < shift) {
       return
     }
-    copyBytes(this.out, 0, this.out, shift, this.outEnd - shift)
-    this.outEnd -= shift
+    const n: i32 = end - shift
+    copyBytes(this.out, 0, this.out, shift, n)
+    this.outEnd = n
     this.outStart = 0
-    if (this.bindAt >= 0) {
-      this.bindAt -= shift
-      this.paramCountAt -= shift
+    // An open bind and its array lie in the unsent bytes, past the shift.
+    const bindAt: i32 = this.bindAt
+    const countAt: i32 = this.paramCountAt
+    if (bindAt >= 0 && countAt >= 0) {
+      this.bindAt = bindAt - shift
+      this.paramCountAt = countAt - shift
     }
-    if (this.arrayAt >= 0) {
-      this.arrayAt -= shift
+    const arrayAt: i32 = this.arrayAt
+    if (arrayAt >= 0) {
+      this.arrayAt = arrayAt - shift
     }
   }
 
   /** Makes the output buffer at least `want` bytes long. */
-  private reserve(want: i32): void {
-    if (want > toI32(this.out.length)) {
+  private reserve(want: i64): void {
+    if (want > toI64(this.out.length)) {
       this.grow(want)
     }
   }
@@ -2319,38 +2499,76 @@ export class PgConnection {
    * `reserve` when the buffer is short: kept apart so that the test above,
    * which every put makes, is small enough to inline into it.
    */
-  private grow(want: i32): void {
-    const size: i32 = toI32(this.out.length)
-    const grown: u8[] = new Array<u8>(size <= PG_MAX_CAP && want < 2 * size ? 2 * size : want)
+  private grow(want: i64): void {
+    const doubled: i64 = toI64(this.out.length) * toI64(2)
+    const grown: u8[] = new Array<u8>(
+      toI32(want < doubled && doubled <= toI64(PG_MAX_CAP) * toI64(2) ? doubled : want)
+    )
     grown.set(this.out, 0)
     this.out = grown
   }
 
+  // Each put reserves its bytes and then writes them: the end lies inside the
+  // buffer after `reserve`, and the test states that bound for the prover.
+
   private putByte(v: i32): void {
-    this.reserve(this.outEnd + 1)
-    this.out[this.outEnd] = toU8(v)
-    this.outEnd += 1
+    const end: i32 = this.outEnd
+    const b: u8[] = this.out
+    if (end >= 0 && end < toI32(b.length)) {
+      b[end] = toU8(v)
+      this.outEnd = end + 1
+      return
+    }
+    this.reserve(toI64(end) + toI64(1))
+    const grown: u8[] = this.out
+    if (end < 0 || end >= toI32(grown.length)) {
+      return
+    }
+    grown[end] = toU8(v)
+    this.outEnd = end + 1
   }
 
   private putI32(v: i32): void {
-    this.reserve(this.outEnd + 4)
-    setI32BE(this.out, this.outEnd, v)
-    this.outEnd += 4
+    const end: i32 = this.outEnd
+    const b: u8[] = this.out
+    if (end >= 0 && end <= toI32(b.length) - 4) {
+      setI32BE(b, end, v)
+      this.outEnd = end + 4
+      return
+    }
+    this.reserve(toI64(end) + toI64(4))
+    const grown: u8[] = this.out
+    if (end < 0 || end > toI32(grown.length) - 4) {
+      return
+    }
+    setI32BE(grown, end, v)
+    this.outEnd = end + 4
   }
 
   private putI16(v: i32): void {
-    this.reserve(this.outEnd + 2)
-    setU16BE(this.out, this.outEnd, toU16(v))
-    this.outEnd += 2
+    const end: i32 = this.outEnd
+    this.reserve(toI64(end) + toI64(2))
+    const b: u8[] = this.out
+    if (end < 0 || end > toI32(b.length) - 2) {
+      return
+    }
+    setU16BE(b, end, toU16(v))
+    this.outEnd = end + 2
   }
 
   private putString(text: string): void {
     const n: i32 = toI32(text.length)
-    this.reserve(this.outEnd + n)
-    for (let i: i32 = 0; i < n; i++) {
-      this.out[this.outEnd + i] = toU8(text.charCodeAt(i))
+    let k: i32 = this.outEnd
+    this.reserve(toI64(k) + toI64(n))
+    const b: u8[] = this.out
+    if (k < 0) {
+      return
     }
-    this.outEnd += n
+    for (let i: i32 = 0; i < n && k < toI32(b.length); i++) {
+      b[k] = toU8(text.charCodeAt(i))
+      k++
+    }
+    this.outEnd = k
   }
 
   private putCString(text: string): void {
@@ -2373,7 +2591,12 @@ export class PgConnection {
 
   /** Writes the length of the message started at `at`. */
   private endMessage(at: i32): void {
-    setI32BE(this.out, at + 1, this.outEnd - at - 1)
+    const end: i32 = this.outEnd
+    // The message's type byte and length word lie before the end; the test states that for the prover.
+    if (at < 0 || end < 0 || end - at < 5 || at > toI32(this.out.length) - 5) {
+      return
+    }
+    setI32BE(this.out, at + 1, end - at - 1)
   }
 
   /**
@@ -2387,13 +2610,18 @@ export class PgConnection {
   }
 
   /** Opens a group if none is, for a message of `size` bytes; false, and no group opened, when none may be or there is no room. */
-  private canOpen(size: i32): boolean {
+  private canOpen(size: i64): boolean {
     if (!this.canSend() || this.bindAt >= 0 || !this.room(size)) {
       return false
     }
     if (!this.groupOpen) {
+      // canSend allowed a new group only under maxInFlight; the test states that for the prover.
+      const inFlight: i32 = this.inFlight
+      if (inFlight >= this.config.maxInFlight) {
+        return false
+      }
       this.groupOpen = true
-      this.inFlight += 1
+      this.inFlight = inFlight + 1
     }
     return true
   }
@@ -2421,7 +2649,10 @@ export class PgConnection {
       return false
     }
     const sqlLength: i32 = toI32(sql.length)
-    if (sqlLength > PG_MAX_CAP || !this.canOpen(toI32(16) + 2 * nameLength + sqlLength + 4 * types)) {
+    if (
+      sqlLength > PG_MAX_CAP ||
+      !this.canOpen(toI64(16) + toI64(2) * toI64(nameLength) + toI64(sqlLength) + toI64(4) * toI64(types))
+    ) {
       return false
     }
     const at: i32 = this.startMessage(PG_FE_PARSE)
@@ -2447,7 +2678,7 @@ export class PgConnection {
    * @returns True when the Close was queued.
    */
   closeStatement(name: string): boolean {
-    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(7 + toI32(name.length))) {
+    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(toI64(7) + toI64(name.length))) {
       return false
     }
     const at: i32 = this.startMessage(PG_FE_CLOSE)
@@ -2492,7 +2723,11 @@ export class PgConnection {
   private openBind(name: string, binary: boolean): boolean {
     const opens: boolean = !this.groupOpen
     const extra: i32 = binary ? PG_BINARY_TAIL : 0
-    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(11 + extra + toI32(name.length))) {
+    if (
+      pgHasNul(name) ||
+      toI32(name.length) > PG_MAX_CAP ||
+      !this.canOpen(toI64(11) + toI64(extra) + toI64(name.length))
+    ) {
       return false
     }
     this.bindOpened = opens
@@ -2518,11 +2753,19 @@ export class PgConnection {
     this.noArrayOpen()
     // Once the bind holds a binary parameter, every parameter owes its format code.
     const owed: i32 = this.binaryParamCount > 0 ? 2 : 0
-    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size + owed)) {
+    const count: i32 = this.paramCount
+    if (
+      this.bindAt < 0 ||
+      count < 0 ||
+      count >= 65535 ||
+      size > PG_MAX_CAP ||
+      !this.room(toI64(4) + toI64(size) + toI64(owed))
+    ) {
       return -1
     }
-    this.bindOwed += owed
-    this.paramCount += 1
+    // `room` held what the bind owes under `maxOutput`, so the sum fits an `i32`.
+    this.bindOwed = toI32(toI64(this.bindOwed) + toI64(owed))
+    this.paramCount = count + 1
     const at: i32 = this.outEnd
     this.putI32(PG_ZERO)
     return at
@@ -2536,25 +2779,38 @@ export class PgConnection {
    */
   private startBinaryParam(size: i32): i32 {
     this.noArrayOpen()
-    const owed: i32 = this.binaryParamCount > 0 ? toI32(2) : toI32(2) * (this.paramCount + toI32(1))
-    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size + owed)) {
+    const count: i32 = this.paramCount
+    const binary: i32 = this.binaryParamCount
+    // Each binary parameter is one of the bind's, so both counts stay under 65535.
+    if (this.bindAt < 0 || count < 0 || count >= 65535 || binary < 0 || binary > count || binary >= 65535) {
       return -1
     }
-    if (this.binaryParamCount < toI32(this.binaryParams.length)) {
-      this.binaryParams[this.binaryParamCount] = this.paramCount
-    } else {
-      this.binaryParams.push(this.paramCount)
+    const owed: i32 = binary > 0 ? toI32(2) : toI32(2) * (count + toI32(1))
+    if (size > PG_MAX_CAP || !this.room(toI64(4) + toI64(size) + toI64(owed))) {
+      return -1
     }
-    this.binaryParamCount += 1
-    this.bindOwed += owed
-    this.paramCount += 1
+    const params: i32[] = this.binaryParams
+    if (binary < toI32(params.length)) {
+      params[binary] = count
+    } else {
+      params.push(count)
+    }
+    this.binaryParamCount = binary + 1
+    // `room` held what the bind owes under `maxOutput`, so the sum fits an `i32`.
+    this.bindOwed = toI32(toI64(this.bindOwed) + toI64(owed))
+    this.paramCount = count + 1
     const at: i32 = this.outEnd
     this.putI32(PG_ZERO)
     return at
   }
 
   private endParam(at: i32): void {
-    setI32BE(this.out, at, this.outEnd - at - 4)
+    const end: i32 = this.outEnd
+    // `startParam` wrote the length word at `at`; the test states that for the prover.
+    if (at < 0 || end < 0 || end - at < 4 || at > toI32(this.out.length) - 4) {
+      return
+    }
+    setI32BE(this.out, at, end - at - 4)
   }
 
   private noArrayOpen(): void {
@@ -2602,9 +2858,14 @@ export class PgConnection {
     if (at < 0) {
       return false
     }
-    this.reserve(this.outEnd + length)
-    copyBytes(this.out, this.outEnd, bytes, start, length)
-    this.outEnd += length
+    const end: i32 = this.outEnd
+    this.reserve(toI64(end) + toI64(length))
+    // `reserve` made the room; the test states that bound for the prover.
+    if (end < 0 || end > toI32(this.out.length) - length) {
+      return false
+    }
+    copyBytes(this.out, end, bytes, start, length)
+    this.outEnd = toI32(toI64(end) + toI64(length))
     this.endParam(at)
     return true
   }
@@ -2615,10 +2876,12 @@ export class PgConnection {
    * @returns True when it was written; false as every `param...` call is.
    */
   paramNull(): boolean {
-    if (this.startParam(toI32(0)) < 0) {
+    const at: i32 = this.startParam(toI32(0))
+    // `startParam` wrote the length word at `at`; the test states that bound for the prover.
+    if (at < 0 || at > toI32(this.out.length) - 4) {
       return false
     }
-    setI32BE(this.out, this.outEnd - 4, -1)
+    setI32BE(this.out, at, -1)
     return true
   }
 
@@ -2643,8 +2906,12 @@ export class PgConnection {
   /** `value` in decimal, `pgDecimalLength(value)` bytes. */
   private putDecimal(value: i64): void {
     const n: i32 = pgDecimalLength(value)
-    this.reserve(this.outEnd + n)
-    this.outEnd = pgPutDecimal(this.out, this.outEnd, value, n)
+    this.reserve(toI64(this.outEnd) + toI64(n))
+    // `reserve` made the room, so the window is inside `out` and the answer is not -1.
+    const end: i32 = pgPutDecimal(this.out, this.outEnd, value, n)
+    if (end >= 0) {
+      this.outEnd = end
+    }
   }
 
   /**
@@ -2664,10 +2931,16 @@ export class PgConnection {
     // Each loop is bounded by `values.length` as well as by the window's end,
     // which the guard above keeps inside it: that names the bound the compiler
     // proves `values[i]` against, where the guard alone does not reach it.
-    const end: i32 = start + count
-    // Its exact size first, so that room is asked for once and a refusal writes nothing.
-    let size: i64 = count > 0 ? toI64(count + 1) : toI64(2)
-    for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
+    // The window is inside `values`, so its end fits an `i32`.
+    const end: i32 = toI32(toI64(start) + toI64(count))
+    // Its exact size first, so that room is asked for once and a refusal writes nothing. The
+    // count stops once past `PG_MAX_CAP` (2^30 - 1), which `startParam` refuses whatever the rest.
+    let size: i64 = count > 0 ? toI64(count) + toI64(1) : toI64(2)
+    for (
+      let i: i32 = start;
+      i >= 0 && i < end && i < toI32(values.length) && size >= 0 && size <= 1073741823;
+      i++
+    ) {
       size += toI64(pgDecimalLength(values[i]))
     }
     const at: i32 = this.startParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
@@ -2698,13 +2971,20 @@ export class PgConnection {
    */
   paramTextArray(items: string[]): boolean {
     // Its exact size first, so that room is asked for once and a refusal writes nothing.
+    // The count stops once past `PG_MAX_CAP` (2^30 - 1), which `startParam` refuses whatever the rest.
     let size: i64 = 2
     for (const item of items) {
-      size += toI64(item.length) + 3
       const n: i32 = toI32(item.length)
+      if (size < 0 || size > 1073741823 || n < 0) {
+        break
+      }
+      size += toI64(n) + toI64(3)
       for (let i: i32 = 0; i < n; i++) {
         const c: i32 = toI32(item.charCodeAt(i))
         if (c === 34 || c === 92) {
+          if (size < 0 || size > 1073741823) {
+            break
+          }
           size += 1
         }
       }
@@ -2758,7 +3038,8 @@ export class PgConnection {
    */
   paramInt4Array(values: i64[], start: i32, count: i32): boolean {
     pgIntWindow(values, start, count)
-    const end: i32 = start + count
+    // `pgIntWindow` kept the window inside `values`, so its end fits an `i32`.
+    const end: i32 = toI32(toI64(start) + toI64(count))
     for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
       if (!pgFitsInt4(values[i])) {
         panic("nish/net/postgres: paramInt4Array() with an element outside int4")
@@ -2783,27 +3064,48 @@ export class PgConnection {
 
   private paramBinaryInts(values: i64[], start: i32, count: i32, oid: i32): boolean {
     const width: i32 = oid === PG_OID_INT4 ? 4 : 8
+    this.noArrayOpen()
+    // More elements than `maxOutput` holds bytes is past any bind's room, as `startBinaryParam` answers.
+    if (count < 0 || count > PG_MAX_CAP) {
+      return false
+    }
     // The header, its one dimension when there are elements, then each element's length word and bytes.
-    const size: i64 =
-      count > 0
-        ? toI64(PG_ARRAY_HEADER + PG_ARRAY_DIM) + toI64(count) * toI64(4 + width)
-        : toI64(PG_ARRAY_HEADER)
-    const at: i32 = this.startBinaryParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
+    let size: i64 = toI64(PG_ARRAY_HEADER)
+    if (count > 0) {
+      size = width === 4 ? toI64(20) + toI64(count) * toI64(8) : toI64(20) + toI64(count) * toI64(12)
+    }
+    if (size > toI64(PG_MAX_CAP)) {
+      return false
+    }
+    const at: i32 = this.startBinaryParam(toI32(size))
     if (at < 0) {
       return false
     }
-    this.reserve(this.outEnd + toI32(size))
+    this.reserve(toI64(this.outEnd) + toI64(toI32(size)))
     this.putArrayHeader(oid, count)
-    const end: i32 = start + count
+    const b: u8[] = this.out
+    let p: i32 = this.outEnd
+    // `pgIntWindow` held the window inside `values`, so its end fits an `i32`.
+    const end: i32 = toI32(toI64(start) + toI64(count))
+    // `reserve` made room for every element; the loop's tests state that bound for the prover.
     for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
-      setI32BE(this.out, this.outEnd, width)
       if (width === 4) {
-        setI32BE(this.out, this.outEnd + 4, toI32(values[i]))
+        if (p < 0 || p > toI32(b.length) - 8) {
+          break
+        }
+        setI32BE(b, p, width)
+        setI32BE(b, p + 4, toI32(values[i]))
+        p = p + 8
       } else {
-        setI64BE(this.out, this.outEnd + 4, values[i])
+        if (p < 0 || p > toI32(b.length) - 12) {
+          break
+        }
+        setI32BE(b, p, width)
+        setI64BE(b, p + 4, values[i])
+        p = p + 12
       }
-      this.outEnd += 4 + width
     }
+    this.outEnd = p
     this.endParam(at)
     return true
   }
@@ -2861,8 +3163,12 @@ export class PgConnection {
 
   /** Whether the open array has room for an element of `size` bytes, its comma, and the `}` it owes. */
   private elementRoom(size: i64): boolean {
+    // An element past `PG_MAX_CAP` (2^30 - 1) has no room in any buffer.
+    if (size < 0 || size > 1073741823) {
+      return false
+    }
     const total: i64 = size + toI64(this.arrayCount > 0 ? 2 : 1)
-    return total <= toI64(PG_MAX_CAP) && this.room(toI32(total))
+    return total <= toI64(PG_MAX_CAP) && this.room(total)
   }
 
   /**
@@ -2880,12 +3186,14 @@ export class PgConnection {
     if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
       panic("nish/net/postgres: arrayElement() outside its source")
     }
-    // Both loops are bounded by `bytes.length` too, as `paramIntArray`'s are.
-    const end: i32 = start + length
+    // Both loops are bounded by `bytes.length` too, as `paramIntArray`'s are;
+    // the window is inside `bytes`, so its end fits an `i32`.
+    const end: i32 = toI32(toI64(start) + toI64(length))
     let escapes: i32 = 0
     for (let i: i32 = start; i < end && i < toI32(bytes.length); i++) {
       const c: i32 = toI32(bytes[i])
-      if (c === PG_QUOTE || c === PG_BACKSLASH) {
+      // An escape per byte at most, so fewer than `length` before this one.
+      if ((c === PG_QUOTE || c === PG_BACKSLASH) && escapes < length) {
         escapes += 1
       }
     }
@@ -2894,10 +3202,15 @@ export class PgConnection {
     }
     this.elementComma()
     this.putByte(PG_QUOTE)
-    this.reserve(this.outEnd + length + escapes + 1)
+    const at: i32 = this.outEnd
+    this.reserve(toI64(at) + toI64(length) + toI64(escapes) + toI64(1))
     if (escapes === 0) {
-      copyBytes(this.out, this.outEnd, bytes, start, length)
-      this.outEnd += length
+      // `reserve` made the room; the test states that bound for the prover.
+      if (at < 0 || at > toI32(this.out.length) - length) {
+        return false
+      }
+      copyBytes(this.out, at, bytes, start, length)
+      this.outEnd = toI32(toI64(at) + toI64(length))
     } else {
       for (let i: i32 = start; i < end && i < toI32(bytes.length); i++) {
         const c: i32 = toI32(bytes[i])
@@ -2927,10 +3240,11 @@ export class PgConnection {
   }
 
   private elementComma(): void {
-    if (this.arrayCount > 0) {
+    const count: i32 = this.arrayCount
+    if (count > 0) {
       this.putByte(PG_COMMA)
     }
-    this.arrayCount += 1
+    this.arrayCount = pgCountUp(count)
   }
 
   /**
@@ -3004,18 +3318,23 @@ export class PgConnection {
     if (width === 4 && !pgFitsInt4(value)) {
       panic("nish/net/postgres: binaryArrayInt() with an element outside int4")
     }
-    if (!this.room(4 + width)) {
+    if (!this.room(toI64(4) + toI64(width))) {
       return false
     }
     this.putI32(width)
     if (width === 4) {
       this.putI32(toI32(value))
     } else {
-      this.reserve(this.outEnd + 8)
-      setI64BE(this.out, this.outEnd, value)
-      this.outEnd += 8
+      const at: i32 = this.outEnd
+      this.reserve(toI64(at) + toI64(8))
+      // `room` and `reserve` made the eight bytes; the test states that bound for the prover.
+      if (at < 0 || at > toI32(this.out.length) - 8) {
+        return false
+      }
+      setI64BE(this.out, at, value)
+      this.outEnd = toI32(toI64(at) + toI64(8))
     }
-    this.arrayCount += 1
+    this.arrayCount = pgCountUp(this.arrayCount)
     return true
   }
 
@@ -3027,12 +3346,12 @@ export class PgConnection {
    */
   binaryArrayNull(): boolean {
     this.binaryArrayOpen()
-    if (!this.room(toI32(4))) {
+    if (!this.room(toI64(4))) {
       return false
     }
     this.putI32(toI32(-1))
     this.arrayNulls = true
-    this.arrayCount += 1
+    this.arrayCount = pgCountUp(this.arrayCount)
     return true
   }
 
@@ -3047,17 +3366,21 @@ export class PgConnection {
     }
     if (this.arrayOid !== 0) {
       // The header follows the parameter's length word: ndim, the NULL flag, the OID, then the dimension.
-      const header: i32 = this.arrayAt + 4
-      if (this.arrayCount === 0) {
-        setI32BE(this.out, header, PG_ZERO)
-        this.outEnd = header + PG_ARRAY_HEADER
-      } else {
-        setI32BE(this.out, header + 4, this.arrayNulls ? 1 : 0)
-        setI32BE(this.out, header + PG_ARRAY_HEADER, this.arrayCount)
+      // `binaryArrayStart` wrote all 24 bytes inside `out`; the test states that bound for the prover.
+      const at: i32 = this.arrayAt
+      if (at >= 0 && at <= toI32(this.out.length) - 24) {
+        const header: i32 = at + 4
+        if (this.arrayCount === 0) {
+          setI32BE(this.out, header, PG_ZERO)
+          this.outEnd = header + PG_ARRAY_HEADER
+        } else {
+          setI32BE(this.out, header + 4, this.arrayNulls ? 1 : 0)
+          setI32BE(this.out, header + PG_ARRAY_HEADER, this.arrayCount)
+        }
       }
       this.arrayOid = 0
     } else {
-      this.tailRoom(toI32(1))
+      this.tailRoom(toI64(1))
       this.putByte(PG_RBRACE)
     }
     this.endParam(this.arrayAt)
@@ -3080,7 +3403,7 @@ export class PgConnection {
       panic("nish/net/postgres: bindEnd() while an array is open")
     }
     const binary: boolean = this.bindBinary
-    this.tailRoom(PG_TAIL + this.bindOwed)
+    this.tailRoom(toI64(PG_TAIL) + toI64(this.bindOwed))
     const at: i32 = this.bindAt
     if (this.binaryParamCount > 0) {
       this.putFormatCodes()
@@ -3114,9 +3437,11 @@ export class PgConnection {
       return false
     }
     this.dropBind()
-    if (this.bindOpened) {
+    // The bind's group is in flight, so the count is positive.
+    const inFlight: i32 = this.inFlight
+    if (this.bindOpened && inFlight > 0) {
       this.groupOpen = false
-      this.inFlight -= 1
+      this.inFlight = inFlight - 1
     }
     return true
   }
@@ -3137,18 +3462,41 @@ export class PgConnection {
    */
   private putFormatCodes(): void {
     const from: i32 = this.paramCountAt
-    const codes: i32 = 2 * this.paramCount
-    this.reserve(this.outEnd + codes)
-    copyBytes(this.out, from + codes, this.out, from, this.outEnd - from)
-    this.outEnd += codes
-    setU16BE(this.out, from - 2, toU16(this.paramCount))
-    for (let i: i32 = 0; i < this.paramCount; i++) {
-      setU16BE(this.out, from + 2 * i, toU16(0))
+    const count: i32 = this.paramCount
+    const end: i32 = this.outEnd
+    // The count word lies before the parameters, a bind holds at most 65535 of
+    // them, and the end lies past the count; the test states that for the prover.
+    if (from < 2 || count < 0 || count > 65535 || end < 0 || end < from) {
+      return
     }
-    for (let k: i32 = 0; k < this.binaryParamCount && k < toI32(this.binaryParams.length); k++) {
-      setU16BE(this.out, from + 2 * this.binaryParams[k], toU16(PG_FORMAT_BINARY))
+    const codes: i32 = count * 2
+    this.reserve(toI64(end) + toI64(codes))
+    const b: u8[] = this.out
+    if (end > toI32(b.length) - codes) {
+      return
     }
-    this.paramCountAt = from + codes
+    // `reserve` made the room, so both ends fit an `i32`.
+    const moved: i32 = toI32(toI64(from) + toI64(codes))
+    copyBytes(b, moved, b, from, end - from)
+    this.outEnd = toI32(toI64(end) + toI64(codes))
+    setU16BE(b, from - 2, toU16(count))
+    // Every code lies in `[from, from + codes)`, inside `b`.
+    for (let i: i32 = 0; i < count; i++) {
+      const at: i32 = toI32(toI64(from) + toI64(i) * toI64(2))
+      if (at > toI32(b.length) - 2) {
+        break
+      }
+      setU16BE(b, at, toU16(0))
+    }
+    const params: i32[] = this.binaryParams
+    for (let k: i32 = 0; k < this.binaryParamCount && k < toI32(params.length); k++) {
+      const param: i32 = params[k]
+      if (param < 0 || param >= count) {
+        break
+      }
+      setU16BE(b, toI32(toI64(from) + toI64(param) * toI64(2)), toU16(PG_FORMAT_BINARY))
+    }
+    this.paramCountAt = moved
   }
 
   /**
@@ -3162,7 +3510,7 @@ export class PgConnection {
       return false
     }
     this.groupOpen = false
-    this.tailRoom(toI32(5))
+    this.tailRoom(toI64(5))
     const at: i32 = this.startMessage(PG_FE_SYNC)
     this.endMessage(at)
     return true
@@ -3177,7 +3525,7 @@ export class PgConnection {
     if (this.bindAt >= 0) {
       this.dropBind()
     }
-    this.tailRoom(toI32(5))
+    this.tailRoom(toI64(5))
     const at: i32 = this.startMessage(PG_FE_TERMINATE)
     this.endMessage(at)
   }
@@ -3223,7 +3571,8 @@ export class PgConnection {
       return ""
     }
     const start: i32 = this.colStarts[c]
-    return String.fromBytes(this.input, start, start + length)
+    // `readRow` held the column inside the row, so its end fits an `i32`.
+    return String.fromBytes(this.input, start, toI32(toI64(start) + toI64(length)))
   }
 
   /**
@@ -3292,10 +3641,20 @@ export class PgConnection {
    */
   tagIs(word: string): boolean {
     const n: i32 = toI32(word.length)
-    if (n > this.tagLength || !pgBytesAre(this.input, this.tagStart, n, word)) {
+    const start: i32 = this.tagStart
+    const b: u8[] = this.input
+    if (n > this.tagLength || !pgBytesAre(b, start, n, word)) {
       return false
     }
-    return n === this.tagLength || toI32(this.input[this.tagStart + n]) === 32
+    if (n === this.tagLength) {
+      return true
+    }
+    // The tag lies inside the buffer, so the byte after the word does; the test states that for the prover.
+    const at: i32 = toI32(toI64(start) + toI64(n))
+    if (at < 0 || at >= toI32(b.length)) {
+      return false
+    }
+    return toI32(b[at]) === 32
   }
 
   /**
@@ -3306,18 +3665,32 @@ export class PgConnection {
    *   tag has none (`BEGIN`) or it does not fit an i64.
    */
   tagRows(): i64 {
-    const end: i32 = this.tagStart + this.tagLength
+    const start: i32 = this.tagStart
+    const b: u8[] = this.input
+    const last: i64 = toI64(start) + toI64(this.tagLength)
+    // The tag lies inside the buffer; the test states that bound for the prover.
+    if (start < 0 || last < toI64(start) || last > toI64(b.length)) {
+      return -1
+    }
+    const end: i32 = toI32(last)
+    if (end < 0) {
+      return -1
+    }
     let p: i32 = end
-    while (p > this.tagStart && toI32(this.input[p - 1]) >= 48 && toI32(this.input[p - 1]) <= 57) {
+    while (p > start && p > 0 && p <= toI32(b.length)) {
+      const digit: i32 = toI32(b[p - 1])
+      if (digit < 48 || digit > 57) {
+        break
+      }
       p--
     }
-    if (p === end || p === this.tagStart || toI32(this.input[p - 1]) !== 32) {
+    if (p === end || p <= start || p <= 0 || p > toI32(b.length) || toI32(b[p - 1]) !== 32) {
       return -1
     }
     // Read without touching `text.failed`, which belongs to the program's own decoding.
     const failed: boolean = this.text.failed
     this.text.failed = false
-    const rows: i64 = this.text.int(this.input, p, end - p)
+    const rows: i64 = this.text.int(b, p, end - p)
     const overflowed: boolean = this.text.failed
     this.text.failed = failed
     return overflowed ? -1 : rows
@@ -3382,18 +3755,91 @@ class PgPoolSlot {
     this.leads = new Array<i32>(ring)
   }
 
-  /** @internal Used by `PgPool.dispatch` and `PgPool.next` in this module. */
-  push(ticket: i32, leads: i32): void {
-    const at: i32 = (this.head + this.count) % toI32(this.tickets.length)
-    this.tickets[at] = ticket
-    this.leads[at] = leads
-    this.count += 1
+  /**
+   * Records a group at the ring's tail; false, and nothing recorded, only when the ring is full,
+   * which the pool never lets it be: `dispatch` hands a slot a group only while its ring has room.
+   * @internal Used by `PgPool.dispatch` and `PgPool.next` in this module.
+   */
+  push(ticket: i32, leads: i32): boolean {
+    const tickets: i32[] = this.tickets
+    const leadCounts: i32[] = this.leads
+    const head: i32 = this.head
+    const count: i32 = this.count
+    const size: i32 = toI32(tickets.length)
+    // `head` is a slot of the ring and `count` below its size; the test states those bounds for the prover.
+    if (count < 0 || count >= size || head < 0 || head >= size) {
+      return false
+    }
+    // Below twice the ring's size, at most 2048.
+    const sum: i64 = toI64(head) + toI64(count)
+    const at: i32 = toI32(sum < toI64(size) ? sum : sum - toI64(size))
+    // `at` is a slot of the ring, which both arrays are; the test states that for the prover.
+    if (at < 0 || at >= toI32(tickets.length) || at >= toI32(leadCounts.length)) {
+      return false
+    }
+    tickets[at] = ticket
+    leadCounts[at] = leads
+    this.count = count + 1
+    return true
   }
 
-  /** @internal Used by `PgPool.next` in this module. */
+  /**
+   * Drops the oldest group in flight; nothing when none is.
+   * @internal Used by `PgPool.next` in this module.
+   */
   pop(): void {
-    this.head = (this.head + 1) % toI32(this.tickets.length)
-    this.count -= 1
+    const head: i32 = this.head
+    const count: i32 = this.count
+    const size: i32 = toI32(this.tickets.length)
+    // `head` is a slot of the ring; the test states that bound for the prover.
+    if (count <= 0 || head < 0 || head >= size) {
+      return
+    }
+    const after: i32 = head + 1
+    this.head = after === size ? 0 : after
+    this.count = count - 1
+  }
+
+  /**
+   * The ticket of the oldest group in flight; -1 when none is.
+   * @internal Used by `PgPool.next` in this module.
+   */
+  oldest(): i32 {
+    const tickets: i32[] = this.tickets
+    const head: i32 = this.head
+    // `head` is a slot of the ring; the test states that bound for the prover.
+    if (this.count <= 0 || head < 0 || head >= toI32(tickets.length)) {
+      return -1
+    }
+    return tickets[head]
+  }
+
+  /**
+   * How many of the pool's prepares still lead the oldest group in flight; 0 when none is.
+   * @internal Used by `PgPool.next` in this module.
+   */
+  leading(): i32 {
+    const leadCounts: i32[] = this.leads
+    const head: i32 = this.head
+    // `head` is a slot of the ring; the test states that bound for the prover.
+    if (this.count <= 0 || head < 0 || head >= toI32(leadCounts.length)) {
+      return 0
+    }
+    return leadCounts[head]
+  }
+
+  /**
+   * Sets how many prepares lead the oldest group in flight; nothing when none is.
+   * @internal Used by `PgPool.next` in this module.
+   */
+  setLeading(n: i32): void {
+    const leadCounts: i32[] = this.leads
+    const head: i32 = this.head
+    // `head` is a slot of the ring; the test states that bound for the prover.
+    if (this.count <= 0 || head < 0 || head >= toI32(leadCounts.length)) {
+      return
+    }
+    leadCounts[head] = n
   }
 }
 
@@ -3543,14 +3989,29 @@ export class PgPool {
    *   after 2^31-1; or `PG_POOL_FULL`.
    */
   request(): i32 {
-    const room: i32 = toI32(this.queue.length)
-    if (this.queueCount === room) {
+    const queue: i32[] = this.queue
+    const room: i32 = toI32(queue.length)
+    const head: i32 = this.queueHead
+    const count: i32 = this.queueCount
+    // Full at `count === room`; below that, `count` is not negative and `head` is a slot of the
+    // ring, which the test states for the prover.
+    if (count < 0 || count >= room || head < 0 || head >= room) {
+      return PG_POOL_FULL
+    }
+    // Below twice the queue's size, at most 2^21.
+    const sum: i64 = toI64(head) + toI64(count)
+    const at: i32 = toI32(sum < toI64(room) ? sum : sum - toI64(room))
+    // `at` is a slot of the ring; the test states that bound for the prover.
+    if (at < 0 || at >= toI32(queue.length)) {
       return PG_POOL_FULL
     }
     const ticket: i32 = this.nextTicket
-    this.nextTicket = ticket === 2147483647 ? 0 : ticket + 1
-    this.queue[(this.queueHead + this.queueCount) % room] = ticket
-    this.queueCount += 1
+    this.nextTicket = 0
+    if (ticket < 2147483647) {
+      this.nextTicket = ticket + 1
+    }
+    queue[at] = ticket
+    this.queueCount = count + 1
     return ticket
   }
 
@@ -3572,7 +4033,13 @@ export class PgPool {
   inFlight(): i32 {
     let n: i32 = 0
     for (const slot of this.slots) {
-      n += slot.count
+      const count: i32 = slot.count
+      // A slot's ring holds at most `maxInFlight`, at most 1024, and the pool at most 1024
+      // slots, so the sum stays at most 2^20; the test states those bounds for the prover.
+      if (count < 0 || count > 1024 || n > 1047552) {
+        return n
+      }
+      n += count
     }
     return n
   }
@@ -3594,47 +4061,74 @@ export class PgPool {
     if (this.building >= 0 || this.queueCount === 0) {
       return PG_POOL_NONE
     }
+    const slots: PgPoolSlot[] = this.slots
     const cap: i32 = this.config.maxInFlight
     const pack: boolean = this.config.pack
     let best: i32 = -1
     let load: i32 = 0
     let starting: i32 = 0
     let idle: i32 = -1
-    for (let s: i32 = 0; s < this.size; s++) {
-      const slot: PgPoolSlot = this.slots[s]
+    for (let s: i32 = 0; s < toI32(slots.length); s++) {
+      const slot: PgPoolSlot = slots[s]
       const conn: PgConnection | null = slot.conn
       if (slot.state === PG_SLOT_READY && conn !== null) {
-        if (conn.inFlight < cap && (best < 0 || (!pack && conn.inFlight < load))) {
+        // The slot's ring must have room too: a group dropped on a failed connection stays on
+        // it until the failure drains it.
+        if (
+          conn.inFlight < cap &&
+          slot.count < toI32(slot.tickets.length) &&
+          (best < 0 || (!pack && conn.inFlight < load))
+        ) {
           best = s
           load = conn.inFlight
         }
       } else if (slot.state === PG_SLOT_WANTED || slot.state === PG_SLOT_STARTING) {
-        starting += 1
+        // At most one for each slot, so below the slot count; the test states that for the prover.
+        if (starting < toI32(slots.length)) {
+          starting += 1
+        }
       } else if (slot.state === PG_SLOT_IDLE && idle < 0) {
         idle = s
       }
     }
     if (best < 0) {
-      if (idle >= 0 && toI64(this.queueCount) > toI64(starting) * toI64(cap)) {
-        this.slots[idle].state = PG_SLOT_WANTED
+      const spare: PgPoolSlot | null = this.slotAt(idle)
+      if (spare !== null && toI64(this.queueCount) > toI64(starting) * toI64(cap)) {
+        spare.state = PG_SLOT_WANTED
       }
       return PG_POOL_NONE
     }
-    const ticket: i32 = this.queue[this.queueHead]
-    this.queueHead = (this.queueHead + 1) % toI32(this.queue.length)
-    this.queueCount -= 1
-    const slot: PgPoolSlot = this.slots[best]
-    const conn: PgConnection = this.connection(best)
-    let leads: i32 = 0
-    while (slot.queued < toI32(this.names.length)) {
-      const k: i32 = slot.queued
-      if (!conn.prepare(this.names[k], this.sqls[k], this.types[k])) {
-        break
-      }
-      slot.queued += 1
-      leads += 1
+    const slot: PgPoolSlot | null = this.slotAt(best)
+    const ticket: i32 = this.dequeue()
+    // `best` is a slot the loop found, and a request waits; the test states both for the prover.
+    if (slot === null || ticket < 0) {
+      return PG_POOL_NONE
     }
-    slot.push(ticket, leads)
+    const conn: PgConnection = this.connection(best)
+    const names: string[] = this.names
+    const sqls: string[] = this.sqls
+    const types: i32[][] = this.types
+    const start: i32 = slot.queued
+    let k: i32 = start
+    // The three lists grow together, so one bound holds for all; the tests state it for each.
+    while (
+      k >= 0 &&
+      k < toI32(names.length) &&
+      k < toI32(sqls.length) &&
+      k < toI32(types.length) &&
+      conn.prepare(names[k], sqls[k], types[k])
+    ) {
+      k += 1
+    }
+    slot.queued = k
+    let leads: i32 = 0
+    if (start >= 0 && k >= 0 && k >= start) {
+      leads = k - start
+    }
+    // The loop above chose `best` only with room on its ring; the test states that for the prover.
+    if (!slot.push(ticket, leads)) {
+      return PG_POOL_NONE
+    }
     this.building = best
     this.ticket = ticket
     return best
@@ -3653,17 +4147,24 @@ export class PgPool {
     if (s < 0) {
       return false
     }
-    const slot: PgPoolSlot = this.slots[s]
+    const slot: PgPoolSlot | null = this.slotAt(s)
+    // `building` names a slot `dispatch` handed a request to; the test states that for the prover.
+    if (slot === null) {
+      this.building = -1
+      return false
+    }
     const conn: PgConnection = this.connection(s)
     if (conn.sync()) {
       this.building = -1
       return true
     }
-    if (conn.inFlight < slot.count) {
+    const count: i32 = slot.count
+    if (conn.inFlight < count) {
       // No message opened the group. A failed connection reports the request
       // lost with the rest; a live one would never answer it, so it is dropped.
-      if (conn.failure === PG_ERR_NONE) {
-        slot.count -= 1
+      // The request is on the slot's ring, so `count` is above 0; the test states that for the prover.
+      if (conn.failure === PG_ERR_NONE && count > 0) {
+        slot.count = count - 1
       }
       this.building = -1
     }
@@ -3676,8 +4177,9 @@ export class PgPool {
    * @returns The lowest wanted slot, or `PG_POOL_NONE` when no slot is wanted.
    */
   wanted(): i32 {
-    for (let s: i32 = 0; s < this.size; s++) {
-      if (this.slots[s].state === PG_SLOT_WANTED) {
+    const slots: PgPoolSlot[] = this.slots
+    for (let s: i32 = 0; s < toI32(slots.length); s++) {
+      if (slots[s].state === PG_SLOT_WANTED) {
         return s
       }
     }
@@ -3696,7 +4198,8 @@ export class PgPool {
    *   `PgConnection` constructor takes them; a new one for every connection.
    */
   connect(slot: i32, nonce: u8[]): void {
-    if (slot < 0 || slot >= this.size || this.slots[slot].state !== PG_SLOT_WANTED) {
+    const s: PgPoolSlot | null = this.slotAt(slot)
+    if (s === null || s.state !== PG_SLOT_WANTED) {
       panic("nish/net/postgres: PgPool.connect on a slot that wants no connection")
     }
     if (this.password.gone) {
@@ -3706,7 +4209,6 @@ export class PgPool {
     if (this.config.tls !== PG_TLS_DISABLE && carried === null) {
       panic("nish/net/postgres: PgConfig.tls asks for TLS, which only PgCarrier speaks")
     }
-    const s: PgPoolSlot = this.slots[slot]
     s.conn = new PgConnection(carried !== null ? carried : this.config, this.password.bytes, nonce)
     s.state = PG_SLOT_STARTING
     s.queued = 0
@@ -3724,7 +4226,8 @@ export class PgPool {
    * @returns The slot's connection, owned by the pool: a later `connect` on the slot replaces it.
    */
   connection(slot: i32): PgConnection {
-    const conn: PgConnection | null = slot < 0 || slot >= this.size ? null : this.slots[slot].conn
+    const s: PgPoolSlot | null = this.slotAt(slot)
+    const conn: PgConnection | null = s !== null ? s.conn : null
     if (conn === null) {
       panic("nish/net/postgres: PgPool.connection on a slot with no connection")
     }
@@ -3748,31 +4251,44 @@ export class PgPool {
    */
   next(slot: i32): i32 {
     const conn: PgConnection = this.connection(slot)
-    const s: PgPoolSlot = this.slots[slot]
-    if (s.state === PG_SLOT_IDLE || s.state === PG_SLOT_WANTED) {
+    const s: PgPoolSlot | null = this.slotAt(slot)
+    // `connection(slot)` refused a slot out of range; the test states that for the prover.
+    if (s === null || s.state === PG_SLOT_IDLE || s.state === PG_SLOT_WANTED) {
       this.ticket = -1
       return PG_NEED_MORE
     }
     while (s.state === PG_SLOT_STARTING || s.state === PG_SLOT_READY) {
-      this.ticket = s.count > 0 ? s.tickets[s.head] : -1
+      this.ticket = s.oldest()
       const event: i32 = conn.next()
       if (event === PG_READY) {
         s.state = PG_SLOT_READY
-      } else if (event === PG_DESCRIBED && s.count > 0 && s.leads[s.head] > 0) {
-        s.leads[s.head] -= 1
-        s.described += 1
-        continue
-      } else if (event === PG_ERROR && s.count > 0 && s.leads[s.head] > 0) {
-        // The rest of the group's prepares were skipped: the next request prepares them again.
-        s.leads[s.head] = 0
-        s.queued = s.described
+      } else if (event === PG_DESCRIBED || event === PG_ERROR) {
+        // Only an event about a prepare leading the oldest group is the pool's own.
+        const lead: i32 = s.leading()
+        if (lead > 0 && event === PG_DESCRIBED) {
+          s.setLeading(lead - 1)
+          const described: i32 = s.described
+          // Only a queued prepare is described, so `described` stays below `queued`; the test
+          // states that for the prover.
+          if (described < s.queued) {
+            s.described = described + 1
+          }
+          continue
+        }
+        if (lead > 0) {
+          // The rest of the group's prepares were skipped: the next request prepares them again.
+          s.setLeading(toI32(0))
+          s.queued = s.described
+        }
       } else if (event === PG_GROUP_DONE) {
         s.pop()
       } else if (event === PG_FAILED) {
         if (s.state === PG_SLOT_STARTING && this.queueCount > 0 && !this.anyReady()) {
-          s.push(this.queue[this.queueHead], toI32(0))
-          this.queueHead = (this.queueHead + 1) % toI32(this.queue.length)
-          this.queueCount -= 1
+          // A starting slot was given no request, so its ring is empty and takes this one.
+          const ticket: i32 = this.dequeue()
+          if (ticket >= 0) {
+            s.push(ticket, toI32(0))
+          }
         }
         if (this.building === slot) {
           this.building = -1
@@ -3783,13 +4299,38 @@ export class PgPool {
       return event
     }
     if (s.state === PG_SLOT_DRAINING && s.count > 0) {
-      this.ticket = s.tickets[s.head]
+      this.ticket = s.oldest()
       s.pop()
       return PG_LOST
     }
     s.state = PG_SLOT_IDLE
     this.ticket = -1
     return PG_FAILED
+  }
+
+  /** The slot at `slot`, or null when `slot` is not one of the pool's. */
+  private slotAt(slot: i32): PgPoolSlot | null {
+    const slots: PgPoolSlot[] = this.slots
+    if (slot < 0 || slot >= toI32(slots.length)) {
+      return null
+    }
+    return slots[slot]
+  }
+
+  /** Takes the oldest waiting request off the queue and answers its ticket; -1 when none waits. */
+  private dequeue(): i32 {
+    const queue: i32[] = this.queue
+    const head: i32 = this.queueHead
+    const count: i32 = this.queueCount
+    // `queueHead` is a slot of the queue's ring; the test states that bound for the prover.
+    if (count <= 0 || head < 0 || head >= toI32(queue.length)) {
+      return -1
+    }
+    const ticket: i32 = queue[head]
+    const after: i32 = head + 1
+    this.queueHead = after === toI32(queue.length) ? 0 : after
+    this.queueCount = count - 1
+    return ticket
   }
 
   private anyReady(): boolean {
@@ -4163,13 +4704,17 @@ export class PgBatcher {
    * @internal Used by `PgCarrier.next` in std/net/postgres-carrier.ts.
    */
   shed(): i32 {
-    if (this.count === 0) {
+    const count: i32 = this.count
+    const tags: i32[] = this.qTags
+    const head: i32 = this.head
+    // `head` is a slot of the ring while a request waits; the test states that bound for the prover.
+    if (count <= 0 || head < 0 || head >= toI32(tags.length)) {
       return -1
     }
-    const tag: i32 = this.qTags[this.head]
-    this.head = (this.head + 1) % toI32(this.qTags.length)
-    this.count -= 1
-    if (this.count === 0) {
+    const tag: i32 = tags[head]
+    this.head = head + 1 === toI32(tags.length) ? 0 : head + 1
+    this.count = count - 1
+    if (count === 1) {
       this.storeEnd = 0
     }
     return tag
@@ -4189,12 +4734,13 @@ export class PgBatcher {
       panic("nish/net/postgres: PgBatcher.addInt on a text batcher")
     }
     const q: i32 = this.slotToAdd()
-    if (q < 0) {
+    const ints: i64[] = this.qInts
+    // `slotToAdd` answers a slot of the ring, which `qInts` is on an int8 batcher; the test states that for the prover.
+    if (q < 0 || q >= toI32(ints.length)) {
       return false
     }
-    this.qInts[q] = key
-    this.added(q, tag, pgIntHash(key), pgDecimalLength(key))
-    return true
+    ints[q] = key
+    return this.added(q, tag, pgIntHash(key), pgDecimalLength(key))
   }
 
   /**
@@ -4220,80 +4766,153 @@ export class PgBatcher {
     if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
       panic("nish/net/postgres: PgBatcher.addText outside its source")
     }
-    const end: i32 = start + length
+    // Inside `bytes`, by the test above.
+    const end: i32 = toI32(toI64(start) + toI64(length))
     if (!pgIsText(bytes, start, end)) {
       return false
     }
     // The element as `arrayElement` writes it: quoted, `"` and `\` escaped;
     // and FNV-1a, whose unsigned multiply wraps by definition.
-    let size: i64 = toI64(length) + 2
+    let escapes: i32 = 0
     let h: u32 = 2166136261
     for (let i: i32 = start; i < end && i < toI32(bytes.length); i++) {
       const c: u8 = bytes[i]
-      if (toI32(c) === PG_QUOTE || toI32(c) === PG_BACKSLASH) {
-        size += 1
+      if ((toI32(c) === PG_QUOTE || toI32(c) === PG_BACKSLASH) && escapes < length) {
+        escapes += 1
       }
       h = (h ^ toU32(c)) * 16777619
     }
-    if (size + 2 > toI64(this.maxBytes)) {
+    // With the array's two braces, within `maxBytes`, so the size fits an `i32`.
+    if (toI64(length) + toI64(escapes) + toI64(4) > toI64(this.maxBytes)) {
       return false
     }
+    const size: i32 = toI32(toI64(length) + toI64(escapes) + toI64(2))
     const q: i32 = this.slotToAdd()
     if (q < 0) {
       return false
     }
+    const store: u8[] = this.store
+    const starts: i32[] = this.qStarts
+    const lengths: i32[] = this.qLengths
+    const cap: i32 = toI32(store.length)
     let at: i32 = this.storeEnd
-    if (length > toI32(this.store.length) - at) {
+    // `storeEnd` lies in the store, and `q` is a slot of the ring, which `qStarts` and
+    // `qLengths` are on a text batcher; the test states those bounds for the prover.
+    if (at < 0 || at > cap || q >= toI32(starts.length) || q >= toI32(lengths.length)) {
+      return false
+    }
+    if (length > cap - at) {
       // The waiting keys are moved to the front, the room the taken ones left after them.
       // Refused first when even that would not make room, so a full store is not moved for nothing.
-      const from: i32 = this.count > 0 ? this.qStarts[this.head] : at
-      if (length > toI32(this.store.length) - (at - from)) {
+      const head: i32 = this.head
+      let from: i32 = at
+      if (this.count > 0 && head >= 0 && head < toI32(starts.length)) {
+        from = starts[head]
+      }
+      // The oldest waiting key starts in the store's used part; the test states that for the prover.
+      if (from < 0 || from > at || toI64(length) + toI64(at) - toI64(from) > toI64(cap)) {
         return false
       }
-      copyBytes(this.store, 0, this.store, from, at - from)
+      copyBytes(store, 0, store, from, at - from)
+      let w: i32 = head
       for (let i: i32 = 0; i < this.count; i++) {
-        const w: i32 = (this.head + i) % toI32(this.qStarts.length)
-        this.qStarts[w] -= from
+        // `w` walks the ring from `head`, and each waiting key starts at or after the oldest's.
+        if (w < 0 || w >= toI32(starts.length)) {
+          break
+        }
+        const s: i32 = starts[w]
+        if (s >= from && s >= 0) {
+          starts[w] = s - from
+        }
+        w += 1
+        if (w === toI32(starts.length)) {
+          w = 0
+        }
       }
       at -= from
       this.storeEnd = at
     }
-    copyBytes(this.store, at, bytes, start, length)
-    this.storeEnd = at + length
-    this.qStarts[q] = at
-    this.qLengths[q] = length
-    this.added(q, tag, toI32(h >> 1), toI32(size))
-    return true
+    copyBytes(store, at, bytes, start, length)
+    // `copyBytes` checked that the key fits after `at`.
+    this.storeEnd = toI32(toI64(at) + toI64(length))
+    starts[q] = at
+    lengths[q] = length
+    return this.added(q, tag, toI32(h >> 1), size)
   }
 
   /** The ring slot the next request goes in, or -1 when the queue is full. */
   private slotToAdd(): i32 {
     const size: i32 = toI32(this.qTags.length)
-    return this.count === size ? -1 : (this.head + this.count) % size
+    const head: i32 = this.head
+    const count: i32 = this.count
+    // `head` is a slot of the ring and `count` at most its size; the test states those bounds for the prover.
+    if (count < 0 || count >= size || head < 0 || head >= size) {
+      return -1
+    }
+    // Below twice the ring's size, at most 2^21.
+    const at: i64 = toI64(head) + toI64(count)
+    return toI32(at < toI64(size) ? at : at - toI64(size))
   }
 
-  private added(q: i32, tag: i32, hash: i32, size: i32): void {
-    this.qTags[q] = tag
-    this.qHashes[q] = hash
-    this.qSizes[q] = size
-    this.count += 1
+  /** Records the request `slotToAdd` placed at `q`; false, and nothing recorded, only when `q` is not a slot of the ring. */
+  private added(q: i32, tag: i32, hash: i32, size: i32): boolean {
+    const tags: i32[] = this.qTags
+    const hashes: i32[] = this.qHashes
+    const sizes: i32[] = this.qSizes
+    const count: i32 = this.count
+    // `q` is a free slot of the ring, which all three are; the test states that for the prover.
+    if (
+      q < 0 ||
+      q >= toI32(tags.length) ||
+      q >= toI32(hashes.length) ||
+      q >= toI32(sizes.length) ||
+      count < 0 ||
+      count >= toI32(tags.length)
+    ) {
+      return false
+    }
+    tags[q] = tag
+    hashes[q] = hash
+    sizes[q] = size
+    this.count = count + 1
+    return true
   }
 
   /** Whether the keys of the queued requests `a` and `b` are equal. */
+  // Both are slots of the ring holding waiting keys, which lie in the store; the tests
+  // state those bounds for the prover (false outside them binds the key again, as a long probe does).
   private sameKey(a: i32, b: i32): boolean {
     if (this.keyType === PG_BATCH_INT) {
-      return this.qInts[a] === this.qInts[b]
-    }
-    const n: i32 = this.qLengths[a]
-    if (n !== this.qLengths[b]) {
-      return false
-    }
-    const x: i32 = this.qStarts[a]
-    const y: i32 = this.qStarts[b]
-    for (let i: i32 = 0; i < n; i++) {
-      if (this.store[x + i] !== this.store[y + i]) {
+      const ints: i64[] = this.qInts
+      if (a < 0 || b < 0 || a >= toI32(ints.length) || b >= toI32(ints.length)) {
         return false
       }
+      return ints[a] === ints[b]
+    }
+    const starts: i32[] = this.qStarts
+    const lengths: i32[] = this.qLengths
+    const store: u8[] = this.store
+    if (a < 0 || b < 0 || a >= toI32(starts.length) || b >= toI32(starts.length)) {
+      return false
+    }
+    if (a >= toI32(lengths.length) || b >= toI32(lengths.length)) {
+      return false
+    }
+    const n: i32 = lengths[a]
+    if (n !== lengths[b]) {
+      return false
+    }
+    let x: i32 = starts[a]
+    let y: i32 = starts[b]
+    for (let i: i32 = 0; i < n; i++) {
+      if (x < 0 || y < 0 || x >= toI32(store.length) || y >= toI32(store.length)) {
+        return false
+      }
+      if (store[x] !== store[y]) {
+        return false
+      }
+      x += 1
+      y += 1
     }
     return true
   }
@@ -4321,8 +4940,9 @@ export class PgBatcher {
     }
     const before: i32 = this.count
     const r: i32 = this.take(conn)
-    if (r >= 0) {
-      clock.started(before - this.count, nowUs)
+    const after: i32 = this.count
+    if (r >= 0 && before >= 0 && after >= 0) {
+      clock.started(before - after, nowUs)
     }
     return r
   }
@@ -4342,108 +4962,212 @@ export class PgBatcher {
    *   `next` for this execution's events; or -1.
    */
   take(conn: PgConnection): i32 {
-    if (this.count === 0) {
+    const count: i32 = this.count
+    if (count <= 0) {
       return -1
     }
+    const runs: PgBatchRun[] = this.runs
     let r: i32 = -1
-    for (let i: i32 = 0; i < toI32(this.runs.length); i++) {
-      if (!this.runs[i].open) {
+    for (let i: i32 = 0; i < toI32(runs.length); i++) {
+      if (!runs[i].open) {
         r = i
         break
       }
     }
-    if (r < 0 || !(this.binary ? conn.bindStartBinary(this.name) : conn.bindStart(this.name))) {
+    if (r < 0 || r >= toI32(runs.length)) {
+      return -1
+    }
+    const run: PgBatchRun = runs[r]
+    if (!(this.binary ? conn.bindStartBinary(this.name) : conn.bindStart(this.name))) {
       return -1
     }
     if (!conn.arrayStart()) {
       conn.bindCancel()
       return -1
     }
-    const ring: i32 = toI32(this.qTags.length)
-    this.grow(this.count < this.maxRequests ? this.count : this.maxRequests)
-    const mask: i32 = toI32(this.table.length) - 1
+    const tags: i32[] = this.qTags
+    const hashes: i32[] = this.qHashes
+    const sizes: i32[] = this.qSizes
+    const maxRequests: i32 = this.maxRequests
+    const maxBytes: i32 = this.maxBytes
+    this.grow(count < maxRequests ? count : maxRequests)
+    const table: i32[] = this.table
+    const keySlots: i32[] = this.keySlots
+    const keyEntries: i32[] = this.keyEntries
+    const keyCounts: i32[] = this.keyCounts
+    const takenKeys: i32[] = this.takenKeys
+    // A power of two, at least 2, by `grow`.
+    const mask: i32 = toI32(table.length) - 1
     let keys: i32 = 0
     let taken: i32 = 0
     let bytes: i32 = 2
-    while (taken < this.count && taken < this.maxRequests && taken < toI32(this.takenKeys.length)) {
-      const q: i32 = (this.head + taken) % ring
+    // `q` walks the ring from `head`, one slot per request taken; the tests on it, and on the
+    // key-table entries below, state for the prover the bounds the queue and `grow` keep.
+    let q: i32 = this.head
+    while (taken < count && taken < maxRequests && taken < toI32(takenKeys.length)) {
+      if (q < 0 || q >= toI32(tags.length) || q >= toI32(hashes.length) || q >= toI32(sizes.length)) {
+        break
+      }
       // Probe for the key: a slot holding it, or the empty slot it would take;
       // -1 after `PG_BATCH_PROBES` occupied ones, when the key is bound again,
       // its own ordinal and rows, and left out of the table.
-      let slot: i32 = this.qHashes[q] & mask
+      const hash: i32 = hashes[q]
+      let slot: i32 = hash & mask
       let k: i32 = -1
       let probes: i32 = 0
-      while (this.table[slot] > 0) {
-        const seen: i32 = this.table[slot] - 1
-        const e: i32 = this.keyEntries[seen]
-        if (this.qHashes[e] === this.qHashes[q] && this.sameKey(e, q)) {
+      while (probes < PG_BATCH_PROBES) {
+        if (slot < 0 || slot >= toI32(table.length)) {
+          probes = PG_BATCH_PROBES
+          break
+        }
+        const held: i32 = table[slot]
+        if (held <= 0) {
+          break
+        }
+        const seen: i32 = held - 1
+        if (seen >= toI32(keyEntries.length)) {
+          probes = PG_BATCH_PROBES
+          break
+        }
+        const e: i32 = keyEntries[seen]
+        if (e >= 0 && e < toI32(hashes.length) && hashes[e] === hash && this.sameKey(e, q)) {
           k = seen
           break
         }
         probes += 1
-        if (probes === PG_BATCH_PROBES) {
-          slot = -1
-          break
-        }
         slot = (slot + 1) & mask
       }
+      if (probes >= PG_BATCH_PROBES) {
+        slot = -1
+      }
       if (k < 0) {
-        const cost: i32 = this.qSizes[q] + (keys > 0 ? 1 : 0)
-        if (cost > this.maxBytes - bytes || !this.bindKey(conn, q)) {
+        let comma: i32 = 0
+        if (keys > 0) {
+          comma = 1
+        }
+        const size: i32 = sizes[q]
+        const added: i32 = keys
+        // A key is one of the taken, fewer than `grow`'s arrays hold.
+        if (
+          toI64(size) + toI64(comma) > toI64(maxBytes) - toI64(bytes) ||
+          added < 0 ||
+          added >= toI32(keySlots.length) ||
+          added >= toI32(keyEntries.length) ||
+          added >= toI32(keyCounts.length)
+        ) {
           break
         }
-        bytes += cost
-        k = keys
-        keys += 1
-        if (slot >= 0) {
-          this.table[slot] = keys
+        // Past `keys` until the bind succeeds, so unread if it does not.
+        keySlots[added] = slot
+        keyEntries[added] = q
+        keyCounts[added] = 0
+        if (!this.bindKey(conn, q)) {
+          break
         }
-        this.keySlots[k] = slot
-        this.keyEntries[k] = q
-        this.keyCounts[k] = 0
+        // At most `maxBytes`, by the test above.
+        bytes = toI32(toI64(bytes) + toI64(size) + toI64(comma))
+        k = added
+        keys = added + 1
+        if (slot >= 0 && slot < toI32(table.length)) {
+          table[slot] = keys
+        }
       }
-      this.keyCounts[k] += 1
-      this.takenKeys[taken] = k
+      // A key's count is of the requests taken so far.
+      if (k < 0 || k >= toI32(keyCounts.length)) {
+        break
+      }
+      const kc: i32 = keyCounts[k]
+      if (kc < 0 || kc >= count || taken >= toI32(takenKeys.length)) {
+        break
+      }
+      keyCounts[k] = kc + 1
+      takenKeys[taken] = k
       taken += 1
+      q += 1
+      if (q === toI32(tags.length)) {
+        q = 0
+      }
     }
-    for (let k: i32 = 0; k < keys && k < toI32(this.keySlots.length); k++) {
-      const slot: i32 = this.keySlots[k]
-      if (slot >= 0) {
-        this.table[slot] = 0
+    for (let k: i32 = 0; k < keys && k < toI32(keySlots.length); k++) {
+      const slot: i32 = keySlots[k]
+      if (slot >= 0 && slot < toI32(table.length)) {
+        table[slot] = 0
       }
     }
     if (taken === 0) {
       conn.bindCancel()
       return -1
     }
-    conn.arrayEnd()
-    conn.bindEnd()
     // The requests grouped by key, each key's in the order they were added.
-    const run: PgBatchRun = this.runs[r]
     if (toI32(run.tags.length) < taken) {
-      // Grown together: `first` holds one more than `tags`, which bounds the keys too.
-      run.tags = new Array<i32>(toI32(this.takenKeys.length))
-      run.first = new Array<i32>(toI32(this.takenKeys.length) + 1)
+      // Grown together: `first` holds one more than `tags`, which bounds the keys too;
+      // `takenKeys` holds at most `PG_BATCH_MAX_REQUESTS` (65536).
+      run.tags = new Array<i32>(toI32(takenKeys.length))
+      run.first = new Array<i32>(toI32(toI64(takenKeys.length) + toI64(1)))
       if (!this.sorted) {
-        run.had = new Array<boolean>(toI32(this.takenKeys.length))
+        run.had = new Array<boolean>(toI32(takenKeys.length))
       }
     }
-    run.first[0] = 0
-    for (let k: i32 = 0; k < keys && k < toI32(this.keyCounts.length); k++) {
-      run.first[k + 1] = run.first[k] + this.keyCounts[k]
-      this.keyCounts[k] = run.first[k]
+    const first: i32[] = run.first
+    const runTags: i32[] = run.tags
+    const uses: i32 = run.uses
+    const n: i32 = toI32(runs.length)
+    // `first` outgrows the keys and `tags` the requests, just above; `uses` counts below
+    // `PG_BATCH_USES` (2^20) and there are at most `PG_BATCH_MAX_RUNS` (1024) runs.
+    // The test states those bounds for the prover.
+    if (
+      keys >= toI32(first.length) ||
+      toI32(first.length) < 1 ||
+      taken > toI32(runTags.length) ||
+      uses < 0 ||
+      uses >= 1048576 ||
+      n > 1024
+    ) {
+      conn.bindCancel()
+      return -1
     }
-    for (let i: i32 = 0; i < taken && i < toI32(this.takenKeys.length); i++) {
-      const k: i32 = this.takenKeys[i]
-      run.tags[this.keyCounts[k]] = this.qTags[(this.head + i) % ring]
-      this.keyCounts[k] += 1
+    first[0] = 0
+    let f: i32 = 0
+    for (let k: i32 = 0; k < keys && k < toI32(keyCounts.length); k++) {
+      if (k >= toI32(first.length) - 1) {
+        break
+      }
+      const c: i32 = keyCounts[k]
+      keyCounts[k] = f
+      // The counts sum to `taken`.
+      f = toI32(toI64(f) + toI64(c))
+      first[k + 1] = f
     }
+    let p: i32 = this.head
+    for (let i: i32 = 0; i < taken && i < toI32(takenKeys.length); i++) {
+      // `p` walks the ring as `q` did, and each key's next place lies inside its group.
+      if (p < 0 || p >= toI32(tags.length)) {
+        break
+      }
+      const k: i32 = takenKeys[i]
+      if (k < 0 || k >= toI32(keyCounts.length)) {
+        break
+      }
+      const at: i32 = keyCounts[k]
+      if (at < 0 || at >= toI32(runTags.length)) {
+        break
+      }
+      runTags[at] = tags[p]
+      keyCounts[k] = at + 1
+      p += 1
+      if (p === toI32(tags.length)) {
+        p = 0
+      }
+    }
+    conn.arrayEnd()
+    conn.bindEnd()
     run.reset(keys)
-    run.handle = run.uses * toI32(this.runs.length) + r
-    run.uses = (run.uses + 1) % PG_BATCH_USES
-    this.head = (this.head + taken) % ring
-    this.count -= taken
-    if (this.count === 0) {
+    // Below 2^20 * 1024 + 1024, by the test above.
+    run.handle = toI32(toI64(uses) * toI64(n) + toI64(r))
+    run.uses = uses + 1 === PG_BATCH_USES ? 0 : uses + 1
+    this.head = q
+    this.count = count - taken
+    if (count === taken) {
       this.storeEnd = 0
     }
     return run.handle
@@ -4459,15 +5183,17 @@ export class PgBatcher {
     if (toI32(this.takenKeys.length) >= need) {
       return
     }
+    // `need` is at most `maxRequests`, itself at most `PG_BATCH_MAX_REQUESTS` (65536).
     let size: i32 = PG_BATCH_MIN_GROWTH
-    while (size < need) {
+    while (size > 0 && size < need && size < 65536) {
       size *= 2
     }
     if (size > this.maxRequests) {
       size = this.maxRequests
     }
+    // Twice `size`, rounded up to a power of two: at most 2^17.
     let tableSize: i32 = 2
-    while (tableSize < 2 * size) {
+    while (tableSize > 0 && tableSize / 2 < size && tableSize < 131072) {
       tableSize *= 2
     }
     this.table = new Array<i32>(tableSize)
@@ -4478,20 +5204,37 @@ export class PgBatcher {
   }
 
   /** Writes the queued request `q`'s key as the open array's next element; false when `conn` has no room. */
+  // `q` is a slot of the ring holding a waiting key; the tests state that for the prover.
   private bindKey(conn: PgConnection, q: i32): boolean {
     if (this.keyType === PG_BATCH_INT) {
-      return conn.arrayInt(this.qInts[q])
+      const ints: i64[] = this.qInts
+      if (q < 0 || q >= toI32(ints.length)) {
+        return false
+      }
+      return conn.arrayInt(ints[q])
     }
-    return conn.arrayElement(this.store, this.qStarts[q], this.qLengths[q])
+    const starts: i32[] = this.qStarts
+    const lengths: i32[] = this.qLengths
+    if (q < 0 || q >= toI32(starts.length) || q >= toI32(lengths.length)) {
+      return false
+    }
+    return conn.arrayElement(this.store, starts[q], lengths[q])
   }
 
   /** The run handle `h` names while its execution's events are owed; null once it is spent. Panics on a handle `take` cannot give. */
   private run(h: i32): PgBatchRun | null {
-    const n: i32 = toI32(this.runs.length)
-    if (h < 0 || h >= n * PG_BATCH_USES) {
+    const runs: PgBatchRun[] = this.runs
+    const n: i32 = toI32(runs.length)
+    // `n * PG_BATCH_USES` (2^20) in an `i64`.
+    if (n <= 0 || h < 0 || toI64(h) >= toI64(n) * toI64(1048576)) {
       panic("nish/net/postgres: a PgBatcher run out of range")
     }
-    const run: PgBatchRun = this.runs[h % n]
+    const at: i32 = h % n
+    // In [0, n), as `h` and `n` are positive; the test states that for the prover.
+    if (at < 0 || at >= toI32(runs.length)) {
+      return null
+    }
+    const run: PgBatchRun = runs[at]
     if (run.handle !== h || !run.open) {
       return null
     }
@@ -4502,8 +5245,9 @@ export class PgBatcher {
   private quietRun(h: i32, what: string): PgBatchRun | null {
     const run: PgBatchRun | null = this.run(h)
     if (run === null) {
-      if (this.stray < 2147483647) {
-        this.stray += 1
+      const stray: i32 = this.stray
+      if (stray < 2147483647) {
+        this.stray = stray + 1
       }
       return null
     }
@@ -4536,7 +5280,11 @@ export class PgBatcher {
     if (run.failed) {
       return false
     }
-    const last: i32 = conn.columns - 1
+    const columns: i32 = conn.columns
+    let last: i32 = -1
+    if (columns > 0) {
+      last = columns - 1
+    }
     let ordinal: i64 = 0
     let bad: boolean = last < 0 || conn.isNull(last)
     if (!bad && this.binary) {
@@ -4555,17 +5303,25 @@ export class PgBatcher {
       conn.text.failed = failed
     }
     // Ordinals count from 1 and, sorted, come in order: a row may name the current key again, never one before it.
-    const least: i64 = this.sorted ? toI64(run.cur) + 1 : toI64(1)
-    if (bad || ordinal < least || ordinal > toI64(run.keys)) {
-      if (this.refused < 2147483647) {
-        this.refused += 1
+    let least: i64 = 1
+    if (this.sorted) {
+      const cur: i32 = run.cur
+      least = toI64(cur) + toI64(1)
+    }
+    if (bad || ordinal < least || ordinal < 1 || ordinal > toI64(run.keys)) {
+      const refused: i32 = this.refused
+      if (refused < 2147483647) {
+        this.refused = refused + 1
       }
       run.failed = true
       return false
     }
-    run.target = toI32(ordinal) - 1
-    if (!this.sorted && run.target < toI32(run.had.length)) {
-      run.had[run.target] = true
+    // From 0 to `keys` - 1, by the test above.
+    const target: i32 = toI32(ordinal - 1)
+    run.target = target
+    const had: boolean[] = run.had
+    if (!this.sorted && target >= 0 && target < toI32(had.length)) {
+      had[target] = true
     }
     return true
   }
@@ -4597,14 +5353,28 @@ export class PgBatcher {
     }
   }
 
-  // Names the current key's next unanswered request as `tag`; false when it has none left.
-  private emit(run: PgBatchRun): boolean {
-    const at: i32 = run.first[run.cur] + run.at
-    if (at >= run.first[run.cur + 1]) {
+  // Names key `key`'s next unanswered request as `tag`; false when it has none left.
+  // `key` is one of the run's, `first` holds one more than its keys, and `at` counts the key's
+  // answered requests, inside its group of `tags`: the tests state those bounds for the prover.
+  private emit(run: PgBatchRun, key: i32): boolean {
+    const first: i32[] = run.first
+    const tags: i32[] = run.tags
+    const a: i32 = run.at
+    if (key < 0 || key >= toI32(first.length) - 1 || a < 0) {
       return false
     }
-    run.at += 1
-    this.tag = run.tags[at]
+    const from: i32 = first[key]
+    const to: i32 = first[key + 1]
+    if (from < 0 || to < 0 || to < from || a >= to - from) {
+      return false
+    }
+    // Below `to`, by the test above.
+    const at: i32 = toI32(toI64(from) + toI64(a))
+    if (at < 0 || at >= toI32(tags.length)) {
+      return false
+    }
+    run.at = a + 1
+    this.tag = tags[at]
     return true
   }
 
@@ -4635,20 +5405,22 @@ export class PgBatcher {
     } else if (run.ended) {
       limit = run.keys
     }
-    while (run.cur < limit && run.cur < toI32(run.tags.length)) {
-      if (this.emit(run)) {
+    let cur: i32 = run.cur
+    while (cur < limit && cur < toI32(run.tags.length)) {
+      if (this.emit(run, cur)) {
         if (run.failed) {
           return PG_BATCH_FAILED
         }
         return run.curRows ? PG_BATCH_DONE : PG_BATCH_MISSING
       }
-      run.cur += 1
+      cur += 1
+      run.cur = cur
       run.at = 0
       run.curRows = false
     }
-    if (run.target >= 0 && run.cur < toI32(run.tags.length)) {
+    if (run.target >= 0 && cur < toI32(run.tags.length)) {
       run.curRows = true
-      if (this.emit(run)) {
+      if (this.emit(run, cur)) {
         return PG_BATCH_ROW
       }
       run.target = -1
@@ -4663,11 +5435,8 @@ export class PgBatcher {
   // `next` with `sorted` false: the row's `PG_BATCH_ROW` events at once, and
   // every last event only once the execution is over, `cur` walking the keys.
   private nextUnsorted(run: PgBatchRun): i32 {
-    if (run.target >= 0 && run.target < toI32(run.tags.length)) {
-      const at: i32 = run.first[run.target] + run.at
-      if (at < run.first[run.target + 1]) {
-        run.at += 1
-        this.tag = run.tags[at]
+    if (run.target >= 0) {
+      if (this.emit(run, run.target)) {
         return PG_BATCH_ROW
       }
       run.target = -1
@@ -4676,14 +5445,17 @@ export class PgBatcher {
     if (!run.ended) {
       return PG_BATCH_NONE
     }
-    while (run.cur < run.keys && run.cur < toI32(run.had.length)) {
-      if (this.emit(run)) {
+    const had: boolean[] = run.had
+    let cur: i32 = run.cur
+    while (cur >= 0 && cur < run.keys && cur < toI32(had.length)) {
+      if (this.emit(run, cur)) {
         if (run.failed) {
           return PG_BATCH_FAILED
         }
-        return run.had[run.cur] ? PG_BATCH_DONE : PG_BATCH_MISSING
+        return had[cur] ? PG_BATCH_DONE : PG_BATCH_MISSING
       }
-      run.cur += 1
+      cur += 1
+      run.cur = cur
       run.at = 0
     }
     run.open = false
@@ -4837,26 +5609,46 @@ export class PgBatchClock {
   /**
    * Records an item queued at `nowUs`; false when `queueSize` are waiting. A
    * time before the last one given counts as the last one, so a clock that
-   * steps back cannot make an item older than its neighbours.
+   * steps back cannot make an item older than its neighbours. The clock's
+   * times run from 0 to 2^52 microseconds (about 142 years); a time
+   * outside that, here or in any other call, counts as the nearest end.
    *
    * @param nowUs The time the item was queued, in microseconds from the program's fixed point.
    * @returns True when the item was recorded.
    */
   arrived(nowUs: i64): boolean {
-    const ring: i32 = toI32(this.times.length)
-    if (this.count === ring) {
+    const times: i64[] = this.times
+    const ring: i32 = toI32(times.length)
+    const head: i32 = this.head
+    const count: i32 = this.count
+    // Full at `count === ring`; below it, `head` is a slot of the ring, which the test states for the prover.
+    if (count < 0 || count >= ring || head < 0 || head >= ring) {
       return false
     }
-    const now: i64 = nowUs < this.last ? this.last : nowUs
+    const last: i64 = this.last
+    const now: i64 = pgClockTime(nowUs < last ? last : nowUs)
     this.last = now
-    this.times[(this.head + this.count) % ring] = now
-    this.count += 1
-    const lights: i32 = toI32(this.light.length)
-    if (lights > 0) {
-      this.light[this.lightAt] = now
-      this.lightAt = (this.lightAt + 1) % lights
-      if (this.lightSeen < lights) {
-        this.lightSeen += 1
+    // Below twice the ring's size, at most 2^21.
+    const sum: i64 = toI64(head) + toI64(count)
+    const at: i32 = toI32(sum < toI64(ring) ? sum : sum - toI64(ring))
+    // `at` is a slot of the ring; the test states that bound for the prover.
+    if (at < 0 || at >= toI32(times.length)) {
+      return false
+    }
+    times[at] = now
+    this.count = count + 1
+    const light: i64[] = this.light
+    const lights: i32 = toI32(light.length)
+    const lightAt: i32 = this.lightAt
+    // `lightAt` is a slot of the light ring when it has any; the test states that bound for the
+    // prover, and skips an empty ring.
+    if (lightAt >= 0 && lightAt < toI32(light.length)) {
+      light[lightAt] = now
+      const after: i32 = lightAt + 1
+      this.lightAt = after === lights ? 0 : after
+      const seen: i32 = this.lightSeen
+      if (seen < lights) {
+        this.lightSeen = seen + 1
       }
     }
     return true
@@ -4893,7 +5685,7 @@ export class PgBatchClock {
       const target: i32 = this.target()
       if (this.count >= target) {
         reason = target > this.minCount ? PG_CLOCK_AVERAGE : PG_CLOCK_COUNT
-      } else if (nowUs - this.times[this.head] >= this.maxWaitUs) {
+      } else if (this.waited(nowUs) >= this.maxWaitUs) {
         reason = PG_CLOCK_TIMER
       } else if (inFlight <= 0 && this.quiet(nowUs)) {
         reason = PG_CLOCK_IDLE
@@ -4909,10 +5701,14 @@ export class PgBatchClock {
    * @returns That time in the caller's microseconds, or -1 when none waits.
    */
   deadline(): i64 {
-    if (this.count === 0) {
+    const oldest: i64 = this.oldest()
+    const wait: i64 = this.maxWaitUs
+    // The times are clock times and `maxWaitUs` is at most a minute, so the sum is below 2^53
+    // and the unsigned add cannot wrap; the test states those bounds.
+    if (oldest < 0 || oldest > 4503599627370496 || wait < 0 || wait > 60000000) {
       return -1
     }
-    return this.times[this.head] + this.maxWaitUs
+    return toI64(toU64(oldest) + toU64(wait))
   }
 
   /**
@@ -4925,20 +5721,35 @@ export class PgBatchClock {
    *   measured to it, and is 0 when it is before the oldest item's arrival.
    */
   started(size: i32, nowUs: i64): void {
-    if (size < 1 || size > this.count || size > this.maxCount) {
+    const count: i32 = this.count
+    if (size < 1 || size > count || size > this.maxCount) {
       panic("nish/net/postgres: PgBatchClock.started with a size out of range")
     }
-    this.lastWaitUs = nowUs - this.times[this.head]
-    if (this.lastWaitUs < 0) {
-      this.lastWaitUs = 0
+    // Measured to the oldest item before the batch takes it.
+    const waited: i64 = this.waited(nowUs)
+    const ring: i32 = toI32(this.times.length)
+    const head: i32 = this.head
+    const starts: i64[] = this.starts
+    const due: i32 = this.due
+    // `head` is a slot of the ring, which holds `count` items, and `due` one of the `PG_CLOCK_*`;
+    // the test states those bounds for the prover.
+    if (head < 0 || head >= ring || count < 0 || count > ring || due < 0 || due >= toI32(starts.length)) {
+      return
     }
-    this.head = (this.head + size) % toI32(this.times.length)
-    this.count -= size
+    // Below twice the ring's size, at most 2^21: `size` is at most `count`.
+    const sum: i64 = toI64(head) + toI64(size)
+    this.head = toI32(sum < toI64(ring) ? sum : sum - toI64(ring))
+    this.count = count - size
+    this.lastWaitUs = waited < 0 ? 0 : waited
     const n: f64 = toF64(size)
     this.average = this.lastSize === 0 ? n : this.average + this.weight * (n - this.average)
     this.lastSize = size
-    this.lastReason = this.due
-    this.starts[this.due] += 1
+    this.lastReason = due
+    const started: i64 = starts[due]
+    // 2^52 batches cannot start in the clock's 2^52 microseconds, so the unsigned add cannot wrap.
+    if (started >= 0 && started < 4503599627370496) {
+      starts[due] = toI64(toU64(started) + toU64(1))
+    }
     this.due = PG_CLOCK_WAIT
   }
 
@@ -4950,10 +5761,12 @@ export class PgBatchClock {
    * @returns The count since the clock was made.
    */
   startsFor(reason: i32): i64 {
-    if (reason < 0 || reason > PG_CLOCK_IDLE) {
+    const starts: i64[] = this.starts
+    // `starts` holds one count for each reason, `PG_CLOCK_WAIT` (0) to `PG_CLOCK_IDLE`.
+    if (reason < 0 || reason >= toI32(starts.length)) {
       panic("nish/net/postgres: PgBatchClock.startsFor with a reason out of range")
     }
-    return this.starts[reason]
+    return starts[reason]
   }
 
   /** Whether fewer than `lightCount` items arrived in the `lightWindowUs` before `nowUs`. */
@@ -4966,8 +5779,61 @@ export class PgBatchClock {
       return true
     }
     // `lightAt` is the next to write, so it holds the oldest of the last `lightCount`.
-    return nowUs - this.light[this.lightAt] >= this.lightWindowUs
+    const light: i64[] = this.light
+    const lightAt: i32 = this.lightAt
+    // `lightAt` is a slot of the light ring, and its times clock times; the tests state those
+    // bounds for the prover.
+    if (lightAt < 0 || lightAt >= toI32(light.length)) {
+      return false
+    }
+    const then: i64 = light[lightAt]
+    const now: i64 = pgClockTime(nowUs)
+    if (then < 0 || then > 4503599627370496 || now < 0 || now > 4503599627370496) {
+      return false
+    }
+    return now - then >= this.lightWindowUs
   }
+
+  /** The arrival time of the oldest waiting item; -1 when none waits. */
+  private oldest(): i64 {
+    const times: i64[] = this.times
+    const head: i32 = this.head
+    // `head` is a slot of the ring; the test states that bound for the prover.
+    if (this.count <= 0 || head < 0 || head >= toI32(times.length)) {
+      return -1
+    }
+    return times[head]
+  }
+
+  /** How long the oldest waiting item has waited at `nowUs`, below 0 when it arrived later; -1 when none waits. */
+  private waited(nowUs: i64): i64 {
+    const oldest: i64 = this.oldest()
+    const now: i64 = pgClockTime(nowUs)
+    // Both are clock times, the oldest one recorded by `arrived`; the tests state those bounds
+    // for the prover.
+    if (oldest < 0 || oldest > 4503599627370496 || now < 0 || now > 4503599627370496) {
+      return -1
+    }
+    return now - oldest
+  }
+}
+
+/**
+ * `count + 1` for an array's element count. An element takes at least two
+ * bytes of a buffer held below 2^30, so the count never nears 2^31 - 1; the
+ * test states that bound for the prover.
+ */
+const pgCountUp = (count: i32): i32 => (count >= 0 && count < 2147483647 ? count + 1 : count)
+
+/** `t` as a `PgBatchClock` time: from 0 to 2^52 microseconds, a time outside counting as the nearest end. */
+const pgClockTime = (t: i64): i64 => {
+  if (t < 0) {
+    return 0
+  }
+  if (t > 4503599627370496) {
+    return 4503599627370496
+  }
+  return t
 }
 
 /** `PgBatchTurns`: no slot to wake. */
@@ -4996,8 +5862,7 @@ export const PG_TURNS_FULL: i32 = -2
 export class PgBatchTurns {
   /** The clock the turns read and record into. */
   readonly clock: PgBatchClock
-  /** The number of slots. */
-  private readonly size: i32
+  /** One per slot: whether it holds a batch. */
   private readonly busy: boolean[]
   private running: i32 = 0
   private woken: i32 = -1
@@ -5014,7 +5879,6 @@ export class PgBatchTurns {
       panic("nish/net/postgres: a PgBatchTurns size out of range")
     }
     this.clock = clock
-    this.size = size
     this.busy = new Array<boolean>(size)
   }
 
@@ -5024,8 +5888,9 @@ export class PgBatchTurns {
    * @returns The lowest-numbered free slot, or `PG_TURNS_NONE` when every slot holds a batch.
    */
   collector(): i32 {
-    for (let i: i32 = 0; i < this.size; i++) {
-      if (!this.busy[i]) {
+    const busy: boolean[] = this.busy
+    for (let i: i32 = 0; i < toI32(busy.length); i++) {
+      if (!busy[i]) {
         return i
       }
     }
@@ -5096,8 +5961,15 @@ export class PgBatchTurns {
   started(slot: i32, size: i32, nowUs: i64): i32 {
     this.free(slot)
     this.clock.started(size, nowUs)
-    this.busy[slot] = true
-    this.running += 1
+    const busy: boolean[] = this.busy
+    const running: i32 = this.running
+    // `free` refused a slot out of range, and `running` counts the busy slots, so it is below
+    // their number while this one is free; the test states those bounds for the prover.
+    if (slot < 0 || slot >= toI32(busy.length) || running < 0 || running >= toI32(busy.length)) {
+      return PG_TURNS_NONE
+    }
+    busy[slot] = true
+    this.running = running + 1
     if (this.woken === slot) {
       this.woken = -1
     }
@@ -5113,11 +5985,16 @@ export class PgBatchTurns {
    * @returns The slot to wake, or `PG_TURNS_NONE`.
    */
   finished(slot: i32, nowUs: i64): i32 {
-    if (slot < 0 || slot >= this.size || !this.busy[slot]) {
+    const busy: boolean[] = this.busy
+    if (slot < 0 || slot >= toI32(busy.length) || !busy[slot]) {
       panic("nish/net/postgres: PgBatchTurns.finished on a slot holding no batch")
     }
-    this.busy[slot] = false
-    this.running -= 1
+    busy[slot] = false
+    const running: i32 = this.running
+    // `running` counts the busy slots, this one among them; the test states that for the prover.
+    if (running > 0) {
+      this.running = running - 1
+    }
     return this.poll(nowUs)
   }
 
@@ -5135,7 +6012,8 @@ export class PgBatchTurns {
   }
 
   private free(slot: i32): void {
-    if (slot < 0 || slot >= this.size || this.busy[slot]) {
+    const busy: boolean[] = this.busy
+    if (slot < 0 || slot >= toI32(busy.length) || busy[slot]) {
       panic("nish/net/postgres: PgBatchTurns slot out of range or holding a batch")
     }
   }
@@ -5208,10 +6086,12 @@ export const pgTarget = (host: string, port: i32): PgTarget => {
   if (port < 1 || port > 65535) {
     return pgTargetFailed(PG_TARGET_BAD_PORT)
   }
-  const n: i32 = toI32(host.length)
-  if (n === 0) {
+  // biome-ignore lint/style/useExplicitLengthCheck: `< 1` is the form that proves `charCodeAt(0)` below
+  if (host.length < 1) {
     return pgTargetFailed(PG_TARGET_BAD_HOST)
   }
+  const n: i32 = toI32(host.length)
+  const first: i32 = toI32(host.charCodeAt(0))
   for (let i: i32 = 0; i < n; i++) {
     const c: i32 = toI32(host.charCodeAt(i))
     if (c === 0 || c === 44) {
@@ -5221,7 +6101,6 @@ export const pgTarget = (host: string, port: i32): PgTarget => {
   const t = new PgTarget()
   t.host = host
   t.port = port
-  const first: i32 = toI32(host.charCodeAt(0))
   if (first === 47 || first === 64) {
     const path: string = `${host}/.s.PGSQL.${port}`
     // An `@` name's NUL-free bytes after the `@` fill what a path's NUL would.
@@ -5248,7 +6127,8 @@ const pgPortValue = (text: string): i32 => {
   let v: i32 = 0
   for (let i: i32 = 0; i < n; i++) {
     const c: i32 = toI32(text.charCodeAt(i))
-    if (c < 48 || c > 57) {
+    // Past 6553 another digit is past 65535; `v` is never negative, which the test states for the prover.
+    if (c < 48 || c > 57 || v < 0 || v > 6553) {
       return -1
     }
     v = v * 10 + (c - 48)
@@ -5343,18 +6223,31 @@ export const pgTargetUrl = (url: string): PgTarget => {
   let hostEnd: i32 = authorityEnd
   let portStart: i32 = -1
   let bracketed: boolean = false
-  if (hostStart < authorityEnd && toI32(url.charCodeAt(hostStart)) === 91) {
+  // Inside an IPv6 address's brackets.
+  let nameStart: i32 = hostStart
+  let nameEnd: i32 = authorityEnd
+  if (
+    hostStart >= 0 &&
+    hostStart < authorityEnd &&
+    hostStart < n &&
+    toI32(url.charCodeAt(hostStart)) === 91
+  ) {
     let close: i32 = hostStart + 1
     while (close >= 0 && close < authorityEnd && close < n && toI32(url.charCodeAt(close)) !== 93) {
       close += 1
     }
-    if (close === authorityEnd) {
+    // The loop stops at the `]` or at `authorityEnd`, which is at most `n`; the test states that
+    // bound for the prover.
+    if (close < 0 || close >= authorityEnd) {
       return pgTargetFailed(PG_TARGET_BAD_HOST)
     }
     bracketed = true
+    nameStart = hostStart + 1
+    nameEnd = close
     hostEnd = close + 1
     if (hostEnd < authorityEnd) {
-      if (toI32(url.charCodeAt(hostEnd)) !== 58) {
+      // `hostEnd` is below `n` as `authorityEnd` is at most `n`; the test states that for the prover.
+      if (hostEnd >= n || toI32(url.charCodeAt(hostEnd)) !== 58) {
         return pgTargetFailed(PG_TARGET_BAD_HOST)
       }
       portStart = hostEnd + 1
@@ -5369,7 +6262,7 @@ export const pgTargetUrl = (url: string): PgTarget => {
     }
   }
   const decodedHost: string | null = bracketed
-    ? pgDecoded(url, hostStart + 1, hostEnd - 1)
+    ? pgDecoded(url, nameStart, nameEnd)
     : pgDecoded(url, hostStart, hostEnd)
   if (decodedHost === null) {
     return pgTargetFailed(PG_TARGET_BAD_ESCAPE)
@@ -5387,7 +6280,10 @@ export const pgTargetUrl = (url: string): PgTarget => {
     }
   }
   // The query: `key=value` pairs split at `&`.
-  let i: i32 = queryStart + 1
+  let i: i32 = n
+  if (queryStart < n) {
+    i = queryStart + 1
+  }
   while (i >= 0 && i < n) {
     let end: i32 = i
     let eq: i32 = -1
@@ -5398,7 +6294,8 @@ export const pgTargetUrl = (url: string): PgTarget => {
       end += 1
     }
     if (end > i) {
-      if (eq < 0) {
+      // `eq` is a `=` found before `end`; the test states that bound for the prover.
+      if (eq < 0 || eq >= end) {
         return pgTargetFailed(PG_TARGET_BAD_URL)
       }
       const key: string | null = pgDecoded(url, i, eq)
@@ -5414,6 +6311,9 @@ export const pgTargetUrl = (url: string): PgTarget => {
           return pgTargetFailed(PG_TARGET_BAD_PORT)
         }
       }
+    }
+    if (end >= n) {
+      break
     }
     i = end + 1
   }

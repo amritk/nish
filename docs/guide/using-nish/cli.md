@@ -420,7 +420,7 @@ where your program can answer differently under Node.
 Seven kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
-```text
+```log
 app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi
 app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement
 app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const
@@ -607,7 +607,7 @@ target, or with a comment before it; or in a file that binds a name
 `toI32`, `toU8`, `toU16` or `toU32` of its own (a function, `const`,
 parameter, loop variable, field, method or import), which the edit would
 call instead of the conversion. The full list is NL8006's row in
-[the language reference](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#diagnostics-and-debugging-flags).
+[the language reference](../../reference/language/semantics-decisions.md#diagnostics-and-debugging-flags).
 
 ## Colour, and when an agent runs `nish`
 
@@ -760,7 +760,7 @@ leaves the IR unchanged.
   dependency's, shows up as `unsafe`, and `--deny unsafe` refuses it.
   `nish run --capabilities hello.ts` prints
   `capabilities: none (deterministic)` before the program's own output. See
-  [Capabilities](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#capabilities).
+  [Capabilities](../../reference/language/builtins.md#capabilities).
 - **A dependency needs your grant** for `unsafe`, `ffi`, `net` and
   `process.spawn`. A package under `node_modules` that reaches one of them,
   itself or through anything it calls, stops the build until your
@@ -773,27 +773,27 @@ leaves the IR unchanged.
   Without it the build stops with exit code 1, and the error names the
   grant to add and the calls that reach the capability:
 
-  ```text
+  ```log
   node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
   ```
 
   Only your own `package.json` grants: `--allow` does not, and neither does
   the dependency's. The standard library needs no grant. See
-  [A dependency's capabilities](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-dependencys-capabilities).
+  [A dependency's capabilities](../../reference/language/builtins.md#a-dependencys-capabilities).
 - **`--update-capability-lock`** writes `nish-capabilities.lock.json` beside
   your `package.json`: every capability each dependency reaches, granted or
   not. Commit it. While it exists, an upgrade that makes a dependency reach
   something new stops the build with exit code 1, naming the dependency, the
   capability and the calls, until you read the chain and run the flag again:
 
-  ```text
+  ```log
   node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it; review the chain, then record it with `--update-capability-lock` — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
   ```
 
   A dependency that reaches less than its row records is fine. A build the
   grants refuse writes no lockfile. `nish run` takes the flag; `--fix` and
   `--emit-ast` do not. See
-  [The capability lockfile](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-capability-lockfile).
+  [The capability lockfile](../../reference/language/builtins.md#the-capability-lockfile).
 - **`--sandbox`** goes one step further on Linux: the built program asks the
   kernel, before `main` runs, to refuse the files, processes and sockets its
   `main` does not reach — C code it links included. It adds a few lines to the
@@ -811,12 +811,12 @@ leaves the IR unchanged.
   refused, because those answer differently on every run. Exit code 1, naming
   the call:
 
-  ```text
+  ```log
   main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run; the chain that reaches it: main.ts:2:15 calls Date.now
   ```
 
   Use it for a simulation a server and a browser both run and must agree on
-  ([`--deterministic`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#--deterministic)).
+  ([`--deterministic`](../../reference/language/builtins.md#--deterministic)).
 - **`--compat`** selects the compatibility dialect, which accepts more of
   TypeScript than Nish does by default: a bare `number` is a 64-bit float, as
   `--number-mode f64` makes it, and its features (`nullish`,
@@ -836,11 +836,11 @@ leaves the IR unchanged.
   tests its pointer and panics with `ffi-null` on `NULL`, a check no proof
   removes. The standard library is not yet panic-free, so a call to `Map`,
   `Set`, `split` or a `JSON` read is refused too, for now
-  ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
+  ([The no-panic scope](../../reference/language/semantics-decisions.md#the-no-panic-scope)).
   Its count of panic sites only falls, and a `panic` it keeps on purpose
   means the call broke a contract the function's doc states, such as an
   index outside an array the caller sized
-  ([Panics the standard library keeps](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panics-the-standard-library-keeps)).
+  ([Panics the standard library keeps](../../reference/language/semantics-decisions.md#panics-the-standard-library-keeps)).
 - **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`
   list in your `package.json`'s `"nish"` field names are still held to no
   panic, and with no list, none is. **`--deny-panics`** spells the default
@@ -886,6 +886,6 @@ leaves the IR unchanged.
   what its checker recorded, one line per node.
 
 The reference for diagnostics and the flags that shape them is
-[Diagnostics and debugging flags](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#diagnostics-and-debugging-flags);
+[Diagnostics and debugging flags](../../reference/language/semantics-decisions.md#diagnostics-and-debugging-flags);
 the exit codes and the caches are also described in
 [INSTALL.md](../../INSTALL.md#4-exit-codes).

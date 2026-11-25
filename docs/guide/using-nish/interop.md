@@ -123,7 +123,7 @@ read, `getenv`, a clock, a spawn — is refused at compile time rather than at
 the link, at your call that leads there, and names the dependency when it is
 a package's code that makes the call:
 
-```text
+```log
 main.ts:6:32: error: `getenv` reaches the operating system, and a wasm32 build has none to reach; the dependency `pkg_conf` calls it in `load` — the chain that reaches it: main.ts:6:32 calls configSize, node_modules/pkg_conf/src/index.ts:9:38 calls load, node_modules/pkg_conf/src/index.ts:5:17 calls getenv
 ```
 
@@ -412,7 +412,7 @@ freestanding wasm module.
 A module keeps its state in [module storage](../language/arrays-and-strings.md#module-storage),
 and under `--profile wasm-host` that storage is memory the page can read and
 write directly, with no call into the module
-([Host modules](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#host-modules-the-functions-a-page-supplies)).
+([Host modules](../../reference/language/declarations.md#host-modules-the-functions-a-page-supplies)).
 The loaded module carries two things for it, and `--emit-dts` types both:
 
 - **`layout`** has one entry per storage, under its name:
@@ -557,7 +557,7 @@ that.
   where you would call `nish_arena_release(mark)`; releasing frees what the
   roots reach.
 
-The rules and the IR: [LANGUAGE.md → Root storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#root-storage-an-object-graph-kept-between-calls).
+The rules and the IR: [LANGUAGE.md → Root storage](../../reference/language/declarations.md#root-storage-an-object-graph-kept-between-calls).
 
 ### Lending an array to the page
 
@@ -882,7 +882,7 @@ the host must not write through it.
 
 A `Result` crosses too: the header gives it a C struct, and the addon and the
 wasm loader turn it into `{ ok: true, value }` or `{ ok: false, error }`. See
-[Interop](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interop) for which `Result`s each host takes.
+[Interop](../../reference/language/result-and-error-handling.md#interop) for which `Result`s each host takes.
 
 An enum does not cross. A function that takes or returns a numeric enum is
 left out of the header and the typings, and each writes a comment naming
@@ -998,7 +998,7 @@ dependency still needs the `ffi` capability to call its C:
 
 `nish/sqlite` needs none of this: the standard library links SQLite itself
 when a program calls it. What a link can and cannot confine is recorded in
-[`docs/security/package-link.md`](https://github.com/amritk/nish/blob/main/docs/security/package-link.md).
+[`docs/security/package-link.md`](../../security/package-link.md).
 
 Without a `package.json`, your own C still goes on the build line beside the
 runtime:
@@ -1083,7 +1083,7 @@ A string C allocated for the caller to free (`strdup`) is a `CPtr`, not a
 `string`: the copy would leave C's allocation with no one to free it.
 
 A class other than a `declare class` (below), an interface or an array other
-than the byte buffer below is refused, in either direction, because nothing else the Nish compiler allocated
+than the typed buffers below is refused, in either direction, because nothing else the Nish compiler allocated
 may reach code it cannot see:
 
 <!-- nish:err NL2551 -->
@@ -1096,13 +1096,16 @@ export const main = (): i32 => {
 ```
 
 A `u8[]` parameter is a byte buffer C writes into, and a `readonly u8[]` one
-C only reads, as C's `const`. A run of one or more buffers is followed by one
-`u64`, the number of bytes C may touch in each of them:
+C only reads, as C's `const`. `u16[]`, `u32[]`, `i32[]` and `f32[]` cross the
+same way, as C's `uint16_t *`, `uint32_t *`, `int32_t *` and `float *`. A run
+of one or more buffers is followed by one `u64`, the number of elements C may
+touch in each of them (bytes, for a `u8[]`):
 
 <!-- nish:ok -->
 ```ts
 declare function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr;
 declare function getentropy(buf: u8[], n: u64): i32;
+declare function scale(xs: f32[], n: u64, k: f32): void;
 
 export const main = (): i32 => {
   return 0;
@@ -1112,16 +1115,20 @@ export const main = (): i32 => {
 The count is paired by position, so it is your word, not the compiler's proof.
 `fwrite(ptr, size, nmemb, stream)` touches `size * nmemb` bytes: declare it
 `fwrite(buf: readonly u8[], n: u64, one: u64, f: CPtr)` and call it with `1`
-as the third argument, so the one count is the whole size. A buffer with no
-`u64` after it, a count of another type, an `i32[]`, a `u8[] | null` and a
-`u8[]` result are each refused; a count of another width, or one elsewhere in
+as the third argument, so the one count is the whole size. Every buffer of a
+run has the same element type, since its one count is in elements: an
+`f32[]` and a `u8[]` before one count are refused (NL2824), so give each its
+own count. A buffer with no `u64` after it, a count of another type, an
+`f64[]` or `i64[]` (whose alignment is not the same on every target), a
+`u8[] | null` and a buffer result are each refused; a count of another width, or one elsewhere in
 the declaration, is named with `CountedBy` (below).
 
-A call passes the array's bytes, and checks the count against each buffer
-first: under `--allow-panics`, a count larger than the array stops the
-program before C runs, with
+A call passes a pointer to the array's first element, not a copy, and checks
+the count against each buffer first: under `--allow-panics`, a count larger
+than the array stops the program before C runs, with
 `` `write`: argument 3 (n) counts more bytes than argument 2 (buf) holds ``
-and exit 1. Pass `toU64(buf.length)` of the buffer itself and the compiler
+(`counts more elements than` for a buffer that is not a `u8[]`) and exit 1.
+Pass `toU64(buf.length)` of the buffer itself and the compiler
 proves the count, so the call carries no check and compiles in a module
 held to no panic, as every module of your package is by default:
 
@@ -1136,8 +1143,10 @@ export const main = (): i32 => {
 };
 ```
 
-C borrows the bytes for the length of the call, and may write a `u8[]` (not a
-`readonly u8[]`), so `read(fd, buf, toU64(buf.length))` fills `buf` in place.
+C borrows the elements for the length of the call, and may write a `u8[]` or
+`f32[]` (not a `readonly` one), so `read(fd, buf, toU64(buf.length))` fills
+`buf` in place. A `Float32Array` module storage does not lend to C: copy it
+into an `f32[]` and pass that.
 A task a scope spawns may not call such a function: C's body is unseen, so the
 call could write memory the parent is reading.
 
@@ -1322,7 +1331,7 @@ then releases the arenas. A panic or `process.exit` ends
 the process without the close; the operating system takes the descriptor
 back, but a bounds panic does not flush what C still buffers, so call
 `fflush` on a `FILE *` you wrote before code that may panic. The rules are in
-[A handle class](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr).
+[A handle class](../../reference/language/declarations.md#a-handle-class-a-class-that-owns-a-cptr).
 
 A C function that fills a struct takes it through a pointer, and a
 `declare class` is that struct. Its fields are laid out in the order you write
@@ -1418,7 +1427,7 @@ field is part of the struct, not a Nish array: you cannot hold it in a
 variable, pass it to a function, read its `.length` or walk it with
 `for...of`, and you write it one element at a time. Unions and bitfields
 still have no spelling, so a struct with one stays out of reach. The rules
-are in [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
+are in [A `declare class`](../../reference/language/declarations.md#a-declare-class-a-c-struct-lent-by-pointer).
 
 C borrows the struct for the call, as it borrows a string: it reads and
 writes the fields until it returns, and may not keep the address. A
@@ -1426,7 +1435,7 @@ writes the fields until it returns, and may not keep the address. A
 it cannot be an array element or built from an object literal. A parameter
 typed `Rlimit | null` passes `NULL` for `null`, under the same rule as a
 `CPtr | null`. The rules are in
-[A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
+[A `declare class`](../../reference/language/declarations.md#a-declare-class-a-c-struct-lent-by-pointer).
 
 A C function that answers a pointer to a struct it owns, such as `localeconv`
 or `gmtime`, often answers the same static buffer every call. `readStruct`
@@ -1463,7 +1472,7 @@ capability, and a build with `--deny unsafe` refuses it. A
 `CPtr` field is copied as C's address, not followed, so read what it points
 at, with `readCString` here, while C still holds it. A `CPtr | null` result
 is narrowed with `!== null` before the call. The rules are in
-[`readStruct`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#readstruct-a-struct-out-of-memory-c-owns).
+[`readStruct`](../../reference/language/declarations.md#readstruct-a-struct-out-of-memory-c-owns).
 
 Many C libraries hand out a pointer to a struct they never show you:
 `sqlite3 *`, `FILE *`, `DIR *`. A `declare class` with no fields is that
@@ -1514,7 +1523,7 @@ did that now gets the error above: declare the C function that makes the
 value, or give the class the fields C lays out.
 
 The rules are in
-[An opaque `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#an-opaque-declare-class-a-c-pointer-type).
+[An opaque `declare class`](../../reference/language/declarations.md#an-opaque-declare-class-a-c-pointer-type).
 
 A C function that fails through `errno` is checked with `cErrno` from
 `nish:unsafe`. It answers the errno the most recent `declare function` call on
@@ -1548,10 +1557,10 @@ Each thread reads its own. A program that never names `cErrno` pays nothing;
 one that does pays a store and a load around every C call in the program. A
 wasm32 build without `--profile wasi` has no C library, so `cErrno` is refused
 there. The rules are in
-[`cErrno`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#cerrno-the-errno-a-c-call-left).
+[`cErrno`](../../reference/language/declarations.md#cerrno-the-errno-a-c-call-left).
 
 A declared function has no body and cannot be exported. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
 so it drops the optimisation facts it would otherwise give the caller and
 everything that calls it. The rules are in
-[Calling C](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#calling-c).
+[Calling C](../../reference/language/declarations.md#calling-c).
