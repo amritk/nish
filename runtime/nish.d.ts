@@ -2000,8 +2000,9 @@ declare function pollRemove(loop: i32, fd: i32): i32;
 declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
 /**
  * Wait as `pollWait` does, up to `timeoutMs` for the first event, and then up to `maxWaitMs`
- * more until `minEvents` pairs are ready, so a busy ring loop takes its events in batches. An
- * idle loop is not woken every `maxWaitMs`: the second wait starts only once an event is in.
+ * more for `minEvents` pairs, so a busy ring loop takes its events in batches. `minEvents` is
+ * checked once per slice of `maxWaitMs / 8`, rounded up, so the wait may end up to one slice
+ * after `minEvents` pairs became ready. An idle loop is not woken every `maxWaitMs`: the second wait starts only once an event is in.
  * The batch counts the slots and listeners of a `NET_LISTEN_RING` listener; a loop with no ring
  * listener, and Darwin, answer as `pollWait` does. A descriptor that becomes ready during the
  * second wait, `signalFd()` included, is reported at most `maxWaitMs` late. `minEvents` of 1 or
@@ -3476,8 +3477,10 @@ declare module "nish:net" {
   export function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
   /**
    * Wait as `pollWait` does for the first event, and then, on a loop holding
-   * a `NET_LISTEN_RING` listener's slots, up to `maxWaitMs` more until
-   * `minEvents` pairs are ready. An idle loop is not woken every `maxWaitMs`.
+   * a `NET_LISTEN_RING` listener's slots, up to `maxWaitMs` more for
+   * `minEvents` pairs, checked once per slice of `maxWaitMs / 8` rounded up:
+   * the wait may end up to one slice after they became ready. An idle loop is
+   * not woken every `maxWaitMs`.
    * A descriptor that becomes ready during the second wait is reported at
    * most `maxWaitMs` late. A loop with no ring listener, and Darwin, answer
    * as `pollWait` does.

@@ -36582,8 +36582,9 @@ server.on("exit", (code, sig) => {
     // epoll fails the program. Its exit status is the verdict: 2 says rings
     // were refused, 3 that the kernel takes no filter, 4 that its io_uring has
     // no IORING_FEAT_EXT_ARG, each a counted skip. `batch.ts signal` adds
-    // signalFd() to the loop, asks for 256 events with a maxWaitMs of 5,000,
-    // and a SIGTERM sent 300 ms in must end the wait within 2,500 ms.
+    // signalFd() to the loop, asks for 256 events with a maxWaitMs of
+    // INT32_MAX (whose slice sum nr_batch widens before it adds), and a
+    // SIGTERM sent 300 ms in must end the wait within 2,500 ms.
     const noepoll = path.join(dir, "noepoll")
     const ne = known
       ? spawnSync("clang", ["-O1", "-o", noepoll, path.join(linkDir, "net_ring_batch", "noepoll.c")], {

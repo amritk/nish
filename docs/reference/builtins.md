@@ -296,7 +296,7 @@ Wait for readiness, filling pairs: `ready[2k]` token, `ready[2k + 1]` events (1 
 
 <scalar-card title="poll​Wait​Batch" icon="phosphor/regular/function" href="#pollwaitbatch">
 
-Wait as `pollWait` does, up to `timeoutMs` for the first event, and then up to `maxWaitMs` more until `minEvents` pairs are ready, so a busy ring loop takes its events in batches.
+Wait as `pollWait` does, up to `timeoutMs` for the first event, and then up to `maxWaitMs` more for `minEvents` pairs, so a busy ring loop takes its events in batches.
 
 </scalar-card>
 
@@ -2421,8 +2421,9 @@ how many pairs, at most `ready.length / 2` and at most 64 (the rest stay ready f
 ### pollWaitBatch
 
 Wait as `pollWait` does, up to `timeoutMs` for the first event, and then up to `maxWaitMs`
-more until `minEvents` pairs are ready, so a busy ring loop takes its events in batches. An
-idle loop is not woken every `maxWaitMs`: the second wait starts only once an event is in.
+more for `minEvents` pairs, so a busy ring loop takes its events in batches. `minEvents` is
+checked once per slice of `maxWaitMs / 8`, rounded up, so the wait may end up to one slice
+after `minEvents` pairs became ready. An idle loop is not woken every `maxWaitMs`: the second wait starts only once an event is in.
 The batch counts the slots and listeners of a `NET_LISTEN_RING` listener; a loop with no ring
 listener, and Darwin, answer as `pollWait` does. A descriptor that becomes ready during the
 second wait, `signalFd()` included, is reported at most `maxWaitMs` late. `minEvents` of 1 or

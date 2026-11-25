@@ -61,7 +61,9 @@
 # h1-ring and h1-ring-copy are the same two builds with BENCH_RING=1: one
 # process on io_uring slots (`slots` = C + 1,024, as for ring), so
 # Http1Server's head + body go out through the ring's sends. ring-copy is
-# ring's byte-identical copy, its noise band.
+# ring's byte-identical copy, its noise band. ring-base-copy is the same for
+# the --base-compiler build: with it the summary also prints the base pair's
+# band, so a gap against ring-base is read against both bands.
 #
 # --base-compiler NISH builds the two sources a second time with another
 # compiler (an older checkout's build/nish, which links that checkout's
@@ -228,7 +230,7 @@ case " $designs_arg " in
   ;;
 esac
 case " $designs_arg " in
-*"-base "*)
+*"-base "* | *" ring-base-copy "*)
   if [ -z "$base_compiler" ]; then
     echo "run.sh: a -base design needs --base-compiler" >&2
     exit 2
@@ -242,7 +244,7 @@ case " $designs_arg " in
   for pair in "ring-base server $out/server-base.ts" "h1-ring-base h1 $root/bench/http1-server.ts"; do
     read -r design bin src <<<"$pair"
     case " $designs_arg " in
-    *" $design "*)
+    *" $design "* | *" $design-copy "*)
       "$base_compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$src" --link "$out/$bin-base" >/dev/null
       if cmp -s "$out/$bin" "$out/$bin-base"; then
         echo "run.sh: --base-compiler builds the same $bin binary as --compiler" >&2
@@ -251,6 +253,13 @@ case " $designs_arg " in
       ;;
     esac
   done
+  # ring-base-copy is the base build's byte-identical copy: its band.
+  case " $designs_arg " in
+  *" ring-base-copy "*)
+    cp "$out/server-base" "$out/server-base-copy"
+    cmp "$out/server-base" "$out/server-base-copy"
+    ;;
+  esac
   ;;
 esac
 node "$root/bench/sqlite/run.mjs" --validate --compiler "$compiler" >/dev/null
@@ -317,12 +326,13 @@ run() {
   fi
   : >"$out/server.out"
   case "$kind" in
-  ring | ring-copy | ring-base | ring-nap)
+  ring | ring-copy | ring-base | ring-base-copy | ring-nap)
     n=1
     slots=$((c + 1024))
     local nap=0
     if [ "$kind" = ring-copy ]; then bin=$out/server-copy; fi
     if [ "$kind" = ring-base ]; then bin=$out/server-base; fi
+    if [ "$kind" = ring-base-copy ]; then bin=$out/server-base-copy; fi
     if [ "$kind" = ring-nap ]; then nap=1; fi
     env -u BENCH_CORES BENCH_RING=1 BENCH_NAP="$nap" BENCH_MIN_EVENTS="$me" BENCH_MAX_WAIT_MS="$mw" ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
@@ -334,7 +344,7 @@ run() {
     fi
     # ring-base is built without the batch lines (base-source.sh) and runs
     # the plain wait whatever its label says.
-    if [ "$kind" != ring-base ] && ! grep -q "^batch $me $mw\$" "$out/server.out"; then
+    if [ "$kind" != ring-base ] && [ "$kind" != ring-base-copy ] && ! grep -q "^batch $me $mw\$" "$out/server.out"; then
       echo "$design did not take minEvents $me and maxWaitMs $mw: $(cat "$out/server.out")" >&2
       exit 1
     fi
@@ -466,7 +476,7 @@ for d in "${asked[@]}"; do
       continue
     fi
     ;;
-  ring-base)
+  ring-base | ring-base-copy)
     # The base build cannot batch: it runs once, as ring-base@1.
     if [ -n "$min_events" ]; then
       designs+=("$d@1")
@@ -555,7 +565,7 @@ awk -v limit="$limit" '
     printf "%-8s %-12s %5s %8s %6s %18s %7s %7s %8s %8s %8s %8s %8s %8s %7s %20s %8s %6s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "user", "sys", "out/rsp", "in/rsp", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms", "lost"
     for (ci = 1; ci <= nc; ci++) {
       c = order[ci]
-      nbase = split("ring ring-copy ring-base ring-nap epoll epoll-copy epoll1 h1 h1-copy h1-ring h1-ring-copy h1-ring-base", base, " ")
+      nbase = split("ring ring-copy ring-base ring-base-copy ring-nap epoll epoll-copy epoll1 h1 h1-copy h1-ring h1-ring-copy h1-ring-base", base, " ")
       # Each design, then its --min-events runs (ring@M) in the order they ran.
       nds = 0
       for (bi = 1; bi <= nbase; bi++) {
@@ -608,6 +618,9 @@ awk -v limit="$limit" '
         if (band < 0) band = -band
         printf "         %s: %.1f%% %s CPU per request than %s-base%s; noise band (%s vs its copy) %.1f%%", cd[ki] at, (d < 0 ? -d : d), (d >= 0 ? "less" : "more"), cd[ki], at, cd[ki] at, band
         if (mso[x] != "" && mso[xb] != "") printf "; out/rsp %.3f against %.3f", mso[x], mso[xb]
+        # ring-base-copy: the band between the base build and its copy.
+        xbc = c SUBSEP cd[ki] "-base-copy" at
+        if ((xbc in m) && m[xb] > 0) { bb = (m[xbc] - m[xb]) / m[xb] * 100; printf "; base band (%s-base vs its copy) %.1f%%", cd[ki], (bb < 0 ? -bb : bb) }
         printf "\n"
       }
       e = c SUBSEP "epoll"; ec = c SUBSEP "epoll-copy"; u = c SUBSEP "ring"

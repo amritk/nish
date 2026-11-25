@@ -172,7 +172,7 @@ Wait until a watched descriptor is ready or the timeout passes, and write one pa
 
 <scalar-card title="poll​Wait​Batch" icon="phosphor/regular/function" href="#pollwaitbatch">
 
-Wait as `pollWait` does for the first event, and then, on a loop holding a `NET_LISTEN_RING` listener's slots, up to `maxWaitMs` more until `minEvents` pairs are ready.
+Wait as `pollWait` does for the first event, and then, on a loop holding a `NET_LISTEN_RING` listener's slots, up to `maxWaitMs` more for `minEvents` pairs, checked once per slice of `maxWaitMs / 8` rounded up: the wait may end up to one slice after they became ready.
 
 </scalar-card>
 
@@ -926,8 +926,10 @@ The count of pairs, at most `ready.length / 2` and at most 64
 ### pollWaitBatch
 
 Wait as `pollWait` does for the first event, and then, on a loop holding
-a `NET_LISTEN_RING` listener's slots, up to `maxWaitMs` more until
-`minEvents` pairs are ready. An idle loop is not woken every `maxWaitMs`.
+a `NET_LISTEN_RING` listener's slots, up to `maxWaitMs` more for
+`minEvents` pairs, checked once per slice of `maxWaitMs / 8` rounded up:
+the wait may end up to one slice after they became ready. An idle loop is
+not woken every `maxWaitMs`.
 A descriptor that becomes ready during the second wait is reported at
 most `maxWaitMs` late. A loop with no ring listener, and Darwin, answer
 as `pollWait` does.

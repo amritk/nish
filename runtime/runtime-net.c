@@ -1148,8 +1148,11 @@ static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int
   if (!held) return n;
   int32_t watch = -1;
   int direct = nr_direct(loop, &watch) == S;
-  int64_t end = nr_now_ms() + max_wait_ms;
-  int64_t slice = (max_wait_ms + 7) / 8;
+  /* Widened before the add: an int `max_wait_ms + 7` overflows past
+     INT32_MAX - 7. min(left, slice) is then at most ceil(INT32_MAX / 8), so
+     poll(2)'s int timeout holds it. */
+  int64_t end = nr_now_ms() + (int64_t)max_wait_ms;
+  int64_t slice = ((int64_t)max_wait_ms + 7) / 8;
   S->windows++;
   while (n < min && n < max) {
     int64_t left = end - nr_now_ms();

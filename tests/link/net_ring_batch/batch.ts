@@ -12,8 +12,9 @@
 // reached epoll would fail the run.
 //
 // With `signal`: the loop also watches `signalFd()`. One client writes, and
-// the program asks for 256 events with a `maxWaitMs` of 5,000 while a child
-// (this program, `killer <pid>`) sends it SIGTERM 300 ms later. The signal
+// the program asks for 256 events with a `maxWaitMs` of INT32_MAX, whose
+// slice sum `nr_batch` widens before it adds, while a child (this program,
+// `killer <pid>`) sends it SIGTERM 300 ms later. The signal
 // must be reported well before the batch's bound.
 //
 // With `apart`: the ring listener is in no loop, and a second loop holds only
@@ -420,7 +421,7 @@ export const main = (): i32 => {
     }
     let waits: i32 = 0
     while (since(started) < 10000) {
-      const n: i32 = pollWaitBatch(loop, ready, 10000, 256, 5000)
+      const n: i32 = pollWaitBatch(loop, ready, 10000, 256, 2147483647)
       waits += 1
       if (n < 0) {
         console.log(`a wait for 256 answered ${n}`)
