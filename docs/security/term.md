@@ -181,7 +181,7 @@ buffer to the buffer, and one below 0 to 0. This replaced an explicit panic.
 Read from the code, its callers pass a whole buffer or a screen's `outLen`,
 which `put` keeps within `out`, so no public input reaches either clamp. No
 check fails when both are removed: WP85 S5 removed them and ran
-`node tests/run.js std-panics` (passes, since the slice was already counted)
+`node tests/run.js std-panics` (passes: no new site, the slice was already counted)
 and `node tests/run.js std_term` (every behavioural check passes; only the
 `term.ll` IR golden, which moves with any edit, fails).
 "link/std_term_decoder_bounds: exits with 0 and stdout matches expected.out"
