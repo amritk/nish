@@ -33,11 +33,18 @@ const decimal = (buf: u8[], len: i32): i32 => {
   return v
 }
 
-/** The decimal digits of a string argument. */
+/** The decimal digits of a string argument, or -1 when it is empty or holds a non-digit. */
 const argNumber = (s: string): i32 => {
+  if (s.length === 0 || s.length > 9) {
+    return -1
+  }
   let v: i32 = 0
   for (let i: i32 = 0; i < s.length; i += 1) {
-    v = v * 10 + toI32(s.charCodeAt(i)) - 48
+    const d: i32 = toI32(s.charCodeAt(i)) - 48
+    if (d < 0 || d > 9) {
+      return -1
+    }
+    v = v * 10 + d
   }
   return v
 }
@@ -78,6 +85,10 @@ export const main = (): i32 => {
   const port: i32 = argNumber(argv[1])
   const slots: i32 = argNumber(argv[2])
   const ring: boolean = argv[3] === "1"
+  if (port < 0 || slots < 0) {
+    console.log("usage: server <port> <slots> <ring 0|1>")
+    return 2
+  }
   const listener: i32 = tcpListenFlags("127.0.0.1", port, 4096, ring ? NET_LISTEN_RING : 0)
   if (listener < 0) {
     console.log(`listen failed: ${listener}`)

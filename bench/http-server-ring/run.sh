@@ -33,7 +33,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-compiler="$root/build/nish"
+compiler_path="$root/build/nish"
 rounds=5
 rates="10000 100000"
 seconds=20
@@ -53,7 +53,7 @@ while [ $# -gt 0 ]; do
   --conns) conns="$2"; shift ;;
   --designs) designs="$2"; shift ;;
   --server-cpus) server_cpus="$2"; shift ;;
-  --compiler) compiler="$2"; shift ;;
+  --compiler) compiler_path="$2"; shift ;;
   --out) out="$2"; shift ;;
   *)
     echo "usage: run.sh [--quick] [--rounds N] [--rates \"R ...\"] [--seconds S] [--warmup S] [--conns C] [--designs \"D ...\"] [--server-cpus LIST] [--compiler nish] [--out DIR]" >&2
@@ -86,9 +86,10 @@ gcc -O2 -Wall -Wextra -o "$out/loadgen" "$root/bench/http-server-ring/loadgen.c"
 # A bench program builds the way the suite builds its cases
 # (`scripts/nish-compiler.sh` -> `nish_allow_panics`).
 . "$root/scripts/nish-compiler.sh"
-nish_allow_panics "$compiler"
+nish_compiler "$compiler_path"
+nish_allow_panics "${compiler[@]}"
 # shellcheck disable=SC2154 # nish_allow_panics sets allow_panics
-"$compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/http-server-ring/server.ts" --link "$out/server" >/dev/null
+"${compiler[@]}" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/http-server-ring/server.ts" --link "$out/server" >/dev/null
 cp "$out/server" "$out/server-copy"
 cmp "$out/server" "$out/server-copy"
 
@@ -165,8 +166,10 @@ node - "$results" <<'EOF'
 const fs = require("fs")
 const rows = fs.readFileSync(process.argv[2], "utf8").trim().split("\n").map((l) =>
   Object.fromEntries(l.split(" ").map((kv) => kv.split("="))))
+// A field loadgen printed as n/a is NaN here, and is left out of the median.
 const median = (xs) => {
-  const s = [...xs].sort((a, b) => a - b), m = s.length >> 1
+  const s = xs.filter(Number.isFinite).sort((a, b) => a - b), m = s.length >> 1
+  if (s.length === 0) return NaN
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
 }
 const rates = [...new Set(rows.map((r) => r.rate))]

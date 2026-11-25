@@ -32,8 +32,8 @@
  * octave, so a percentile reads within about 3%), and the run waits up to
  * 2 s past the window for the window's last answers. `lat_lost` counts the
  * window's requests still unanswered then (the window closes before the
- * last /proc reads, so a request sent during them is outside it); they are not in the histogram, so
- * a nonzero count makes every percentile a lower bound, and with no answer
+ * last /proc reads, so a request sent during them is outside it); they are not in the histogram or the mean's sum, so
+ * a nonzero count makes every percentile and the mean a lower bound, and with no answer
  * at all they print n/a. win_lo and win_hi bound the window, CLOCK_MONOTONIC
  * seconds. `send_failed` counts sends that
  * failed or went short and `closed` the connections that closed or failed
@@ -113,7 +113,7 @@ enum { C_NONE, C_CONNECTING, C_IDLE, C_BUSY };
 struct conn {
   int fd;
   uint8_t state;
-  uint16_t got;
+  uint32_t got;
   uint8_t tries;
   double sent_at;
 };
@@ -270,7 +270,8 @@ static void child(int k, long n, double rate, double think, int port) {
         }
         if (scanned == n) {
           /* Every connection has a request outstanding: the due requests are
-           counted as starved and not sent, so they are never timed. */
+           counted in both `starved` and `sent` but never written to a
+           connection, so they are never timed. */
           starved += due - j;
           sent += due - j;
           break;
@@ -311,7 +312,7 @@ static void child(int k, long n, double rate, double think, int port) {
         }
         c->state = C_IDLE;
       }
-      c->got = (uint16_t)got;
+      c->got = (uint32_t)got;
     }
     sh->responses[k] = responses;
     sh->sent[k] = sent;
