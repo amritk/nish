@@ -267,8 +267,8 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
         "a size-0 binding reached the device and the process lived",
       ],
       [
-        "gfx: offscreen_create refuses 0 and 16385 a side and hands 16384 to the device",
-        "offscreen refuses 0 and 16385, hands 16384 to the device",
+        "gfx: offscreen_create refuses 0 and the device's limit plus 1 a side and makes a target as wide as the limit",
+        "offscreen refuses 0 and the device's limit plus 1, makes the limit itself",
       ],
       ["gfx: a resize SDL reports below zero reaches the program as 0", "a resize to -5 x 7 reads 0 x 7"],
     ]

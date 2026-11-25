@@ -137,6 +137,9 @@ NishGfxDevice *nishgfx_device_request(NishGfxInstance *instance, NishGfxAdapter 
 void nishgfx_device_release(NishGfxDevice *device);
 /* Drain one queued device error into msg (as nishgfx_instance_error_next). */
 int32_t nishgfx_error_next(NishGfxDevice *device, void *msg, size_t cap);
+/* The longest side nishgfx_offscreen_create takes on this device: its
+ * maxTextureDimension2D, at most 16384 (8192 when it reports none). */
+uint32_t nishgfx_device_max_texture_side(NishGfxDevice *device);
 /* How many reports found the ring full, since the device was made. */
 uint32_t nishgfx_errors_dropped(NishGfxDevice *device);
 
@@ -198,7 +201,8 @@ void nishgfx_pass_end(NishGfxPass *pass);
 /* ---- offscreen --------------------------------------------------------- */
 
 /* A width x height RGBA8Unorm render target with readback; needs no window
- * and initialises no SDL video. */
+ * and initialises no SDL video. Answers null for a side of 0 or past
+ * nishgfx_device_max_texture_side. */
 NishGfxOffscreen *nishgfx_offscreen_create(NishGfxDevice *device, uint32_t width, uint32_t height);
 void nishgfx_offscreen_release(NishGfxOffscreen *offscreen);
 /* The target's view, valid until the offscreen is released. */
