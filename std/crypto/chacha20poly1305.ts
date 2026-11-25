@@ -250,35 +250,57 @@ const chacha20Core = (state: u32[], out: u32[]): void => {
 }
 
 /**
- * `dst[dstAt + i] = src[srcAt + i] ^ keystream` for `len` bytes, the keystream
- * running from `state`'s counter on, and the counter left one past the last
- * block used (RFC 8439 §2.4). The caller has checked every window and that
- * the counter does not wrap. The last keystream block is wiped before it
- * returns; `state` is the caller's to wipe.
+ * `dst[dstAt + i] = src[srcAt + i] ^ keystream[i]` for each `i` below `len`,
+ * the keystream running from `state`'s counter on, and the counter left one
+ * past the last block used (RFC 8439 §2.4). The caller has checked both
+ * windows and that the counter does not wrap; a window that ran short would
+ * end the loop there rather than panic. The last keystream block is wiped
+ * before it returns; `state` is the caller's to wipe.
  */
 const chacha20XorInto = (state: u32[], src: u8[], srcAt: i32, len: i32, dst: u8[], dstAt: i32): void => {
   const keystream: u32[] = new Array<u32>(16)
-  let done: i32 = 0
-  while (done < len) {
+  // `n` bytes done, read from `s` and written to `d`. Each cursor moves only
+  // under a guard that bounds it, so the range prover discharges every index
+  // and sum; a window the caller checked passes every guard.
+  let n: i32 = 0
+  let s: i32 = srcAt
+  let d: i32 = dstAt
+  while (n < len && s >= 0 && s < toI32(src.length) && d >= 0 && d < toI32(dst.length)) {
     chacha20Core(state, keystream)
-    state[12] = state[12] + 1
-    const take: i32 = len - done < 64 ? len - done : 64
+    if (toI32(state.length) > 12) {
+      state[12] = state[12] + 1
+    }
     for (let w: i32 = 0; w < 16 && w < toI32(keystream.length); w++) {
       const word: u32 = keystream[w]
-      const at: i32 = done + 4 * w
-      if (at + 4 <= done + take) {
+      if (
+        n <= 2147483643 &&
+        n + 4 <= len &&
+        s >= 0 &&
+        s <= toI32(src.length) - 4 &&
+        d >= 0 &&
+        d <= toI32(dst.length) - 4
+      ) {
         // A whole word, the common case: four bytes with fixed shifts.
-        dst[dstAt + at] = src[srcAt + at] ^ toU8(word)
-        dst[dstAt + at + 1] = src[srcAt + at + 1] ^ toU8(word >>> 8)
-        dst[dstAt + at + 2] = src[srcAt + at + 2] ^ toU8(word >>> 16)
-        dst[dstAt + at + 3] = src[srcAt + at + 3] ^ toU8(word >>> 24)
+        dst[d] = src[s] ^ toU8(word)
+        dst[d + 1] = src[s + 1] ^ toU8(word >>> 8)
+        dst[d + 2] = src[s + 2] ^ toU8(word >>> 16)
+        dst[d + 3] = src[s + 3] ^ toU8(word >>> 24)
+        n = n + 4
+        s = s + 4
+        d = d + 4
       } else {
-        for (let k: i32 = 0; at + k < done + take; k++) {
-          dst[dstAt + at + k] = src[srcAt + at + k] ^ toU8(word >>> toU32(8 * k))
+        for (
+          let k: i32 = 0;
+          k < 4 && n < len && s >= 0 && s < toI32(src.length) && d >= 0 && d < toI32(dst.length);
+          k++
+        ) {
+          dst[d] = src[s] ^ toU8(word >>> toU32(8 * k))
+          n = n + 1
+          s = s + 1
+          d = d + 1
         }
       }
     }
-    done = done + take
   }
   wipe(keystream)
 }

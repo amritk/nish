@@ -14100,6 +14100,29 @@ if (dealtHere("cryptoChecks")) {
     }
   }
 
+  // WP83 S5: `chacha20Poly1305Seal` refuses a plaintext whose sealed form, sixteen bytes
+  // longer, would not be an array length. Under `--number-mode f64` a length of 2^31 or
+  // more saturates to 2^31 - 1 in `toI32`, which the guard refuses, so the sum it bounds
+  // (`len + POLY1305_TAG_SIZE`) never wraps. A 2 GiB test is impractical, so this reads
+  // the f64 IR, as the ed25519 check above does: Seal must compare the length against
+  // 2^31 - 17 and answer `null`. Deleting the guard fails it.
+  {
+    const name = "crypto: chacha20Poly1305Seal answers null on a plaintext longer than 2^31 - 17 bytes (--number-mode f64)"
+    if (!only || [name, "crypto_chacha20poly1305"].some((selector) => selector.includes(only))) {
+      const dir = path.join(buildDir, "chacha20poly1305-length-guard")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const c = spawnNish(
+        [path.join(root, "tests/link/crypto_chacha20poly1305_f64/main.ts"), "--number-mode", "f64", "--allow-panics", "-o", `${dir}/`],
+        { cwd: root, encoding: "utf8" }
+      )
+      const ir = c.status === 0 ? fs.readFileSync(path.join(dir, "chacha20poly1305.ll"), "utf8") : ""
+      const body = (ir.match(/^define [^\n]*@"?nish\.chacha20Poly1305Seal"?\([\s\S]*?\n\}/m) ?? [""])[0]
+      const guard = /fptosi\.sat\.i32\.f64[^\n]*\n[^\n]*\n\s+(%\d+) = load i32, i32\* %len\.addr[^\n]*\n\s+(%\d+) = icmp sgt i32 \1, 2147483631\n\s+br i1 \2, label %(if\.then[\w.]*), label[^\n]*\n\n\3:\n\s+ret %struct\.nish_array\* null\n/
+      check(name, c.status === 0 && guard.test(body), c.status === 0 ? `no guard in:\n${body.slice(0, 1500)}` : c.stderr)
+    }
+  }
+
   // `nish:secret` under `runtime/nish.mjs`: the specifier resolves to the shim, where a
   // `Secret` is a plain wrapper and `wipe` zero-fills it, so `secret_wipe` prints what
   // the native binary prints.
@@ -21779,8 +21802,8 @@ if (dealtHere("simd")) {
   // to a branch on `nish_chacha20_hw`: runtime-chacha20.c's `nish_chacha20_xor` (eight
   // blocks at once on AVX2, four on NEON) on one arm, the Nish loop on the other, and the
   // Nish loop again when the kernel's guard refuses the call (under four blocks, an
-  // offset or window it cannot vouch for), so a bad window panics with the Nish message
-  // on either path (src/kernels.ts). `tests/link/chacha20_hw_agree` holds both arms to
+  // offset or window it cannot vouch for), so a bad window takes the Nish loop on either
+  // path, which stops at the window's end (WP83 S5; src/kernels.ts). `tests/link/chacha20_hw_agree` holds both arms to
   // Node's ChaCha20-Poly1305 and raw ChaCha20 over a seeded corpus whose lengths sit at
   // each of the kernel's block boundaries. It is linked with the kernel wrapped
   // (`-Wl,--wrap`) by a counter that reports its calls on exit, then run with
