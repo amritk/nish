@@ -1625,6 +1625,8 @@ const S8_REALTIME_PANIC_FREE = "make WebTransport, WebSocket, gRPC and OIDC pani
 const COMPRESS_PANIC_FREE = "make checksum, zlib and gzip panic-free"
 /** The changelog words of WP85 S3: std/term.ts proves its indexes and arithmetic, and `Screen.flush` flushes what every buffer holds where it panicked. */
 const TERM_TS_PANIC_FREE = "std/term.ts panic-free"
+/** The changelog words of WP87 S1: std/temporal.ts proves or drops its panic sites and gains Result forms. */
+const TEMPORAL_PANIC_FREE = "std/temporal.ts panic-free"
 /** The changelog words of WP85 S2: std's term-pixels, term-io, term-rate and term-probe modules prove or drop their panic sites. */
 const TERM_PANIC_FREE = "term-pixels, term-io, term-rate and term-probe panic-free"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
@@ -22419,6 +22421,21 @@ const DECLARED = [
       "tests/link/std_term_rate/main.ts": ["term-rate.ll"],
       "tests/link/std_term_rate_f64/main.ts": ["term-rate.ll"],
     }
+  ),
+  // WP87 S1: std/temporal.ts proves or drops its panic sites.
+  ...byFinding(TEMPORAL_PANIC_FREE)(
+    "std/temporal.ts proves or drops its panic sites (WP87 S1): its divisions, indexes and i64 sums are written so the prover discharges them, and it gains tryPlainDate, tryPlainDateFrom and PlainDate.tryAdd, so every program's copy of the module, and each importer that inlines its functions, moves",
+    {
+      "bench/std-temporal-arith.ts": ["std-temporal-arith.ll", "temporal.ll"],
+      "bench/std-temporal-format.ts": ["std-temporal-format.ll", "temporal.ll"],
+      "bench/std-temporal-parse.ts": ["std-temporal-parse.ll", "temporal.ll"],
+      "bench/temporal.ts": ["temporal.ll"],
+      "tests/link/std_temporal/main.ts": ["main.ll"],
+    }
+  ),
+  ...byFinding(TEMPORAL_PANIC_FREE)(
+    "the program calls tryPlainDate, tryPlainDateFrom and PlainDate.tryAdd, which are new in this release (WP87 S1), so the seed's standard library has no such exports and refuses it",
+    { "tests/link/std_temporal_result/main.ts": ["exit"] }
   ),
   // WP85 S2: the term modules prove or drop their panic sites.
   ...byFinding(TERM_PANIC_FREE)(
