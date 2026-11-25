@@ -628,8 +628,9 @@ export const atan2F64 = (y: f64, x: f64): f64 => {
   let a: f64 = Math.abs(y)
   let b: f64 = Math.abs(x)
   if (ix < 0x23d00000 || ix > 0x5c100000) {
-    // 2^h for h = 1023 - (ix >> 20), as 2^(h >> 1) * 2^(h - (h >> 1)) so neither factor overflows.
-    const s: f64 = pow2((1023 - (ix >> 20)) >> 1) * pow2((1024 - (ix >> 20)) >> 1)
+    // 2^h for h = 1023 - (ix >> 20), as 2^(h >> 1) * 2^((h + 1) >> 1) so
+    // neither factor overflows.
+    const s: f64 = pow2(-((ix >> 20) - 1023) >> 1) * pow2(-((ix >> 20) - 1024) >> 1)
     a = a * s
     b = b * s
   }
@@ -967,11 +968,14 @@ const powExp2 = (ph0: f64, pl: f64, s: f64): f64 => {
   const r: f64 = (z * t1) / (t1 - 2.0) - (w + z * w)
   const one: f64 = 1.0
   z = one - (r - z)
-  const hz: i32 = hiWord(z) + (n << 20)
-  if (hz >> 20 <= 0) {
+  // z's exponent field raised by n, in i64, where the sum of two i32s is
+  // exact; z is positive, so its high word's sign bit is clear.
+  const hi: i32 = hiWord(z)
+  const ze: i64 = toI64(hi >> 20) + toI64(n)
+  if (ze <= toI64(0)) {
     return s * scaleDown(z, n)
   }
-  return s * withHi(z, hz)
+  return s * bitsToF64(((toI64(hi & 0x000fffff) | (ze << toI64(20))) << toI64(32)) | toI64(loWord(z)))
 }
 
 /**
