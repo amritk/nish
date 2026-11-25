@@ -1,19 +1,19 @@
 ---
 name: WP71 — an HttpArena entry, and what it asks of std/net
-overview: TechEmpower is archived and HttpArena took its place. This package builds the entry in bench/httparena/ on the 10 scored profiles that wait on nothing, joins the nine that wait on other packages as each lands, and checks io_uring under the façade, before the owner decides whether to enter it. It runs nothing HttpArena-specific of its own; HttpArena's validate.sh is the entry's check.
+overview: TechEmpower is archived and HttpArena took its place. This package builds the entry in bench/httparena/ on 8 of the 9 overall-board profiles that wait on nothing (connections-1m, which asks for capacity rather than a route, is S2g) and async-db on the database board, joins the other 12 as the packages they wait on land (RSA certificates on the TLS server above all, which every TLS profile needs), and checks io_uring under the façade, before the owner decides whether to enter it. It runs nothing HttpArena-specific of its own; HttpArena's validate.sh is the entry's check.
 spec: docs/wp71-httparena.md
 priority: 90
 labels: [ready]
 issue: 2015
 stages:
   - id: s1-entry
-    title: WP71 S1 — bench/httparena/ on what is built, the 10 scored profiles that wait on nothing, passing validate.sh
-    goal: bench/httparena/ is a framework entry in HttpArena's layout, standard mode, serving the 10 scored profiles of the spec's §3 that wait on no other package with one pinned worker a core, and HttpArena's validate.sh passes on it.
+    title: WP71 S1 — bench/httparena/ on what is built, the 8 plaintext scored profiles and async-db, passing validate.sh
+    goal: bench/httparena/ is a framework entry in HttpArena's layout, standard mode, serving 8 of the 9 overall-board profiles of the spec's §3 that wait on no other package (all plaintext, on 8080 and 8082; connections-1m is S2g), async-db on the database board and the reference-only pipelined, with one pinned worker a core, and HttpArena's validate.sh passes on it.
     verification: node tests/run.js httparena_entry passes with a nonzero case count; validate.sh nish passes in an HttpArena checkout at the commit bench/httparena/README.md names; npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
     issue: 2020
     todos:
       - id: entry-layout
-        content: Add bench/httparena/ with a Dockerfile from a released compiler, a meta.json (type emerging, standard mode, middleware declared missing) and a README — see WP71 S1
+        content: Add bench/httparena/ with a Dockerfile from a released compiler, a meta.json (type emerging, standard mode, routing, middleware, request and response all declared, D5) and a README — see WP71 S1
         status: pending
       - id: entry-h1
         content: Serve baseline, limited-conn, async, latency-1m and latency-10k on port 8080 through nish/net/http-server under nish/net/prefork — see WP71 S1
@@ -21,23 +21,23 @@ stages:
       - id: entry-json-comp
         content: Serve json-comp from /data/dataset.json with JsonWriter and gzip through nish/net/http-compress — see WP71 S1
         status: pending
-      - id: entry-h2-h3
-        content: Serve baseline-h2 and baseline-h3 on 8443 and baseline-h2c and json-h2c on 8082 through listenHttp2Tls, listenHttp3 and listenH2c — see WP71 S1
+      - id: entry-h2c
+        content: Serve baseline-h2c and json-h2c on 8082 through listenH2c (baseline-h2 and baseline-h3 wait on RSA certificates, S2f) — see WP71 S1
         status: pending
       - id: entry-reference
-        content: Join the reference-only pipelined and async-db profiles, async-db through nish/net/postgres, and not fortunes (D4) — see WP71 S1
+        content: Join async-db (scored on the database board) through nish/net/postgres with a pool sized from DATABASE_MAX_CONN, and the reference-only pipelined; not fortunes (D4) — see WP71 S1
         status: pending
       - id: entry-workers
         content: Run one prefork worker a core, each pinned with setCpuAffinity and steered by CPU (tcpListenFlags flag 4, QUIC by connection ID) — see WP71 S1
         status: pending
       - id: entry-link-test
-        content: Add tests/link/httparena_entry checking every route's answer over loopback, as tests/link/tfb_entry does — see WP71 S1
+        content: Add tests/link/httparena_entry checking every route's answer over loopback, as tests/link/tfb_entry does, including validate.sh's fragmented, chunked and lower-cased content-length requests and its overlapping /delay probe — see WP71 S1
         status: pending
       - id: entry-validate
         content: Run validate.sh on the entry and record the HttpArena commit it passed at in bench/httparena/README.md — see WP71 S1
         status: pending
   - id: s2-tls
-    title: WP71 S2a — json-tls and 8gbit, HTTP/1.1 over TLS on port 8081, after WP39 G7's TLS on the façade
+    title: WP71 S2a — json-tls and 8gbit, HTTP/1.1 over TLS on port 8081, after WP39 G7's TLS on the façade and RSA certificates
     goal: The entry serves json-tls and 8gbit on port 8081 through the façade's HTTP/1.1-over-TLS listener and passes validate.sh for both.
     verification: node tests/run.js httparena_entry passes with the TLS routes; validate.sh nish passes with both profiles in meta.json
     labels: [deferred]
@@ -63,7 +63,7 @@ stages:
         content: Extend tests/link/httparena_entry to the echo — see WP71 S2b
         status: pending
   - id: s2-grpc
-    title: WP71 S2c — unary-grpc and unary-grpc-tls, after WP72's gRPC
+    title: WP71 S2c — unary-grpc and unary-grpc-tls, after WP39 G7's h2c by preface and RSA certificates
     goal: The entry answers BenchmarkService/GetSum over TLS on 8443 and over cleartext h2c on 8080 beside HTTP/1.1, and passes validate.sh for both.
     verification: node tests/run.js httparena_entry passes with the gRPC calls; validate.sh nish passes with both profiles in meta.json
     labels: [deferred]
@@ -79,7 +79,7 @@ stages:
         content: Extend tests/link/httparena_entry to both calls — see WP71 S2c
         status: pending
   - id: s2-static
-    title: WP71 S2d — static-h2 and static-h3, after WP43 S3's static files
+    title: WP71 S2d — static-h2 and static-h3 on 8443, after RSA certificates on the TLS server
     goal: The entry serves the 20 files of /data/static/ over HTTP/2 and HTTP/3 through nish/net/static, with br or gzip when offered, and passes validate.sh for both.
     verification: node tests/run.js httparena_entry passes with the static routes; validate.sh nish passes with both profiles in meta.json
     labels: [deferred]
@@ -103,6 +103,50 @@ stages:
         status: pending
       - id: br-size
         content: Record json-comp's bytes per response with br and with gzip in bench/httparena/README.md — see WP71 S2e
+        status: pending
+  - id: s2-tls-baseline
+    title: WP71 S2f — baseline-h2 and baseline-h3 on 8443, after RSA certificates on the TLS server
+    goal: The entry serves /baseline2 over HTTP/2 on TLS and over HTTP/3 on 8443 under HttpArena's mounted RSA-2048 certificate, and passes validate.sh, its TLS posture probe included, for both.
+    verification: node tests/run.js httparena_entry passes with the 8443 routes; validate.sh nish passes with both profiles in meta.json
+    labels: [deferred]
+    issue: 2312
+    todos:
+      - id: tls-baseline-routes
+        content: Serve baseline-h2 through listenHttp2Tls and baseline-h3 through listenHttp3 on 8443 with the certificate and key from /certs/, and join both in meta.json — see WP71 S2f
+        status: pending
+      - id: tls-baseline-link-test
+        content: Extend tests/link/httparena_entry to /baseline2 over HTTP/2 on TLS and over HTTP/3 under an RSA-2048 leaf — see WP71 S2f
+        status: pending
+  - id: s2-conn
+    title: WP71 S2g — connections-1m, a million held keep-alive connections at 250K req/s on port 8080
+    goal: The entry holds HttpArena's connections-1m fleet on 8080, listening on every loopback address with no connection cap below the fleet, and passes validate.sh for it, with the memory one held connection costs measured and recorded.
+    verification: node tests/run.js httparena_entry passes with the held-connection checks; validate.sh nish passes with connections-1m in meta.json; bench/httparena/README.md records bytes per held connection with the machine and commit
+    issue: 2313
+    todos:
+      - id: conn-listener
+        content: Listen on 0.0.0.0 (not 127.0.0.1) on 8080 and size each worker's slots and descriptors for its share of 1,000,000 connections, with no idle close under 5 seconds — see WP71 S2g
+        status: pending
+      - id: conn-link-test
+        content: Extend tests/link/httparena_entry to /baseline11 on 127.0.0.2 and on the last loopback address of the range — see WP71 S2g
+        status: pending
+      - id: conn-measure
+        content: Measure the entry's memory per held keep-alive connection at the largest fleet the machine can hold, and record it in bench/httparena/README.md — see WP71 S2g
+        status: pending
+  - id: s2-conn-tls
+    title: WP71 S2h — connections-1m-tls, a million held TLS 1.3 sessions on port 8081, after S2a
+    goal: The entry holds HttpArena's connections-1m-tls fleet of TLS 1.3 sessions on 8081, listening on every loopback address, passes validate.sh for it, and records the TLS state one held session costs.
+    verification: node tests/run.js httparena_entry passes with the held-TLS checks; validate.sh nish passes with connections-1m-tls in meta.json; bench/httparena/README.md records bytes per held TLS session
+    labels: [deferred]
+    issue: 2314
+    todos:
+      - id: conn-tls-listener
+        content: Listen on 0.0.0.0 on 8081 with the façade's HTTP/1.1-over-TLS listener from S2a, sized for its share of 1,000,000 sessions — see WP71 S2h
+        status: pending
+      - id: conn-tls-link-test
+        content: Extend tests/link/httparena_entry to /baseline11 over TLS 1.3 on 127.0.0.2 and 127.0.0.32 — see WP71 S2h
+        status: pending
+      - id: conn-tls-measure
+        content: Measure the memory one held TLS 1.3 session costs the entry, and record it in bench/httparena/README.md — see WP71 S2h
         status: pending
   - id: s3-iouring
     title: WP71 S3 — io_uring under the nish/net/http-server façade, checked and measured on the CPU-scored profiles
@@ -133,14 +177,14 @@ stages:
         content: Copy bench/httparena/ into frameworks/nish/ in a fork of MDA2AV/HttpArena and open the pull request, only on the owner's yes — see WP71 S4
         status: pending
   - id: gateway
-    title: WP71 S5 — the gateway board, gateway-h2, gateway-h3 and production-stack
+    title: WP71 S5 — the gateway board, gateway-64, gateway-h3 and production-stack
     goal: The entry joins HttpArena's gateway board behind its proxy, and production-stack reads Redis through a std/ client that does not exist yet.
     verification: validate.sh nish passes for the gateway profiles joined
     labels: [deferred]
     issue: 2031
     todos:
       - id: gateway-h2-h3
-        content: Join gateway-h2 and gateway-h3 behind HttpArena's proxy — see WP71 S5
+        content: Join gateway-64 (HttpArena's gateway over HTTP/2) and gateway-h3 behind HttpArena's proxy — see WP71 S5
         status: pending
       - id: gateway-redis
         content: Plan a Redis client for std/net in its own package, then join production-stack on it — see WP71 S5
@@ -151,9 +195,9 @@ stages:
 
 ## Context
 
-TechEmpower archived its Framework Benchmarks on 2026-03-24. [HttpArena](https://www.http-arena.com/) took its place: one machine, entries added by pull request and benchmarked on that pull request, a leaderboard over HTTP/1.1, HTTP/2, HTTP/3, gRPC and WebSocket. The spec is [`docs/wp71-httparena.md`](../../docs/wp71-httparena.md): how it scores (§1), the rules that bind a framework entry (§2), the 19 scored profiles against what is built (§3), the stages (§4) and the decisions (§5). Breadth is worth more on that board than the last 10% on one profile, so the order is every family first.
+TechEmpower archived its Framework Benchmarks on 2026-03-24. [HttpArena](https://www.http-arena.com/) took its place: one machine, entries added by pull request and benchmarked on that pull request, a leaderboard over HTTP/1.1, HTTP/2, HTTP/3, gRPC and WebSocket. The spec is [`docs/wp71-httparena.md`](../../docs/wp71-httparena.md): how it scores (§1), the rules that bind a framework entry (§2), the 21 profiles on its overall board and the ones on its own boards, against what is built (§3), the stages (§4) and the decisions (§5). Breadth is worth more on that board than the last 10% on one profile, so the order is every family first.
 
-This package builds the entry and the features it needs. It does not stand up HttpArena's machine or measure the leaders: HttpArena's own `validate.sh` checks the entry, and HttpArena's machine measures it when it is entered (S4). HttpArena's facts move; each stage re-reads the site and the harness before it relies on one.
+This package builds the entry and the features it needs. It does not stand up HttpArena's machine or measure the leaders: HttpArena's own `validate.sh` checks the entry, and HttpArena's machine measures it when it is entered (S4). HttpArena's facts move; each stage re-reads the site and the harness before it relies on one. The spec was last re-read at HttpArena `3388e458` (2026-11-24).
 
 ## Approach
 
@@ -164,64 +208,87 @@ The spec's decisions are taken as written:
 | D1 | A framework entry of type `emerging`, **standard mode**. Tuned mode is a second entry once standard is measured. |
 | D2 | The entry lives in `bench/httparena/`, beside [`bench/techempower/`](../../bench/techempower/), copied into `frameworks/nish/` when entered. |
 | D3 | Entering is the owner's call each time — S4 carries it as an open decision. |
-| D4 | Join the reference-only `pipelined` and `async-db`; **not `fortunes`** (needs a template engine `std/` lacks). |
-| D5 | `meta.json` declares routing, request and response; middleware missing until [WP43](../../docs/wp43-http-app-layer.md) stage 5 lands. |
+| D4 | Join `async-db` (scored on the database board) and the reference-only `pipelined`; **not `fortunes`**, which standard mode wants rendered by a template engine `std/` lacks. |
+| D5 | `meta.json` declares routing, middleware, request and response: middleware is [WP43](../../docs/wp43-http-app-layer.md) S5's route steps (#2007), which have landed. |
 
-**The S2 stages wait on other packages.** Each opens with a **Waits on** line naming the package (its issue where one exists, else its design note) and is labelled `deferred` so no agent builds it early. When that dependency closes, the label comes off and the stage is ready.
+**The S2 stages wait on other packages.** Each opens with a **Waits on** line naming the package (its issue where one exists, else its design note) and is labelled `deferred` so no agent builds it early. When that dependency closes, the label comes off and the stage is ready. The dependency most of them share is **RSA certificates on the TLS server** ([`tls-rsa-server.plan.md`](tls-rsa-server.plan.md), #481): HttpArena mounts an RSA-2048 pair and `validate.sh` fails a TLS listener that serves any other certificate, and the TLS server signs only with ECDSA P-256 today.
 
-## WP71 S1 — bench/httparena/ on what is built, the 10 scored profiles that wait on nothing, passing validate.sh
+## WP71 S1 — bench/httparena/ on what is built, the 8 plaintext scored profiles and async-db, passing validate.sh
 
-Ten of the 19 scored profiles wait on no other package ([§3](../../docs/wp71-httparena.md#3-the-profiles-against-what-is-built)). `bench/httparena/` serves them on [`std/net/http-server.ts`](../../std/net/http-server.ts) (`nish/net/http-server`) under [`std/net/prefork.ts`](../../std/net/prefork.ts):
+Nine of the 21 profiles on HttpArena's overall board wait on no other package ([§3](../../docs/wp71-httparena.md#3-the-profiles-against-what-is-built)), all of them plaintext. This stage joins the eight that need only their routes; the ninth, `connections-1m`, asks for capacity and is S2g. `bench/httparena/` serves them on [`std/net/http-server.ts`](../../std/net/http-server.ts) (`nish/net/http-server`) under [`std/net/prefork.ts`](../../std/net/prefork.ts):
 
 | Family | Profiles | Port | Through |
 | --- | --- | --- | --- |
 | HTTP/1.1 | `baseline`, `limited-conn`, `async`, `latency-1m`, `latency-10k` | 8080 | `listenHttp1`; `async` answers after a real timer, held past the turn ([http-one-handler.md §3.3](../../docs/http-one-handler.md#33-streams-slots-and-late-answers)) |
 | HTTP/1.1 | `json-comp` | 8080 | `JsonWriter` over `/data/dataset.json`, gzip through [`std/net/http-compress.ts`](../../std/net/http-compress.ts) |
-| HTTP/2 | `baseline-h2` | 8443 | `listenHttp2Tls`, certificates from `/certs/` |
 | HTTP/2 | `baseline-h2c`, `json-h2c` | 8082 | `listenH2c` |
-| HTTP/3 | `baseline-h3` | 8443 | `listenHttp3` |
 
-Also the reference-only `pipelined` and `async-db` (D4), `async-db` one query a request on `nish/net/postgres` against `DATABASE_URL`. Not `fortunes`.
+Also `async-db` on the database board (D4): a range query a request on `nish/net/postgres` against `DATABASE_URL`, its pool sized from `DATABASE_MAX_CONN`; and the reference-only `pipelined`. Not `fortunes`. `baseline-h2` and `baseline-h3` were planned here; they serve on 8443 under TLS, so they wait on RSA certificates and moved to S2f.
 
-- `Dockerfile` installs a released compiler, as `bench/techempower/`'s do; `meta.json` declares type `emerging`, standard mode, the profiles joined, and middleware missing (D5).
+- `Dockerfile` installs a released compiler, as `bench/techempower/`'s do; `meta.json` declares type `emerging`, standard mode, the profiles joined, and all four completeness axes (D5).
 - Standard mode: no precomputed or URL-cached body ([§2](../../docs/wp71-httparena.md#2-the-rules-that-bind-the-entry)).
-- **Workers.** One prefork worker for each CPU the container is given, each pinned with `setCpuAffinity` and its connections steered to its CPU by the reuseport program behind `tcpListenFlags`'s flag 4 ([`runtime/runtime-net.c`](../../runtime/runtime-net.c)); QUIC steers by connection ID ([h3-multicore.md](../../docs/h3-multicore.md)). HttpArena gives the server 64 CPUs; the entry takes the count from the container, not a constant.
-- `tests/link/httparena_entry` checks every route's answer over loopback, as [`tests/link/tfb_entry`](../../tests/link/tfb_entry) does for TechEmpower's.
+- **Workers.** One prefork worker for each CPU the container is given, each pinned with `setCpuAffinity` and its connections steered to its CPU by the reuseport program behind `tcpListenFlags`'s flag 4 ([`runtime/runtime-net.c`](../../runtime/runtime-net.c)). HttpArena gives the server 64 CPUs (32 on the database profiles); the entry takes the count from the container, not a constant.
+- `tests/link/httparena_entry` checks every route's answer over loopback, as [`tests/link/tfb_entry`](../../tests/link/tfb_entry) does for TechEmpower's. It also sends what `validate.sh` sends beyond the happy path: a request split before its headers, inside its request line and between headers and body; a chunked `POST` and a lower-cased `content-length`; random `a` and `b`; 32 overlapping `/delay` requests with different delays; and `json-comp` asked with no `Accept-Encoding`, which must answer uncompressed.
 - Done when `validate.sh nish` passes in an HttpArena checkout with `bench/httparena/` copied into `frameworks/nish/`; `bench/httparena/README.md` names the HttpArena commit.
 
-## WP71 S2a — json-tls and 8gbit, HTTP/1.1 over TLS on port 8081, after WP39 G7's TLS on the façade
+## WP71 S2a — json-tls and 8gbit, HTTP/1.1 over TLS on port 8081, after WP39 G7's TLS on the façade and RSA certificates
 
-**Waits on** [WP39](../../docs/wp39-http-server.md) G7's HTTP/1.1 over TLS on the `nish/net/http-server` façade ([F2](../../docs/http-one-handler.md#42-finding-f2-one-tls-port-for-http11-and-http2) puts `Http1TlsServer` outside it today).
+**Waits on** [WP39](../../docs/wp39-http-server.md) G7's HTTP/1.1 over TLS on the `nish/net/http-server` façade (#2010; [F2](../../docs/http-one-handler.md#42-finding-f2-one-tls-port-for-http11-and-http2) puts `Http1TlsServer` outside it today), and RSA certificates on the TLS server (#481).
 
 - `json-tls`: the `json-comp` JSON over HTTP/1.1 on TLS, port 8081.
-- `8gbit`: `POST /echo`, 10 KiB at a fixed 50,000 req/s, scored on CPU per request and latency.
+- `8gbit`: `POST /echo`, 10 KB at a fixed 50,000 req/s over 512 connections, scored on CPU per request and latency. `validate.sh` also posts chunked bodies of 10 KB and 100 KB and an empty one, and compares each echo byte for byte.
 
-Both join `meta.json`, `tests/link/httparena_entry` covers their routes, and `validate.sh` passes with them.
+Both join `meta.json`, `tests/link/httparena_entry` covers their routes, and `validate.sh` passes with them, its TLS posture probe included (the mounted certificate, TLS 1.3, an AEAD suite, no ALPN the client did not offer).
 
 ## WP71 S2b — echo-ws, echo-ws-pipeline and echo-ws-limited, after WP39 G7's WebSocket on the façade
 
-**Waits on** [WP39](../../docs/wp39-http-server.md) G7's WebSocket on the façade's HTTP/1.1 listener ([`std/net/websocket.ts`](../../std/net/websocket.ts) runs on `Http1Server` today, not on the façade).
+**Waits on** [WP39](../../docs/wp39-http-server.md) G7's WebSocket on the façade's HTTP/1.1 listener (#2011; [`std/net/websocket.ts`](../../std/net/websocket.ts) runs on `Http1Server` today, not on the façade).
 
 `echo-ws`, `echo-ws-pipeline` and `echo-ws-limited`: an upgrade on `/ws`, port 8080, text frames echoed. They join `meta.json`, `tests/link/httparena_entry` covers the echo, and `validate.sh` passes with them. The WebSocket board takes no completeness penalty.
 
-## WP71 S2c — unary-grpc and unary-grpc-tls, after WP72's gRPC
+## WP71 S2c — unary-grpc and unary-grpc-tls, after WP39 G7's h2c by preface and RSA certificates
 
-**Waits on** [WP72](../../docs/wp72-grpc.md) (#2008: `nish/net/protobuf`, trailers on the façade, unary calls in `nish/net/grpc`). `unary-grpc` also waits on WP39 G7's open question: whether the façade's HTTP/1.1 listener takes an h2c peer by its preface, which [http-one-handler.md §4](../../docs/http-one-handler.md#4-h2c-prior-knowledge-only) rules out today.
+**Waits on** WP39 G7's h2c by preface (#2012), the opt-in on the façade's HTTP/1.1 listener that routes an h2c peer by its 24-byte preface, for `unary-grpc`; and RSA certificates on the TLS server (#481) for `unary-grpc-tls`. [WP72](../../docs/wp72-grpc.md) (#2008), which this stage first waited on, has landed: `nish/net/protobuf`, trailers on the façade and unary calls in `nish/net/grpc`. Its open acceptance item (#2172, `nish proto` refusing streaming methods) does not block this stage: both profiles are unary.
 
 - `unary-grpc-tls`: `BenchmarkService/GetSum` over TLS on 8443.
-- `unary-grpc`: the same over h2c on 8080, beside HTTP/1.1. If the owner keeps "no sniffing", this profile is not joined and the stage records why.
+- `unary-grpc`: the same over h2c on 8080, beside HTTP/1.1, through #2012's opt-in.
 
-## WP71 S2d — static-h2 and static-h3, after WP43 S3's static files
+## WP71 S2d — static-h2 and static-h3 on 8443, after RSA certificates on the TLS server
 
-**Waits on** [WP43](../../docs/wp43-http-app-layer.md) stage 3 (#485), `nish/net/static` with a cache that follows the disk and `.br`/`.gz` siblings.
+**Waits on** RSA certificates on the TLS server (#481). [WP43](../../docs/wp43-http-app-layer.md) stage 3 (#485), which this stage first waited on, has landed: `nish/net/static` serves through `HttpServer` with a cache that follows the disk and `.br`/`.gz` siblings (`precompressed`).
 
-`static-h2` and `static-h3`: the 20 files of `/data/static/` on 8443 over HTTP/2 and HTTP/3, br or gzip when the request offers it. Standard mode allows a cache only if the framework owns it and it follows the disk ([§2](../../docs/wp71-httparena.md#2-the-rules-that-bind-the-entry)).
+`static-h2` and `static-h3`: the 20 files of `/data/static/` on 8443 over HTTP/2 and HTTP/3, br or gzip when the request offers it (15 of the 20 ship `.gz` and `.br` siblings). Standard mode allows a cache only if the framework owns it and it follows the disk ([§2](../../docs/wp71-httparena.md#2-the-rules-that-bind-the-entry)).
 
 ## WP71 S2e — br for json-comp, after WP43 S4's br coding on WP73's encoder
 
 **Waits on** [WP43](../../docs/wp43-http-app-layer.md) stage 4 (#2006), `br` as a response coding in `nish/net/http-compress`, on [WP73](../../docs/wp73-brotli.md)'s Brotli encoder.
 
 `json-comp`'s rate is multiplied by (smallest bytes per response ÷ ours)², so a smaller body is worth more than a faster one. Offer br when `Accept-Encoding` asks for it, and record the bytes per response with br beside gzip's in `bench/httparena/README.md`.
+
+## WP71 S2f — baseline-h2 and baseline-h3 on 8443, after RSA certificates on the TLS server
+
+**Waits on** RSA certificates on the TLS server (#481).
+
+`baseline-h2` (`GET /baseline2` over HTTP/2 on TLS, ALPN `h2`) and `baseline-h3` (the same over QUIC) on 8443, through `listenHttp2Tls` and `listenHttp3` with `/certs/server.crt` and `/certs/server.key`. QUIC steers by connection ID ([h3-multicore.md](../../docs/h3-multicore.md)). Both were in S1's first cut. `validate.sh`'s TLS posture probe runs on `baseline-h2`, so the served certificate must be the mounted RSA-2048 one, and an entry that generated its own P-256 certificate would fail it.
+
+## WP71 S2g — connections-1m, a million held keep-alive connections at 250K req/s on port 8080
+
+Scored on HttpArena's HTTP/1.1 board since the spec was first read, and not in its first list of profiles. `connections-1m` holds 1,000,000 keep-alive connections spread over `127.0.0.1` to `127.0.0.32`, 31,250 on each, and paces `GET /baseline11?a=1&b=2` across them at 250,000 req/s, one request per connection every four seconds. It is scored like the fixed-rate profiles, on CPU per request, the container's peak memory, p50 and p99, a quarter each. The container has a 96 GiB memory cap and `--ulimit nofile` 2,097,152.
+
+The route is S1's. What the profile asks of the entry:
+
+- **Listen on every address**: `0.0.0.0` or `[::]`, never `127.0.0.1`. `validate.sh` checks `/baseline11` on `127.0.0.2` and `127.0.0.160`.
+- **No cap below the fleet**: each prefork worker's `listenHttp1` slots and descriptors are sized for its share of the million.
+- **No idle close under five seconds.** `Http1Config`'s and `HttpServerLimits`' `idleTimeout` default to 60,000 ms.
+- **Memory per connection is a quarter of the score**, so the stage measures what one held connection costs the entry, at the largest fleet the machine can hold, and records it in `bench/httparena/README.md`.
+
+The link test's extra addresses are loopback aliases, which Linux answers on all of `127.0.0.0/8`. On a host that does not, the case records the skip.
+
+## WP71 S2h — connections-1m-tls, a million held TLS 1.3 sessions on port 8081, after S2a
+
+**Waits on** S2a's HTTP/1.1 over TLS on 8081, and through it WP39 G7 (#2010) and RSA certificates (#481).
+
+`connections-1m-tls` is S2g over TLS 1.3 on 8081, over `127.0.0.1` to `127.0.0.32`. Every connection handshakes once and then carries its requests encrypted. The client hands each session to kernel TLS, so what the profile adds is the TLS state the server keeps per session. TLS 1.3 is the only version the generator offers. The stage listens on `0.0.0.0` on 8081 and measures and records the bytes one held session costs.
 
 ## WP71 S3 — io_uring under the nish/net/http-server façade, checked and measured on the CPU-scored profiles
 
@@ -238,16 +305,18 @@ A pull request to [MDA2AV/HttpArena](https://github.com/MDA2AV/HttpArena) adding
 
 **Decided: enter after S1**, with every profile that waits on nothing joined; HttpArena's `/benchmark` comment on the pull request is the first figure at its size, and the entry is updated as each S2 stage lands. Because a public number is the owner's call each time, this stage stays `needs-decision`: the owner confirms before the pull request opens, and again before each update to it.
 
-## WP71 S5 — the gateway board, gateway-h2, gateway-h3 and production-stack
+## WP71 S5 — the gateway board, gateway-64, gateway-h3 and production-stack
 
-`gateway-h2`, `gateway-h3` and `production-stack` run the server behind nginx or a peer, on a board of their own, not in the overall score. `production-stack` reads Redis, and `std/` has no Redis client; that client is its own package. Deferred until the overall board is joined.
+`gateway-64` (HttpArena's gateway over HTTP/2, called Gateway (H2) on the board), `gateway-h3` and `production-stack` run the server behind an edge proxy, on a board of their own, not in the overall score. `production-stack` adds a Redis cache-aside and a JWT checked on every request. `std/crypto/jwt.ts` exists, but `std/` has no Redis client; that client is its own package. Deferred until the overall board is joined.
 
 ## Out of scope
 
-- **`fortunes`** (D4): standard mode wants it rendered by "a real template engine", which `std/` does not have.
+- **`fortunes`** (D4): standard mode wants it rendered by a template engine with its own syntax and auto-escaping, which `std/` does not have. A tuned entry may hand-write the HTML, so it is a candidate for the tuned entry (D1).
+- **The reference-only `static-tls` and `connections-5m`.** `static-tls` is HTTP/1.1 over TLS on 8081 and could join after S2a and S2d for nothing. `connections-5m` runs only for the entries on HttpArena's allowlist.
+- **The compliance and resilience columns.** HttpArena scores an entry's `spec` suites (Http11Probe, h2spec, h3spec, Autobahn) and runs an opt-in resilience suite. Neither counts toward any composite, and both need a `/spec` route or an opt-in this package does not add. [WP39](../../docs/wp39-http-server.md) G7's WebSocket stage (#2011) adds an Autobahn run against the façade's echo, which is the suite the `ws` column uses.
 - **A rig of HttpArena's size, and the leaders measured on it.** HttpArena's own machine measures the entry when it is entered.
 - **Tuned mode** (D1): a second entry once standard is measured.
-- The work of the packages S2 waits on (WP39 G7, WP43 stage 3, WP72, WP73): each is planned in its own package.
+- The work of the packages S2 waits on (RSA certificates, WP39 G7, WP43 stage 4, WP73): each is planned in its own package.
 
 ## Tests
 

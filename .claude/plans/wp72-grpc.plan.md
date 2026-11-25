@@ -175,7 +175,7 @@ stages:
 
 ## Context
 
-`std/net` serves HTTP/1.1, HTTP/2 over TLS and h2c, and HTTP/3 behind one handler ([`nish/net/http-server`](../../std/net/http-server.ts), WP39 G7), but no RPC protocol on top. gRPC is the one a Nish service is most often asked to speak, and it is two of [HttpArena](../../docs/wp71-httparena.md)'s scored profiles (`unary-grpc` over h2c, `unary-grpc-tls`), worth up to 2,000 of the board's 19,000; an entry with no gRPC scores 0 on both.
+`std/net` serves HTTP/1.1, HTTP/2 over TLS and h2c, and HTTP/3 behind one handler ([`nish/net/http-server`](../../std/net/http-server.ts), WP39 G7), but no RPC protocol on top. gRPC is the one a Nish service is most often asked to speak, and it is two of [HttpArena](../../docs/wp71-httparena.md)'s scored profiles (`unary-grpc` over h2c, `unary-grpc-tls`), worth up to 2,000 of the board's 21,000; an entry with no gRPC scores 0 on both.
 
 Built today: `listenHttp2Tls` and `listenH2c` on the façade, a request body held whole up to `limits.maxBody`, and `Http2Connection.writeTrailers` in [`std/net/http2.ts`](../../std/net/http2.ts). Missing: a way for the façade's `start`/`write`/`end` to send trailers, protobuf's wire format, and gRPC's framing, status and deadlines. Spec: [the design note](../../docs/wp72-grpc.md), [§1](../../docs/wp72-grpc.md#1-what-is-built-and-what-is-missing).
 

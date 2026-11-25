@@ -3296,7 +3296,11 @@ lowercase `date` field straight after `:status`. A 1xx response and trailers
 carry none. Each server's `HttpDate` formats the date at most once a second,
 and a pool's slots share one. Set your own `date` field and it is sent instead:
 in any case on HTTP/1.1, and lowercase on HTTP/2 and HTTP/3, which refuse an
-uppercase field name (`H2_INVALID`, `H3_INVALID`). On HTTP/3 the date counts
+uppercase field name (`H2_INVALID`, `H3_INVALID`). Set two and the head is
+refused, with nothing sent, even when they agree: a `Date` is one value
+(RFC 9110 §5.3). HTTP/1.1 answers `HTTP1_REFUSED` for two in any case,
+HTTP/2 `H2_INVALID` and HTTP/3 `H3_INVALID`, and `httpFieldsCheckOutgoing`
+answers `HTTP_FIELDS_DATE_REPEATED`. On HTTP/3 the date counts
 against the client's field-section limit like any other field.
 
 In a test that compares the bytes, call `date.pin(unixMs)` on the server, or on
