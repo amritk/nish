@@ -231,6 +231,9 @@ Also `async-db` on the database board (D4): a range query a request on `nish/net
 - `tests/link/httparena_entry` checks every route's answer over loopback, as [`tests/link/tfb_entry`](../../tests/link/tfb_entry) does for TechEmpower's. It also sends what `validate.sh` sends beyond the happy path: a request split before its headers, inside its request line and between headers and body; a chunked `POST` and a lower-cased `content-length`; random `a` and `b`; 32 overlapping `/delay` requests with different delays; and `json-comp` asked with no `Accept-Encoding`, which must answer uncompressed.
 - Done when `validate.sh nish` passes in an HttpArena checkout with `bench/httparena/` copied into `frameworks/nish/`; `bench/httparena/README.md` names the HttpArena commit.
 
+Owns: `bench/httparena/**`, `tests/link/httparena_entry/**`, `tests/self/goldens/checked/bench/httparena/**`, `tests/self/goldens/checked/tests/link/httparena_entry/**`, `tests/differential/**` (goldens registration only). Not `std/**`: a façade fix S1 needs is asked of the lead, which hands it to S3 or amends Owns. Not `docs/wp71-httparena.md` or this plan, which #2315 holds until it merges.
+Model: lead. Merge order: first; S2g starts from S1's merge.
+
 ## WP71 S2a — json-tls and 8gbit, HTTP/1.1 over TLS on port 8081, after WP39 G7's TLS on the façade and RSA certificates
 
 **Waits on** [WP39](../../docs/wp39-http-server.md) G7's HTTP/1.1 over TLS on the `nish/net/http-server` façade (#2010; [F2](../../docs/http-one-handler.md#42-finding-f2-one-tls-port-for-http11-and-http2) puts `Http1TlsServer` outside it today), and RSA certificates on the TLS server (#481).
@@ -284,6 +287,9 @@ The route is S1's. What the profile asks of the entry:
 
 The link test's extra addresses are loopback aliases, which Linux answers on all of `127.0.0.0/8`. On a host that does not, the case records the skip.
 
+Owns: as S1 — `bench/httparena/**`, `tests/link/httparena_entry/**` and their golden subtrees. S2g extends S1's files, so it is a chain: its worker is spawned after S1 merges and starts from that `main`.
+Model: lead. Merge order: after S1.
+
 ## WP71 S2h — connections-1m-tls, a million held TLS 1.3 sessions on port 8081, after S2a
 
 **Waits on** S2a's HTTP/1.1 over TLS on 8081, and through it WP39 G7 (#2010) and RSA certificates (#481).
@@ -296,6 +302,9 @@ The link test's extra addresses are loopback aliases, which Linux answers on all
 
 1. `tests/link/net_http_server_ring`: the façade over a flag-8 listener, proving its carriers take ring slots. Fix in [`std/net/http-server.ts`](../../std/net/http-server.ts) what it finds.
 2. Measure the CPU-scored profiles' route (`/baseline11` at a fixed rate, as `latency-1m` and `latency-10k` drive it) with and without the rings: CPU per request, p99 and mean latency, the three HttpArena scores them on, with their noise band, on the machine the `docs/BENCHMARKS.md` table names. `8gbit` joins the measurement once S2a has landed; until then the stage records it as not measured. If the rings win, the entry opens its listeners with flag 8.
+
+Owns: `std/net/http-server.ts`, `tests/link/net_http_server_ring/**`, a bench program for the measurement under `bench/http-server-ring/**`, `docs/BENCHMARKS.md`, `docs/reference/net/http-server.md` (regenerated), `docs/guide/using-nish/http-server.md` (only if a user sees the change), `tests/nish-cmp.js` (`DECLARED` entries), the `std/net/http-server.ts:LINE` pin in `tests/run.js` (the layout check near line 26912, only), and `tests/self/goldens/checked/**` outside S1's subtrees (regenerated, never hand-merged). Not `bench/httparena/**`, which S1 and S2g hold: if the rings win, the flag-8 switch in the entry is a follow-up the lead grants S3 as an Owns amendment once S1 and S2g have merged, or hands to S2g if it is still open.
+Model: lead. Merge order: independent of S1; the later of the two syncs `main` and reruns nish-cmp, since `tests/link/httparena_entry` imports the façade.
 
 ## WP71 S4 — enter the entry in HttpArena
 
