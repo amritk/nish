@@ -6,7 +6,14 @@ PASS  a twin that adds an export is refused, naming it
 PASS  a function parameter's type is compared
 PASS  a method's parameter is compared
 PASS  a field's type is compared
+PASS  a class's private members may differ
+PASS  a class's public method is compared
+PASS  a class's public members count in the order they are written
+PASS  an annotated constant's initializer may differ
+PASS  an unannotated constant is compared with its initializer, which is its type
+PASS  an unannotated constant with the same initializer agrees
+PASS  a constant declared after an exported arrow is compared too
 PASS  a twin that does not parse is left to the build that compiles it
 PASS  nish-wasm32 is not the i32 mode's condition
 PASS  nish-wasm32 is not the f64 mode's condition
-module_target_twin: 11 passed, 0 failed, 0 skipped
+module_target_twin: 18 passed, 0 failed, 0 skipped

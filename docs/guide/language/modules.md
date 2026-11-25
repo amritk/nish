@@ -296,7 +296,10 @@ export const main = (): i32 => {
   signatures, since your code compiles against whichever one its build
   picked. Both builds check this at the import, and a difference is an error
   (`NL3063`) that names the first export the files disagree on. Bodies,
-  initializers and layout may differ.
+  initializers and a class's `private` members may differ; its public members
+  are compared in the order they are written. A constant with no type
+  annotation is compared with its initializer, because that is where its type
+  comes from, so annotate it when the two files' initializers differ.
 - `engines.nish` is the lowest compiler version the package needs, written
   `>=X.Y.Z` or `>=X.Y`. An older compiler refuses the package and says which version it
   asked for.

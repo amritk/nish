@@ -12,7 +12,12 @@
 // compiled by the build that does not pick it, and parsing it is the cheapest
 // thing that can see its exports. A signature is the declaration's text up to
 // its body or initializer with its blank runs collapsed, so a reformatted
-// twin still matches and a changed parameter type does not.
+// twin still matches and a changed parameter type does not. A constant with
+// no type annotation has no such cut: its type is whatever its initializer
+// gives, so the whole declaration is compared (a field, function or method
+// must be annotated to parse or check at all). A class's `private` members
+// are no importer's business and are skipped; its public ones are compared
+// in the order they are written.
 
 import { Node, NodeKind, FLAG_EXPORTED } from "./nodes"
 import { Parser } from "./parser"
@@ -62,21 +67,40 @@ const cutAt = (node: Node, at: i32): i32 =>
   at < node.children.length && node.children[at].kind !== NodeKind.Empty ? node.children[at].start : node.end
 
 /**
- * A class's signature: its head up to the members, and each member's own up
- * to its body or initializer, so a method's body may differ and its
+ * Where a field's or constant's signature stops: after its type when one is
+ * written, and at its end when it is inferred, since the initializer is then
+ * the type.
+ */
+const afterType = (node: Node): i32 =>
+  node.children.length > 1 && node.children[1].kind !== NodeKind.Empty ? node.children[1].end : node.end
+
+/** Whether a class member is private: `private` among the words before its name. */
+const isPrivateMember = (text: string, member: Node): boolean => {
+  if ((member.kind !== NodeKind.Method && member.kind !== NodeKind.Field) || member.children.length === 0) {
+    return false
+  }
+  return ` ${twinCollapsed(text, member.start, member.children[0].start)} `.indexOf(" private ") >= 0
+}
+
+/**
+ * A class's signature: its head up to the members, and each public member's
+ * own up to its body or initializer, so a method's body may differ and its
  * parameters may not.
  */
 const classSignature = (text: string, node: Node): string => {
   const members = node.children[3]
   const parts: string[] = [twinCollapsed(text, node.start, members.start)]
   for (const member of members.children) {
+    if (isPrivateMember(text, member)) {
+      continue
+    }
     let cut = member.end
     if (member.kind === NodeKind.Method) {
       cut = cutAt(member, 3)
     } else if (member.kind === NodeKind.Constructor) {
       cut = cutAt(member, 1)
     } else if (member.kind === NodeKind.Field) {
-      cut = cutAt(member, 2)
+      cut = afterType(member)
     }
     parts.push(`${twinCollapsed(text, member.start, cut)};`)
   }
@@ -98,12 +122,23 @@ const exportsOf = (path: string, text: string): TwinExport[] | null => {
       continue
     }
     if (decl.kind === NodeKind.FunctionDecl) {
-      out.push(new TwinExport(twinDeclName(decl), twinCollapsed(text, decl.start, cutAt(decl, 3))))
+      // `export const f = (): i32 => 1, g = 2` keeps `g` in a sixth child.
+      const rest: Node | null = decl.children.length > 5 ? decl.children[5] : null
+      const end = rest !== null && rest.kind === NodeKind.List ? rest.start : decl.end
+      const cut = decl.children.length > 2 && decl.children[2].kind !== NodeKind.Empty ? cutAt(decl, 3) : end
+      out.push(new TwinExport(twinDeclName(decl), twinCollapsed(text, decl.start, cut)))
+      if (rest !== null && rest.kind === NodeKind.List) {
+        for (const one of rest.children) {
+          out.push(
+            new TwinExport(twinDeclName(one), `const ${twinCollapsed(text, one.start, afterType(one))}`)
+          )
+        }
+      }
     } else if (decl.kind === NodeKind.Class) {
       out.push(new TwinExport(twinDeclName(decl), classSignature(text, decl)))
     } else if (decl.kind === NodeKind.ModuleConst) {
       for (const one of decl.children[0].children) {
-        out.push(new TwinExport(twinDeclName(one), `const ${twinCollapsed(text, one.start, cutAt(one, 2))}`))
+        out.push(new TwinExport(twinDeclName(one), `const ${twinCollapsed(text, one.start, afterType(one))}`))
       }
     } else if (
       decl.kind === NodeKind.Interface ||
