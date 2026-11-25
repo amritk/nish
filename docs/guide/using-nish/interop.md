@@ -1096,13 +1096,16 @@ export const main = (): i32 => {
 ```
 
 A `u8[]` parameter is a byte buffer C writes into, and a `readonly u8[]` one
-C only reads, as C's `const`. A run of one or more buffers is followed by one
-`u64`, the number of bytes C may touch in each of them:
+C only reads, as C's `const`. `u16[]`, `u32[]`, `i32[]` and `f32[]` cross the
+same way, as C's `uint16_t *`, `uint32_t *`, `int32_t *` and `float *`. A run
+of one or more buffers is followed by one `u64`, the number of elements C may
+touch in each of them (bytes, for a `u8[]`):
 
 <!-- nish:ok -->
 ```ts
 declare function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr;
 declare function getentropy(buf: u8[], n: u64): i32;
+declare function scale(xs: f32[], n: u64, k: f32): void;
 
 export const main = (): i32 => {
   return 0;
@@ -1112,16 +1115,19 @@ export const main = (): i32 => {
 The count is paired by position, so it is your word, not the compiler's proof.
 `fwrite(ptr, size, nmemb, stream)` touches `size * nmemb` bytes: declare it
 `fwrite(buf: readonly u8[], n: u64, one: u64, f: CPtr)` and call it with `1`
-as the third argument, so the one count is the whole size. A buffer with no
-`u64` after it, a count of another type, an `i32[]`, a `u8[] | null` and a
-`u8[]` result are each refused; a count of another width, or one elsewhere in
+as the third argument, so the one count is the whole size. Every buffer of a
+run has the same element type, since its one count is in elements: an
+`f32[]` and a `u8[]` before one count are refused (NL2824), so give each its
+own count. A buffer with no `u64` after it, a count of another type, an
+`f64[]` or `i64[]` (whose alignment is not the same on every target), a
+`u8[] | null` and a buffer result are each refused; a count of another width, or one elsewhere in
 the declaration, is named with `CountedBy` (below).
 
 A call passes the array's bytes, and checks the count against each buffer
 first: under `--allow-panics`, a count larger than the array stops the
 program before C runs, with
 `` `write`: argument 3 (n) counts more bytes than argument 2 (buf) holds ``
-and exit 1. Pass `toU64(buf.length)` of the buffer itself and the compiler
+(`counts more elements than` for a buffer that is not a `u8[]`) and exit 1. Pass `toU64(buf.length)` of the buffer itself and the compiler
 proves the count, so the call carries no check and compiles in a module
 held to no panic, as every module of your package is by default:
 
@@ -1136,8 +1142,10 @@ export const main = (): i32 => {
 };
 ```
 
-C borrows the bytes for the length of the call, and may write a `u8[]` (not a
-`readonly u8[]`), so `read(fd, buf, toU64(buf.length))` fills `buf` in place.
+C borrows the elements for the length of the call, and may write a `u8[]` or
+`f32[]` (not a `readonly` one), so `read(fd, buf, toU64(buf.length))` fills
+`buf` in place. A `Float32Array` module storage does not lend to C: copy it
+into an `f32[]` and pass that.
 A task a scope spawns may not call such a function: C's body is unseen, so the
 call could write memory the parent is reading.
 

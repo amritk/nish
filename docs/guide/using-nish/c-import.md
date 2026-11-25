@@ -272,7 +272,9 @@ says so; pass it with `--overrides`:
     bind as never null (only `true` changes anything), and
     `"buffer": "<length parameter>"`, which binds a `void *` or `char *` and
     its length as a `u8[]` (a `readonly u8[]` when the header says
-    `const void *`, so `"readonly"` is never needed and is refused). A
+    `const void *`, so `"readonly"` is never needed and is refused), and a
+    `uint16_t *`, `uint32_t *`, `int32_t *` or `float *` as a `u16[]`,
+    `u32[]`, `i32[]` or `f32[]` whose length counts elements. A
     `size_t` length straight after the buffer on a 64-bit target keeps the
     plain form, `(data: u8[], len: u64)`. Any other length -- a `uint32_t`,
     `uint16_t` or `uint8_t`, one before the buffer, or a `uint32_t *` the

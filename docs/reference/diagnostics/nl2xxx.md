@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 815 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 816 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -10866,7 +10866,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-` with no count after it: a run of `u8[]` parameters is followed by one `u64`, the byte count C may touch in each
+` with no count after it: a run of buffers is followed by one `u64`, the count of elements C may touch in each
 ```
 
 ## NL2550
@@ -10874,7 +10874,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…, and the parameter after a run of `u8[]` buffers is their byte count, a `u64`
+…, and the parameter after a run of buffers is their element count, a `u64`
 ```
 
 ## NL2551
@@ -10882,7 +10882,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…, and the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target
+…, and the only arrays a declared C function takes are of `u8`, `u16`, `u32`, `i32` or `f32`, readonly or not, whose elements have one layout on every target
 ```
 
 ## NL2552
@@ -10916,7 +10916,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…, and a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count
+…, and a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]`, `u16[]`, `u32[]`, `i32[]` or `f32[]` buffer followed by its `u64` count
 ```
 
 ## NL2556
@@ -15613,7 +15613,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`
+`CountedBy` takes a buffer of `u8`, `u16`, `u32`, `i32` or `f32`, readonly or not, and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`
 ```
 
 ## NL2811
@@ -15746,4 +15746,12 @@ The message of an error contains:
 
 ```text
 ` takes u64 operands (convert with toU64), got …
+```
+
+## NL2824
+
+The message of an error contains:
+
+```text
+…[]: the one count after a run is in elements, so every buffer of a run has the same element type; close the run with its count first
 ```
