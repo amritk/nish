@@ -554,6 +554,51 @@ user shipping one which notices to carry; if a header is ever vendored, it
 goes into [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) per
 [.claude/licensing.md](../.claude/licensing.md).
 
+## 10. A module file chosen by target (S6)
+
+S6 shipped the rule §4 leans on. A wasm32 build asks a package's `exports`
+for `nish-wasm32` before `nish-<mode>` and `nish`, and resolves a library
+module `nish/<name>` to `std/<name>.wasm32.ts` when that file is beside
+`std/<name>.ts`. A native build reads neither. The target outranks the mode
+because the two files differ in what they can link against (the operating
+system against the host page), while the mode only changes how one source
+compiles. `nish-wasm32` cannot be a mode's condition, because the modes are
+`i32` and `f64`. The pair must export the same names with the same
+signatures, and both builds compare it at the import (`NL3063`). The rule,
+its wording and its cases are in
+[LANGUAGE.md](LANGUAGE.md#export-and-import), in its package bullets.
+
+No library module has a twin yet, and S6 adds none. The library half is
+pinned by `tests/link/module_target_std_twin`, which points a `Compilation`
+at a library root of its own and checks the path and module name each build
+resolves `nish/<name>` to, and the pair comparison `Compilation` runs on it;
+`tests/link/module_target_twin` pins the comparison itself. The first end to
+end case through the shipped `std/` lands with the first twin, in S7.
+
+What the comparison reads, and what it leaves out:
+
+- A signature is a declaration's text up to its body or initializer. A
+  constant with no annotation is compared whole, initializer included, since
+  that is its type; every field, function and method already annotates its
+  type.
+- A class's `private` members are skipped; its public members count
+  in the order they are written, which keeps the comparison one string per
+  export.
+- The pair is compared once per build, at the first import that reaches it,
+  and refused there; later importers are not reported again.
+
+Open questions:
+
+- A twin that does not parse is not compared, so the native build passes
+  the pair and only the wasm32 build, which compiles it, reports the parse
+  error. That fails open for a native-only CI; it is left so because the
+  parse error is reported by the first wasm32 build.
+- `nish/<name>.wasm32` names the twin file directly and resolves under any
+  target. Refusing a `.wasm32` stem would close the native build's route to
+  wasm32-only source.
+- `nish:` builtin modules have no twin lookup; their source is the
+  compiler's.
+
 ## Stages
 
 | Stage | What |

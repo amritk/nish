@@ -1,9 +1,7 @@
 target datalayout = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20"
 target triple = "wasm32-unknown-unknown"
 
-declare extern_weak void @nish_panic_overflow(i32 noundef) #2
-declare i32 @llvm.fptosi.sat.i32.f64(double) #1
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
+declare i32 @llvm.fptosi.sat.i32.f64(double) #0
 
 define noundef double @grow(double noundef %x) #0 {
 entry:
@@ -11,7 +9,7 @@ entry:
   ret double %0
 }
 
-define internal noundef i32 @nish.hiWord(double noundef %x) #1 {
+define internal noundef i32 @nish.hiWord(double noundef %x) #0 {
 entry:
   %0 = bitcast double %x to i64
   %1 = sext i32 32 to i64
@@ -21,33 +19,31 @@ entry:
   ret i32 %4
 }
 
-define internal noundef double @nish.pow2(i32 noundef %n) #0 {
+define internal noundef double @nish.exp2Bits(i64 noundef %biased) #0 {
 entry:
-  %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %n, i32 1023)
-  %1 = extractvalue { i32, i1 } %0, 0
-  %2 = extractvalue { i32, i1 } %0, 1
-  br i1 %2, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  %3 = sext i32 %1 to i64
-  %4 = sext i32 52 to i64
-  %5 = and i64 %4, 63
-  %6 = shl i64 %3, %5
-  %7 = bitcast i64 %6 to double
-  ret double %7
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
+  %0 = sext i32 52 to i64
+  %1 = and i64 %0, 63
+  %2 = shl i64 %biased, %1
+  %3 = bitcast i64 %2 to double
+  ret double %3
 }
 
-define internal noundef zeroext i1 @nish.isNan(double noundef %v) #1 {
+define internal noundef double @nish.pow2(i32 noundef %n) #0 {
+entry:
+  %0 = sext i32 %n to i64
+  %1 = sext i32 1023 to i64
+  %2 = add nsw i64 %0, %1
+  %3 = tail call double @nish.exp2Bits(i64 %2)
+  ret double %3
+}
+
+define internal noundef zeroext i1 @nish.isNan(double noundef %v) #0 {
 entry:
   %0 = fcmp une double %v, %v
   ret i1 %0
 }
 
-define internal noundef double @nish.expPoly(double noundef %t) #1 {
+define internal noundef double @nish.expPoly(double noundef %t) #0 {
 entry:
   %0 = fmul double %t, 0x3E66376972BEA4D0
   %1 = fsub double %0, 0x3EBBBD41C5D26BF1
@@ -60,7 +56,7 @@ entry:
   ret double %7
 }
 
-define internal noundef double @nish.overflow(double noundef %s) #1 {
+define internal noundef double @nish.overflow(double noundef %s) #0 {
 entry:
   %0 = fmul double %s, 0x7E37E43C8800759C
   %1 = fmul double %0, 0x7E37E43C8800759C
@@ -315,22 +311,13 @@ if.end.10:
 if.end.9:
   %94 = load double, double* %y.addr, align 8
   %95 = load i32, i32* %k.addr, align 4
-  %96 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %95, i32 1000)
-  %97 = extractvalue { i32, i1 } %96, 0
-  %98 = extractvalue { i32, i1 } %96, 1
-  br i1 %98, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  %99 = call double @nish.pow2(i32 %97)
+  %96 = sext i32 %95 to i64
+  %97 = sext i32 2023 to i64
+  %98 = add nsw i64 %96, %97
+  %99 = call double @nish.exp2Bits(i64 %98)
   %100 = fmul double %94, %99
   %101 = fmul double %100, 0x0170000000000000
   ret double %101
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn readnone }

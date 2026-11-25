@@ -100,8 +100,7 @@ JavaScript. `Math.min`, `max` and `hypot` take exactly two arguments.
 `std/math.ts` rather than called from the C library, so they answer the same
 on every target, WebAssembly included, within one unit in the last place.
 
-<!-- allow-panics: calls `std/math.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 export const main = (): i32 => {
   const angle: f64 = Math.atan2(1.0, 1.0);
