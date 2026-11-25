@@ -1,2 +1,0 @@
-child: held 100 connections at once under a descriptor limit of 32, and answered each
-parent: every one of 100 clients was answered

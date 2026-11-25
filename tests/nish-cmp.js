@@ -23457,32 +23457,6 @@ const DECLARED = [
       "tests/link/std_http1_config_checked/main.ts": ["main.h"],
     }
   ),
-  // WP71 S3: tests/link/net_http_server_ring is new, and the std it links has
-  // moved since the 0.46.0 seed the way net_http_server_lifecycle's has.
-  {
-    program: "tests/link/net_http_server_ring/main.ts",
-    file: "chacha20poly1305.ll",
-    changelog: "ciphers, curves, signatures and password hashing",
-    why: "std/crypto/chacha20poly1305.ts proves the indices of its block, Poly1305 and tag walks, and still answers null or false for a key, nonce or buffer of the wrong size, so the ChaCha20-Poly1305 code changes",
-  },
-  ...["chacha20poly1305.ll", "hmac.ll"].map((file) => ({
-    program: "tests/link/net_http_server_ring/main.ts",
-    file,
-    changelog: "named constants, masks, charCodeAt and down-counting loops in the panic prover",
-    why: "the panic prover now reads a named `const`, a mask or shift, a charCodeAt result and a down-counting loop, so the checks and panic blocks it proves leave this module and the values after them renumber",
-  })),
-  ...["handler.ll", "main.ll"].map((file) => ({
-    program: "tests/link/net_http_server_ring/main.ts",
-    file,
-    changelog: "Http1Connection says when it is between requests",
-    why: "Http1Connection gains betweenRequests(), so a graceful drain can ask whether closing a connection cuts a request short; every module declaring the class's methods moves",
-  })),
-  {
-    program: "tests/link/net_http_server_ring/main.ts",
-    file: "main.h",
-    changelog: "HandlerLimits listen on io_uring rings",
-    why: "`HandlerLimits` gains its `ring` field, so its struct in the header of a program that links nish/net/http-server moves (WP63 S4)",
-  },
 ]
 
 /**

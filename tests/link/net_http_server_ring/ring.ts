@@ -9,8 +9,10 @@
 // empty 200: a carrier on descriptors holds fewer than 32 under the limit, so
 // only connections that live in ring slots (handles at or above 2^20, a ring
 // and its eventfd costing two descriptors per 32 slots) can reach `CLIENTS`.
-// The child exits 2 with "rings refused" where the kernel refuses io_uring,
-// and the case then fails: it is a claim about the rings.
+// The child exits 2 with "rings refused" where the kernel refuses io_uring;
+// the parent then exits 2 too, and its `tests/run.js` section counts a skip.
+// It is not a `main.ts`, so the generic link runner, which has no skip, does
+// not run it.
 import { realpathSync } from "nish:fs"
 import {
   NET_LISTEN_RING,
@@ -163,13 +165,14 @@ export const main = (): i32 => {
 
   // Wait for the child's listener: a connection that is refused is retried.
   // A child that exits first, refused rings or a shell whose `ulimit` failed,
-  // ends the wait at once with its status, not at the deadline.
+  // ends the wait at once with its status, not at the deadline. Its 2 is
+  // passed on; the section reads "rings refused" beside it to skip.
   let ready: boolean = false
   while (!ready && monotonicNanos() < deadline) {
     const early: i32[] = waitPid(pid, 1)
     if (early[0] === pid) {
       console.log(`parent: the child exited with ${early[1]} before it listened`)
-      return 1
+      return early[1] === 2 ? 2 : 1
     }
     const fd: i32 = tcpConnect(addr)
     pause(loop, out, 20)
