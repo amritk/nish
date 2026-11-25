@@ -6691,7 +6691,52 @@ if (dealtHere("performance")) {
 // sites that stay, by function, with the reason (`docs/LANGUAGE.md`, "Panics
 // the standard library keeps"); the explicit sites of every other function
 // are the ones still to fix, and both counts are pinned.
+//
+// Its `residual` list names, by module, function and kind, the sites of other
+// kinds that stay, with the reason and the docs/security record that gives it
+// (WP83 S5's cipher sites: an `array-length` the prover cannot bound, a
+// constant-time copy's first read, where an early return would be a branch).
+// In a module with an entry the counted sites must equal the entries, function
+// by function and kind by kind, so a site that moves to another function, or
+// one fixed without its entry going, fails; each record must exist and name
+// its function.
 const UPDATE_STD_PANICS = process.argv.includes("--update-std-panics")
+/** The baseline `--update-std-panics` writes: the new counts, with `kept` and `residual` as they were. */
+const rewrittenStdPanics = (baseline, total, explicit, modules) => ({
+  ...baseline,
+  total,
+  explicit,
+  modules,
+  kept: baseline.kept,
+  residual: baseline.residual ?? [],
+})
+/**
+ * The differences between the counted non-`panic` sites and the `residual`
+ * entries, in each module that has an entry: one line per module, function
+ * and kind whose counts differ.
+ */
+const residualMismatches = (sites, residual) => {
+  const key = (module, fn, kind) => `${module} ${fn} ${kind}`
+  const owned = new Set(residual.map((r) => r.module))
+  const got = new Map()
+  for (const site of sites) {
+    if (site.kind !== "panic" && owned.has(site.module)) {
+      const k = key(site.module, site.function, site.kind)
+      got.set(k, (got.get(k) ?? 0) + 1)
+    }
+  }
+  const want = new Map()
+  for (const r of residual) {
+    for (const [kind, n] of Object.entries(r.sites)) {
+      const k = key(r.module, r.function, kind)
+      want.set(k, (want.get(k) ?? 0) + n)
+    }
+  }
+  return [...new Set([...got.keys(), ...want.keys()])]
+    .sort()
+    .filter((k) => (got.get(k) ?? 0) !== (want.get(k) ?? 0))
+    .map((k) => `${k}: ${got.get(k) ?? 0} counted, ${want.get(k) ?? 0} listed as residual`)
+}
 if (dealtHere("stdPanics")) {
   const baselineName = "tests/std-panics.json"
   const baselineFile = path.join(root, baselineName)
@@ -6756,7 +6801,7 @@ if (dealtHere("stdPanics")) {
     for (const module of Object.keys(counts).sort()) {
       modulesOut[module] = sorted(counts[module])
     }
-    const next = { ...baseline, total: sites.size, explicit, modules: modulesOut, kept: baseline.kept }
+    const next = rewrittenStdPanics(baseline, sites.size, explicit, modulesOut)
     fs.writeFileSync(baselineFile, `${JSON.stringify(next, null, 2)}\n`)
     console.log(`std-panics: rewrote ${baselineName} (${sites.size} sites)`)
     Object.assign(baseline, next)
@@ -6820,6 +6865,44 @@ if (dealtHere("stdPanics")) {
       ...keptGone.map((k) => `${k.module} ${k.function}: no explicit panic left; take it off the kept list`),
       ...baseline.kept.filter((k) => !k.reason).map((k) => `${k.module} ${k.function}: no reason`),
     ].join("\n")
+  )
+  const residual = baseline.residual ?? []
+  const residualModules = [...new Set(residual.map((r) => r.module))]
+  const mismatches = residualMismatches(sites.values(), residual)
+  check(
+    `std-panics: in the ${residualModules.length} modules with a residual entry, the counted sites are the ${residual.length} entries, by function and kind`,
+    unreported.length === 0 && residual.length > 0 && mismatches.length === 0,
+    `${mismatches.join("\n")}\nA site fixed takes its entry off; a site left gets one, with its reason and record.`
+  )
+  // The comparison itself fails on a site its entries do not list: one
+  // fabricated extra site in the first entry's function must show.
+  const extra = residual.length > 0 ? { module: residual[0].module, function: residual[0].function, kind: "index" } : null
+  check(
+    `std-panics: the residual comparison fails on one site its entries do not list`,
+    extra !== null && residualMismatches([...sites.values(), extra], residual).length === 1,
+    "residualMismatches did not report a fabricated extra site"
+  )
+  const badRecords = residual.filter((r) => {
+    const file = path.join(root, r.record ?? "")
+    return (
+      typeof r.reason !== "string" ||
+      r.reason.length === 0 ||
+      !r.record?.startsWith("docs/security/") ||
+      !fs.existsSync(file) ||
+      !fs.readFileSync(file, "utf8").includes(r.function)
+    )
+  })
+  check(
+    `std-panics: every residual entry says why, and its docs/security record exists and names its function`,
+    residual.length > 0 && badRecords.length === 0,
+    badRecords.map((r) => `${r.module} ${r.function}: no reason, or ${r.record} is missing or does not name it`).join("\n")
+  )
+  const rewritten = rewrittenStdPanics(baseline, sites.size, explicit, baseline.modules)
+  check(
+    `std-panics: --update-std-panics keeps the kept and residual lists`,
+    JSON.stringify(rewritten.residual) === JSON.stringify(residual) &&
+      JSON.stringify(rewritten.kept) === JSON.stringify(baseline.kept),
+    "the rewrite drops or changes kept or residual"
   )
   check(
     `std-panics: ${baselineName} counts ${explicit.kept} kept explicit panics and ${explicit.toFix} still to fix`,
