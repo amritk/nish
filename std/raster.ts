@@ -730,7 +730,9 @@ export const rasterPushTrail = (trail: RasterTrail, x: f64, y: f64): void => {
 /**
  * A trail as a line of discs from oldest to newest, each larger and more
  * opaque than the one before: a streak that fades out behind what made it.
- * A point at `v` is drawn at pixel `offset + v * scale`.
+ * A point at `v` is drawn at pixel `offset + v * scale`. A `head` set
+ * outside the ring still draws the points `count` slots behind it that land
+ * in the ring, as an in-range head does, and no others.
  *
  * @param pixels - the frame, row-major
  * @param width - the frame's width in pixels
@@ -760,29 +762,30 @@ export const rasterTrail = (
   const n: i32 = toI32(xs.length)
   const count: i32 = Math.min(trail.count, n)
   const head: i32 = trail.head
-  if (count <= 0 || head < 0 || head >= n) {
+  // The oldest point is `count` slots behind the head, wrapping once. A head
+  // out of the ring (a caller can set the field) still has the slots that land
+  // in it drawn. The slot is counted in f64, where it is exact for any head,
+  // so no sum can overflow.
+  if (count <= 0) {
     return
   }
-  // The oldest point is `count` slots behind the head, wrapping; `slot` walks
-  // forward from it.
-  let slot: i32 = head - count
-  if (slot < 0) {
-    slot = slot + n
-  }
+  const size: f64 = toF64(n)
+  let raw: f64 = toF64(head) - toF64(count)
   for (let i: i32 = 0; i < count; i++) {
-    // `slot` is always in the ring, so the first test never ends the walk; it
-    // is what proves the index.
-    if (slot < 0 || slot >= n) {
-      return
+    const at: f64 = raw < 0.0 ? raw + size : raw
+    if (at >= 0.0 && at < size) {
+      const slot: i32 = toI32(at)
+      // The first two are always true after the test on `at` and prove the
+      // indexes; the third skips a slot a shorter `ys` does not hold.
+      if (slot >= 0 && slot < n && slot < toI32(ys.length)) {
+        const f: f64 = (toF64(i) + 1.0) / (toF64(count) + 1.0)
+        const radius: f64 = r * (f * 0.6 + 0.4)
+        const cx: f64 = offsetX + xs[slot] * scale
+        const cy: f64 = offsetY + ys[slot] * scale
+        rasterDisc(pixels, width, height, cx, cy, radius * scale, colour, alpha * f)
+      }
     }
-    if (slot < toI32(ys.length)) {
-      const f: f64 = (toF64(i) + 1.0) / (toF64(count) + 1.0)
-      const radius: f64 = r * (f * 0.6 + 0.4)
-      const cx: f64 = offsetX + xs[slot] * scale
-      const cy: f64 = offsetY + ys[slot] * scale
-      rasterDisc(pixels, width, height, cx, cy, radius * scale, colour, alpha * f)
-    }
-    slot = slot + 1 >= n ? 0 : slot + 1
+    raw = raw + 1.0
   }
 }
 
