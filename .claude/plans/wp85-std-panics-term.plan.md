@@ -59,6 +59,39 @@ stages:
       - id: s3-ratchet
         content: Lower tests/std-panics.json to the new exact per-module counts and lower each instruction count that fell to CI's figure, with the before and after table in the PR body — see WP85 S3
         status: pending
+  - id: s4-followups
+    title: WP85 S4 — game-starter without --allow-panics, raster trails draw again, the guide catches up
+    goal: game-starter builds without --allow-panics; rasterTrail draws its in-range slots for an out-of-range head again; term-probe's and break-web's opt-outs name the sites they reach and the issues that hold them; the guide states no stale panic claim and documents every behaviour WP85 changed.
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js link && WASI_SYSROOT=/usr node tests/run.js wasi && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/nish-cmp.js
+    issue: 2289
+    todos:
+      - id: s4-synth
+        content: Remove or prove std/synth.ts's array-length site in synthSilence, and any other site still between examples/game-starter and the no-panic default, the way #2103 did (no nish:unsafe, no made-up-value guard); then drop game-starter's opt-out header, its build.mjs --allow-panics argument and comment, and the guide markers and sentences about it — see WP85 S4 (#2289, option 1)
+        status: pending
+      - id: s4-records
+        content: Rewrite examples/term-probe.ts's opt-out header to name the sites it reaches today (std/term-pixels.ts's kept desync panic, std/term.ts's slice) and record it against #2208; record break-web's opt-out (examples/break-web/build.mjs and game.ts's header comment) against #2208 and #2316 for its module-storage indexes — see WP85 S4 (#2289)
+        status: pending
+      - id: s4-trail
+        content: Make rasterTrail draw the slots that land in range again when its public head is out of range, bounded by n, as the base did, without a new panic site; pin it with a tests/link case that fails under the draw-nothing guard; keep the Screen.flush change — see WP85 S4 (#2290 decision)
+        status: pending
+      - id: s4-guide
+        content: Rewrite the stale panic passages and allow-panics markers in docs/guide/using-nish/browser-games.md and standard-library.md so they name only modules tests/std-panics.json still counts, and add one sentence per changed behaviour on its module's guide page - the rasterMixWeight clamp, the ringCapacity cap at 2^30-1, rasterTrail's in-range draw, and Screen.flush flushing up to the shortest buffer as specified behaviour — see WP85 S4 (#2292, #2290)
+        status: pending
+      - id: s4-pins
+        content: Regenerate the pinned std line numbers, the checked goldens and docs/reference; add the nish-cmp DECLARED and file exit entries the IR moves need; lower tests/std-panics.json to the new counts and every instruction count that fell to CI's figure (a raster count that rises is raised only with CI's table and the reason in the PR body, since the decision restores the base's work) — see WP85 S4
+        status: pending
+  - id: s5-term-tests
+    title: WP85 S5 — tests for four rewritten std/term.ts input paths
+    goal: KeyDecoder.keep, termDecodeKeys, termDecodeEvents and termBytesText's clamp each have a test that feeds the input that used to panic and pins the output, and docs/security/term.md records them as tested.
+    verification: node tests/run.js term && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/security-scope.mjs
+    issue: 2291
+    todos:
+      - id: s5-cases
+        content: Add tests/link case(s) under tests/link/std_term_* that feed KeyDecoder.keep, termDecodeKeys, termDecodeEvents and termBytesText's clamp the input that used to reach their panic, and pin each output in expected stdout; each must fail if its guard is removed — see WP85 S5 (#2291)
+        status: pending
+      - id: s5-record
+        content: Move the matching rows in docs/security/term.md from "Open - untested defensive bounds" to its evidence table, each citing the check that fails without its guard; record Screen.flush's shortest-buffer flush as specified behaviour there, citing tests/link/std_term_buffers_disagree; update the term row in docs/security/README.md if its counts change — see WP85 S5 (#2291, #2290)
+        status: pending
 ---
 
 # WP85 — std panic-free for term, raster, synth and host
@@ -120,6 +153,32 @@ Explicit panics to fix, not kept (their reasons were internal invariants or unre
 
 **Runs with:** S1 and S2 in parallel. Merges last.
 
+### S4 — game-starter without --allow-panics, raster trails draw again, the guide catches up
+
+Added after the first run (tracking #2267) for the owner's decisions on #2289 and #2290 and the follow-up #2292; the owner signed the parent off again on 2026-11-25. Fixes #2289, #2290 and #2292.
+
+On main at c5265f9c, `tests/std-panics.json` counts `std/synth.ts` array-length 1 and `std/raster.ts` array-length 12, and no longer lists `std/math.ts` (WP87 cleared it), so game-starter's opt-out may now rest on synth's site alone: the stage builds game-starter without `--allow-panics` first to see what is left.
+
+- **#2289, option 1 (split it).** Clear what still sits between game-starter and the default, drop its opt-out, and fix term-probe's stale header. break-web's and term-probe's opt-outs stay, recorded against #2208 and #2316 (module-storage indexes the prover cannot discharge).
+- **#2290 (restore raster, keep flush).** `rasterTrail` draws the in-range slots again, bounded by `n`, as the base did. The `Screen.flush` guard stays and is documented as specified behaviour: here on the guide page, and in `docs/security/term.md` by S5.
+- **#2292.** The guide's stale panic passages and markers (`browser-games.md:62-64` and its marker, `standard-library.md`'s marker) name only what `tests/std-panics.json` still counts after this stage, and each changed behaviour gets a sentence on its module's page: the `rasterMixWeight` clamp, the `ringCapacity` cap at 2^30−1 (`interop.md` documents ring), `rasterTrail`'s in-range draw, and `Screen.flush` flushing up to the shortest buffer.
+
+**Owns:** `std/synth.ts`, `std/raster.ts`, `examples/game-starter/**`, `examples/term-probe.ts`, `examples/break-web/build.mjs`, `examples/break-web/game.ts` (its header comment only), `bench/std-raster*`, `bench/std-synth*`, `tests/link/std_raster*/**`, `tests/link/std_synth*/**`, `tests/run.js` (only the checks that name game-starter, term-probe or break-web's opt-outs), `docs/guide/**`, `docs/security/wasm-host.md`, `tests/std-panics.json`, `bench/instructions.json`, `tests/nish-cmp.js`, `docs/security/README.md` (the wasm-host row only)
+
+**Model:** lead.
+
+**Runs with:** S5 in parallel. Merges first.
+
+### S5 — tests for four rewritten std/term.ts input paths
+
+Fixes #2291. Test and record work only: no `std/` change. `docs/security/term.md` already lists three of the four under "Open: untested defensive bounds"; `KeyDecoder.keep` is the fourth. A test pins today's output; if that output looks wrong, the PR body says so and the stage does not change `std/term.ts`.
+
+**Owns:** new `tests/link/std_term_*/**` cases (not the existing ones), `docs/security/term.md`, `docs/security/README.md` (the term row only)
+
+**Model:** lead.
+
+**Runs with:** S4 in parallel. Merges second.
+
 ## Running the stages together (refined for `/feature`)
 
 The three stages are written at once and merge in order S1 → S2 → S3.
@@ -141,3 +200,15 @@ Derived from the plan's goals and rules, not given separately.
 6. `node tests/run.js term` and the `std_term*`, `std_raster`, `std_synth`, `std_host_*` and `break_*` link cases pass on main.
 7. The guide no longer says these modules keep panic sites where they no longer do, and states every changed public API; `node scripts/gen-reference.mjs --check` passes.
 8. CI is green on main after the last merge, and every nish-cmp IR move the run caused is declared.
+
+## Acceptance criteria for S4 and S5
+
+Derived from #2289, #2290, #2291 and #2292 and the owner's decisions on them.
+
+1. `examples/game-starter` builds without `--allow-panics`: no opt-out header, no `--allow-panics` in its `build.mjs`, and `node tests/run.js performance` passes; `tests/std-panics.json` gives `std/synth.ts` no to-fix count, or the PR names the site that stays and why.
+2. `examples/term-probe.ts`'s header names the sites it reaches today, and term-probe's and break-web's opt-outs each cite #2208 and, for break-web's module-storage indexes, #2316.
+3. `rasterTrail` with an out-of-range `head` draws the slots that land in range, bounded by `n`; a `tests/link` case pins it and fails under the draw-nothing guard; `node tests/run.js std-panics` passes with no new raster site.
+4. `Screen.flush` flushing up to the shortest buffer is documented as specified behaviour on its guide page and in `docs/security/term.md`.
+5. `browser-games.md` and `standard-library.md` name as keeping panic sites only modules `tests/std-panics.json` still counts, and the guide documents the `rasterMixWeight` clamp, the `ringCapacity` cap and `rasterTrail`'s in-range draw; `gen-reference --check` and `check-links` pass.
+6. `KeyDecoder.keep`, `termDecodeKeys`, `termDecodeEvents` and `termBytesText`'s clamp each have a test that feeds the input that used to panic and pins the output, and their `docs/security/term.md` rows have moved out of "Open: untested defensive bounds", each citing its check.
+7. CI is green on main after the last merge; every nish-cmp move is declared; no instruction count rose without CI's table and its reason in the PR body.
