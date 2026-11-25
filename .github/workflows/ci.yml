@@ -1905,6 +1905,124 @@ jobs:
             $run node bench/sha256/run.mjs --compiler build/nish-test
           done
 
+  # WP89 S3: runtime/gfx/ against the SDL3 and wgpu-native that
+  # scripts/fetch-gfx.sh pins, built here from their checked downloads (no
+  # cache: a restored build/gfx/ would skip the sha256 check). The triangle
+  # draws offscreen on Mesa's lavapipe, the CPU Vulkan driver, so no GPU and
+  # no display are needed; libwayland-dev to libdecor-0-dev are the headers
+  # SDL's Wayland and X11 drivers build against. The step fails on any SKIP of
+  # a gfx check: here the libraries and an adapter are both present.
+  gfx:
+    name: gfx (ubuntu-latest, lavapipe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26.13.1
+          cache: npm
+
+      - name: Install LLVM 18, Vulkan and SDL's build headers (Ubuntu)
+        timeout-minutes: 5
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18 mesa-vulkan-drivers libvulkan1 libwayland-dev libxkbcommon-dev wayland-protocols libegl-dev libxcursor-dev libxrandr-dev libxi-dev libxss-dev libxfixes-dev libxtst-dev libxrender-dev libdecor-0-dev cmake ninja-build
+
+      # The `test` job's step of the same name.
+      - name: Link the LLVM 18 tools by their plain names
+        run: |
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as llvm-link llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci --ignore-scripts
+
+      - name: Fetch the seed
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
+        run: bash scripts/fetch-seed.sh
+
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
+
+      - name: Fetch and build SDL3 and wgpu-native
+        timeout-minutes: 10
+        run: sh scripts/fetch-gfx.sh
+
+      - name: The gfx section on lavapipe
+        run: |
+          set -o pipefail
+          node tests/run.js gfx | tee "$RUNNER_TEMP/gfx.log"
+          grep -E '^[1-9][0-9]* passed, 0 failed\.$' "$RUNNER_TEMP/gfx.log"
+          grep -E '^PASS  gfx: tests/gfx/triangle\.c draws a red triangle on a blue clear offscreen and reads it back$' "$RUNNER_TEMP/gfx.log"
+          grep -E '^PASS  gfx: a Nish program that calls nishgfx_instance_create links runtime/gfx/ with --link and gets an instance$' "$RUNNER_TEMP/gfx.log"
+          if grep -E '^SKIP  ' "$RUNNER_TEMP/gfx.log"; then exit 1; fi
+
+  # The same section on Apple silicon, which checks what Linux cannot: that
+  # scripts/build.sh's framework list links SDL's Cocoa driver and
+  # wgpu-native's Metal backend, and that both build there. A macOS runner is a
+  # VM, so whether a Metal adapter answers is the VM's to say: the triangle's
+  # checks are a counted skip when none does ("no GPU adapter answered"), and
+  # that is the one SKIP this step allows.
+  gfx-macos:
+    name: gfx (macos-latest, Metal)
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26.13.1
+          cache: npm
+
+      - name: Install LLVM 18, cmake and ninja (macOS)
+        timeout-minutes: 10
+        uses: ./.github/actions/brew-install
+        with:
+          formulae: llvm@18 cmake ninja
+
+      - name: Put LLVM 18 on PATH (macOS)
+        run: |
+          prefix="$(brew --prefix llvm@18)"
+          if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci --ignore-scripts
+
+      - name: Fetch the seed
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
+        run: bash scripts/fetch-seed.sh
+
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
+
+      - name: Fetch and build SDL3 and wgpu-native
+        timeout-minutes: 10
+        run: sh scripts/fetch-gfx.sh
+
+      - name: The gfx section on Metal
+        run: |
+          set -o pipefail
+          node tests/run.js gfx | tee "$RUNNER_TEMP/gfx.log"
+          grep -E '^[1-9][0-9]* passed, 0 failed(, [0-9]+ skipped)?\.$' "$RUNNER_TEMP/gfx.log"
+          grep -E '^PASS  gfx: a Nish program that calls nishgfx_instance_create links runtime/gfx/ with --link and gets an instance$' "$RUNNER_TEMP/gfx.log"
+          if grep -E '^SKIP  ' "$RUNNER_TEMP/gfx.log" | grep -vE '^SKIP  gfx: no GPU adapter answered '; then exit 1; fi
+
   # Every fuzz target in tests/fuzz/targets/ built under
   # -fsanitize=fuzzer,address,undefined, replayed over its seed corpus and
   # regressions, then fuzzed for 30 seconds from a fixed -seed, one target per
@@ -2224,6 +2342,8 @@ jobs:
       - simd-arm64
       - runtime-net
       - sha256-macos
+      - gfx
+      - gfx-macos
       - fuzz-smoke
       - postgres-live
       - lint
