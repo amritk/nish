@@ -316,10 +316,11 @@ export const ctChacha20XorInto = (state: u32[], src: u8[], srcAt: i32, len: i32,
 // Only the whole-blocks loop of poly1305Absorb: its padded tail copies the
 // message into a stack array at a counted index, a store this reading cannot
 // place, so the tail stays discipline (docs/security/ct-verification.md).
-export const ctPoly1305AbsorbWhole = (h: u64[], r: u64[], buf: u8[], at: i32, len: i32): void => {
-  const whole: i32 = len >> 4
-  for (let i: i32 = 0; i < whole; i++) {
-    ctPoly1305Block(h, r, buf, at + 16 * i, toU64(CT_POLY1305_HIGH_BIT))
+export const ctPoly1305AbsorbWhole = (h: u64[], r: u64[], buf: u8[], len: i32): void => {
+  const whole: i32 = (len >> 4) & 0x7ffffff
+  const end: i32 = 16 * whole
+  for (let off: i32 = 0; off < end; off += 16) {
+    ctPoly1305Block(h, r, buf, off, toU64(CT_POLY1305_HIGH_BIT))
   }
 }
 

@@ -451,7 +451,7 @@ const poly1305Clamp = (key: u8[], r: u64[]): void => {
  */
 const poly1305Block = (h: u64[], r: u64[], m: u8[], at: i32, high: u64): void => {
   const lo: u64 = poly1305Le64(m, at)
-  const hi: u64 = poly1305Le64(m, toI32(toU32(at) + 8))
+  const hi: u64 = poly1305Le64(m, at + 8)
   const h0: u64 = h[0] + (lo & 0x3ffffff)
   const h1: u64 = h[1] + ((lo >>> 26) & 0x3ffffff)
   const h2: u64 = h[2] + (((lo >>> 52) | (hi << 12)) & 0x3ffffff)
@@ -567,23 +567,22 @@ const poly1305Finish = (h: u64[], key: u8[], tag: u8[]): void => {
 }
 
 /**
- * Feeds the `len` bytes of `buf` from `at` to the accumulator `h`, sixteen at
+ * Feeds the first `len` bytes of `buf` to the accumulator `h`, sixteen at
  * a time. A short last block is padded one of two ways: `zeroPad` is the
  * AEAD's (RFC 8439 §2.8, zeros up to 16 bytes and the block counted as whole),
  * and otherwise it is §2.5.1's, a 0x01 byte after the message and zeros after
  * that, with no bit at 2^128.
  */
-const poly1305Absorb = (h: u64[], r: u64[], buf: u8[], at: i32, len: i32, zeroPad: boolean): void => {
-  const whole: i32 = len >> 4
-  for (let i: i32 = 0; i < whole; i++) {
-    poly1305Block(h, r, buf, at + 16 * i, toU64(POLY1305_HIGH_BIT))
+const poly1305Absorb = (h: u64[], r: u64[], buf: u8[], len: i32, zeroPad: boolean): void => {
+  const whole: i32 = (len >> 4) & 0x7ffffff
+  const end: i32 = 16 * whole
+  for (let off: i32 = 0; off < end; off += 16) {
+    poly1305Block(h, r, buf, off, toU64(POLY1305_HIGH_BIT))
   }
   const tail: i32 = len & 15
   if (tail > 0) {
     const last: u8[] = new Array<u8>(16)
-    // Where the tail starts, summed in `u32`: it is inside `buf`, so the sum
-    // cannot wrap, and the loop stops at the end of `buf` all the same.
-    let k: i32 = toI32(toU32(at) + (toU32(whole) << 4))
+    let k: i32 = end
     for (let i: i32 = 0; i < tail && i < toI32(last.length) && k >= 0 && k < toI32(buf.length); i++) {
       last[i] = buf[k]
       k = k + 1
@@ -615,7 +614,7 @@ export const poly1305 = (key: u8[], msg: u8[]): u8[] | null => {
   const h: u64[] = new Array<u64>(5)
   const r: u64[] = new Array<u64>(5)
   poly1305Clamp(key, r)
-  poly1305Absorb(h, r, msg, 0, toI32(msg.length), false)
+  poly1305Absorb(h, r, msg, toI32(msg.length), false)
   // `POLY1305_TAG_SIZE`, written out because a literal length is what proves
   // `poly1305Finish`'s stores in range.
   const tag: u8[] = new Array<u8>(16)
@@ -648,17 +647,17 @@ export const poly1305KeyGen = (key: u8[], nonce: u8[]): u8[] | null => {
 }
 
 /**
- * The AEAD tag of RFC 8439 §2.8 over `aad` and the `len` bytes of ciphertext
- * at `ct[at]`: Poly1305 under `polyKey` of the AAD and the ciphertext, each
+ * The AEAD tag of RFC 8439 §2.8 over `aad` and the first `len` bytes of
+ * ciphertext in `ct`: Poly1305 under `polyKey` of the AAD and the ciphertext, each
  * zero-padded to 16 bytes, and then both lengths as little-endian `u64`s.
  */
-const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i32): u8[] => {
+const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], len: i32): u8[] => {
   const aadLen: i32 = toI32(aad.length)
   const h: u64[] = new Array<u64>(5)
   const r: u64[] = new Array<u64>(5)
   poly1305Clamp(polyKey, r)
-  poly1305Absorb(h, r, aad, 0, aadLen, true)
-  poly1305Absorb(h, r, ct, at, len, true)
+  poly1305Absorb(h, r, aad, aadLen, true)
+  poly1305Absorb(h, r, ct, len, true)
   const lengths: u8[] = new Array<u8>(16)
   for (let i: i32 = 0; i < 4; i++) {
     lengths[i] = toU8(aadLen >>> (8 * i))
@@ -723,24 +722,25 @@ const chacha20Poly1305TagMatch = (tag: u8[], sealed: u8[], at: i32): u32 => {
 export const chacha20Poly1305Seal = (key: u8[], nonce: u8[], aad: u8[], plaintext: u8[]): u8[] | null => {
   const len: i32 = toI32(plaintext.length)
   // 2^31 - 17: the longest plaintext whose sealed form, sixteen bytes longer,
-  // is still an array length.
-  const longest: i32 = 0x7fffffef
+  // is still an array length. Written in decimal, since the range prover
+  // reads a decimal bound and not a hex one.
+  if (len > 2147483631) {
+    return null
+  }
   if (
     toI32(key.length) !== CHACHA20_KEY_SIZE ||
     toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE ||
-    len > longest ||
     !chacha20CounterFits(1, len)
   ) {
     return null
   }
-  // Summed in `u32`: `len` is at most `longest`, so the sum is at most
-  // 2^31 - 1 and reads back as the same `i32`.
-  const total: i32 = toI32(toU32(len) + toU32(POLY1305_TAG_SIZE))
+  // `len` is at most 2^31 - 17, so the sum is at most 2^31 - 1.
+  const total: i32 = len + POLY1305_TAG_SIZE
   const state: u32[] = chacha20State(key, 0, nonce, 0)
   const polyKey: u8[] = chacha20Poly1305Setup(state)
   const sealed: u8[] = new Array<u8>(total)
   chacha20XorInto(state, plaintext, 0, len, sealed, 0)
-  const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, 0, len)
+  const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, len)
   let k: i32 = len
   for (let i: i32 = 0; i < toI32(tag.length) && k >= 0 && k < toI32(sealed.length); i++) {
     sealed[k] = tag[i]
@@ -783,7 +783,7 @@ export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: 
   }
   const state: u32[] = chacha20State(key, 0, nonce, 0)
   const polyKey: u8[] = chacha20Poly1305Setup(state)
-  const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, 0, len)
+  const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, len)
   // The one branch on the comparison, and it is on the answer the caller is
   // about to learn anyway.
   const match: u32 = chacha20Poly1305TagMatch(tag, sealed, len)

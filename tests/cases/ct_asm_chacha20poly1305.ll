@@ -2251,46 +2251,40 @@ ovf.fail:
   unreachable
 }
 
-define void @ctPoly1305AbsorbWhole(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %h, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %r, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %at, i32 noundef %len) #3 {
+define void @ctPoly1305AbsorbWhole(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %h, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %r, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %len) #3 {
 entry:
   %whole.addr = alloca i32, align 4
-  %i.addr = alloca i32, align 4
+  %end.addr = alloca i32, align 4
+  %off.addr = alloca i32, align 4
   %0 = ashr i32 %len, 4
-  store i32 %0, i32* %whole.addr, align 4
-  store i32 0, i32* %i.addr, align 4
+  %1 = and i32 %0, 134217727
+  store i32 %1, i32* %whole.addr, align 4
+  %2 = load i32, i32* %whole.addr, align 4
+  %3 = mul nsw i32 16, %2
+  store i32 %3, i32* %end.addr, align 4
+  store i32 0, i32* %off.addr, align 4
   br label %for.cond
 
 for.cond:
-  %1 = load i32, i32* %i.addr, align 4
-  %2 = load i32, i32* %whole.addr, align 4
-  %3 = icmp slt i32 %1, %2
-  br i1 %3, label %for.body, label %for.end
+  %4 = load i32, i32* %off.addr, align 4
+  %5 = load i32, i32* %end.addr, align 4
+  %6 = icmp slt i32 %4, %5
+  br i1 %6, label %for.body, label %for.end
 
 for.body:
-  %4 = load i32, i32* %i.addr, align 4
-  %5 = mul nsw i32 16, %4
-  %6 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %at, i32 %5)
-  %7 = extractvalue { i32, i1 } %6, 0
-  %8 = extractvalue { i32, i1 } %6, 1
-  br i1 %8, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  %9 = sext i32 16777216 to i64
-  call void @ctPoly1305Block(%struct.nish_array* %h, %struct.nish_array* %r, %struct.nish_array* %buf, i32 %7, i64 %9)
+  %7 = load i32, i32* %off.addr, align 4
+  %8 = sext i32 16777216 to i64
+  call void @ctPoly1305Block(%struct.nish_array* %h, %struct.nish_array* %r, %struct.nish_array* %buf, i32 %7, i64 %8)
   br label %for.inc
 
 for.inc:
-  %10 = load i32, i32* %i.addr, align 4
-  %11 = add nsw i32 %10, 1
-  store i32 %11, i32* %i.addr, align 4
+  %9 = load i32, i32* %off.addr, align 4
+  %10 = add nsw i32 %9, 16
+  store i32 %10, i32* %off.addr, align 4
   br label %for.cond
 
 for.end:
   ret void
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
 }
 
 define void @ctChacha20XorIntoToZero(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %keystream, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst) #3 {
