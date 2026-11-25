@@ -16664,7 +16664,8 @@ are not all in `[0, length)`; and the second check of a compound store
   does (`0 <= off <= end <= buf.length`, the rest of the buffer
   `buf.length - off` among them); that guard also proves `end - off` does
   not overflow, since it lies in `[0, end]`. A bound held in a field is
-  copied into a local the guard tests (`const end = this.end`). Every bound is a literal, a
+  copied into a local the guard tests (`const end = this.end`). Every
+  bound is a literal, a
   constant, a local, a `.length`, or a sum or difference of them, and no later
   argument assigns or calls anything but a builtin integer conversion, since
   the check reads the length after every argument has run. A proven check is left out of the IR, but for an
