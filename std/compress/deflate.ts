@@ -2358,13 +2358,24 @@ export class InflateTable {
  * bit. Answers false, copying nothing, unless `2 * end` is within the table.
  */
 const inflateDouble = (entries: i32[], end: i32): boolean => {
-  if (end < 0 || end > toI32(entries.length) - end) {
+  if (end < 0) {
+    return false
+  }
+  // `2 * end` as `n - ((n - end) - end)`: each step subtracts one value at
+  // least zero from another, so the bounds prover proves all three, and the
+  // middle one is negative exactly when `2 * end` is past the table.
+  const n: i32 = toI32(entries.length)
+  const room: i32 = n - end
+  if (room < 0) {
+    return false
+  }
+  const gap: i32 = room - end
+  if (gap < 0) {
     return false
   }
   // A counter below a bound needs no overflow check, and the loop without
   // one is a vector copy.
-  // Cannot wrap: `2 * end` is at most the table's length, by the test above.
-  const twice: i32 = toI32(toU32(end) + toU32(end))
+  const twice: i32 = n - gap
   for (let j: i32 = end; j < twice; j += 1) {
     uncheckedSet(entries, j, uncheckedGet(entries, j - end))
   }
@@ -2560,7 +2571,7 @@ export class Inflater {
       bits > 15 ||
       from < 0 ||
       n < 0 ||
-      from > toI32(lens.length) - n ||
+      n > 288 ||
       n > toI32(syms.length) ||
       toI32(count.length) < 16 ||
       toI32(offs.length) < 16 ||
@@ -2568,61 +2579,98 @@ export class Inflater {
     ) {
       return DEFLATE_ERR_HUFFMAN
     }
+    // `from + n` as `lens.length - ((lens.length - from) - n)`: each step
+    // subtracts a value at least zero, so the bounds prover proves all
+    // three, and the middle one is negative exactly when the run is past
+    // `lens`.
+    const room: i32 = toI32(lens.length) - from
+    if (room < 0) {
+      return DEFLATE_ERR_HUFFMAN
+    }
+    const gap: i32 = room - n
+    if (gap < 0) {
+      return DEFLATE_ERR_HUFFMAN
+    }
+    const hi: i32 = toI32(lens.length) - gap
     for (let l: i32 = 0; l < 16; l += 1) {
       count[l] = 0
     }
-    // `lens[from .. from + n)` was checked above. A length outside 0 to 15
-    // shows in the OR of them all, tested once after the loop.
-    // Cannot wrap: `from + n` is at most `lens.length`, checked above.
-    const hi: i32 = toI32(toU32(from) + toU32(n))
-    let seen: i32 = 0
+    // A count is at most the `n` lengths seen, and `n` at most 288, the
+    // literal/length alphabet. The bounds prover reads a decimal literal in a
+    // guard, not a named constant or a hex one.
     for (let i: i32 = from; i < hi; i += 1) {
       const l: i32 = uncheckedGet(lens, i)
-      seen = seen | l
-      const c: i32 = l & 15
-      count[c] = wrappingAdd(count[c], 1)
-    }
-    if ((seen & ~15) !== 0) {
-      return DEFLATE_ERR_HUFFMAN
-    }
-    count[0] = 0
-    // The Kraft sum: over-subscribed is an error; incomplete is allowed for
-    // one one-bit code only.
-    // A count, and so `codes`, is at most `n`, which the `u16` alphabet
-    // size bounds, and `left` stays at most 2^15: the masks keep every bit,
-    // and tell the bounds prover so.
-    let left: i32 = 1
-    let codes: i32 = 0
-    for (let l: i32 = 1; l < 16; l += 1) {
-      const c: i32 = count[l] & 0xffff
-      left = (left & 0xffff) * 2 - c
-      codes = (codes & 0xffff) + c
-      if (left < 0) {
+      if (l < 0 || l > 15) {
         return DEFLATE_ERR_HUFFMAN
       }
+      const c: i32 = count[l]
+      if (c < 0 || c >= 288) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      count[l] = c + 1
+    }
+    const unused: i32 = count[0]
+    if (unused < 0 || unused > n) {
+      return DEFLATE_ERR_HUFFMAN
+    }
+    const codes: i32 = n - unused
+    count[0] = 0
+    // The Kraft sum: over-subscribed is an error; incomplete is allowed for
+    // one one-bit code only. `left` is the codes still free at length `l`,
+    // at most 2^(l - 1) before the step, and a count at most `n`.
+    let left: i32 = 1
+    for (let l: i32 = 1; l < 16; l += 1) {
+      const c: i32 = count[l]
+      const free: i32 = left
+      if (free < 0 || free > 16384) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      if (c < 0 || c > 288) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      left = free * 2 - c
+    }
+    if (left < 0) {
+      return DEFLATE_ERR_HUFFMAN
     }
     if (left > 0 && codes !== 0 && !(kind !== INF_TABLE_CODELEN && codes === 1 && count[1] === 1)) {
       return DEFLATE_ERR_HUFFMAN
     }
     // Sorted by length, then symbol, with no branch per symbol: the unused
     // symbols (length 0) go after the rest, where nothing reads them.
-    offs[1] = 0
-    for (let l: i32 = 1; l < 15; l += 1) {
-      // At most `codes`, as above.
-      offs[l + 1] = (offs[l] & 0xffff) + (count[l] & 0xffff)
+    // The running sum is at most `codes`, checked as it grows.
+    let acc: i32 = 0
+    for (let l: i32 = 1; l < 16; l += 1) {
+      const c: i32 = count[l]
+      const sum: i32 = acc
+      if (sum < 0 || sum > 288) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      if (c < 0 || c > 288) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      offs[l] = sum
+      acc = sum + c
     }
     offs[0] = codes
     for (let i: i32 = from; i < hi; i += 1) {
-      const l: i32 = uncheckedGet(lens, i) & 15
-      const at: i32 = offs[l]
-      if (at >= 0 && at < toI32(syms.length)) {
-        syms[at] = i - from
+      const l: i32 = uncheckedGet(lens, i)
+      if (l < 0 || l > 15) {
+        return DEFLATE_ERR_HUFFMAN
       }
-      offs[l] = wrappingAdd(at, 1)
+      const at: i32 = offs[l]
+      if (at < 0 || at >= toI32(syms.length)) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      syms[at] = i - from
+      offs[l] = at + 1
     }
-    // `bits` is at most 15: the mask keeps every bit, and tells the bounds
-    // prover so.
-    const size: i32 = (1 << bits) & 0xffff
+    // `bits` is 1 to 15, so `size` is 2 to 2^15; the guard tells the bounds
+    // prover so, which does not range a shift.
+    const size: i32 = 1 << bits
+    if (size < 2 || size > 32768) {
+      return DEFLATE_ERR_HUFFMAN
+    }
     const slow: i32 = INF_SLOW << 8
     let tmpl: i32[] = this.clEntries
     if (kind === INF_TABLE_LITLEN) {
@@ -2645,24 +2693,28 @@ export class Inflater {
       let k: i32 = 0
       for (let l: i32 = 1; l <= bits && l < 16; l += 1) {
         const codesHere: i32 = uncheckedGet(count, l)
+        const step: i32 = 1 << l
+        if (step < 2 || step > 32768) {
+          return DEFLATE_ERR_HUFFMAN
+        }
         for (let c: i32 = 0; c < codesHere; c += 1) {
-          if (k >= 0 && k < toI32(syms.length)) {
-            const s: i32 = syms[k]
-            if (s < 0 || s >= toI32(tmpl.length)) {
-              return DEFLATE_ERR_HUFFMAN
-            }
-            const e: i32 = tmpl[s] | l
-            const step: i32 = 1 << l
-            // Cannot wrap: `r` is under `size` and `step` at most 2^15.
-            for (let r: i32 = deflateReverse(code, l); r < size; r = toI32(toU32(r) + toU32(step))) {
-              uncheckedSet(entries, r, e)
-            }
+          // `k` is under `codes`, and `code` under 2^l: the set is not
+          // over-subscribed, checked above.
+          const at: i32 = k
+          const cur: i32 = code
+          if (at < 0 || at >= toI32(syms.length) || cur < 0 || cur > 32767) {
+            return DEFLATE_ERR_HUFFMAN
           }
-          // `k` is under `codes`, and `code` under 2^l (the set is not
-          // over-subscribed): the masks keep every bit, and tell the bounds
-          // prover so.
-          k = (k & 0xffff) + 1
-          code = (code & 0x7fff) + 1
+          const s: i32 = syms[at]
+          if (s < 0 || s >= toI32(tmpl.length)) {
+            return DEFLATE_ERR_HUFFMAN
+          }
+          const e: i32 = tmpl[s] | l
+          for (let r: i32 = deflateReverse(cur, l); r < size; r += step) {
+            uncheckedSet(entries, r, e)
+          }
+          k = at + 1
+          code = cur + 1
         }
         code = code << 1
       }
@@ -2702,8 +2754,8 @@ export class Inflater {
           return 0
         }
         // `code` differs from `end - 1`, so the count of leading zeros is
-        // under 32: the mask keeps every bit, and tells the bounds prover so.
-        const bit: u32 = toU32(1) << toU32(toI32(31) - (toI32(Math.clz32(toU32(code ^ (end - 1)))) & 31))
+        // under 32 and the shift inside the width.
+        const bit: u32 = toU32(1) << toU32(31 - Math.clz32(toU32(code ^ (end - 1))))
         code = toI32((toU32(code) & (bit - toU32(1))) | bit)
         here -= 1
       }
@@ -2725,7 +2777,12 @@ export class Inflater {
     // tables already built, as wide as it takes for them to fill it (the
     // code is complete, so they do), and the slot points to it. A subtable
     // entry carries the bits past the main table's as its length.
+    // A subtable's start is packed into an entry's top bits, so a table and
+    // its subtables fit 2^15 entries.
     const limit: i32 = toI32(entries.length)
+    if (limit > 32767) {
+      return DEFLATE_ERR_HUFFMAN
+    }
     let prefix: i32 = -1
     let start: i32 = 0
     let subEnd: i32 = size
@@ -2735,24 +2792,40 @@ export class Inflater {
       }
       if ((code & (size - 1)) !== prefix) {
         prefix = code & (size - 1)
-        start = subEnd
         let subBits: i32 = len - bits
         let used: i32 = here
-        // `used` is under 2^subBits when it doubles, and `bits + subBits` at
-        // most 15 after the step: the masks keep every bit, and tell the
-        // bounds prover so.
+        // `used` is under 2^subBits, at most 2^13, when it doubles, and
+        // `bits + subBits` at most 15 after the step.
         while (subBits < 14 && bits + subBits < 15 && used < 1 << subBits) {
-          subBits += 1
-          const at: i32 = (bits + (subBits & 15)) & 15
-          used = (used & 0xffff) * 2 + (count[at] & 0xffff)
+          const wider: i32 = subBits
+          const twice: i32 = used
+          if (wider < 0 || wider > 13 || twice < 0 || twice > 8191) {
+            return DEFLATE_ERR_HUFFMAN
+          }
+          subBits = wider + 1
+          const at: i32 = bits + subBits
+          if (at > 15) {
+            return DEFLATE_ERR_HUFFMAN
+          }
+          const c: i32 = count[at]
+          if (c < 0 || c > 288) {
+            return DEFLATE_ERR_HUFFMAN
+          }
+          used = twice * 2 + c
         }
-        // Cannot wrap: `start` is at most the table's length, a `u16`, and
-        // the width at most 2^14.
-        subEnd = toI32(toU32(start) + (toU32(1) << toU32(subBits)))
-        if (subEnd > limit || prefix < 0) {
+        // The subtable goes after the last one, and must fit the table.
+        const base: i32 = subEnd
+        const width: i32 = 1 << subBits
+        if (base < 0 || base > 32767 || width < 1 || width > 16384 || prefix < 0) {
           return DEFLATE_ERR_HUFFMAN
         }
-        uncheckedSet(entries, prefix, (start << 16) | (INF_SUB << 8) | (subBits << 11) | bits)
+        const next: i32 = base + width
+        if (next > limit) {
+          return DEFLATE_ERR_HUFFMAN
+        }
+        start = base
+        subEnd = next
+        uncheckedSet(entries, prefix, (base << 16) | (INF_SUB << 8) | (subBits << 11) | bits)
       }
       if (k < 0 || k >= toI32(syms.length)) {
         return DEFLATE_ERR_HUFFMAN
@@ -2763,31 +2836,41 @@ export class Inflater {
       }
       const e: i32 = tmpl[s] | (len - bits)
       k += 1
+      // The code past the main table's bits is under 2^14, as is the
+      // stride, and the subtable ends within the table's 2^15 entries.
+      const first: i32 = start
+      const stop: i32 = subEnd
+      const high: i32 = code >> bits
       const stride: i32 = toI32(1) << (len - bits)
-      // Cannot wrap: `start` and `subEnd` are at most the table's length, a
-      // `u16`, and the code past the main table's bits and the stride under
-      // 2^15.
-      let i: i32 = toI32(toU32(start) + (toU32(code) >> toU32(bits)))
-      while (i < subEnd && i >= 0) {
-        uncheckedSet(entries, i, e)
-        i = toI32(toU32(i) + toU32(stride))
+      if (first < 0 || first > 32767 || stop > 32767 || high < 0 || high > 16383 || stride < 1 || stride > 16384) {
+        return DEFLATE_ERR_HUFFMAN
       }
-      // `len` is at most 15: the mask keeps every bit, and tells the bounds
-      // prover so.
-      const full: i32 = ((1 << len) & 0xffff) - 1
+      for (let i: i32 = first + high; i < stop; i += stride) {
+        uncheckedSet(entries, i, e)
+      }
+      const top: i32 = 1 << len
+      if (top < 2 || top > 32768) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      const full: i32 = top - 1
       if (code === full) {
         return 0
       }
       // As above: `code` is not `full`, so the leading zeros are under 32.
-      const bit: u32 = toU32(1) << toU32(toI32(31) - (toI32(Math.clz32(toU32(code ^ full))) & 31))
+      const bit: u32 = toU32(1) << toU32(31 - Math.clz32(toU32(code ^ full)))
       code = toI32((toU32(code) & (bit - toU32(1))) | bit)
-      // At least one code of this length remains, and at most `n`: the mask
-      // keeps every bit, and tells the bounds prover so.
-      here = (here & 0xffff) - 1
+      // At least one code of this length remains, and at most `n`: the code
+      // is complete, so the last code, `full`, comes before the count runs
+      // out.
+      const remain: i32 = here
+      if (remain < 1 || remain > 288) {
+        return DEFLATE_ERR_HUFFMAN
+      }
+      here = remain - 1
       while (here === 0 && len < 15) {
         const next: i32 = len + 1
         if (next < 0 || next >= toI32(count.length)) {
-          break
+          return DEFLATE_ERR_HUFFMAN
         }
         len = next
         here = count[next]
@@ -2808,26 +2891,41 @@ export class Inflater {
     let first: i32 = 0
     let index: i32 = 0
     let b: u64 = bb
-    // A built table has at most 320 symbols and no code past 15 bits, so a
-    // count is below 2^9, `index` below 2^9 and `code` and `first` below
-    // 2^17: the masks keep every bit, and tell the bounds prover so.
+    // A built table has at most 288 symbols and no code past 15 bits, so a
+    // count and `index` are at most 288 and `code` and `first` under 2^16:
+    // a value past those is a table `build` did not make, and no code
+    // matches.
     for (let l: i32 = 1; l < 16 && l < toI32(count.length); l += 1) {
       if (l > bc) {
         return -1
       }
-      code = (code | toI32(b & toU64(1))) & 0x1ffff
+      const cur: i32 = code | toI32(b & toU64(1))
       b = b >> toU64(1)
-      const c: i32 = count[l] & 511
-      if (code - c < first) {
-        const at: i32 = index + (code - first)
+      const c: i32 = count[l]
+      const base: i32 = first
+      const seen: i32 = index
+      if (
+        c < 0 ||
+        c > 288 ||
+        cur < 0 ||
+        cur > 65535 ||
+        base < 0 ||
+        base > 65535 ||
+        seen < 0 ||
+        seen > 288
+      ) {
+        return -2
+      }
+      if (cur - c < base) {
+        const at: i32 = seen + (cur - base)
         if (at < 0 || at >= toI32(syms.length)) {
           return -2
         }
         return this.entryOf(kind, syms[at], l)
       }
-      index = (index + c) & 511
-      first = ((first + c) << 1) & 0x1ffff
-      code = (code << 1) & 0x1ffff
+      index = seen + c
+      first = (base + c) * 2
+      code = cur * 2
     }
     return -2
   }
@@ -2835,14 +2933,15 @@ export class Inflater {
   /**
    * Reads bytes of `src` into the bit buffer from `inPos` while it has room
    * and `end` allows. Answers false, reading nothing, when `inPos` is
-   * negative or `end` past `src`, which `inflate` rules out.
+   * negative, `end` past `src` or the bit count outside 0 to 63, which
+   * `inflate` rules out.
    */
   private fill(src: u8[], end: i32): boolean {
     let bb: u64 = this.bitBuf
-    // The buffer holds under 64 bits: the mask keeps every bit.
-    let bc: i32 = this.bitCount & 63
+    let bc: i32 = this.bitCount
     let ip: i32 = this.inPos
-    if (ip < 0 || end > toI32(src.length)) {
+    // The buffer holds under 64 bits.
+    if (bc < 0 || bc > 63 || ip < 0 || end > toI32(src.length)) {
       return false
     }
     // `ip < end - 7` keeps `ip` at most 2^31 - 9: the third test never
@@ -2866,52 +2965,65 @@ export class Inflater {
     return true
   }
 
-  /** The low `n` bits of the bit buffer, consumed; the caller has checked that `n` are there. */
-  private take(n: i32): i32 {
-    const v: i32 = toI32(this.bitBuf & ((toU64(1) << toU64(n)) - toU64(1)))
-    this.bitBuf = this.bitBuf >> toU64(n)
-    // Cannot wrap: the caller has checked that `n` bits are there.
-    this.bitCount = toI32(toU32(this.bitCount) - toU32(n))
-    return v
+  /**
+   * Gives back the whole bytes of the bit buffer to the input, keeping the
+   * bits short of a byte. Answers false, changing nothing, when the bit
+   * count is outside 0 to 63 or the bytes would take `inPos` below zero:
+   * the buffer only holds bytes read from before `inPos`, so neither
+   * happens.
+   */
+  private giveBack(): boolean {
+    const bc: i32 = this.bitCount
+    const ip: i32 = this.inPos
+    if (bc < 0 || bc > 63 || ip < 0) {
+      return false
+    }
+    const back: i32 = ip - (bc >> 3)
+    if (back < 0) {
+      return false
+    }
+    this.inPos = back
+    this.bitCount = bc & 7
+    this.bitBuf = this.bitBuf & ((toU64(1) << toU64(this.bitCount)) - toU64(1))
+    return true
   }
 
   /**
    * Gives back the whole bytes of the bit buffer to the input, after dropping
    * the bits to the next byte boundary: where a stored block's `LEN`, or the
-   * framing after the final block, begins.
+   * framing after the final block, begins. Answers false as `giveBack` does.
    */
-  private unread(): void {
-    // The buffer holds under 64 bits, read from before `inPos`: the mask
-    // keeps every bit, and the whole bytes cannot take `inPos` below zero.
-    const bc: i32 = this.bitCount & 63
-    this.inPos = toI32(toU32(this.inPos) - toU32(bc >> 3))
+  private unread(): boolean {
+    if (!this.giveBack()) {
+      return false
+    }
     this.bitBuf = 0
     this.bitCount = 0
+    return true
   }
 
   /**
    * Reads a dynamic block's header (§3.2.7) from the bit buffer and `src`,
    * and builds its tables. Answers 0, `INFLATE_NEED_INPUT` when the input ran
    * out first (nothing is consumed then: the caller rewinds), or an error:
-   * `DEFLATE_ERR_TRUNCATED` too when `inPos` is negative or `end` past
-   * `src`, and `DEFLATE_ERR_HUFFMAN` when the code-length table is not its
+   * `DEFLATE_ERR_TRUNCATED` too when `inPos` is negative, `end` past `src`
+   * or the bit count outside 0 to 63, and `DEFLATE_ERR_HUFFMAN` when the code-length table is not its
    * size, which `inflate` and the constructor rule out.
    */
   private readDynamic(src: u8[], end: i32): i32 {
     // The bit buffer in locals: the lengths are stored into an `i32[]`,
     // which the fields could alias, and every symbol would reload them.
     let bb: u64 = this.bitBuf
-    // The buffer holds under 64 bits: the mask keeps every bit, and tells
-    // the bounds prover so.
-    let bc: i32 = this.bitCount & 63
+    let bc: i32 = this.bitCount
     let ip: i32 = this.inPos
-    if (ip < 0 || end > toI32(src.length)) {
+    // The buffer holds under 64 bits.
+    if (bc < 0 || bc > 63 || ip < 0 || end > toI32(src.length)) {
       return DEFLATE_ERR_TRUNCATED
     }
     if (end >= 8 && ip < end - 7 && ip <= 2147483639) {
       const at: integer<0, 2147483639> = ip
       bb = bb | (deflateLoad64(src, at) << toU64(bc))
-      ip += ((63 - bc) >> 3) & 7
+      ip += (63 - bc) >> 3
       bc = bc | 56
     } else {
       while (bc <= 56 && ip < end) {
@@ -2944,12 +3056,14 @@ export class Inflater {
     }
     for (let i: i32 = 0; i < hclen; i += 1) {
       // Under 64 bits, as above.
-      bc = bc & 63
+      if (bc < 0 || bc > 63) {
+        return DEFLATE_ERR_TRUNCATED
+      }
       if (bc < 3) {
         if (ip >= 0 && end >= 8 && ip < end - 7 && ip <= 2147483639) {
           const at: integer<0, 2147483639> = ip
           bb = bb | (deflateLoad64(src, at) << toU64(bc))
-          ip += ((63 - bc) >> 3) & 7
+          ip += (63 - bc) >> 3
           bc = bc | 56
         } else {
           while (bc <= 56 && ip < end) {
@@ -2980,17 +3094,23 @@ export class Inflater {
       return DEFLATE_ERR_HUFFMAN
     }
     const total: i32 = hlit + hdist
+    if (total > toI32(lens.length)) {
+      return DEFLATE_ERR_HUFFMAN
+    }
     let i: i32 = 0
     while (i < total) {
       // Under 64 bits, as above.
-      bc = bc & 63
+      if (bc < 0 || bc > 63) {
+        return DEFLATE_ERR_TRUNCATED
+      }
       // A code-length code is at most 7 bits and its repeat count at most 7.
       if (bc < 14) {
         if (ip >= 0 && end >= 8 && ip < end - 7 && ip <= 2147483639) {
           const at: integer<0, 2147483639> = ip
           bb = bb | (deflateLoad64(src, at) << toU64(bc))
-          ip += ((63 - bc) >> 3) & 7
-          bc = bc | 56
+          ip += (63 - bc) >> 3
+          // `bc | 56`, as a sum the bounds prover follows.
+          bc = 56 + (bc & 7)
         } else {
           while (bc <= 56 && ip < end) {
             bb = bb | (toU64(uncheckedGet(src, ip)) << toU64(bc))
@@ -3009,8 +3129,7 @@ export class Inflater {
         return INFLATE_NEED_INPUT
       }
       bb = bb >> toU64(l)
-      // Cannot wrap: `l` is at most `bc`, checked above.
-      bc = toI32(toU32(bc) - toU32(l))
+      bc -= l
       const sym: i32 = e >> 16
       if (sym < 16) {
         if (i < 0 || i >= toI32(lens.length)) {
@@ -3039,15 +3158,23 @@ export class Inflater {
         if (bc < x) {
           return INFLATE_NEED_INPUT
         }
-        // At most 7 bits: the mask keeps every bit, and tells the bounds
-        // prover so.
-        rep += toI32(bb & ((toU64(1) << toU64(x)) - toU64(1))) & 127
+        // At most 7 bits.
+        const more: i32 = toI32(bb & ((toU64(1) << toU64(x)) - toU64(1)))
+        if (more < 0 || more > 127) {
+          return DEFLATE_ERR_HUFFMAN
+        }
+        rep += more
         bb = bb >> toU64(x)
-        // Cannot wrap: `x` is at most `bc`, checked above.
-        bc = toI32(toU32(bc) - toU32(x))
+        const have: i32 = bc
+        if (have < 0 || have > 64) {
+          return DEFLATE_ERR_HUFFMAN
+        }
+        bc = have - x
         if (i < 0 || rep > total - i) {
           return DEFLATE_ERR_HUFFMAN
         }
+        // `total` is at most `lens.length`, checked above: the second test
+        // never stops the loop.
         for (let k: i32 = 0; k < rep && i < toI32(lens.length); k += 1) {
           lens[i] = value
           i += 1
@@ -3118,12 +3245,9 @@ export class Inflater {
     const r: i32 = this.step(src, inEnd, more, out, outEnd, histStart)
     // Whole bytes the bit buffer read ahead go back to the input, so that a
     // caller may drop everything before `inPos`.
-    // The buffer holds under 64 bits, read from before `inPos`: the mask
-    // keeps every bit, and the whole bytes cannot take `inPos` below zero.
-    const bc: i32 = this.bitCount & 63
-    this.inPos = toI32(toU32(this.inPos) - toU32(bc >> 3))
-    this.bitCount = bc & 7
-    this.bitBuf = this.bitBuf & ((toU64(1) << toU64(this.bitCount)) - toU64(1))
+    if (!this.giveBack()) {
+      return DEFLATE_ERR_TRUNCATED
+    }
     return r
   }
 
@@ -3136,7 +3260,9 @@ export class Inflater {
       }
       if (s === INF_S_BLOCK) {
         if (this.last) {
-          this.unread()
+          if (!this.unread()) {
+            return DEFLATE_ERR_TRUNCATED
+          }
           this.state = INF_S_DONE
           return INFLATE_DONE
         }
@@ -3146,16 +3272,21 @@ export class Inflater {
         if (!this.fill(src, inEnd)) {
           return DEFLATE_ERR_TRUNCATED
         }
-        if (this.bitCount < 3) {
+        const have: i32 = this.bitCount
+        if (have < 3) {
           this.bitBuf = saveBuf
           this.bitCount = saveCount
           this.inPos = savePos
           return more ? INFLATE_NEED_INPUT : DEFLATE_ERR_TRUNCATED
         }
-        const header: i32 = this.take(toI32(3))
+        const header: i32 = toI32(this.bitBuf & toU64(7))
+        this.bitBuf = this.bitBuf >> toU64(3)
+        this.bitCount = have - 3
         const type: i32 = header >> 1
         if (type === 0) {
-          this.unread()
+          if (!this.unread()) {
+            return DEFLATE_ERR_TRUNCATED
+          }
           const at: i32 = this.inPos
           if (at < 0) {
             return DEFLATE_ERR_TRUNCATED
@@ -3204,12 +3335,21 @@ export class Inflater {
       } else if (s === INF_S_STORED) {
         const ip: i32 = this.inPos
         const opos: i32 = this.outPos
-        // Cannot wrap: `inflate` checked `inPos <= inEnd` and
-        // `outPos <= outEnd`, and every step keeps both.
-        const inAvail: i32 = toI32(toU32(inEnd) - toU32(ip))
-        const outAvail: i32 = toI32(toU32(outEnd) - toU32(opos))
-        // A stored length is 16 bits: the mask keeps every bit.
-        const left: i32 = this.storedLeft & 0xffff
+        // `inflate` checked `inPos <= inEnd` and `outPos <= outEnd`, and
+        // every step keeps both.
+        if (ip < 0 || ip > inEnd || opos < 0 || opos > outEnd) {
+          return DEFLATE_ERR_TRUNCATED
+        }
+        const inAvail: i32 = inEnd - ip
+        const outAvail: i32 = outEnd - opos
+        if (inAvail < 0 || outAvail < 0 || inEnd < 0 || outEnd < 0) {
+          return DEFLATE_ERR_TRUNCATED
+        }
+        // A stored length is 16 bits.
+        const left: i32 = this.storedLeft
+        if (left < 0 || left > 65535) {
+          return DEFLATE_ERR_STORED_LENGTH
+        }
         let n: i32 = left
         if (n > inAvail) {
           n = inAvail
@@ -3217,11 +3357,20 @@ export class Inflater {
         if (n > outAvail) {
           n = outAvail
         }
+        // `n` is at most each room, and each room at least zero: `ip + n`
+        // and `opos + n` are the ends less what is left of each room.
+        if (n < 0) {
+          return DEFLATE_ERR_TRUNCATED
+        }
+        const inGap: i32 = inAvail - n
+        const outGap: i32 = outAvail - n
+        if (inGap < 0 || outGap < 0) {
+          return DEFLATE_ERR_TRUNCATED
+        }
         copyBytes(out, opos, src, ip, n)
-        // Cannot wrap: `n` is at most `left` and each room.
-        this.inPos = toI32(toU32(ip) + toU32(n))
-        this.outPos = toI32(toU32(opos) + toU32(n))
-        this.storedLeft = toI32(toU32(left) - toU32(n))
+        this.inPos = inEnd - inGap
+        this.outPos = outEnd - outGap
+        this.storedLeft = left - n
         if (this.storedLeft > 0) {
           if (this.outPos === outEnd) {
             return INFLATE_NEED_OUTPUT
@@ -3455,13 +3604,19 @@ export class Inflater {
       if (ip >= 0 && ip <= inFast) {
         bb = bb | (deflateLoad64(src, ip) << toU64(bc))
         ip += (63 - bc) >> 3
-        bc = bc | 56
+        // `bc | 56`, as a sum the bounds prover follows.
+        bc = 56 + (bc & 7)
       } else {
         while (bc <= 56 && ip < inEnd) {
           bb = bb | (toU64(uncheckedGet(src, ip)) << toU64(bc))
           ip += 1
           bc += 8
         }
+      }
+      // Under 64 bits, as the refill leaves it.
+      if (bc < 0 || bc > 64) {
+        status = DEFLATE_ERR_TRUNCATED
+        break
       }
       const e: i32 = this.lookup(lt, INF_TABLE_LITLEN, le, bb, bc)
       if (e === -1) {
@@ -3483,8 +3638,9 @@ export class Inflater {
       const kind: i32 = (e >> 8) & 7
       const n: i32 = e & 15
       bb = bb >> toU64(n)
-      // Cannot wrap: `lookup` answers only a code whose bits are all here.
-      bc = toI32(toU32(bc) - toU32(n))
+      // `lookup` answers only a code whose bits are all here.
+      const left: i32 = bc - n
+      bc = left
       if (kind === INF_LITERAL) {
         if (op >= outEnd) {
           bb = sBb
@@ -3497,18 +3653,25 @@ export class Inflater {
         op += 1
       } else if (kind === INF_LENGTH) {
         const lx: i32 = (e >> 11) & 15
-        if (lx > bc) {
+        if (lx > left) {
           bb = sBb
           bc = sBc
           ip = sIp
           status = more ? INFLATE_NEED_INPUT : DEFLATE_ERR_TRUNCATED
           break
         }
-        // Cannot wrap, as in the fast loop; `lx` is at most `bc`, checked
-        // above.
-        const len: i32 = toI32(toU32(e >> 16) + toU32(bb & ((toU64(1) << toU64(lx)) - toU64(1))))
+        // A length base is at most 258 and its extra bits at most 5: an
+        // entry past those is one `build` did not make.
+        const lbase: i32 = e >> 16
+        const lextra: i32 = toI32(bb & ((toU64(1) << toU64(lx)) - toU64(1)))
+        if (lbase < 0 || lbase > 258 || lextra < 0 || lextra > 32767) {
+          status = DEFLATE_ERR_SYMBOL
+          break
+        }
+        const len: i32 = lbase + lextra
         bb = bb >> toU64(lx)
-        bc = toI32(toU32(bc) - toU32(lx))
+        const rest: i32 = left - lx
+        bc = rest
         const d: i32 = this.lookup(dt, INF_TABLE_DIST, de, bb, bc)
         if (d === -1) {
           bb = sBb
@@ -3523,7 +3686,8 @@ export class Inflater {
         }
         const dn: i32 = d & 15
         const dx: i32 = (d >> 11) & 15
-        if (dn + dx > bc) {
+        const used: i32 = dn + dx
+        if (used > rest) {
           bb = sBb
           bc = sBc
           ip = sIp
@@ -3531,30 +3695,49 @@ export class Inflater {
           break
         }
         bb = bb >> toU64(dn)
-        // Cannot wrap, as in the fast loop; `dn + dx` is at most `bc`,
-        // checked above, and `op` stays within [histStart, outEnd].
-        const dist: i32 = toI32(toU32(d >> 16) + toU32(bb & ((toU64(1) << toU64(dx)) - toU64(1))))
+        // A distance base is 1 to 24577 and its extra bits at most 13, as
+        // for a length.
+        const dbase: i32 = d >> 16
+        const dextra: i32 = toI32(bb & ((toU64(1) << toU64(dx)) - toU64(1)))
+        if (dbase < 1 || dbase > 32768 || dextra < 0 || dextra > 32767) {
+          status = DEFLATE_ERR_SYMBOL
+          break
+        }
+        const dist: i32 = dbase + dextra
         bb = bb >> toU64(dx)
-        bc = toI32(toU32(bc) - toU32(dn + dx))
-        if (dist > toI32(toU32(op) - toU32(histStart))) {
+        bc = rest - used
+        // `inflate` checked `histStart <= outPos <= outEnd`, and every step
+        // keeps it.
+        if (histStart < 0 || op < 0 || op < histStart || op > outEnd) {
+          status = DEFLATE_ERR_TRUNCATED
+          break
+        }
+        const span: i32 = op - histStart
+        const room: i32 = outEnd - op
+        if (room < 0) {
+          status = DEFLATE_ERR_TRUNCATED
+          break
+        }
+        if (dist > span) {
           status = DEFLATE_ERR_DISTANCE
           break
         }
-        if (len > toI32(toU32(outEnd) - toU32(op))) {
+        // `op + len` is `outEnd` less the room the copy leaves.
+        const gap: i32 = room - len
+        if (gap < 0) {
           bb = sBb
           bc = sBc
           ip = sIp
           status = INFLATE_NEED_OUTPUT
           break
         }
-        // Cannot wrap: `dist` is at most `op - histStart`, `len` at most
-        // `outEnd - op`, and `from` stays below `op`.
-        let from: i32 = toI32(toU32(op) - toU32(dist))
-        const stop: i32 = toI32(toU32(op) + toU32(len))
-        while (op < stop) {
+        const stop: i32 = outEnd - gap
+        // `dist` is at least 1, so the second test never stops the copy.
+        let from: i32 = op - dist
+        while (op < stop && from < op) {
           uncheckedSet(out, op, uncheckedGet(out, from))
           op += 1
-          from = toI32(toU32(from) + toU32(1))
+          from += 1
         }
       } else if (kind === INF_END) {
         this.state = INF_S_BLOCK
@@ -3580,18 +3763,27 @@ export class Inflater {
    * rules out. A code is decoded only once all its bits are here.
    */
   private lookup(t: InflateTable, kind: i32, entries: i32[], bb: u64, bc: i32): i32 {
-    // Codes are at most 15 bits, and a table is under 2^15 entries: the
-    // masks keep every bit, and tell the bounds prover so.
-    const mask: u64 = (toU64(1) << toU64(t.bits & 15)) - toU64(1)
-    const i: i32 = toI32(bb & mask) & 0x7fff
-    if (i >= toI32(entries.length)) {
+    // Codes are at most 15 bits, and a table is under 2^15 entries: a
+    // table past those is one `build` did not make.
+    const bits: i32 = t.bits
+    if (bits < 1 || bits > 15) {
+      return -2
+    }
+    const mask: u64 = (toU64(1) << toU64(bits)) - toU64(1)
+    const i: i32 = toI32(bb & mask)
+    if (i < 0 || i >= toI32(entries.length)) {
       return -2
     }
     let e: i32 = entries[i]
     if (((e >> 8) & 7) === INF_SUB) {
       const root: i32 = e & 15
       const subMask: u64 = (toU64(1) << toU64((e >> 11) & 15)) - toU64(1)
-      const at: i32 = ((e >> 16) & 0x7fff) + (toI32((bb >> toU64(root)) & subMask) & 0x7fff)
+      const start: i32 = e >> 16
+      const off: i32 = toI32((bb >> toU64(root)) & subMask)
+      if (start < 0 || start > 32767 || off < 0 || off > 32767) {
+        return -2
+      }
+      const at: i32 = start + off
       if (at >= toI32(entries.length)) {
         return -2
       }
@@ -3631,14 +3823,41 @@ export class Inflater {
     if (limit < 0) {
       panic("Inflater.decompress: a negative limit")
     }
-    // Cannot wrap: `deflateWindow` checked `off + len` against `src` and `at`
-    // against `out`, and the input is read from `off` on.
-    const inEnd: i32 = toI32(toU32(off) + toU32(len))
-    const room: i32 = toI32(toU32(toI32(out.length)) - toU32(at))
-    const end: i32 = toI32(toU32(at) + toU32(limit < room ? limit : room))
+    // `deflateWindow` checked `off + len` against `src` and `at` against
+    // `out`, so the stream ends `src.length` less the bytes after it, and the
+    // output `out.length` less the room it leaves; the input is read from
+    // `off` on.
+    if (off < 0 || len < 0 || at < 0) {
+      this.consumed = 0
+      return DEFLATE_ERR_TRUNCATED
+    }
+    const after: i32 = toI32(src.length) - off
+    const room: i32 = toI32(out.length) - at
+    if (after < 0 || room < 0) {
+      this.consumed = 0
+      return DEFLATE_ERR_TRUNCATED
+    }
+    const inGap: i32 = after - len
+    const take: i32 = limit < room ? limit : room
+    if (inGap < 0 || take < 0) {
+      this.consumed = 0
+      return DEFLATE_ERR_TRUNCATED
+    }
+    const outGap: i32 = room - take
+    if (outGap < 0) {
+      this.consumed = 0
+      return DEFLATE_ERR_TRUNCATED
+    }
+    const inEnd: i32 = toI32(src.length) - inGap
+    const end: i32 = toI32(out.length) - outGap
     this.reset()
     const r: i32 = this.inflate(src, off, inEnd, false, out, at, end, at)
-    this.consumed = toI32(toU32(this.inPos) - toU32(off))
+    const pos: i32 = this.inPos
+    if (pos < 0) {
+      this.consumed = 0
+      return DEFLATE_ERR_TRUNCATED
+    }
+    this.consumed = pos - off
     if (r === INFLATE_NEED_OUTPUT) {
       return DEFLATE_ERR_OUTPUT_LIMIT
     }
