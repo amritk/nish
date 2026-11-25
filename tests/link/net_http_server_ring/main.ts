@@ -162,8 +162,15 @@ export const main = (): i32 => {
   const deadline: i64 = monotonicNanos() + PATIENCE
 
   // Wait for the child's listener: a connection that is refused is retried.
+  // A child that exits first, refused rings or a shell whose `ulimit` failed,
+  // ends the wait at once with its status, not at the deadline.
   let ready: boolean = false
   while (!ready && monotonicNanos() < deadline) {
+    const early: i32[] = waitPid(pid, 1)
+    if (early[0] === pid) {
+      console.log(`parent: the child exited with ${early[1]} before it listened`)
+      return 1
+    }
     const fd: i32 = tcpConnect(addr)
     pause(loop, out, 20)
     ready = fd >= 0 && connectResult(fd) === 0
