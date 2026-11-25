@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 1521,
+  "total": 1263,
   "explicit": {
-    "kept": 363,
-    "toFix": 9
+    "kept": 364,
+    "toFix": 8
   },
   "modules": {
     "std/base64.ts": {
@@ -300,11 +300,8 @@
       "array-length": 1
     },
     "std/temporal.ts": {
-      "divide": 3,
-      "index": 9,
-      "overflow": 240,
       "panic": 1,
-      "slice": 7
+      "slice": 1
     },
     "std/term-io.ts": {
       "slice": 3
@@ -1567,6 +1564,11 @@
       "module": "std/sync/ring.ts",
       "function": "SpscRing.tryPush",
       "reason": "no open reservation, and the record length must fit the ring capacity; both are caller-controlled preconditions in the doc"
+    },
+    {
+      "module": "std/temporal.ts",
+      "function": "temporalRangeError",
+      "reason": "a documented RangeError as JS Temporal throws for out-of-range fields or arithmetic; the …OrNull parsers and try… variants return the failure instead"
     },
     {
       "module": "std/term-pixels.ts",
