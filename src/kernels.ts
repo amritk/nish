@@ -333,6 +333,20 @@ export const bytesKernelOf = (walk: i32): string => {
 /** The runtime kernel `jsonPutF64Walk`'s call becomes. */
 export const JSON_PUT_F64_KERNEL: string = "nish_json_put_f64"
 
+/** The runtime kernel `jsonPutStringWalk`'s call becomes. */
+export const JSON_PUT_STRING_KERNEL: string = "nish_json_put_string"
+
+/**
+ * Whether a call in `program` to `sig` is `jsonPutString`'s walk,
+ * `jsonPutStringWalk(dst, at, src, from, to)`, tested as `isJsonPutF64Walk`
+ * tests its walk.
+ */
+export const isJsonPutStringWalk = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  sig.owner === null &&
+  sig.instance === null &&
+  sig.sourceName === "jsonPutStringWalk" &&
+  isJsonModule(program.packageName, program.source.path)
+
 /**
  * Whether a call in `program` to `sig` is `JsonWriter.f64`'s walk, tested as
  * `isIndexOfAnyWalk` tests its walk: a root-package file that happens to sit

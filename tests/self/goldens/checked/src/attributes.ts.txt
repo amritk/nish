@@ -1277,10 +1277,10 @@ function FactCollector.orderSites(this: FactCollector, from: i32, to: i32): void
 function FactCollector.noteCall(this: FactCollector, node: Node, callee: FunctionSig): void -> @FactCollector.noteCall [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.noteSite
-  calls: FactCollector.noteSite isArraySliceInstance isSpawnEntry isVoidSpawn nish_panic_index parallelRoleOf
-  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSite#0 FactCollector.noteSite#0 FactCollector.noteSite#0 FactCollector.noteSite#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSite#1 FactCollector.noteSite#1 FactCollector.noteSite#1 FactCollector.noteSite#1
-  pointer callee: size=224 writesThrough=false captured=false passedTo=isSpawnEntry#0 isVoidSpawn#0 isArraySliceInstance#0 parallelRoleOf#0
+  calls: FactCollector.noteSite isArraySliceInstance isAtomicArrayMethod isSpawnEntry isVoidSpawn nish_panic_index parallelRoleOf
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSite#0 FactCollector.noteSite#0 FactCollector.noteSite#0 FactCollector.noteSite#0 FactCollector.noteSite#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSite#1 FactCollector.noteSite#1 FactCollector.noteSite#1 FactCollector.noteSite#1 FactCollector.noteSite#1
+  pointer callee: size=224 writesThrough=false captured=false passedTo=isSpawnEntry#0 isVoidSpawn#0 isArraySliceInstance#0 parallelRoleOf#0 isAtomicArrayMethod#0
   stackSites=0 stackLocals=0
   local +0:11 proven: boolean (const)
   callee +1:9 isSpawnEntry -> @isSpawnEntry
@@ -1290,7 +1290,9 @@ function FactCollector.noteCall(this: FactCollector, node: Node, callee: Functio
   callee +7:7 FactCollector.noteSite -> @FactCollector.noteSite
   callee +9:9 parallelRoleOf -> @parallelRoleOf
   callee +10:7 FactCollector.noteSite -> @FactCollector.noteSite
-  callee +12:5 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +12:9 isAtomicArrayMethod -> @isAtomicArrayMethod
+  callee +13:7 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +15:5 FactCollector.noteSite -> @FactCollector.noteSite
 function FactCollector.noteCaptures(this: FactCollector, arrow: Node, lifted: FunctionSig): void -> @FactCollector.noteCaptures [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via captureTarget
@@ -2719,39 +2721,40 @@ function collectStatedFacts(unit: AnalysisUnit, table: TypeTable, opts: Options,
   pointer unit: size=16 writesThrough=true captured=true passedTo=FactCollector.constructor#1
   pointer table: size=168 writesThrough=true captured=true passedTo=structSize#1 pointerAlign#1 rootsHoldNoPointer#1 isScalarArgument#0 isPointerParam#0 structSize#1 TypeTable.stripNull#0 pointerAlign#1 markJsonRoute#1 isPointerParam#0 filledByC#1 TypeTable.stripNull#0 FactCollector.constructor#2 checksRangesInPrologue#0 TypeTable.isRanged#0 markMapRoute#0 routeCalleesOf#0
   pointer opts: size=256 writesThrough=true captured=true passedTo=structSize#2 structSize#2 Options.recordsPanics#0 Options.recordsPanics#0 FactCollector.constructor#3 checksRangesInPrologue#1
-  pointer sig: size=224 writesThrough=true captured=true passedTo=isChannelSend#0 jsonRouteOf#0 isArraySliceInstance#0 rootsHoldNoPointer#2 jsonRouteOf#0 markJsonRoute#2 isChannelSend#0 isAtomicMethod#0 isAtomicArrayMethod#0 isRegionIntrinsic#1 isShmWindowIntrinsic#1 FunctionSig.foreign#0 filledByC#2 FactCollector.constructor#4 FunctionSig.body#0 initialisesFields#0 checksRangesInPrologue#2 isRegionEntry#0 isSpawnEntry#0 isMapRoute#0 markMapRoute#1 routeCalleesOf#1 secretRoleOf#0 isLockMethod#0 FunctionSig.suspends#0
+  pointer sig: size=224 writesThrough=true captured=true passedTo=isChannelSend#0 jsonRouteOf#0 isArraySliceInstance#0 isAtomicArrayMethod#0 rootsHoldNoPointer#2 jsonRouteOf#0 markJsonRoute#2 isChannelSend#0 isAtomicMethod#0 isAtomicArrayMethod#0 isRegionIntrinsic#1 isShmWindowIntrinsic#1 FunctionSig.foreign#0 filledByC#2 FactCollector.constructor#4 FunctionSig.body#0 initialisesFields#0 checksRangesInPrologue#2 isRegionEntry#0 isSpawnEntry#0 isMapRoute#0 markMapRoute#1 routeCalleesOf#1 secretRoleOf#0 isLockMethod#0 FunctionSig.suspends#0
   pointer memory: size=104 writesThrough=false captured=false
   pointer known: size=24 writesThrough=true captured=true passedTo=FactCollector.constructor#6
   stackSites=3 stackLocals=3
-  local -183:9 program: CheckedProgram (const)
-  local -180:9 ownMemory: boolean (const)
-  callee -180:41 isChannelSend -> @isChannelSend
-  callee -180:63 jsonRouteOf -> @jsonRouteOf
-  local -175:9 facts: FunctionFacts (const)
-  callee -175:17 new FunctionFacts -> @FunctionFacts.constructor
-  callee -173:83 isThreadsModule -> @isThreadsModule
-  callee -172:5 isArraySliceInstance -> @isArraySliceInstance
-  callee -170:23 structSize -> @structSize
-  callee -169:23 pointerAlign -> @pointerAlign
-  callee -145:43 rootsHoldNoPointer -> @rootsHoldNoPointer
-  callee -137:54 isScalarArgument -> @isScalarArgument
-  local -136:7 i: i32 (let)
-  local -134:11 type: i32 (const)
-  callee -133:9 isPointerParam -> @isPointerParam
-  callee -131:9 new PointerParamFacts -> @PointerParamFacts.constructor
-  callee -129:11 structSize -> @structSize
-  callee -129:44 TypeTable.stripNull -> @TypeTable.stripNull
-  callee -128:11 pointerAlign -> @pointerAlign
-  callee -120:7 jsonRouteOf -> @jsonRouteOf
-  callee -119:5 applyStance -> @applyStance
-  callee -119:24 markJsonRoute -> @markJsonRoute
-  callee -114:7 isChannelSend -> @isChannelSend
-  callee -113:5 applyStance -> @applyStance
-  callee -113:24 markChannelSend -> @markChannelSend
-  callee -108:7 isAtomicMethod -> @isAtomicMethod
-  callee -107:5 applyStance -> @applyStance
-  callee -107:24 markAtomic -> @markAtomic
-  callee -106:9 isAtomicArrayMethod -> @isAtomicArrayMethod
+  local -186:9 program: CheckedProgram (const)
+  local -183:9 ownMemory: boolean (const)
+  callee -183:41 isChannelSend -> @isChannelSend
+  callee -183:63 jsonRouteOf -> @jsonRouteOf
+  local -178:9 facts: FunctionFacts (const)
+  callee -178:17 new FunctionFacts -> @FunctionFacts.constructor
+  callee -176:83 isThreadsModule -> @isThreadsModule
+  callee -175:5 isArraySliceInstance -> @isArraySliceInstance
+  callee -174:5 isAtomicArrayMethod -> @isAtomicArrayMethod
+  callee -172:23 structSize -> @structSize
+  callee -171:23 pointerAlign -> @pointerAlign
+  callee -147:43 rootsHoldNoPointer -> @rootsHoldNoPointer
+  callee -139:54 isScalarArgument -> @isScalarArgument
+  local -138:7 i: i32 (let)
+  local -136:11 type: i32 (const)
+  callee -135:9 isPointerParam -> @isPointerParam
+  callee -133:9 new PointerParamFacts -> @PointerParamFacts.constructor
+  callee -131:11 structSize -> @structSize
+  callee -131:44 TypeTable.stripNull -> @TypeTable.stripNull
+  callee -130:11 pointerAlign -> @pointerAlign
+  callee -122:7 jsonRouteOf -> @jsonRouteOf
+  callee -121:5 applyStance -> @applyStance
+  callee -121:24 markJsonRoute -> @markJsonRoute
+  callee -116:7 isChannelSend -> @isChannelSend
+  callee -115:5 applyStance -> @applyStance
+  callee -115:24 markChannelSend -> @markChannelSend
+  callee -110:7 isAtomicMethod -> @isAtomicMethod
+  callee -109:5 applyStance -> @applyStance
+  callee -109:24 markAtomic -> @markAtomic
+  callee -108:9 isAtomicArrayMethod -> @isAtomicArrayMethod
   callee -102:7 StringSet.add -> @StringSet.add
   callee -101:11 Options.recordsPanics -> @Options.recordsPanics
   callee -100:31 new PanicSite -> @PanicSite.constructor

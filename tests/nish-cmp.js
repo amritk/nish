@@ -11680,6 +11680,11 @@ const cursorReadRow = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: CURSOR_READ_ROW, why }))
   )
 
+/** The release-note words of `jsonPutString` (std/json.ts). */
+const JSON_PUT_STRING = "jsonPutString"
+/** The release-note words of `Http1Server.tick` (std/net/http1-server.ts). */
+const HTTP1_TICK = "Http1Server.tick"
+
 const DECLARED = [
   // #2297: the bounds walk proves `end - start` of two index locals with
   // `0 <= start <= end` cannot overflow, so `hasTwinWord`'s `i - from` and
@@ -22509,6 +22514,14 @@ const DECLARED = [
     changelog: "caller-proven spawn slots",
     why: "the candidate proves the `parallelMapInto` call's `src.length <= dst.length` from the caller's guard and compiles the program under the default no-panic scope; the reference has no such proof and refuses it",
   },
+  // #2206: an atomic array's element method has its index judged at the call,
+  // as `a[i]` is, so a guarded call is a proven site of its caller.
+  {
+    program: "tests/link/atomic_index_proven/main.ts",
+    file: "exit",
+    changelog: "prove atomic element indexes the code has checked",
+    why: "the candidate proves each atomic element call's index from the caller's guard or loop and compiles the program under its `noPanic` scope; the reference counts the method's own `index` site at every call and refuses it",
+  },
   // WP72 S6a: a route marked `streamBody` takes its HTTP/2 body in pieces.
   // `Http2Stream` gains `held` and `owed`, so its struct moves in the header
   // of a program that links nish/net/http2 itself; the new probe calls
@@ -23388,6 +23401,58 @@ const DECLARED = [
       "tests/link/sync_ring_inplace_partial/main.ts": ["testing.ll"],
       "tests/link/sync_shm/main.ts": ["testing.ll"],
       "tests/link/sync_shm_window/main.ts": ["testing.ll"],
+    }
+  ),
+  // `jsonPutString` is exported from std/json.ts and its walk is lowered to
+  // the runtime's `nish_json_put_string`, so every json.ll a program writes
+  // declares the kernel and defines the new function, and the module moves.
+  {
+    file: "json.ll",
+    changelog: JSON_PUT_STRING,
+    why: "std/json.ts gains jsonPutString, whose walk a native build lowers to the runtime's nish_json_put_string, so every json.ll declares the kernel and defines it, and the module moves",
+  },
+  // `Http1Server` gains `ticked`, so the struct grows 8 bytes and every
+  // module that lays it out or names its `dereferenceable` size moves.
+  {
+    file: "http-server.ll",
+    changelog: HTTP1_TICK,
+    why: "Http1Server gains `ticked` for Http1Server.tick, so the struct grows 8 bytes and the module that lays it out moves",
+  },
+  ...byFinding(HTTP1_TICK)(
+    "Http1Server gains `ticked` for Http1Server.tick, so the struct grows 8 bytes, and each module or header that lays it out or names its dereferenceable size moves",
+    {
+      "tests/link/net_grpc/main.ts": ["client.ll", "grpc.ll", "main.ll", "rig.ll"],
+      "tests/link/net_grpc_interop/main.ts": [
+        "grpc.ll",
+        "main.ll",
+        "net_grpc_client.ll",
+        "rig.ll",
+        "serve.ll",
+      ],
+      "tests/link/net_handler_batch_limits/main.ts": ["handler.ll", "main.h", "main.ll"],
+      "tests/link/net_http1_server_lend_park/main.ts": ["main.h"],
+      "tests/link/net_http_server_steps/main.ts": [
+        "main.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+        "rows.ll",
+      ],
+      "tests/link/net_http_server_steps_full/main.ts": ["main.ll"],
+      "tests/link/net_http_server_steps_split/main.ts": ["main.ll"],
+      "tests/link/net_http_server_stream/main.ts": ["client.ll", "main.ll", "rig.ll"],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["main.ll", "taken-h2c.ll", "taken.ll"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["main.ll", "taken-h2c.ll", "taken.ll"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["main.ll", "taken-h2c.ll", "taken.ll"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["main.ll", "taken.ll"],
+      "tests/link/net_http_server_trailers_h3/main.ts": [
+        "main.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+      ],
+      "tests/link/net_http_server_trailers_short/main.ts": ["main.ll", "taken-h2c.ll", "taken.ll"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["main.ll", "taken-h2c.ll", "taken.ll"],
+      "tests/link/net_static/main.ts": ["net_http_server_carriers_rig.ll"],
+      "tests/link/std_http1_config_checked/main.ts": ["main.h"],
     }
   ),
 ]

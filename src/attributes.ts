@@ -952,7 +952,10 @@ export class FunctionFacts {
    * (`PANIC_SPAWN_SLOT`), or its `dstTooShort`, the length check of
    * `parallelMapInto`, proven at the map's call (`PANIC_PARALLEL_LENGTH`):
    * `src/panics.ts` follows no call into it. Its own `panic` is still listed,
-   * at its own line. Beside `onCycleStack`, so the two share a word.
+   * at its own line. An atomic array's element method is one too: its index
+   * check is listed at each call, proven by the guard or loop test around the
+   * call (#2206).
+   * Beside `onCycleStack`, so the two share a word.
    */
   callerProven: boolean
   // ---- WP35 capabilities (docs/wp35-capabilities.md) ----
@@ -2221,11 +2224,13 @@ class FactCollector {
 
   /**
    * A call into `callee`, a candidate `call` site the resolution keeps when
-   * the callee may panic. Two callees also hold a check their callers prove,
+   * the callee may panic. Three callees also hold a check their callers prove,
    * at the call, as a site of its own: a four-argument `spawn`'s slot, proven
-   * where `src/bounds.ts` proves `dst[at]` would be (`PANIC_SPAWN_SLOT`), and
+   * where `src/bounds.ts` proves `dst[at]` would be (`PANIC_SPAWN_SLOT`),
    * a `parallelMapInto` instance's length check, proven by `src.length <=
-   * dst.length` (`PANIC_PARALLEL_LENGTH`).
+   * dst.length` (`PANIC_PARALLEL_LENGTH`), and an atomic array's element
+   * method's index, proven by the guard or loop test around the call
+   * (`PANIC_INDEX`, #2206).
    */
   noteCall(node: Node, callee: FunctionSig): void {
     const proven = this.unit.program.nodeProvenIndex[node.id]
@@ -2239,6 +2244,9 @@ class FactCollector {
     }
     if (parallelRoleOf(callee) === PAR_MAP) {
       this.noteSite(node, PANIC_PARALLEL_LENGTH, proven, "")
+    }
+    if (isAtomicArrayMethod(callee)) {
+      this.noteSite(node, PANIC_INDEX, proven, "")
     }
     this.noteSite(node, PANIC_CALL, false, callee.name)
   }
@@ -4565,7 +4573,8 @@ const collectStatedFacts = (
   const facts = new FunctionFacts(sig.paramNames, known === null || ownMemory ? 0 : nodeCount)
   facts.callerProven =
     ((sig.sourceName === "slotOutOfRange" || sig.sourceName === "dstTooShort") && isThreadsModule(program)) ||
-    isArraySliceInstance(sig)
+    isArraySliceInstance(sig) ||
+    isAtomicArrayMethod(sig)
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
   facts.returnDeref = structSize(program, table, opts, sig.returnType)
   facts.returnAlign = pointerAlign(program, table, sig.returnType)
@@ -4633,7 +4642,9 @@ const collectStatedFacts = (
     applyStance(facts, markAtomic(facts))
     if (isAtomicArrayMethod(sig)) {
       // The element's index is checked as `a[i]`'s is, and an index out of
-      // range stops the program there.
+      // range stops the program there. The check is listed here, where its
+      // IR is, and again at each call, proven there as its callers prove it
+      // (`noteCall`, #2206): `callerProven` keeps a caller from inheriting it.
       facts.willReturn = false
       facts.callees.add("nish_panic_index")
       if (opts.recordsPanics()) {

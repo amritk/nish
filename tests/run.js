@@ -12454,6 +12454,46 @@ int main(void) {
       )
     }
 
+    // The adapter's own record decoding (row_of, field_value, the index
+    // rowid's fast path and cursor_record) against corrupt records, under
+    // AddressSanitizer: tests/link/std_sqlite_cursor_record/corrupt-record.c
+    // says what it corrupts. A toolchain without the sanitizer runtimes is a
+    // named skip, as the runtime's sanitizer run is.
+    {
+      const asan = ["-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
+      const probe = sanitizerProbe(asan)
+      if (probe?.skip) {
+        skip(`skipped: sqlite-link: the corrupt-record walk: ${probe.skip}`)
+      } else {
+        const exe = path.join(sqDir, "corrupt-record")
+        const built = spawnSync(
+          "clang",
+          [
+            "-O1",
+            "-g",
+            "-w",
+            ...asan,
+            `-I${path.join(root, "runtime", "sqlite")}`,
+            "-DSQLITE_OMIT_SHARED_CACHE",
+            "-DSQLITE_THREADSAFE=1",
+            path.join(root, "runtime", "sqlite", "nish-sqlite.c"),
+            path.join(root, "tests", "link", "std_sqlite_cursor_record", "corrupt-record.c"),
+            "-o",
+            exe,
+            "-lpthread",
+            "-lm",
+          ],
+          { encoding: "utf8" }
+        )
+        const ran = built.status === 0 ? spawnSync(exe, [path.join(sqDir, "corrupt.db")], { encoding: "utf8" }) : null
+        check(
+          "sqlite-link: every cursor read of a corrupt record stays inside it (AddressSanitizer)",
+          probe === null && ran !== null && ran.status === 0 && Number(ran.stdout) > 800,
+          (probe?.error ?? "") + built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stdout} ${ran.stderr.slice(0, 4000)}` : "")
+        )
+      }
+    }
+
     // What ships of runtime/sqlite/: its units, its headers and its notice.
     // The README's SHA3-256 lines name the two vendored files' bytes, and each
     // of release.yml's presence gates names every shipped file.
@@ -12973,6 +13013,19 @@ int main(void) {
         rowDebugRun.status === 0 &&
         rowDebugRun.stdout === fs.readFileSync(path.join(root, rowDir, "expected.out"), "utf8"),
       rowDebug.stderr + (rowDebugRun ? rowDebugRun.stdout.slice(-2000) + rowDebugRun.stderr : "")
+    )
+    // Cursor.record, RowRecord and reopenCursor under SQLite's asserts: the
+    // record copy reads the payload as SQLite's own accessors do, overflow
+    // pages included, and every reopen closes the cursor it replaces.
+    const recDir = path.join("tests", "link", "std_sqlite_cursor_record")
+    const recDebug = link(path.join(recDir, "main.ts"), "record-debug", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEBUG" })
+    const recDebugRun = recDebug.status === 0 ? runOut("record-debug") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_record passes with SQLite's asserts on (-DSQLITE_DEBUG)",
+      recDebugRun !== null &&
+        recDebugRun.status === 0 &&
+        recDebugRun.stdout === fs.readFileSync(path.join(root, recDir, "expected.out"), "utf8"),
+      recDebug.stderr + (recDebugRun ? recDebugRun.stdout.slice(-2000) + recDebugRun.stderr : "")
     )
     // A readRow walk takes no more of SQLite's heap once warm. This watches
     // sqlite3_memory_used and its highwater only: SQLite's allocator, which
@@ -19307,7 +19360,7 @@ if (dealtHere("runtimeChecks")) {
       )
       check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c and runtime-net.c under -Werror", cc.status === 0, cc.stderr)
       const modes = [
-        ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
+        ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left, and a provided-buffer ring refused for zero reserved words (Ubuntu 6.8.0-136+) is retried with resv[0] set"],
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
@@ -19317,6 +19370,7 @@ if (dealtHere("runtimeChecks")) {
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
         ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
+        ["taskrun1", "the same burst with taskrun_worth 1, entering again while any entry reaps a completion, is taken by one wait too"],
         ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
         ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
         ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
@@ -47489,6 +47543,71 @@ if (!only || "json_f64_seam".includes(only)) {
       rootIr.includes("call i32 @jsonPutF64Walk(") &&
       !rootIr.includes("nish_json_put_f64"),
     asRoot.status === 0 ? rootIr : asRoot.stderr
+  )
+}
+
+// The string seam: a native `jsonPutString` copies and escapes through
+// `nish_json_put_string` (runtime/runtime-bytes.c), sixteen bytes a block,
+// where the Nish body, `jsonPutStringWalk` in std/json.ts, goes a byte at a
+// time. `tests/link/std_json_writer/put-string.ts` compares it with
+// `JsonWriter.stringBytes` on every byte value at every offset of strings up
+// to 40 bytes and on 2,000 pseudo-random strings, each also into a
+// destination one byte short; the native build and the Node prelude must
+// print `put-string.out`, and std/json's IR must make the call.
+if (!only || "json_string_seam".includes(only)) {
+  const dir = path.join(linkDir, "std_json_writer")
+  const want = fs.readFileSync(path.join(dir, "put-string.out"), "utf8")
+  const node = runUnderPrelude(path.join(dir, "put-string.ts"), [])
+  check(
+    "json_string_seam: put-string.ts under the Node prelude runs jsonPutStringWalk and prints put-string.out",
+    node.status === 0 && node.stdout === want,
+    `--- put-string.out\n${want}--- node\n${shown(node)}`
+  )
+  const outDir = path.join(buildDir, "link", "json_string_seam")
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const exe = path.join(outDir, "app")
+  const link = HAS_CLANG ? ["--link", exe, ...linkProfile("std_json_writer")] : []
+  const built = spawnNish([path.join(dir, "put-string.ts"), "-o", `${outDir}${path.sep}`, ...link], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const jsonLl = path.join(outDir, "json.ll")
+  const ir = built.status === 0 ? fs.readFileSync(jsonLl, "utf8") : ""
+  const put = ir.match(/^define [^\n]*@nish\.jsonPutString\([^]*?^}/m)?.[0] ?? ""
+  check(
+    "json_string_seam: std/json's jsonPutString calls nish_json_put_string and not its walk",
+    built.status === 0 &&
+      put.includes("call i32 @nish_json_put_string(i8* ") &&
+      !put.includes("jsonPutStringWalk") &&
+      ir.includes(
+        "declare i32 @nish_json_put_string(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, i8* noundef nocapture readonly, i64 noundef, i64 noundef)"
+      ),
+    built.status === 0 ? put || ir : built.stderr
+  )
+  if (HAS_LLVM_AS) {
+    const as = spawnSync("llvm-as", [jsonLl, "-o", "/dev/null"], { encoding: "utf8" })
+    check("json_string_seam: std/json's IR passes llvm-as", built.status === 0 && as.status === 0, as.stderr)
+  } else {
+    skip("skipped: json_string_seam: no llvm-as")
+  }
+  if (HAS_CLANG) {
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "json_string_seam: put-string.ts built natively writes through the kernel and prints put-string.out",
+      native.status === 0 && native.stdout === want,
+      `--- put-string.out\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: json_string_seam: no clang, so put-string.ts is not built natively")
+  }
+  const rootDir = path.join(buildDir, "json_string_seam_root")
+  fs.rmSync(rootDir, { recursive: true, force: true })
+  const asRoot = spawnNish(["std/json.ts", "-o", `${rootDir}${path.sep}`], { cwd: root, encoding: "utf8" })
+  const rootIr = asRoot.status === 0 ? fs.readFileSync(path.join(rootDir, "json.ll"), "utf8") : ""
+  check(
+    "json_string_seam: std/json.ts compiled as a root is an ordinary module, so jsonPutString calls its walk and not the kernel",
+    asRoot.status === 0 && rootIr.includes("call i32 @jsonPutStringWalk(") && !rootIr.includes("nish_json_put_string"),
+    asRoot.status === 0 ? rootIr.slice(0, 2000) : asRoot.stderr
   )
 }
 
