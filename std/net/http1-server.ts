@@ -3283,7 +3283,7 @@ export class Http1Server {
         conn.abort()
         break
       }
-      const n: i32 = netWrite(fd, conn.output, start, http1ServerSub(end, start))
+      const n: i32 = netWrite(fd, conn.output, start, end - start)
       if (n <= 0) {
         if (n !== H1_AGAIN) {
           conn.abort()

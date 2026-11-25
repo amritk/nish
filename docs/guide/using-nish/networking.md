@@ -53,7 +53,8 @@ The examples on this page build with
 `u8[]` that `netRead` and `netWrite` take is checked while the program runs
 unless the compiler can see the window is inside the buffer (`buf, 0,
 buf.length`, or an offset of 0 and a count tested with
-`n >= 0 && n <= buf.length`); the servers built on `nish/net/prefork`, the
+`n >= 0 && n <= buf.length`, or a window `buf, start, end - start` under
+`start >= 0 && start <= end && end <= buf.length`); the servers built on `nish/net/prefork`, the
 HTTP handlers and `nish/net/dns` call standard-library code that keeps
 panic sites until the standard library is made panic-free;
 and some examples index arrays or add numbers without a guard, which a test
