@@ -70,6 +70,7 @@ import {
 import { HTTP1_CHUNKED, HTTP1_NO_BODY, http1HexValue } from "nish/net/http1-codec"
 import {
   H1_AGAIN,
+  H1_ALPN,
   H1_BODY,
   H1_DONE,
   H1_END,
@@ -167,17 +168,14 @@ const HTTP_SERVER_VALUE_END: i32 = 3
 const HTTP_SERVER_H1: i32 = 1
 const HTTP_SERVER_H2: i32 = 2
 const HTTP_SERVER_H3: i32 = 3
-
-// Poll tokens: an HTTP/1.1 slot is its index in `h1Slots`, an HTTP/2 slot is past
-// `HTTP_SERVER_H2_BASE`, and a watched descriptor is `-2 - id`. A listener's
-// token, less -100, is also its entry in `restUntil`.
+// Poll tokens: an HTTP/1.1 slot is its `h1Slots` index, an HTTP/2 slot is past `HTTP_SERVER_H2_BASE`,
+// a watched descriptor is `-2 - id`, and a listener's token less -100 is its entry in `restUntil`.
 const HTTP_SERVER_H1_LISTENER: i32 = -100
 const HTTP_SERVER_H2_LISTENER: i32 = -101
 const HTTP_SERVER_H3_SOCKET: i32 = -102
 const HTTP_SERVER_H2C_LISTENER: i32 = -103
 const HTTP_SERVER_H1_TLS_LISTENER: i32 = -104
 const HTTP_SERVER_H2_BASE: i32 = 1048576
-
 const HTTP_SERVER_READ_BITS: i32 = 5
 const HTTP_SERVER_ZERO: i32 = 0
 const HTTP_SERVER_ACCEPT_NONE: i32 = -11
@@ -1245,7 +1243,9 @@ export class HttpServer {
       )
     }
     if (config.maxHeaders > this.maxFields) {
-      panic(`HttpServer.${name}: maxHeaders ${config.maxHeaders} is more than limits.maxFields ${this.maxFields}`)
+      panic(
+        `HttpServer.${name}: maxHeaders ${config.maxHeaders} is more than limits.maxFields ${this.maxFields}`
+      )
     }
     if (slots < 1) {
       panic(`HttpServer.${name}: slots ${slots} is below 1`)
@@ -1809,7 +1809,11 @@ export class HttpServer {
     if (s.tls && h1Tls !== null) {
       let wants: i32 = read ? h1Tls.readable(s.carrier) : h1Tls.writable(s.carrier)
       // A handshake signs once; the bound only stops a carrier that kept asking.
-      for (let turn: i32 = 0; turn < 4 && key !== null && (wants & TLS_RECORD_SIGN) !== 0 && h1Tls.holds(s.carrier); turn++) {
+      for (
+        let turn: i32 = 0;
+        turn < 4 && key !== null && (wants & TLS_RECORD_SIGN) !== 0 && h1Tls.holds(s.carrier);
+        turn++
+      ) {
         wants = h1Tls.signP256(s.carrier, key)
       }
     } else {
@@ -1845,11 +1849,20 @@ export class HttpServer {
     return h1 !== null ? h1.connection(s.carrier) : null
   }
 
-  /** `s`'s carrier's next event; `H1_ERROR` with no carrier. */
+  /**
+   * `s`'s carrier's next event; `H1_ERROR` with no carrier, or for a TLS slot
+   * whose handshake chose another protocol: the carrier's own `refused` reads
+   * false once its shutdown has moved TLS past open, and would then hand on a
+   * request the client sent after its Finished.
+   */
   private h1Next(s: HttpServerH1Slot): i32 {
     if (s.tls) {
       const h1Tls: Http1TlsServer | null = this.h1Tls
-      return h1Tls !== null ? h1Tls.next(s.carrier) : H1_ERROR
+      if (h1Tls === null) {
+        return H1_ERROR
+      }
+      const chosen: string = h1Tls.alpn(s.carrier)
+      return chosen === "" || chosen === H1_ALPN ? h1Tls.next(s.carrier) : H1_ERROR
     }
     const h1: Http1Server | null = this.h1
     return h1 !== null ? h1.next(s.carrier) : H1_ERROR

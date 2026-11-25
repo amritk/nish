@@ -1,0 +1,29 @@
+PASS  the server listens: HTTP/1.1, HTTP/1.1 over TLS and HTTP/3
+PASS  a TLS handshake offering http/1.1, the server's signature and Finished verified
+PASS  a GET of /hello: 200 and its body, with alt-svc naming the HTTP/3 port
+PASS  a GET of /users/42 on the same connection: the parameter as JSON
+PASS  a POST of /echo: its body echoed
+PASS  a GET of a path no route has: 404
+PASS  every request was taken, and said secure
+PASS  of 4 taken
+PASS  a cleartext GET beside it: 200 hello
+PASS  which did not say secure
+PASS  32 warmed keep-alive requests over TLS, each answered
+PASS  and the server's waitSigned and send kept 0 arena bytes for them
+PASS  no alert on the connection
+PASS  a TLS handshake offering no ALPN
+PASS  is served as HTTP/1.1: 200 hello
+PASS  drain closes the idle TLS connections
+PASS  ALPN h2 to a listener offering http/1.1 alone: no handshake
+PASS  but a fatal no_application_protocol alert
+PASS  and the connection closed, no request taken
+PASS  ALPN h2 to a listener offering http/1.1 and h2: the handshake completes
+PASS  then the server closes
+PASS  with close_notify, and no HTTP byte
+PASS  no request taken
+PASS  idleTimeout 100: a handshake, then silence
+PASS  is closed by the server
+PASS  bodyTimeout 100: a handshake
+PASS  a body that stops after 2 of 10 bytes is closed by the server
+PASS  never handed to the program
+net_http_server_h1_tls: 28 passed, 0 failed, 0 skipped
