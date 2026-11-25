@@ -1,0 +1,336 @@
+{
+  "version": "0.47.0",
+  "date": "2026-11-25",
+  "tag": "v0.47.0",
+  "range": {
+    "from": "v0.46.0",
+    "to": "c5265f9c1"
+  },
+  "entries": [
+    {
+      "id": "wp85-s1-host-raster-and-synth-panic-free",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP85 S1 — host, raster and synth panic-free",
+      "body": "std/host/{game,ring,text}.ts, std/raster.ts and std/synth.ts lose their removable panic sites. Each removal rests on a bound the module itself proves. The sites left are array-length and slice sites the prover cannot discharge; they are counted in tests/std-panics.json, each with a reason. Raster keeps the base's malformed-pool and trail checks. The term frame, raster and synth benches landed before any site changed, so their counts are measured against the base.\n\nMeasured: instructions (CI cachegrind): std-raster 155.3M -> 136.9M, std-synth 159.3M -> 110.1M, std-term-frame 203.6M -> 194.3M\nTests: tests/std-panics.json, bench/instructions.json\nFixes #2155\nVerified: pr-adversary 1 round, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e274b99"
+      ],
+      "pr": 2269,
+      "author": "Redis Stasa",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "wp85-s2-term-pixels-term-io-term-rate",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP85 S2 — term-pixels, term-io, term-rate and term-probe panic-free",
+      "body": "std/term-pixels.ts, std/term-io.ts, std/term-rate.ts and std/term-probe.ts now prove or drop their panic sites. RateController keeps its fastest, up and level rates as i32 fields and saturates its counters. A Framebuffer whose public width, height or pixels disagree still panics, and its docs now say so. A new link negative pins that panic. The sites left are array-length and slice sites, listed with reasons in tests/std-panics.json.\n\nexamples/break-web keeps --allow-panics. All but one of its remaining sites are indexes into root storage that the prover cannot discharge, and its header records the count.\n\nTests: tests/link/std_term_pixels_negative_desync, tests/std-panics.json\nFixes #2156\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "80f7c91"
+      ],
+      "pr": 2272,
+      "author": "Redis Stasa",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "make-std-term-ts-panic-free-but-for",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "make std/term.ts panic-free but for one slice",
+      "body": "std/term.ts now proves its indexes and arithmetic and drops its five explicit panics. Screen.flush now flushes whatever every buffer holds even where a buffer disagrees, rather than panicking. Screen.text and Canvas.text walk their string in place without allocating. The one site left is a slice the prover cannot discharge (#2208), listed with its reason in tests/std-panics.json. docs/security/term.md records the bounds tests pin and lists the untested defensive bounds as open findings.\n\nThe examples keep --allow-panics. game-starter reaches four sites in std/synth and std/math, term-probe reaches two, and break-web reaches 369, of which 368 are its own root-storage indexes. The PR body lists each.\n\nMeasured: instructions (CI cachegrind): std-term-frame 194.3M -> 166.1M (-14.5%)\nTests: tests/link/std_term, tests/link/std_term_buffers_disagree, tests/std-panics.json\nFixes #2157\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3dbe610"
+      ],
+      "pr": 2273,
+      "author": "Redis Stasa",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "pollwaitbatch-sleeps-its-window-out-in-slices-and",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "pollWaitBatch sleeps its window out in slices and pumps once",
+      "body": "* test(runtime): add the ring-nap design to bench/handler-ring\n\nring-nap runs the plain pollWait turn and, after a pass that answered\nfewer than 64 requests, sleeps 1 ms in pollWait on an empty\npollCreate() loop: the nap a pollWaitBatch window is measured against.\nrun.sh prints it against ring@1 as it prints each ring@M.\n\n* test(runtime): count ring enters and batch windows in the uring-stats line\n\nNISH_URING_STATS now prints enters (io_uring_enter calls, direct waits\nincluded), windows (pollWaitBatch windows opened) and window_waits (ring\nwaits inside them), so the batch's per-request cost can be read from a run.\n\nTests: tests/run.js uring-stats line check\n\n* perf(runtime): pollWaitBatch sleeps its window in slices and pumps once a slice\n\nThe batch window no longer waits on the ring, which woke, ran its deferred\ntask work and pumped once per completion, sends' included. It sleeps in at\nmost eight poll(2) slices of maxWaitMs, watching signalFd() on a direct\nloop, and pumps and collects once after each.\n\nTests: tests/link/net_ring_batch/batch.ts trickle\n\n* test(runtime): bound the trickle window's waits and enters by the stats lines\n\nnish's kill takes only 0, 2, 9 and 15, so the trickle mode asks for the\nstats lines with the system's kill -USR1. The window waits 4 times and\nenters the ring 39 times; the one it replaced waited 16 and entered 62.\n\nTests: tests/link/net_ring_batch (trickle)\n\n* docs(runtime): describe pollWaitBatch's sliced second wait and the window stats\n\nThe guide, LANGUAGE.md, the WP63 note and NURING-46 now say the second wait\nsleeps in at most eight poll(2) slices, pumping once after each, and that a\nbatch may end up to one slice after minEvents became ready. The stats line\nexample shows enters, windows and window_waits.\n\nRefs: docs/security/net-uring.md#findings\n\n* docs(runtime): say where pollWaitBatch's second wait sleeps and what bounds it\n\nThe second wait sleeps in poll(2) slices, not io_uring_enter, watches the\nsignal on any one-set loop however many rings it has grown, and takes one\nmore slice for each signal handler that interrupts one. A window reaps the\nring only after each slice, so a large maxWaitMs holds accepts and send\ncompletions for up to maxWaitMs / 8.\n\n* test(runtime): pin that an unfilled pollWaitBatch window sleeps in 6 to 8 slices\n\nThe trickle check fills its window before the slices run out, so it never\nreached the cap of eight. A window for 16 that gets one byte sleeps its\nwhole maxWaitMs out; a single sleep or slices of maxWaitMs / 16 fail it.\n\nTests: tests/link/net_ring_batch\n\n* docs(runtime): record the batch window's slice cap check and its mutants\n\n* docs(runtime): record the send pool's PSS at 90,000 and regenerate the reference\n\nRecords the mid-window smaps of the sliced-window run at 90,000\nconnections beside the #2260 note. The 0.46.0 rise from 55 to 75 MB is\nnot reproduced: ring@1, ring@64 and the nap held 29.0, 29.2 and 27.5 MB.\nRegenerates docs/reference for the pollWaitBatch rule in LANGUAGE.md.\n\n* docs(runtime): record the sliced pollWaitBatch window against a 1 ms nap\n\nAdds the handler-ring run that compares pollWaitBatch(64, 1 ms) with\nplain pollWait and with pollWait plus a 1 ms nap, SQLite, think 4.5,\nat 18,000 and 90,000 connections, and the 18,000 think-30 no-regress run.\n\n* docs(runtime): record the near-saturation and ring@1-against-main runs\n\nNear saturation the 64-event window answers as many requests as plain\npollWait within noise. ring@1 against main reads 7.9% above main's\nmedian, inside main's own range; it is recorded as measured, not\nexplained.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1908bae"
+      ],
+      "pr": 2278,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "wp89-s1-the-design-note-the-shim-s",
+      "type": "docs",
+      "breaking": false,
+      "title": "WP89 S1 — the design note, the shim's ABI and the pinned toolchain",
+      "body": "docs/wp89-gfx.md is the design note for nish-gfx. It covers four things:\n- the C shim's ABI over wgpu-native, with each buffer parameter typed `const void *` so that c-import binds it as `readonly u8[]`\n- the pinned toolchain and how it is fetched\n- the 2D game layer's shape\n- which later stage owns each piece\n\nFixes #2236\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e2f1ef8"
+      ],
+      "pr": 2284,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "add-wp83-s5-for-the-88-cipher-panic",
+      "type": "docs",
+      "scope": "self",
+      "breaking": false,
+      "title": "add WP83 S5 for the 88 cipher panic sites S2 left",
+      "body": "Adds stage S5 to the WP83 plan, from the owner's decision on #2283. S5\nproves, removes or records the 88 unproven sites that S2 left in aes,\nchacha20poly1305, x25519, bcrypt and bcrypt-batch, inside and outside the\nct_asm-pinned constant-time copies, keeping each copy in step.\n\nEach site that stays gets a per-function, per-kind reason in a new\n`residual` list in tests/std-panics.json, and a row in the cipher's\ndocs/security record. The stage also applies the #2219 no-wrapping-sum rule\nto chacha20poly1305's three toI32(toU32( sums, and fixes the drifted\nanchors in crypto-k1.md and crypto-chacha20-hw.md.\n\nS2's section no longer calls those modules cleared: only ed25519 was.",
+      "metrics": [],
+      "refs": [
+        "#2283"
+      ],
+      "tests": [],
+      "commits": [
+        "00ad6f9"
+      ],
+      "pr": 2287,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "add-wp84-s3-checked-sums-and-s4-guide",
+      "type": "docs",
+      "scope": "plan",
+      "breaking": false,
+      "title": "add WP84 S3 checked sums and S4 guide wording",
+      "body": "S3 replaces every wrapping u32 sum, mask and loop cap in\nstd/compress/deflate.ts with a checked sum: a Result where the failure\ncan be real, a bound src/bounds.ts proves only where it cannot. Rule 1\nnow names a u32-cast wrapping sum, or a mask no wider than an assumed\nmaximum, as a made-up-value guard rather than a proof. S4 fixes the\ncompression guide's stale gzip panic wording and documents the -1 that\ncompressBound and deflateBound return for a huge n.",
+      "metrics": [],
+      "refs": [
+        "amritk/nish#2219",
+        "amritk/nish#2151",
+        "amritk/nish#2285",
+        "amritk/nish#2286"
+      ],
+      "tests": [],
+      "commits": [
+        "3ca191d"
+      ],
+      "pr": 2288,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "wp80-s6-read-windows-the-prover-reads-fallen",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP80 S6 read windows the prover reads, fallen bench counts and example opt-outs",
+      "body": "Rewrites the std/net read windows in http1-server readable and drain and\nprefork preforkDiscard, and two example windows in file-server and\nhttp-app, into the (buf, 0, len) shape the pending slice prover (#2208)\ndischarges. Today's compiler clears no site with them, so\ntests/std-panics.json does not move.\n\nThe six examples keep --allow-panics. Each opt-out header now names only\nthe sites still blocking it and what each one needs: #2206, #2207, #2208,\na kept panic, or src/ work not yet filed. Lowers the 25 instruction counts\nthat fell to CI's shard 9 figures. No count is raised.\n\nPartial progress on WP80 S6. The stage stays open for the owner's\ndecision on the blockers that need src/.\n\nRefs: amritk/nish#2209, amritk/nish#2176\nVerified: pr-adversary 1 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b2d5c98"
+      ],
+      "pr": 2294,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "wp89-s2-numeric-typed-arrays-as-buffers-a",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "WP89 S2 — numeric typed arrays as buffers a declared C function borrows",
+      "body": "A `declare function` now takes `u16[]`, `u32[]`, `i32[]` and `f32[]` buffers, and their `readonly` forms, under the rule that already applied to `u8[]`. C borrows each one as a pointer to its elements for the length of the call. The count that closes a run is in elements, not bytes. A run that mixes element types is refused with NL2824, at the parameter that breaks it. `f64[]` and `i64[]` stay refused, because their layout is not the same on every target.\n\nA c-import `\"buffer\"` override binds `uint16_t *`, `uint32_t *`, `int32_t *` and `float *` as typed buffers, `readonly` when `const`. It refuses an enum pointer and a typedef carrying its own `aligned` attribute, and the refusal says why. The `ffi-length` panic says \"elements\" for any buffer that is not a `u8[]`.\n\nRefs: docs/LANGUAGE.md, docs/guide/using-nish/interop.md\nTests: tests/cases/ffi_buffer_{f32,u16,u32,i32}, tests/c-import/typed-buffers, tests/link/ffi_buffer_mixed_run\nFixes #2237\n\nVerified: pr-adversary 3 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "25ac57f"
+      ],
+      "pr": 2293,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "make-std-temporal-ts-panic-free-but-for",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "make std/temporal.ts panic-free but for a kept panic and a slice",
+      "body": "std/temporal.ts goes from 260 counted panic sites to 2: the documented\nRangeError panic in temporalRangeError and one String.fromBytes slice in\ntemporalText (#2208). The calendar core, digit writers and reader now\nprove their overflow, index and divide sites; field arithmetic goes\nthrough checked i64 helpers that raise the documented RangeError.\n\nNew Result forms tryPlainDate, tryPlainDateFrom and PlainDate.tryAdd\nanswer the panicking forms' RangeError as an Err with the same text.\nThe *FromOrNull readers answer null for a six-digit year outside\nTemporal's range. A Duration whose microseconds or nanoseconds field is\nthe least i64 is now refused with a RangeError, as its negation does not\nfit.\n\nMeasured: std-temporal-arith -4.84%, std-temporal-format -5.21%, std-temporal-parse -7.31% instructions (CI valgrind 3.26.0)\nTests: tests/link/std_temporal_result, tests/link/std_temporal_duration_min, tests/link/std_temporal_duration_min_ns\n\nFixes #2162",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7a8ab49"
+      ],
+      "pr": 2282,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-24"
+    },
+    {
+      "id": "wp89-s6-a-module-file-chosen-by-target",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "WP89 S6 — a module file chosen by target",
+      "body": "A wasm32 build links against the host, not an OS, so a module that reads the environment or a file has nothing to call there. A build can now pick a different file for wasm32: a package's `nish-wasm32` exports condition is read before `nish-<mode>` and `nish` (a native build ignores it), and under wasm32 a module resolves `<name>.wasm32.ts` beside `<name>.ts` when that file exists.\n\nThe two files must export the same names with the same signatures, or a program that compiles for one target fails for the other far from the file that changed. A mismatch is NL3063, reported by both builds: the comparison parses both sources, so the native build refuses the pair as early as the wasm one. A signature is the declaration's text up to its body or initializer with blanks collapsed; an unannotated constant is compared whole, and private class members are not compared.\n\nRefs: docs/LANGUAGE.md, docs/guide/language/modules.md, docs/wp89-gfx.md\nTests: tests/link/package_target_wasm32, tests/link/package_target_mismatch, tests/link/package_target_mismatch_native, tests/link/module_target_twin, tests/link/module_target_std_twin, tests/wordings/nl3063_target_twin_mismatch\n\nFixes #2241\n\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "53ff05c"
+      ],
+      "pr": 2299,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "make-the-remaining-std-modules-panic-free-2301",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "make the remaining std modules panic-free",
+      "body": "std/math, base64, random, regex, release, sqlite and testing remove or prove their counted panic sites. Each fix is a Result or refusal where the failure is real, a bound the prover checks where the site is unreachable, or a restructure. None of them uses nish:unsafe, a made-up value or a wrapping sum offered as a proof. std/random no longer imports nish:unsafe, and its answers are the same bits natively and under Node. tests/std-panics.json falls from 1263 sites to 1167.\n\nreleaseCacheFresh now treats a cache dated before 1970 as stale. A NULL sqlite error message reads as the code's description.\n\nMeasured: std-base64-encode 139,248,545 -> 122,002,283 instructions (-12.4%), std-math-kernel 141,871,116 -> 139,016,271 (-2.0%), CI shard 9/9\nTests: tests/std-panics.json, tests/run.js nish/release cache freshness\n\nFixes #2163",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f26e64d"
+      ],
+      "pr": 2301,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "wp83-s5-prove-remove-or-record-the-88",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP83 S5 — prove, remove or record the 88 cipher sites S2 left",
+      "body": "S2 left 88 panic sites the prover could not discharge in aes,\nchacha20poly1305, x25519, bcrypt and bcrypt-batch. This change proves or\nremoves 75 of them: wrapping Poly1305 limb sums, masked bit counts and\nround offsets, guarded loads and tag reads, literal loop bounds, and i64\nqueue arithmetic. aesGcmOpen now fails closed on a bad length. The ct\ncopies in tests/cases/ct_asm_* take the same proofs as masks and literal\nbounds only, with no data branch.\n\nThe 13 sites left are named, with their reasons, in a new `residual` list\nin tests/std-panics.json and in the modules' security records (AEAD-5,\nECC-12, BCRYPT-13, CHACHAHW-3). tests/run.js requires each such module to\ncount exactly its residual entries, by function and kind, and fails on an\nover-listed entry too. The guide's bcrypt snippets no longer need\n--allow-panics.\n\nMeasured: chacha20poly1305-seal -7.48% instructions, aes128gcm-seal -0.77%, others within 0.03%; bcrypt bench ratios 0.973-1.004, within noise\nTests: tests/std-panics.json, tests/cases/ct_asm_aes, tests/cases/ct_asm_chacha20poly1305, tests/cases/ct_asm_x25519\n\nFixes #2283",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "cc5e9f6"
+      ],
+      "pr": 2302,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "prove-new-array-lengths-and-slice-ranges-the",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "prove new Array lengths and slice ranges the code has checked",
+      "body": "The bounds walk now proves two kinds of check that no guard could remove before. A program held to no panic can keep these calls by writing the guard that its refusal names.\n\nAn `i32` length passed to `new Array<T>(n)` can fail only by being negative. Its check is now proven wherever `n` is known to be non-negative: a local of `integer<0, N>`, an `if (n >= 0)` guard, a literal, a `.length`, or a sum of these.\n\nA range check is now proven wherever the state after the call's arguments gives `0 <= start <= end <= length`. This covers `String.fromBytes`, string and array `slice`, `dst.set(src)`, and the `(buf, off, len)` window of `writeBytes`, `readStdin`, `fileReadAt` and the `nish:net` calls.\n\nA proven check leaves the IR. Each refusal names the guard that would prove it, using the call's own local names.\n\nstd/ drops 52 panic sites: the `tests/std-panics.json` total goes from 1092 to 1040. Three of them are ChaCha20-Poly1305 allocations, and `docs/security/crypto-aead.md` AEAD-5 now records 10 kept sites, down from 13.\n\nSupersedes #2279.\nFixes #2207\nFixes #2208",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/cases/deny_panics_ranges",
+        "tests/cases/deny_panics_ranges_shapes",
+        "tests/cases/reject_deny_panics_range_*"
+      ],
+      "commits": [
+        "f6594b9"
+      ],
+      "pr": 2303,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "prove-start-end-slice-windows-the-code-has",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "prove [start, end) slice windows the code has checked",
+      "body": "The bounds walk now proves a buffer window [start, end) that the code has\nchecked with 0 <= start <= end <= buf.length, so writeBytes, netWrite and\nString.fromBytes over `end - start` keep no range check. When `end` is a\nlocal the guard holds at or above `start`, it also proves `end - start`\ncannot overflow, and that subtraction drops its overflow check. A bound\nheld in a field is copied into a local the guard tests.\n\nstd/net/http1-server.ts, std/net/static.ts and std/net/dns.ts each lose\none slice site under --deny-panics (tests/std-panics.json 1040 -> 1037).\n\nFixes #2297",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/cases/deny_panics_window",
+        "tests/cases/reject_deny_panics_window_*"
+      ],
+      "commits": [
+        "b5e2b3a"
+      ],
+      "pr": 2305,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "say-gzip-keeps-only-contract-panics-and-when",
+      "type": "docs",
+      "scope": "guide",
+      "breaking": false,
+      "title": "say gzip keeps only contract panics and when compressBound answers -1",
+      "body": "The compression guide now says nish/compress/gzip keeps only the panics of its contract, as deflate does. Those are a window outside its buffer, a level outside 0 to 9, a negative limit, a GzipReader.commit of more than inputRoom() bytes, and a GzipReader.read with no room. The guide also states that compressBound answers -1 for an n past 2,146,664,726 and deflateBound past 2,146,664,744. A caller then refuses the body, sends it uncompressed, or streams it through GzipWriter.\n\nFixes #2286",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "14d490a"
+      ],
+      "pr": 2308,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "prove-atomic-element-indexes-the-code-has-checked",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "prove atomic element indexes the code has checked",
+      "body": "An AtomicI32Array or AtomicI64Array element method (load, store, add,\nsub, min, max, exchange, compareExchange) used to leave every caller with\nan unproven index panic site, however the caller guarded the index. The\nprover now judges the index at the call from the guard or loop test around\nit: a caller that checked `i >= 0 && i < arr.length` on the same array, or\nloops while `i < arr.length`, gets a proven site, so a --deny-panics or\nnoPanic caller can use these methods.\n\nThe index is judged as soon as the first argument is evaluated, and the\ncheck is recorded as passed only when no later argument assigns or calls,\nso `a.store(i, (i = k))` and a later argument that replaces the array both\nstay unproven. The method's own declaration site in std/threads.ts stays\nlisted, because the method body is the check; the gain is at the callers.\n\nTests: tests/link/atomic_index_proven, atomic_index_unproven,\natomic_index_no_lower, atomic_index_no_upper, atomic_index_other_length,\natomic_index_later_arg, atomic_index_later_write, atomic_index_later_call\nRefs: docs/LANGUAGE.md, docs/guide/using-nish/threads.md\n\nFixes #2206",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "bd9c5a0"
+      ],
+      "pr": 2306,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "ring-re-entries-bounded-ubuntu-6-8-buffer",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "ring re-entries bounded, Ubuntu 6.8 buffer rings, Cursor.record and RowRecord, jsonPutString and Http1Server.tick",
+      "body": "The runtime and standard-library changes behind an HTTP server on SQLite that holds 300,000 keep-alive connections at about 96,000 requests a second, where 0.46.0 saturates its core.\n\n- A buffer ring that Ubuntu 24.04's 6.8.0-136+ kernels refuse for a zero resv[0] is retried once with resv[0] = 1, so ring listeners no longer silently fall back to descriptors there (NURING-52).\n- A wait stops re-entering a ring once an entry reaps fewer than nish_uring_opts.taskrun_worth completions (default 16; 1 keeps the old behaviour): 1.5 io_uring_enter calls a request instead of 7.8-11. A ring slot's state and send queue are one record, and drained 1 KiB receive queues are reused, up to 4,096 per listener (NURING-53).\n- nish/sqlite: Cursor.record copies a row's record whole, RowRecord decodes it with sqlite3VdbeRecordUnpack's bounds, and Database.reopenCursor opens into an existing Cursor. The adapter decodes a record's columns in place.\n- nish/json: jsonPutString writes a JSON string into a caller's u8[] with JsonWriter.stringBytes's escapes and no allocation, lowered natively to the nish_json_put_string kernel (an SSE2 scan for the next byte to escape, 4- to 16-byte copies).\n- nish/net: Http1Server.tick stamps a pass's activity with one clock reading; a server never ticked reads the clock as before.",
+      "metrics": [
+        "core per request 10.5 us (saturated) -> 7.5-7.7 us, p99 285 ms -> 2.5 ms, 300k connections on one pinned core over a 5-minute hold"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/link/std_sqlite_cursor_record",
+        "tests/link/std_json_writer/put-string.ts",
+        "tests/runtime/uring-test.c"
+      ],
+      "commits": [
+        "c5265f9"
+      ],
+      "pr": 2307,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    }
+  ]
+}
