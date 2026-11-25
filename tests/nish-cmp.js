@@ -11757,7 +11757,12 @@ const DECLARED = [
       "tests/link/crypto_x509/main.ts": ["crypto_p256_plain.ll", "crypto_x25519_plain.ll", "plain.ll"],
       "tests/link/crypto_x509_audit/main.ts": ["plain.ll"],
       "tests/link/crypto_x509_malformed/main.ts": ["plain.ll"],
-      "tests/link/module_target_std_twin/main.ts": ["arena-report.ll", "bounds.ll", "emit-async.ll", "map.ll"],
+      "tests/link/module_target_std_twin/main.ts": [
+        "arena-report.ll",
+        "bounds.ll",
+        "emit-async.ll",
+        "map.ll",
+      ],
       "tests/link/module_target_twin/main.ts": ["map.ll"],
       "tests/link/net_fetch_async/main.ts": ["server.ll"],
       "tests/link/net_fetch_async_dns_slow/main.ts": ["server.ll"],
