@@ -154,7 +154,7 @@ No public input reaches the value these three guards stop, so removing one
 changes no output. What fails is the std-panics ratchet: without the guard the
 prover can no longer discharge an index, and `std/term.ts` gains a site
 `tests/std-panics.json` does not allow. Each row was checked by removing its
-guard and running `node tests/run.js std-panics` (at `083b97d8`), which
+guard and running `node tests/run.js std-panics` (with `std/term.ts` as at `c5265f9c`), which
 failed with the sites listed; with the guard in place it passes.
 "link/std_term_decoder_bounds: exits with 0 and stdout matches expected.out"
 pins what the public API gives at each guard's edge.
