@@ -71,6 +71,12 @@ const TEMPORAL_NS_PER_DAY: i64 = 86400000000000
 /** The epoch day of +275760-09-13, the last date Temporal can represent. */
 const TEMPORAL_MAX_EPOCH_DAY: i64 = 100000000
 
+/** The last instant Temporal represents, in epoch seconds: the start of `TEMPORAL_MAX_EPOCH_DAY`. */
+const TEMPORAL_MAX_EPOCH_SECOND: i64 = 8640000000000
+
+/** The negation of `TEMPORAL_MAX_EPOCH_SECOND`. */
+const TEMPORAL_MIN_EPOCH_SECOND: i64 = -8640000000000
+
 /** The epoch day of -271821-04-19, the first date Temporal can represent. */
 const TEMPORAL_MIN_EPOCH_DAY: i64 = -100000001
 
@@ -205,6 +211,15 @@ const temporalSign = (a: i64): i32 => {
 
 /** The most bytes any `toString` here writes: a `Duration` of ten 19-digit fields. */
 const TEMPORAL_TEXT_MAX: i32 = 256
+
+/**
+ * The text of `out` up to `end`, the index the last writer answered. Each
+ * `toString` sizes `out` at `TEMPORAL_TEXT_MAX`, which holds its longest text,
+ * so `end` stays inside `out`; the slice still keeps its bounds check, since
+ * the prover does not carry a writer's answer back to its caller (#2208), and
+ * this is the one slice site every `toString` here shares.
+ */
+const temporalText = (out: u8[], end: i32): string => String.fromBytes(out, 0, end)
 
 /** Write the ASCII byte `c` at `at`. */
 const temporalPutByte = (out: u8[], at: i32, c: i32): i32 => {
@@ -357,9 +372,6 @@ const temporalPutDateTime4 = (
   minute: i32,
   second: i32
 ): i32 => {
-  if (at < 0 || at > toI32(out.length) - 32) {
-    return at
-  }
   const v: u16x8 = u16x8(
     toU16(year / 100),
     toU16(year % 100),
@@ -413,6 +425,9 @@ const temporalPutDateTime4 = (
     toU8(0),
     toU8(0)
   )
+  if (at < 0 || at > toI32(out.length) - 32) {
+    return at
+  }
   store(addWrapping(head, headText), out, at)
   store(addWrapping(tail, tailText), out, at + 16)
   return at + 19
@@ -1639,10 +1654,10 @@ export class PlainDate {
   toString(): string {
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
     if (this.year >= 0 && this.year <= 9999) {
-      return String.fromBytes(out, 0, temporalPutDate4(out, 0, this.year, this.month, this.day))
+      return temporalText(out, temporalPutDate4(out, 0, this.year, this.month, this.day))
     }
     const end: i32 = temporalPutDate(out, 0, this.year, this.month, this.day)
-    return String.fromBytes(out, 0, end)
+    return temporalText(out, end)
   }
 
   /**
@@ -1866,7 +1881,7 @@ export class PlainTime {
     const sub: u32 =
       toU32(this.millisecond) * 1000000 + toU32(this.microsecond) * 1000 + toU32(this.nanosecond)
     const end: i32 = temporalPutTime(out, 0, this.hour, this.minute, this.second, toI32(sub))
-    return String.fromBytes(out, 0, end)
+    return temporalText(out, end)
   }
 
   /**
@@ -2196,7 +2211,7 @@ export class PlainDateTime {
         this.minute,
         this.second
       )
-      return String.fromBytes(out, 0, temporalPutFraction(out, seconds, sub))
+      return temporalText(out, temporalPutFraction(out, seconds, sub))
     }
     const date: i32 = temporalPutDate(out, 0, this.year, this.month, this.day)
     const end: i32 = temporalPutTime(
@@ -2207,7 +2222,7 @@ export class PlainDateTime {
       this.second,
       sub
     )
-    return String.fromBytes(out, 0, end)
+    return temporalText(out, end)
   }
 
   /**
@@ -2607,7 +2622,7 @@ export class Duration {
       i = temporalPutNumber(out, i, wholeSeconds)
       i = temporalPutByte(out, temporalPutFraction(out, i, toI32(fraction)), 83)
     }
-    return String.fromBytes(out, 0, i)
+    return temporalText(out, i)
   }
 
   /**
@@ -2886,7 +2901,7 @@ export const durationFromOrNull = (text: string): Duration | null => {
         return null
       }
       inTime = true
-      r.at = r.at + 1
+      r.step()
       if (r.done()) {
         return null
       }
@@ -2895,15 +2910,16 @@ export const durationFromOrNull = (text: string): Duration | null => {
     if (fractionSeen || !r.digitAt(toI32(0))) {
       return null
     }
-    let n: i64 = 0
+    // At most 16 digits, so the `u64` value never wraps.
+    let n: u64 = 0
     let count: i32 = 0
     while (r.digitAt(toI32(0))) {
-      if (count === 16) {
+      if (count >= 16) {
         return null
       }
-      n = n * 10 + toI64(r.peek(toI32(0)) - 48)
+      n = n * 10 + toU64(r.peek(toI32(0))) - 48
       count = count + 1
-      r.at = r.at + 1
+      r.step()
     }
     if (count > longest) {
       longest = count
@@ -2912,74 +2928,82 @@ export const durationFromOrNull = (text: string): Duration | null => {
     const fraction: i32 = r.fractionDigits()
     const sawFraction: boolean = r.at !== beforeFraction
     const unit: i32 = r.peek(toI32(0)) | 32 // lowercased
-    r.at = r.at + 1
+    r.step()
     const slot: i32 = temporalDurationSlot(unit, inTime)
     if (slot < 0 || slot >= toI32(values.length) || slot <= rank || !r.ok) {
       return null
     }
     rank = slot
     any = true
-    values[slot] = n
+    values[slot] = toI64(n)
     if (sawFraction) {
       if (!inTime) {
         return null
       }
       fractionSeen = true
-      // The fraction of an hour, a minute or a second, spread over the smaller fields.
-      let ns: i64 = toI64(fraction)
+      // The fraction of an hour, a minute or a second, spread over the smaller
+      // fields. It is below 10^9 nanoseconds of the unit, so below an hour's
+      // nanoseconds, and the `u64` product never wraps.
+      let ns: u64 = toU64(fraction)
       if (slot === 4) {
         ns = ns * 3600
       } else if (slot === 5) {
         ns = ns * 60
       }
       if (slot === 4) {
-        values[5] = temporalTruncDiv(ns, 60 * TEMPORAL_NS_PER_SECOND)
-        ns = ns % (60 * TEMPORAL_NS_PER_SECOND)
+        const minutes: u64 = ns / 1000000000 / 60
+        values[5] = toI64(minutes)
+        ns = ns - minutes * 60000000000
       }
       if (slot <= 5) {
-        values[6] = temporalTruncDiv(ns, TEMPORAL_NS_PER_SECOND)
-        ns = ns % TEMPORAL_NS_PER_SECOND
+        values[6] = toI64(ns / 1000000000)
+        ns = ns % 1000000000
       }
-      values[7] = temporalTruncDiv(ns, 1000000)
-      values[8] = temporalTruncDiv(ns, 1000) % 1000
-      values[9] = ns % 1000
+      values[7] = toI64(ns / 1000000)
+      values[8] = toI64((ns / 1000) % 1000)
+      values[9] = toI64(ns % 1000)
     }
   }
   if (!any || !r.ok) {
     return null
   }
-  const k: i64 = toI64(negative ? -1 : 1)
+  if (negative) {
+    // Every value is below 10^16, so the wrapping negation is exact.
+    for (let i: i32 = 0; i < toI32(values.length); i++) {
+      values[i] = temporalNegField(values[i])
+    }
+  }
   // Fields of nine digits or fewer cannot reach any of the constructor's
   // bounds, so only a longer one is checked here first.
   const problem: string =
     longest <= 9
       ? ""
       : temporalDurationProblem(
-          values[0] * k,
-          values[1] * k,
-          values[2] * k,
-          values[3] * k,
-          values[4] * k,
-          values[5] * k,
-          values[6] * k,
-          values[7] * k,
-          values[8] * k,
-          values[9] * k
+          values[0],
+          values[1],
+          values[2],
+          values[3],
+          values[4],
+          values[5],
+          values[6],
+          values[7],
+          values[8],
+          values[9]
         )
   if (problem.length > 0) {
     return null
   }
   return new Duration(
-    values[0] * k,
-    values[1] * k,
-    values[2] * k,
-    values[3] * k,
-    values[4] * k,
-    values[5] * k,
-    values[6] * k,
-    values[7] * k,
-    values[8] * k,
-    values[9] * k
+    values[0],
+    values[1],
+    values[2],
+    values[3],
+    values[4],
+    values[5],
+    values[6],
+    values[7],
+    values[8],
+    values[9]
   )
 }
 
@@ -2989,13 +3013,25 @@ export const durationFromOrNull = (text: string): Duration | null => {
  * character. `unit` is already lowercased.
  */
 const temporalDurationSlot = (unit: i32, inTime: boolean): i32 => {
-  const designators: string = inTime ? "hms" : "ymwd"
-  for (let i: i32 = 0; i < toI32(designators.length); i++) {
-    if (toI32(designators.charCodeAt(i)) === unit) {
-      return inTime ? i + 4 : i
+  if (inTime) {
+    if (unit === 104) {
+      return 4
     }
+    if (unit === 109) {
+      return 5
+    }
+    return unit === 115 ? 6 : -1
   }
-  return -1
+  if (unit === 121) {
+    return 0
+  }
+  if (unit === 109) {
+    return 1
+  }
+  if (unit === 119) {
+    return 2
+  }
+  return unit === 100 ? 3 : -1
 }
 
 /**
@@ -3060,7 +3096,7 @@ export class Instant {
     let seconds: i64 = epochSeconds
     let nanos: i64 = nanoseconds
     if (nanos < 0 || nanos >= TEMPORAL_NS_PER_SECOND) {
-      seconds = seconds + temporalFloorDiv(nanos, TEMPORAL_NS_PER_SECOND)
+      seconds = temporalAdd(seconds, temporalFloorDiv(nanos, TEMPORAL_NS_PER_SECOND))
       nanos = temporalFloorMod(nanos, TEMPORAL_NS_PER_SECOND)
     }
     if (!temporalInstantInRange(seconds, nanos)) {
@@ -3068,7 +3104,8 @@ export class Instant {
     }
     this.epochSeconds = seconds
     this.nanosecondOfSecond = toI32(nanos)
-    this.epochMilliseconds = toF64(seconds * 1000 + toI64(nanos / 1000000))
+    // In range, `seconds` is within ±8.64 × 10^12, so the wrapping sum is exact.
+    this.epochMilliseconds = toF64(toI64(toU64(seconds) * 1000 + toU64(nanos / 1000000)))
   }
 
   /**
@@ -3083,7 +3120,8 @@ export class Instant {
     const civil: i64 = temporalCivilOfEpochDay(day)
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
     const year: i32 = temporalCivilYear(civil)
-    const nanoOfDay: i64 = secondOfDay * TEMPORAL_NS_PER_SECOND + toI64(this.nanosecondOfSecond)
+    // `secondOfDay` is below a day, so the `u64` sum never wraps.
+    const nanoOfDay: i64 = toI64(toU64(secondOfDay) * 1000000000 + toU64(this.nanosecondOfSecond))
     let i: i32 = 0
     if (year >= 0 && year <= 9999) {
       const secs: i32 = toI32(secondOfDay)
@@ -3096,14 +3134,14 @@ export class Instant {
         temporalCivilDay(civil),
         toI32(minutes / 60),
         minutes % 60,
-        secs - minutes * 60
+        toI32(toU32(secs) % 60)
       )
       i = temporalPutFraction(out, i, this.nanosecondOfSecond)
     } else {
       i = temporalPutDate(out, 0, year, temporalCivilMonth(civil), temporalCivilDay(civil))
       i = temporalPutNanoOfDay(out, temporalPutByte(out, i, 84), nanoOfDay)
     }
-    return String.fromBytes(out, 0, temporalPutByte(out, i, 90))
+    return temporalText(out, temporalPutByte(out, i, 90))
   }
 
   /**
@@ -3138,7 +3176,10 @@ export class Instant {
       temporalRangeError("Instant: a duration with days or larger units cannot be added to an instant")
     }
     const span: TemporalSpan = temporalSpanOfDuration(duration, false)
-    return new Instant(this.epochSeconds + span.seconds, toI64(this.nanosecondOfSecond) + toI64(span.nanos))
+    return new Instant(
+      temporalAdd(this.epochSeconds, span.seconds),
+      toI64(this.nanosecondOfSecond) + toI64(span.nanos)
+    )
   }
 
   /**
@@ -3175,7 +3216,10 @@ export class Instant {
 
 /** The span from `a` to `b`. */
 const temporalInstantSpan = (a: Instant, b: Instant): TemporalSpan =>
-  new TemporalSpan(b.epochSeconds - a.epochSeconds, toI64(b.nanosecondOfSecond) - toI64(a.nanosecondOfSecond))
+  new TemporalSpan(
+    temporalSub(b.epochSeconds, a.epochSeconds),
+    toI64(b.nanosecondOfSecond) - toI64(a.nanosecondOfSecond)
+  )
 
 /**
  * `Temporal.Instant.fromEpochMilliseconds(ms)`: the instant `ms` milliseconds
@@ -3190,7 +3234,7 @@ export const instantFromEpochMilliseconds = (ms: f64): Instant => {
     temporalRangeError("Instant: epoch milliseconds must be a whole number within ±8.64e15")
   }
   const whole: i64 = toI64(ms)
-  return new Instant(temporalFloorDiv(whole, 1000), temporalFloorMod(whole, 1000) * 1000000)
+  return new Instant(temporalFloorDiv(whole, 1000), toI64(toU64(temporalFloorMod(whole, 1000)) * 1000000))
 }
 
 /**
@@ -3239,7 +3283,8 @@ export const instantFromOrNull = (text: string): Instant | null => {
     ) {
       if (minutes >= 0 && minutes <= 59) {
         timeEnd = length - 6
-        offsetSeconds = toI64(hours * 3600 + minutes * 60) * (sign === 43 ? 1 : -1)
+        const offset: u64 = toU64(hours) * 3600 + toU64(minutes) * 60
+        offsetSeconds = sign === 43 ? toI64(offset) : toI64(0 - offset)
       }
     }
   }
@@ -3252,8 +3297,10 @@ export const instantFromOrNull = (text: string): Instant | null => {
         temporalCivilMonth(civil),
         temporalCivilDay(civil)
       )
+      // A four-digit year keeps `day` within ±4 × 10^6 and the offset is below a
+      // day, so the wrapping sum is the exact one.
       return new Instant(
-        day * TEMPORAL_SECONDS_PER_DAY + toI64(nanoOfDay / TEMPORAL_NS_PER_SECOND) - offsetSeconds,
+        toI64(toU64(day) * 86400 + toU64(nanoOfDay / TEMPORAL_NS_PER_SECOND) - toU64(offsetSeconds)),
         nanoOfDay % TEMPORAL_NS_PER_SECOND
       )
     }
@@ -3263,11 +3310,11 @@ export const instantFromOrNull = (text: string): Instant | null => {
     return null
   }
   const day: i64 = temporalEpochDay(r.year, r.month, r.day)
-  const seconds: i64 =
-    day * TEMPORAL_SECONDS_PER_DAY + toI64(r.hour) * 3600 + toI64(r.minute) * 60 + toI64(r.second)
-  // The offset is below a day, so its nanoseconds stay below 2^53.
-  const nanos: i64 = toI64(r.fraction) - r.offsetNanos
-  const exactSeconds: i64 = seconds + temporalFloorDiv(nanos, TEMPORAL_NS_PER_SECOND)
+  // The reader's six-digit years keep `day` within ±4 × 10^8 and the offset is
+  // below a day, so these wrapping sums are the exact ones.
+  const seconds: u64 = toU64(day) * 86400 + toU64(r.hour) * 3600 + toU64(r.minute) * 60 + toU64(r.second)
+  const nanos: i64 = toI64(toU64(r.fraction) - toU64(r.offsetNanos))
+  const exactSeconds: i64 = toI64(seconds + toU64(temporalFloorDiv(nanos, TEMPORAL_NS_PER_SECOND)))
   const exactNanos: i64 = temporalFloorMod(nanos, TEMPORAL_NS_PER_SECOND)
   if (!temporalInstantInRange(exactSeconds, exactNanos)) {
     return null
@@ -3277,8 +3324,8 @@ export const instantFromOrNull = (text: string): Instant | null => {
 
 /** Whether `seconds` and `nanos` (in `[0, 10^9)`) past the epoch are within Temporal's ±10^8 days. */
 const temporalInstantInRange = (seconds: i64, nanos: i64): boolean => {
-  const limit: i64 = TEMPORAL_MAX_EPOCH_DAY * TEMPORAL_SECONDS_PER_DAY
-  return seconds >= -limit && seconds <= limit && !(seconds === limit && nanos > 0)
+  const limit: i64 = TEMPORAL_MAX_EPOCH_SECOND
+  return seconds >= TEMPORAL_MIN_EPOCH_SECOND && seconds <= limit && !(seconds === limit && nanos > 0)
 }
 
 /**
