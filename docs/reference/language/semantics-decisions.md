@@ -1404,7 +1404,11 @@ are not all in `[0, length)`; and the second check of a compound store
   no other offset yet; and a buffer window
   `[off, off + len)` whose `off` is 0 and `len` within the buffer, whose
   `len` is a literal `off` reaches that far below the length, or whose `len`
-  is the rest of the buffer, `buf.length - off`. Every bound is a literal, a
+  is `end - off` for an `end` the range `[off, end)` holds as a `slice`'s
+  does (`0 <= off <= end <= buf.length`, the rest of the buffer
+  `buf.length - off` among them); that guard also proves `end - off` does
+  not overflow, since it lies in `[0, end]`. A bound held in a field is
+  copied into a local the guard tests (`const end = this.end`). Every bound is a literal, a
   constant, a local, a `.length`, or a sum or difference of them, and no later
   argument assigns or calls anything but a builtin integer conversion, since
   the check reads the length after every argument has run. A proven check is left out of the IR, but for an
@@ -1417,8 +1421,9 @@ are not all in `[0, length)`; and the second check of a compound store
   `reject_deny_panics_set_offset`, `reject_deny_panics_write_bytes`,
   `reject_deny_panics_range_decrement`, `reject_deny_panics_range_increment`,
   `reject_deny_panics_range_negative_start` and
-  `reject_deny_panics_range_rebound` and `reject_deny_panics_window_shrink`
-  stay refused)
+  `reject_deny_panics_range_rebound`, `reject_deny_panics_window_shrink`
+  and `reject_deny_panics_window_unordered` stay refused;
+  `deny_panics_window` builds)
 
 **`divide`**: integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1`
 when signed

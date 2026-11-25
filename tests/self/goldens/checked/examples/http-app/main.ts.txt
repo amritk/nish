@@ -6363,7 +6363,6 @@ function Http1Server.send(this: Http1Server, conn: Http1Connection): void -> @ni
   local -17:13 end: i32 (const)
   callee -13:9 Http1Connection.abort -> @nish.Http1Connection.abort
   local -10:13 n: i32 (const)
-  callee -10:55 http1ServerSub -> @nish.http1ServerSub
   callee -7:11 Http1Connection.abort -> @nish.Http1Connection.abort
   callee -3:7 Http1Connection.consume -> @nish.Http1Connection.consume
   callee -1:9 http1ServerSub -> @nish.http1ServerSub
@@ -39694,34 +39693,37 @@ function StaticFiles.staticFields(this: StaticFiles, status: i32, names: u8[][],
   callee +10:29 httpFieldBytes -> @nish.httpFieldBytes
   callee +12:20 httpFieldBytes -> @nish.httpFieldBytes
   callee +13:21 staticCut -> @nish.staticCut
-  callee +18:18 httpFieldBytes -> @nish.httpFieldBytes
-  callee +19:19 httpFieldBytes -> @nish.httpFieldBytes
-  callee +19:34 staticContentType -> @nish.staticContentType
-  callee +22:18 httpFieldBytes -> @nish.httpFieldBytes
-  callee +23:19 staticCut -> @nish.staticCut
-  local +25:11 date: u8[] (const)
-  callee +26:9 httpDateWrite -> @nish.httpDateWrite
-  callee +26:32 StaticFiles.staticSecond -> @nish.StaticFiles.staticSecond
+  local +17:11 path: u8[] (const)
+  local +18:11 m: i32 (const)
+  local +22:13 type: string (const)
+  callee +22:28 staticContentType -> @nish.staticContentType
+  callee +23:18 httpFieldBytes -> @nish.httpFieldBytes
+  callee +24:19 httpFieldBytes -> @nish.httpFieldBytes
   callee +27:18 httpFieldBytes -> @nish.httpFieldBytes
-  callee +31:18 httpFieldBytes -> @nish.httpFieldBytes
-  callee +32:19 httpFieldBytes -> @nish.httpFieldBytes
-  callee +37:16 httpFieldBytes -> @nish.httpFieldBytes
-  callee +38:17 httpFieldBytes -> @nish.httpFieldBytes
-  callee +39:16 httpFieldBytes -> @nish.httpFieldBytes
-  callee +40:17 httpFieldBytes -> @nish.httpFieldBytes
-  callee +42:18 httpFieldBytes -> @nish.httpFieldBytes
-  callee +43:19 httpFieldBytes -> @nish.httpFieldBytes
-  callee +46:7 copyBytes -> @nish.copyBytes
-  callee +46:29 httpFieldBytes -> @nish.httpFieldBytes
-  local +50:11 at: i32 (let)
-  callee +50:21 staticDigits -> @nish.staticDigits
-  callee +51:12 staticPut -> @nish.staticPut
-  callee +52:12 staticDigits -> @nish.staticDigits
-  callee +52:38 staticSub64 -> @nish.staticSub64
-  callee +53:12 staticPut -> @nish.staticPut
-  callee +54:12 staticDigits -> @nish.staticDigits
-  callee +56:20 httpFieldBytes -> @nish.httpFieldBytes
-  callee +57:21 staticCut -> @nish.staticCut
+  callee +28:19 staticCut -> @nish.staticCut
+  local +30:11 date: u8[] (const)
+  callee +31:9 httpDateWrite -> @nish.httpDateWrite
+  callee +31:32 StaticFiles.staticSecond -> @nish.StaticFiles.staticSecond
+  callee +32:18 httpFieldBytes -> @nish.httpFieldBytes
+  callee +36:18 httpFieldBytes -> @nish.httpFieldBytes
+  callee +37:19 httpFieldBytes -> @nish.httpFieldBytes
+  callee +42:16 httpFieldBytes -> @nish.httpFieldBytes
+  callee +43:17 httpFieldBytes -> @nish.httpFieldBytes
+  callee +44:16 httpFieldBytes -> @nish.httpFieldBytes
+  callee +45:17 httpFieldBytes -> @nish.httpFieldBytes
+  callee +47:18 httpFieldBytes -> @nish.httpFieldBytes
+  callee +48:19 httpFieldBytes -> @nish.httpFieldBytes
+  callee +51:7 copyBytes -> @nish.copyBytes
+  callee +51:29 httpFieldBytes -> @nish.httpFieldBytes
+  local +55:11 at: i32 (let)
+  callee +55:21 staticDigits -> @nish.staticDigits
+  callee +56:12 staticPut -> @nish.staticPut
+  callee +57:12 staticDigits -> @nish.staticDigits
+  callee +57:38 staticSub64 -> @nish.staticSub64
+  callee +58:12 staticPut -> @nish.staticPut
+  callee +59:12 staticDigits -> @nish.staticDigits
+  callee +61:20 httpFieldBytes -> @nish.httpFieldBytes
+  callee +62:21 staticCut -> @nish.staticCut
 module std/net/http-server.ts [package nish]
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
 import tryCopyBytes from "nish/bytes" -> function @nish.tryCopyBytes
