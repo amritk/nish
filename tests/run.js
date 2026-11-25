@@ -19132,7 +19132,7 @@ if (dealtHere("runtimeChecks")) {
       )
       check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c and runtime-net.c under -Werror", cc.status === 0, cc.stderr)
       const modes = [
-        ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
+        ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left, and a provided-buffer ring refused for zero reserved words (Ubuntu 6.8.0-136+) is retried with resv[0] set"],
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],

@@ -479,6 +479,20 @@ static int ur_setup_flags(uint32_t entries, uint32_t cq, struct ur_params *p) {
   return fd;
 }
 
+/* Registers the provided-buffer ring `reg` describes. Ubuntu's 6.8.0-136
+ * and later kernels invert the check on its reserved words (Launchpad
+ * #2162843): they refuse all zeroes with -EINVAL and accept a nonzero
+ * `resv[0]`, so a refused registration is tried once more that way. A
+ * correct kernel answers the first, and never sees the second. */
+static int ur_register_pbuf(int fd, struct ur_buf_reg *reg) {
+  int rc = ur_register(fd, UR_REGISTER_PBUF_RING, reg, 1);
+  if (rc == -EINVAL) {
+    reg->resv[0] = 1;
+    rc = ur_register(fd, UR_REGISTER_PBUF_RING, reg, 1);
+  }
+  return rc;
+}
+
 /* Whether the ring `fd` has every opcode the layer submits: 1, -EOPNOTSUPP
  * when one is missing or the kernel has no probe, or the register's errno. */
 static int32_t ur_ops_ok(int fd) {
@@ -519,7 +533,7 @@ static int32_t ur_probe_once(void) {
       reg.ring_addr = (uint64_t)(uintptr_t)br;
       reg.ring_entries = 8;
       reg.bgid = BGID;
-      int e = ur_register(fd, UR_REGISTER_PBUF_RING, &reg, 1);
+      int e = ur_register_pbuf(fd, &reg);
       if (e < 0) rc = e == -EINVAL ? -EOPNOTSUPP : e;
       close(fd);
       fd = -1;
@@ -806,7 +820,7 @@ static int ur_make_ring(const struct ur_sizes *z, int restricted, struct ur_ring
   reg.ring_addr = (uint64_t)(uintptr_t)r->br;
   reg.ring_entries = z->buf_count;
   reg.bgid = BGID;
-  rc = ur_register(r->fd, UR_REGISTER_PBUF_RING, &reg, 1);
+  rc = ur_register_pbuf(r->fd, &reg);
   if (rc < 0) goto fail;
 
   /* Per-slot state: generation and flags, send queues, parked recvs. */

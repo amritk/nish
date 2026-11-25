@@ -70,7 +70,9 @@
  *    opcode. The probe and the open answer what sends a caller to epoll
  *    (the errno, or -EOPNOTSUPP for a missing feature), with no set, the
  *    process alive and no descriptor leaked. A kernel that wants
- *    COOP_TASKRUN takes the second setup and the set opens on it.
+ *    COOP_TASKRUN takes the second setup and the set opens on it, and one
+ *    that refuses a provided-buffer ring with zero reserved words (Ubuntu's
+ *    6.8.0-136 and later) takes the retry with resv[0] set.
  *  - `coalesce`: 200 head+body responses, each two sends in one pass, as
  *    `netWrite2` makes them, and then three writes in one pass. Each leaves
  *    as one SEND; the mode prints the SENDs per response (NURING-40).
@@ -162,7 +164,7 @@ void nish_signal_fd_closing(int32_t fd) { (void)fd; }
 #define UR_UNREGISTER_EVENTFD 5 /* IORING_UNREGISTER_EVENTFD, which only `nowake` calls */
 
 /* What the hooks force. HOOK_NONE passes every call to the kernel. */
-enum hook { HOOK_NONE, HOOK_EINVAL, HOOK_WANT_COOP, HOOK_NO_NODROP, HOOK_NO_SEND, HOOK_NO_EXT_ARG };
+enum hook { HOOK_NONE, HOOK_EINVAL, HOOK_WANT_COOP, HOOK_NO_NODROP, HOOK_NO_SEND, HOOK_NO_EXT_ARG, HOOK_PBUF_RESV };
 static enum hook hook;
 static int setup_calls;
 static uint32_t setup_flags_seen[4];
@@ -192,7 +194,25 @@ static int test_accept_res(int res) {
   return res;
 }
 
+/* PBUF_RING registrations HOOK_PBUF_RESV refused for all-zero reserved
+ * words, and those it passed on. */
+static int pbuf_zero_refused, pbuf_resv_passed;
+
 static long test_register(int fd, unsigned op, void *arg, unsigned nr) {
+  /* Ubuntu's 6.8.0-136 and later (Launchpad #2162843): all-zero reserved
+   * words are -EINVAL and a nonzero resv[0] is taken. The kernel underneath
+   * checks the other way, so what it is handed has them zeroed. */
+  if (hook == HOOK_PBUF_RESV && op == UR_REGISTER_PBUF_RING) {
+    struct ur_buf_reg reg = *(const struct ur_buf_reg *)arg;
+    if (reg.resv[0] == 0 && reg.resv[1] == 0 && reg.resv[2] == 0) {
+      pbuf_zero_refused++;
+      errno = EINVAL;
+      return -1;
+    }
+    pbuf_resv_passed++;
+    memset(reg.resv, 0, sizeof reg.resv);
+    return syscall(__NR_io_uring_register, fd, op, &reg, nr);
+  }
   long rc = syscall(__NR_io_uring_register, fd, op, arg, nr);
   if (rc >= 0 && hook == HOOK_NO_SEND && op == UR_REGISTER_PROBE)
     ((struct ur_probe *)arg)->ops[UR_OP_SEND].flags &= (uint16_t)~UR_OP_SUPPORTED;
@@ -641,6 +661,62 @@ static int fallback_coop(void) {
   return WEXITSTATUS(status);
 }
 
+/* A kernel that refuses a provided-buffer ring with all-zero reserved words
+ * and takes one with resv[0] set, as Ubuntu's 6.8.0-136 and later do: the
+ * probe and the ring each retry once that way, and the set opens on it and
+ * serves a client, rather than sending the caller to epoll. */
+static int fallback_pbuf_resv(void) {
+  fflush(NULL);
+  pid_t pid = fork();
+  if (pid < 0) return fail("fork");
+  if (pid == 0) {
+    hook = HOOK_PBUF_RESV;
+    int l = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in a = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+    socklen_t al = sizeof a;
+    if (l < 0 || bind(l, (struct sockaddr *)&a, sizeof a) != 0 || listen(l, 8) != 0 ||
+        getsockname(l, (struct sockaddr *)&a, &al) != 0)
+      _exit(fail("listener"));
+    int p = ur_probe_once();
+    if (p != 1) {
+      fprintf(stderr, "uring-test: a kernel that wants resv[0] set made the probe answer %d\n", p);
+      _exit(1);
+    }
+    struct nish_uring_set *s = NULL;
+    struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+    int rc = nish_uring_open(&s, l, &o);
+    if (rc != 0 || s == NULL) {
+      fprintf(stderr, "uring-test: a kernel that wants resv[0] set made the open answer %d\n", rc);
+      _exit(1);
+    }
+    /* The open probes again (the cache is nish_uring_probe's), so the probe
+     * and the ring make three registrations, each refused once. */
+    if (pbuf_zero_refused != 3 || pbuf_resv_passed != 3) {
+      fprintf(stderr, "uring-test: %d registrations refused for zero reserved words, %d retried with resv[0] set\n",
+              pbuf_zero_refused, pbuf_resv_passed);
+      _exit(fail("the probe and the ring did not each retry their refused registration once with resv[0] set"));
+    }
+    int c = socket(AF_INET, SOCK_STREAM, 0);
+    if (c < 0 || connect(c, (struct sockaddr *)&a, sizeof a) != 0 || write(c, "ping", 4) != 4) _exit(fail("client"));
+    struct nish_uring_event ev[EVENTS_MAX];
+    int got = 0;
+    for (int i = 0; i < 200 && !got; i++) {
+      int n = nish_uring_wait(s, 10, ev, EVENTS_MAX);
+      for (int k = 0; k < n; k++)
+        if (ev[k].kind == NISH_URING_DATA && ev[k].res == 4 && memcmp(ev[k].data, "ping", 4) == 0) got = 1;
+    }
+    if (!got) _exit(fail("the set opened on the retried ring received nothing"));
+    close(c);
+    nish_uring_destroy(s);
+    close(l);
+    _exit(0);
+  }
+  int status;
+  if (waitpid(pid, &status, 0) != pid) return fail("waitpid");
+  if (!WIFEXITED(status)) return fail("the resv[0] case died of a signal");
+  return WEXITSTATUS(status);
+}
+
 static int fallback(void) {
   /* The cases a refused setup answers need no io_uring underneath. */
   static const int refused[][4] = {
@@ -674,6 +750,8 @@ static int fallback(void) {
     else if (rc != 0) return rc;
   }
   int rc = fallback_coop();
+  if (rc != 0) return rc;
+  rc = fallback_pbuf_resv();
   if (rc != 0) return rc;
   if (no_seccomp) {
     printf("skip: seccomp filters are unavailable here; the hook cases passed\n");
