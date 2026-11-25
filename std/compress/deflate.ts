@@ -122,14 +122,8 @@ const DEFLATE_BLOCK_TOKENS: i32 = 16384
 /** A table position this far up is slid back down before the next block. */
 const DEFLATE_REBASE: i32 = 1073741824
 
-/** The largest stored block (§3.2.4). */
-const DEFLATE_STORED_MAX: i32 = 65535
-
 /** Huffman's multiplier for the hash (Knuth's 2^32 / phi). */
 const DEFLATE_HASH_MUL: i64 = 2654435761
-
-/** `FixedDeflater`'s farthest match back: its inputs are short. */
-const FIXED_WINDOW: i32 = 16384
 
 /** `FixedDeflater`'s largest hash table, 2^14 entries; a call clears only as much as its input needs. */
 const FIXED_HASH_BITS: i32 = 14
@@ -1701,7 +1695,7 @@ export class Deflater {
         const ls: i32 = 257 + toI32(uncheckedGet(lsym, len - 3))
         const lc: i32 = uncheckedGet(lf, ls)
         const ds: i32 = toI32(
-          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256),
+          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
         )
         const dc: i32 = uncheckedGet(df, ds)
         if (lc >= DEFLATE_BLOCK_TOKENS || dc >= DEFLATE_BLOCK_TOKENS) {
@@ -1826,7 +1820,7 @@ export class Deflater {
         const ls: i32 = 257 + toI32(uncheckedGet(lsym, len - 3))
         const lc: i32 = uncheckedGet(lf, ls)
         const ds: i32 = toI32(
-          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256),
+          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
         )
         const dc: i32 = uncheckedGet(df, ds)
         if (lc >= DEFLATE_BLOCK_TOKENS || dc >= DEFLATE_BLOCK_TOKENS) {
@@ -1915,7 +1909,7 @@ export class Deflater {
     let first: boolean = true
     while (first || left > 0) {
       first = false
-      // A stored block's length is 16 bits: 65,535 (DEFLATE_STORED_MAX).
+      // A stored block's length is 16 bits: 65,535.
       const l0: i32 = left
       if (l0 < 0 || l0 > n) {
         return -1
@@ -2189,8 +2183,20 @@ export class Deflater {
       const fix: i32 = uncheckedGet(fl, s)
       const x: i32 = s >= 257 ? toI32(uncheckedGet(lx, s - 257)) : 0
       if (
-        f < 0 || f > 16384 || dyn < 0 || dyn > 15 || fix < 0 || fix > 15 || x < 0 || x > 15 ||
-        dynBits < 0 || dynBits > 16777215 || fixBits < 0 || fixBits > 16777215 || extra < 0 || extra > 16777215
+        f < 0 ||
+        f > 16384 ||
+        dyn < 0 ||
+        dyn > 15 ||
+        fix < 0 ||
+        fix > 15 ||
+        x < 0 ||
+        x > 15 ||
+        dynBits < 0 ||
+        dynBits > 16777215 ||
+        fixBits < 0 ||
+        fixBits > 16777215 ||
+        extra < 0 ||
+        extra > 16777215
       ) {
         return -1
       }
@@ -2203,8 +2209,18 @@ export class Deflater {
       const dyn: i32 = uncheckedGet(dl, d)
       const x: i32 = toI32(uncheckedGet(dx, d))
       if (
-        f < 0 || f > 16384 || dyn < 0 || dyn > 15 || x < 0 || x > 15 ||
-        dynBits < 0 || dynBits > 16777215 || fixBits < 0 || fixBits > 16777215 || extra < 0 || extra > 16777215
+        f < 0 ||
+        f > 16384 ||
+        dyn < 0 ||
+        dyn > 15 ||
+        x < 0 ||
+        x > 15 ||
+        dynBits < 0 ||
+        dynBits > 16777215 ||
+        fixBits < 0 ||
+        fixBits > 16777215 ||
+        extra < 0 ||
+        extra > 16777215
       ) {
         return -1
       }
@@ -2217,13 +2233,27 @@ export class Deflater {
     for (let s: i32 = 0; s < 19; s += 1) {
       const f: i32 = cf[s]
       const len: i32 = cl[s]
-      const rep: i32 = s === 16 ? 2 : s === 17 ? 3 : s === 18 ? 7 : 0
+      let rep: i32 = 0
+      if (s === 16) {
+        rep = 2
+      } else if (s === 17) {
+        rep = 3
+      } else if (s === 18) {
+        rep = 7
+      }
       if (f < 0 || f > 320 || len < 0 || len > 7 || rep < 0 || rep > 7 || dynBits < 0 || dynBits > 16777215) {
         return -1
       }
       dynBits += f * (len + rep)
     }
-    if (dynBits < 0 || dynBits > 16777215 || fixBits < 0 || fixBits > 16777215 || extra < 0 || extra > 16777215) {
+    if (
+      dynBits < 0 ||
+      dynBits > 16777215 ||
+      fixBits < 0 ||
+      fixBits > 16777215 ||
+      extra < 0 ||
+      extra > 16777215
+    ) {
       return -1
     }
     const dynSize: i32 = dynBits + extra
@@ -2384,7 +2414,7 @@ export class Deflater {
           c3 = c2 - 32
         }
         const d: i32 = toI32(
-          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256),
+          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
         )
         const da: i32 = uncheckedGet(dl, d)
         if (da < 0 || da > 15) {
@@ -2441,7 +2471,7 @@ export const fixedDeflateBound = (n: i32): i32 => {
 /**
  * A one-block DEFLATE compressor in the fixed Huffman code (BTYPE=01, §3.2.6)
  * for short inputs such as an HTTP response body: one hash probe per position,
- * matches at most `FIXED_WINDOW` back, no code to build or send. It carries
+ * matches at most 16,384 back, no code to build or send. It carries
  * nothing from one call to the next: the hash table, sized to the input, is
  * cleared at the start of every call, so the output is a function of the
  * input alone. About 70 KB of tables; reuse one per thread.
@@ -3267,7 +3297,15 @@ export class Inflater {
       const stop: i32 = subEnd
       const high: i32 = code >> bits
       const stride: i32 = toI32(1) << (len - bits)
-      if (first < 0 || first > 32767 || stop > 32767 || high < 0 || high > 16383 || stride < 1 || stride > 16384) {
+      if (
+        first < 0 ||
+        first > 32767 ||
+        stop > 32767 ||
+        high < 0 ||
+        high > 16383 ||
+        stride < 1 ||
+        stride > 16384
+      ) {
         return DEFLATE_ERR_HUFFMAN
       }
       for (let i: i32 = first + high; i < stop; i += stride) {
@@ -3332,16 +3370,7 @@ export class Inflater {
       const c: i32 = count[l]
       const base: i32 = first
       const seen: i32 = index
-      if (
-        c < 0 ||
-        c > 288 ||
-        cur < 0 ||
-        cur > 65535 ||
-        base < 0 ||
-        base > 65535 ||
-        seen < 0 ||
-        seen > 288
-      ) {
+      if (c < 0 || c > 288 || cur < 0 || cur > 65535 || base < 0 || base > 65535 || seen < 0 || seen > 288) {
         return -2
       }
       if (cur - c < base) {
@@ -3891,7 +3920,10 @@ export class Inflater {
               bc = wrappingSub(bc, e)
               // The subtable's start and the index into it are both under
               // 2^16, so the sum is an i32.
-              e = uncheckedGet(le, ((e >> 16) & 65535) + (toI32(bb) & 32767 & ~(toI32(-1) << ((e >> 11) & 15))))
+              e = uncheckedGet(
+                le,
+                ((e >> 16) & 65535) + (toI32(bb) & 32767 & ~(toI32(-1) << ((e >> 11) & 15)))
+              )
             } else if ((e & 0x700) === INF_SLOW << 8) {
               // Only a table built for an incomplete code (none at all, or
               // one one-bit code) has these, and every code it does have
@@ -3927,7 +3959,10 @@ export class Inflater {
                 bb = bb >> toU64(d)
                 bc = wrappingSub(bc, d)
                 // As for the literal/length subtable.
-                d = uncheckedGet(de, ((d >> 16) & 65535) + (toI32(bb) & 32767 & ~(toI32(-1) << ((d >> 11) & 15))))
+                d = uncheckedGet(
+                  de,
+                  ((d >> 16) & 65535) + (toI32(bb) & 32767 & ~(toI32(-1) << ((d >> 11) & 15)))
+                )
               }
               if ((d & 0x700) !== 0) {
                 // A slow entry, as for the literal/length table, or one of

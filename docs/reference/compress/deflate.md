@@ -95,7 +95,7 @@ A DEFLATE compressor at one level: the match finder's tables, one block of symbo
 
 <scalar-card title="Fixed​Deflater" icon="phosphor/regular/cube" href="#fixeddeflater">
 
-A one-block DEFLATE compressor in the fixed Huffman code (BTYPE=01, §3.2.6) for short inputs such as an HTTP response body: one hash probe per position, matches at most `FIXED_WINDOW` back, no code to build or send.
+A one-block DEFLATE compressor in the fixed Huffman code (BTYPE=01, §3.2.6) for short inputs such as an HTTP response body: one hash probe per position, matches at most 16,384 back, no code to build or send.
 
 </scalar-card>
 
@@ -398,7 +398,7 @@ class Deflater
 
 A one-block DEFLATE compressor in the fixed Huffman code (BTYPE=01, §3.2.6)
 for short inputs such as an HTTP response body: one hash probe per position,
-matches at most `FIXED_WINDOW` back, no code to build or send. It carries
+matches at most 16,384 back, no code to build or send. It carries
 nothing from one call to the next: the hash table, sized to the input, is
 cleared at the start of every call, so the output is a function of the
 input alone. About 70 KB of tables; reuse one per thread.
