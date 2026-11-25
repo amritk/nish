@@ -8,6 +8,7 @@ import splitByte from "./strings" -> function @splitByte
 const SLASH: i32 = 47
 const DOT: i32 = 46
 const STD_DIR: string = "std"
+const WASM_TWIN_EXTENSION: string = ".wasm32.ts"
 const COLLECTIONS_SPECIFIER: string = "nish/collections" [exported]
 const MAP_EXTRAS_SPECIFIER: string = "nish/map"
 const JSON_TYPED_SPECIFIER: string = "nish/json-typed"
@@ -37,6 +38,11 @@ function stdModulePath(root: string, specifier: string): string -> @stdModulePat
   calls: nish_str_concat nish_str_new normalizePath
   stackSites=0 stackLocals=0
   callee +0:3 normalizePath -> @normalizePath
+function wasmTwinOf(file: string): string -> @wasmTwinOf [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: file
+  calls: nish_str_at nish_str_concat nish_str_new
+  stackSites=0 stackLocals=0
 function isStdModule(root: string, name: string, path: string): boolean -> @isStdModule [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_at nish_str_concat nish_str_eq normalizePath

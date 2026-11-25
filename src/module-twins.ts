@@ -18,10 +18,10 @@ import { Node, NodeKind, FLAG_EXPORTED } from "./nodes"
 import { Parser } from "./parser"
 import { SourceFile } from "./diagnostics"
 
-const SPACE: i32 = 32
-const TAB: i32 = 9
-const NEWLINE: i32 = 10
-const RETURN: i32 = 13
+const TWIN_SPACE: i32 = 32
+const TWIN_TAB: i32 = 9
+const TWIN_NEWLINE: i32 = 10
+const TWIN_RETURN: i32 = 13
 
 /** One exported name, and the text of its declaration a twin must repeat. */
 class TwinExport {
@@ -34,14 +34,15 @@ class TwinExport {
   }
 }
 
-const isBlank = (code: i32): boolean => code === SPACE || code === TAB || code === NEWLINE || code === RETURN
+const isTwinBlank = (code: i32): boolean =>
+  code === TWIN_SPACE || code === TWIN_TAB || code === TWIN_NEWLINE || code === TWIN_RETURN
 
 /** `text[start, end)` with every blank run one space and none at either end. */
-const collapsed = (text: string, start: i32, end: i32): string => {
+const twinCollapsed = (text: string, start: i32, end: i32): string => {
   const words: string[] = []
   let from = -1
   for (let i = start; i < end; i++) {
-    if (isBlank(text.charCodeAt(i))) {
+    if (isTwinBlank(text.charCodeAt(i))) {
       if (from >= 0) {
         words.push(text.substring(from, i))
         from = -1
@@ -67,7 +68,7 @@ const cutAt = (node: Node, at: i32): i32 =>
  */
 const classSignature = (text: string, node: Node): string => {
   const members = node.children[3]
-  const parts: string[] = [collapsed(text, node.start, members.start)]
+  const parts: string[] = [twinCollapsed(text, node.start, members.start)]
   for (const member of members.children) {
     let cut = member.end
     if (member.kind === NodeKind.Method) {
@@ -77,12 +78,12 @@ const classSignature = (text: string, node: Node): string => {
     } else if (member.kind === NodeKind.Field) {
       cut = cutAt(member, 2)
     }
-    parts.push(`${collapsed(text, member.start, cut)};`)
+    parts.push(`${twinCollapsed(text, member.start, cut)};`)
   }
   return parts.join(" ")
 }
 
-const nameOf = (node: Node): string => (node.children.length > 0 ? node.children[0].text : "")
+const twinDeclName = (node: Node): string => (node.children.length > 0 ? node.children[0].text : "")
 
 /** The exports of one parsed file, in declaration order, or null when it does not parse. */
 const exportsOf = (path: string, text: string): TwinExport[] | null => {
@@ -97,19 +98,19 @@ const exportsOf = (path: string, text: string): TwinExport[] | null => {
       continue
     }
     if (decl.kind === NodeKind.FunctionDecl) {
-      out.push(new TwinExport(nameOf(decl), collapsed(text, decl.start, cutAt(decl, 3))))
+      out.push(new TwinExport(twinDeclName(decl), twinCollapsed(text, decl.start, cutAt(decl, 3))))
     } else if (decl.kind === NodeKind.Class) {
-      out.push(new TwinExport(nameOf(decl), classSignature(text, decl)))
+      out.push(new TwinExport(twinDeclName(decl), classSignature(text, decl)))
     } else if (decl.kind === NodeKind.ModuleConst) {
       for (const one of decl.children[0].children) {
-        out.push(new TwinExport(nameOf(one), `const ${collapsed(text, one.start, cutAt(one, 2))}`))
+        out.push(new TwinExport(twinDeclName(one), `const ${twinCollapsed(text, one.start, cutAt(one, 2))}`))
       }
     } else if (
       decl.kind === NodeKind.Interface ||
       decl.kind === NodeKind.TypeAlias ||
       decl.kind === NodeKind.Enum
     ) {
-      out.push(new TwinExport(nameOf(decl), collapsed(text, decl.start, decl.end)))
+      out.push(new TwinExport(twinDeclName(decl), twinCollapsed(text, decl.start, decl.end)))
     }
   }
   return out
