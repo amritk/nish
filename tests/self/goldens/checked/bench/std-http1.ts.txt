@@ -3548,7 +3548,6 @@ function Http1Server.send(this: Http1Server, conn: Http1Connection): void -> @ni
   local -17:13 end: i32 (const)
   callee -13:9 Http1Connection.abort -> @nish.Http1Connection.abort
   local -10:13 n: i32 (const)
-  callee -10:55 http1ServerSub -> @nish.http1ServerSub
   callee -7:11 Http1Connection.abort -> @nish.Http1Connection.abort
   callee -3:7 Http1Connection.consume -> @nish.Http1Connection.consume
   callee -1:9 http1ServerSub -> @nish.http1ServerSub

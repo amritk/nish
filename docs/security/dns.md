@@ -384,7 +384,7 @@ sites the prover discharges:
 | File | Before | After | What is left |
 | --- | --- | --- | --- |
 | `std/net/dns-message.ts` | 80 | 4 | the four explicit panics on the caller's arguments |
-| `std/net/dns.ts` | 55 | 9 | four explicit panics; `crypto.getRandomValues`'s exit; four windows the socket builtins check at run time |
+| `std/net/dns.ts` | 55 | 7 | four explicit panics; `crypto.getRandomValues`'s exit; the two read windows of `dnsClientReadDatagrams` and `dnsClientReadStream`, which the socket builtins check at run time (the `dnsClientWrite` window, `sent < length <= output.length`, is proven since WP80 S2) |
 | `std/net/dns-resolver.ts` | 232 | 12 | eleven explicit panics; one overflow, gone since WP82 S9 (below) |
 | `std/net/dns-config.ts` | 117 | 21 | explicit panics on the caller's arguments |
 

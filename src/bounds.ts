@@ -3261,7 +3261,9 @@ const provesRange = (walk: BoundsWalk, state: State, w: Local, from: Node, to: N
  * `0 <= off` and `off + len <= w.length` with `len >= 0`, the window
  * `[off, off + len)` a buffer call checks (`emitNetCall`): `off` is 0 and
  * `len` within the length, `len` is a literal `off` reaches that far below
- * the length, or `len` is the rest of the buffer, `w.length - off`.
+ * the length, or `len` is `end - off` for an `end` the range `[off, end)`
+ * of `w` holds (`provesRange`), the rest of the buffer `w.length - off`
+ * among them.
  */
 const provesWindow = (walk: BoundsWalk, state: State, w: Local, off: Node, len: Node): boolean => {
   const ctx = walk.ctx
@@ -3287,12 +3289,14 @@ const provesWindow = (walk: BoundsWalk, state: State, w: Local, off: Node, len: 
   if (rest.kind !== NodeKind.Binary || rest.text !== "-" || !checksOverflow(ctx.program, ctx.table, rest)) {
     return false
   }
+  // The difference is exact (`checksOverflow`), so `off + len` is `end`.
   const v = indexLocal(ctx, off)
+  const end = rest.children[0]
   return (
     v !== null &&
     isLocal(indexLocal(ctx, rest.children[1]), v) &&
-    isLocal(exactLengthOf(walk, rest.children[0]), w) &&
-    provesWithin(walk, state, off, w)
+    provesWithin(walk, state, end, w) &&
+    provesOrdered(walk, state, off, end, w)
   )
 }
 
@@ -6380,6 +6384,27 @@ const writesAnyLocal = (program: CheckedProgram, node: Node): boolean => {
 }
 
 /**
+ * `a - b` between two index locals of one base with `0 <= b <= a`, the
+ * length of a window `[b, a)`: the difference lies in `[0, a]`, so it fits
+ * whatever the two ends are, which no interval of each alone can say.
+ */
+const orderedDifference = (walk: BoundsWalk, state: State, node: Node): boolean => {
+  const ctx = walk.ctx
+  if (node.kind !== NodeKind.Binary || node.text !== "-") {
+    return false
+  }
+  const a = indexLocal(ctx, node.children[0])
+  const b = indexLocal(ctx, node.children[1])
+  return (
+    a !== null &&
+    b !== null &&
+    sameBase(ctx, a, b) &&
+    knownOrdered(state, b, a) &&
+    impliesNonNegative(walk, state, node.children[1])
+  )
+}
+
+/**
  * Record the verdict for one checked operation, in the state its operands
  * left. `left` is what the operator reads first — the target of a compound
  * assignment or a step — and `right` the other operand, or `null` for a
@@ -6397,6 +6422,13 @@ const judgeOverflow = (walk: BoundsWalk, state: State, node: Node, left: Node, r
   // The target of `x op= e` and of `x++` is written by the node itself, after
   // the operator; only what runs before it may not write.
   if (writesAnyLocal(ctx.program, left) || (right !== null && writesAnyLocal(ctx.program, right))) {
+    return
+  }
+  if (orderedDifference(walk, state, node)) {
+    walk.noOverflow.push(node)
+    if (walk.record) {
+      ctx.program.nodeProvenNoOverflow[node.id] = true
+    }
     return
   }
   walk.callRanges = true

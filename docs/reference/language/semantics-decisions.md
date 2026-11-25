@@ -1404,8 +1404,15 @@ are not all in `[0, length)`; and the second check of a compound store
   no other offset yet; and a buffer window
   `[off, off + len)` whose `off` is 0 and `len` within the buffer, whose
   `len` is a literal `off` reaches that far below the length, or whose `len`
-  is the rest of the buffer, `buf.length - off`. Every bound is a literal, a
-  constant, a local, a `.length`, or a sum or difference of them, and no later
+  is `end - off` for an `end` the range `[off, end)` holds as a `slice`'s
+  does (`0 <= off <= end <= buf.length`, the rest of the buffer
+  `buf.length - off` among them). When `end` is a local of the same integer
+  type that the guard keeps at or above `off >= 0`, it also proves
+  `end - off` does not overflow, since that lies in `[0, end]`; an `end` of
+  `buf.length`, `off + c` or `toI32(buf.length)` leaves the subtraction its
+  overflow check. A bound held in a field is copied into a local the guard
+  tests (`const end = this.end`), and a write to that local after the guard
+  drops what it proved. Every bound is a literal, a constant, a local, a `.length`, or a sum or difference of them, and no later
   argument assigns or calls anything but a builtin integer conversion, since
   the check reads the length after every argument has run. A proven check is left out of the IR, but for an
   array's `slice`, whose check `std/array.ts` still makes and its caller does
@@ -1417,8 +1424,12 @@ are not all in `[0, length)`; and the second check of a compound store
   `reject_deny_panics_set_offset`, `reject_deny_panics_write_bytes`,
   `reject_deny_panics_range_decrement`, `reject_deny_panics_range_increment`,
   `reject_deny_panics_range_negative_start` and
-  `reject_deny_panics_range_rebound` and `reject_deny_panics_window_shrink`
-  stay refused)
+  `reject_deny_panics_range_rebound`, `reject_deny_panics_window_shrink`,
+  `reject_deny_panics_window_unordered`,
+  `reject_deny_panics_window_negative_start`,
+  `reject_deny_panics_window_past_end` and
+  `reject_deny_panics_window_rewritten` stay refused;
+  `deny_panics_window` builds)
 
 **`divide`**: integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1`
 when signed

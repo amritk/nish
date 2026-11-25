@@ -567,6 +567,12 @@ const rangeProofs = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: RANGE_PROOFS, why }))
   )
+/** WP80 S2's release-note words, a `[start, end)` window whose `end - start` the guard proves. */
+const SLICE_WINDOWS = "prove [start, end) slice windows the code has checked"
+const sliceWindows = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: SLICE_WINDOWS, why }))
+  )
 /** WP80 S4's release-note words, lower-case so they match the capitalised CHANGELOG.md line. */
 const HTTP1_SERVER_PANIC_FREE = "the HTTP/1 server panic-free"
 const BETWEEN_REQUESTS = "Http1Connection says when it is between requests"
@@ -11675,6 +11681,46 @@ const cursorReadRow = (why, filesByProgram) =>
   )
 
 const DECLARED = [
+  // #2297: the bounds walk proves `end - start` of two index locals with
+  // `0 <= start <= end` cannot overflow, so `hasTwinWord`'s `i - from` and
+  // the type table's `to - from` drop their overflow checks.
+  ...sliceWindows(
+    "a difference end - start under 0 <= start <= end is proven not to overflow, so its llvm.ssub.with.overflow call and panic block leave the IR",
+    {
+      "src/build-cache.ts": ["module-twins.ll"],
+      "src/capability-report.ts": ["module-twins.ll"],
+      "src/compilation.ts": ["module-twins.ll"],
+      "src/compile.ts": ["module-twins.ll"],
+      "src/dump-checked.ts": ["module-twins.ll"],
+      "src/dump.ts": ["module-twins.ll"],
+      "src/emit-ts-control.ts": ["module-twins.ll"],
+      "src/emit-ts-edits.ts": ["module-twins.ll"],
+      "src/emit-ts-numbers.ts": ["module-twins.ll"],
+      "src/emit-ts-records.ts": ["module-twins.ll"],
+      "src/emit-ts-storage.ts": ["module-twins.ll"],
+      "src/emit-ts-strings.ts": ["module-twins.ll"],
+      "src/emit-ts.ts": ["module-twins.ll"],
+      "src/fix.ts": ["module-twins.ll"],
+      "src/interop-abi.ts": ["module-twins.ll"],
+      "src/interop-dts.ts": ["module-twins.ll"],
+      "src/interop-header.ts": ["module-twins.ll"],
+      "src/interop-napi.ts": ["module-twins.ll"],
+      "src/interop-wasm.ts": ["module-twins.ll"],
+      "src/module-twins.ts": ["module-twins.ll"],
+      "src/proto-cli.ts": ["module-twins.ll", "types.ll"],
+      "src/run-cache.ts": ["module-twins.ll"],
+      "src/upgrade.ts": ["module-twins.ll"],
+      "src/watch.ts": ["module-twins.ll"],
+      "tests/link/module_target_std_twin/main.ts": ["module-twins.ll", "types.ll"],
+      "tests/link/module_target_twin/main.ts": ["module-twins.ll"],
+    }
+  ),
+  {
+    program: "tests/cases/deny_panics_window.ts",
+    file: "exit",
+    changelog: SLICE_WINDOWS,
+    why: "the program writes a [start, end) window under --deny-panics, which the reference cannot prove and refuses",
+  },
   // #2207, #2208: the bounds walk proves an `i32` `new Array` length that is
   // known non-negative, and the range of `String.fromBytes`, a `slice`,
   // `dst.set(src, 0)` and a buffer window that a guard pins, so those checks

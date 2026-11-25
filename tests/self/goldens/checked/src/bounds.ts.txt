@@ -1360,7 +1360,7 @@ function keepsUpperBound(ctx: CheckContext, v: Local): boolean -> @keepsUpperBou
 function differenceFacts(walk: BoundsWalk, state: State, v: Local, w: Local, c: i32, out: Fact[]): void -> @differenceFacts
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: Fact.constructor holdersAbove keepsUpperBound knownBelow maxIndexOf minValueOf nish_alloc_struct nish_array_grow nish_panic_overflow
+  calls: Fact.constructor holdersAbove keepsUpperBound knownBelow maxIndexOf minValueOf nish_alloc_struct nish_array_grow
   pointer walk: size=200 writesThrough=false captured=false
   pointer state: size=136 writesThrough=false captured=false passedTo=minValueOf#0 maxIndexOf#0 holdersAbove#0 knownBelow#0
   pointer v: size=64 writesThrough=true captured=true passedTo=Fact.constructor#2 Fact.constructor#2 Fact.constructor#2 Fact.constructor#2 Fact.constructor#2 Fact.constructor#3
@@ -1905,11 +1905,11 @@ function provesRange(walk: BoundsWalk, state: State, w: Local, from: Node, to: N
 function provesWindow(walk: BoundsWalk, state: State, w: Local, off: Node, len: Node): boolean -> @provesWindow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via isQuietBound
-  calls: belowReach checksOverflow constantValue exactLengthOf impliesNonNegative indexLocal isLocal isQuietBound knownMinLength nish_panic_index nish_panic_overflow nish_str_eq provesWithin unwrapBoundsParens
-  pointer walk: size=200 writesThrough=false captured=false passedTo=isQuietBound#0 isQuietBound#0 impliesNonNegative#0 constantValue#0 impliesNonNegative#0 provesWithin#0 constantValue#0 provesWithin#0 exactLengthOf#0 provesWithin#0
-  pointer state: size=136 writesThrough=false captured=false passedTo=impliesNonNegative#1 impliesNonNegative#1 provesWithin#1 provesWithin#1 knownMinLength#0 belowReach#0 provesWithin#1
-  pointer w: size=64 writesThrough=false captured=false passedTo=provesWithin#3 provesWithin#3 knownMinLength#1 belowReach#2 isLocal#1 provesWithin#3
-  pointer off: size=40 writesThrough=true captured=true passedTo=isQuietBound#1 impliesNonNegative#2 constantValue#1 provesWithin#2 indexLocal#1 indexLocal#1 provesWithin#2
+  calls: belowReach checksOverflow constantValue impliesNonNegative indexLocal isLocal isQuietBound knownMinLength nish_panic_index nish_panic_overflow nish_str_eq provesOrdered provesWithin unwrapBoundsParens
+  pointer walk: size=200 writesThrough=false captured=false passedTo=isQuietBound#0 isQuietBound#0 impliesNonNegative#0 constantValue#0 impliesNonNegative#0 provesWithin#0 constantValue#0 provesWithin#0 provesWithin#0 provesOrdered#0
+  pointer state: size=136 writesThrough=false captured=false passedTo=impliesNonNegative#1 impliesNonNegative#1 provesWithin#1 provesWithin#1 knownMinLength#0 belowReach#0 provesWithin#1 provesOrdered#1
+  pointer w: size=64 writesThrough=false captured=false passedTo=provesWithin#3 provesWithin#3 knownMinLength#1 belowReach#2 provesWithin#3 provesOrdered#4
+  pointer off: size=40 writesThrough=true captured=true passedTo=isQuietBound#1 impliesNonNegative#2 constantValue#1 provesWithin#2 indexLocal#1 indexLocal#1 provesOrdered#2
   pointer len: size=40 writesThrough=true captured=true passedTo=isQuietBound#1 impliesNonNegative#2 provesWithin#2 constantValue#1 unwrapBoundsParens#0
   stackSites=0 stackLocals=0
   local +0:9 ctx: CheckContext (const)
@@ -1930,13 +1930,13 @@ function provesWindow(walk: BoundsWalk, state: State, w: Local, off: Node, len: 
   local +19:9 rest: Node (const)
   callee +19:16 unwrapBoundsParens -> @unwrapBoundsParens
   callee +20:62 checksOverflow -> @checksOverflow
-  local +23:9 v: Local | null (const)
-  callee +23:13 indexLocal -> @indexLocal
-  callee +26:5 isLocal -> @isLocal
-  callee +26:13 indexLocal -> @indexLocal
-  callee +27:5 isLocal -> @isLocal
-  callee +27:13 exactLengthOf -> @exactLengthOf
-  callee +28:5 provesWithin -> @provesWithin
+  local +24:9 v: Local | null (const)
+  callee +24:13 indexLocal -> @indexLocal
+  local +25:9 end: Node (const)
+  callee +28:5 isLocal -> @isLocal
+  callee +28:13 indexLocal -> @indexLocal
+  callee +29:5 provesWithin -> @provesWithin
+  callee +30:5 provesOrdered -> @provesOrdered
 function quietFrom(program: CheckedProgram, call: Node, first: i32): boolean -> @quietFrom
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: changesAnything nish_panic_index nish_panic_overflow
@@ -3730,30 +3730,47 @@ function writesAnyLocal(program: CheckedProgram, node: Node): boolean -> @writes
   callee +2:9 localOf -> @localOf
   local +6:14 child: Node (const)
   callee +7:9 writesAnyLocal -> @writesAnyLocal
+function orderedDifference(walk: BoundsWalk, state: State, node: Node): boolean -> @orderedDifference
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via impliesNonNegative
+  calls: impliesNonNegative indexLocal knownOrdered nish_panic_index nish_str_eq sameBase
+  pointer walk: size=200 writesThrough=false captured=false passedTo=impliesNonNegative#0
+  pointer state: size=136 writesThrough=false captured=false passedTo=knownOrdered#0 impliesNonNegative#1
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 ctx: CheckContext (const)
+  local +4:9 a: Local | null (const)
+  callee +4:13 indexLocal -> @indexLocal
+  local +5:9 b: Local | null (const)
+  callee +5:13 indexLocal -> @indexLocal
+  callee +9:5 sameBase -> @sameBase
+  callee +10:5 knownOrdered -> @knownOrdered
+  callee +11:5 impliesNonNegative -> @impliesNonNegative
 function judgeOverflow(walk: BoundsWalk, state: State, node: Node, left: Node, right: Node | null): void -> @judgeOverflow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
+  sharedWrite: +0:5
   escaping: node
-  calls: Interval.constructor arithmeticOperator checkedArithmeticType fitsType nish_array_grow nish_panic_index valueRange writesAnyLocal
-  pointer walk: size=200 writesThrough=true captured=false passedTo=valueRange#0 valueRange#0
-  pointer state: size=136 writesThrough=false captured=false passedTo=valueRange#1 valueRange#1
-  pointer node: size=40 writesThrough=true captured=true passedTo=checkedArithmeticType#2 arithmeticOperator#0
+  calls: Interval.constructor arithmeticOperator checkedArithmeticType fitsType nish_array_grow nish_panic_index orderedDifference valueRange writesAnyLocal
+  pointer walk: size=200 writesThrough=true captured=false passedTo=orderedDifference#0 valueRange#0 valueRange#0
+  pointer state: size=136 writesThrough=false captured=false passedTo=orderedDifference#1 valueRange#1 valueRange#1
+  pointer node: size=40 writesThrough=true captured=true passedTo=checkedArithmeticType#2 orderedDifference#2 arithmeticOperator#0
   pointer left: size=40 writesThrough=true captured=true passedTo=writesAnyLocal#1 valueRange#2
   pointer right: size=40 writesThrough=true captured=true passedTo=writesAnyLocal#1 valueRange#2
   stackSites=1 stackLocals=0
-  local -10:9 ctx: CheckContext (const)
-  local -9:9 type: i32 (const)
-  callee -9:16 checkedArithmeticType -> @checkedArithmeticType
-  callee -3:7 writesAnyLocal -> @writesAnyLocal
-  callee -3:63 writesAnyLocal -> @writesAnyLocal
-  local +1:9 a: Interval (const)
-  callee +1:13 valueRange -> @valueRange
-  local +2:9 one: i64 (const)
-  local +3:9 b: Interval (const)
-  callee +3:30 new Interval -> @Interval.constructor
-  callee +3:55 valueRange -> @valueRange
-  callee +5:8 fitsType -> @fitsType
-  callee +5:17 arithmeticOperator -> @arithmeticOperator
+  local -11:9 ctx: CheckContext (const)
+  local -10:9 type: i32 (const)
+  callee -10:16 checkedArithmeticType -> @checkedArithmeticType
+  callee -4:7 writesAnyLocal -> @writesAnyLocal
+  callee -4:63 writesAnyLocal -> @writesAnyLocal
+  callee -1:7 orderedDifference -> @orderedDifference
+  local +7:9 a: Interval (const)
+  callee +7:13 valueRange -> @valueRange
+  local +8:9 one: i64 (const)
+  local +9:9 b: Interval (const)
+  callee +9:30 new Interval -> @Interval.constructor
+  callee +9:55 valueRange -> @valueRange
+  callee +11:8 fitsType -> @fitsType
+  callee +11:17 arithmeticOperator -> @arithmeticOperator
 function CallSummary.constructor(this: CallSummary): void -> @CallSummary.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=16 writesThrough=true captured=false
