@@ -591,14 +591,26 @@ const gfxFingerprint = (root: string): string => {
   } else {
     const platforms = readdirSync(`${root}/build/gfx`)
     if (platforms !== null) {
-      for (const platform of platforms) {
-        if (!platform.startsWith(".")) {
-          key.add(`gfx-stamp ${platform} ${fileFingerprint(`${root}/build/gfx/${platform}/.fetched`)}\n`)
-        }
-      }
+      addGfxStamps(key, `${root}/build/gfx`, platforms, 0)
     }
   }
   return key.toText()
+}
+
+/**
+ * The stamp line of each platform in `platforms` from `at` on, below `dir`.
+ * Recursive for the reason `addUnitFingerprints` is: a loop would keep every
+ * stamp it hashed alive until the key is done (NL9011).
+ */
+const addGfxStamps = (key: StringBuilder, dir: string, platforms: string[], at: i32): void => {
+  if (at < 0 || at >= platforms.length) {
+    return
+  }
+  const platform = platforms[at]
+  if (!platform.startsWith(".")) {
+    key.add(`gfx-stamp ${platform} ${fileFingerprint(`${dir}/${platform}/.fetched`)}\n`)
+  }
+  addGfxStamps(key, dir, platforms, at + 1)
 }
 
 /**

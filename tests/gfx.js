@@ -104,7 +104,7 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
   // `callsGfx` keys `nish run`'s binary on runtime/gfx/ under the same rule.
   // A name inside a string constant, or one the module defines, is not a call
   // into the shim.
-  const plainTs = write("plain.ts", 'export function main(): void {\n  console.log("plain")\n}\n')
+  const plainTs = write("plain.ts", 'export const main = (): void => {\n  console.log("plain")\n}\n')
   const plainLl = path.join(dir, "plain.ll")
   const compiled = spawnSync(nish, [plainTs, "-o", plainLl], { cwd: root, encoding: "utf8" })
   if (compiled.status !== 0) {
@@ -333,7 +333,7 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
   )
   const program = write(
     "instance.ts",
-    `${bound}\nexport function main(): void {\n  const instance = nishgfx_instance_create()\n  if (instance !== null) {\n    console.log("instance")\n    nishgfx_instance_release(instance)\n  } else {\n    console.log("no instance")\n  }\n}\n`
+    `${bound}\nexport const main = (): void => {\n  const instance = nishgfx_instance_create()\n  if (instance !== null) {\n    console.log("instance")\n    nishgfx_instance_release(instance)\n  } else {\n    console.log("no instance")\n  }\n}\n`
   )
   const exe = path.join(dir, "instance")
   const linked =
