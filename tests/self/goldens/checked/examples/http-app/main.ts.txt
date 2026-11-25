@@ -40283,6 +40283,7 @@ struct HttpServer (class) size=568 align=8 exported
   method h1Conn -> @nish.HttpServer.h1Conn
   method h1Next -> @nish.HttpServer.h1Next
   method h1Flush -> @nish.HttpServer.h1Flush
+  method h1Sealing -> @nish.HttpServer.h1Sealing
   method h1Resting -> @nish.HttpServer.h1Resting
   method h1Arm -> @nish.HttpServer.h1Arm
   method drive -> @nish.HttpServer.drive
@@ -40736,7 +40737,7 @@ function HttpServer.checkHttp1(this: HttpServer, name: string, config: Http1Conf
   pointer this: size=568 writesThrough=false captured=false
   pointer config: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -18:11 head: i64 (const)
+  local -20:11 head: i64 (const)
 function HttpServer.h1Grow(this: HttpServer, slots: i32, tls: boolean, outputSize: i32): i32 -> @nish.HttpServer.h1Grow [exported method]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -40955,8 +40956,8 @@ function HttpServer.restAt(this: HttpServer, token: i32): i32 -> @nish.HttpServe
 function HttpServer.drain(this: HttpServer): void -> @nish.HttpServer.drain [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.Http1Connection.wantsWrite nish.Http2Connection.goaway nish.Http3Connection.goaway nish.Http3Server.connection nish.Http3Server.holds nish.Http3Server.size nish.Http3Server.touch nish.HttpServer.h1Close nish.HttpServer.h1Conn nish.HttpServer.h1Holds nish.HttpServer.h1Resting nish.HttpServer.h2Close nish.HttpServer.h2Holds nish.HttpServer.h2Prefaced nish.HttpServer.h2Settle nish.HttpServer.unlisten
-  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.unlisten#0 nish.HttpServer.unlisten#0 nish.HttpServer.unlisten#0 nish.HttpServer.unlisten#0 nish.HttpServer.h1Conn#0 nish.HttpServer.h1Holds#0 nish.HttpServer.h1Resting#0 nish.HttpServer.h1Close#0 nish.HttpServer.h2Holds#0 nish.HttpServer.h2Prefaced#0 nish.HttpServer.h2Close#0 nish.HttpServer.h2Settle#0
+  calls: nish.Http1Connection.wantsWrite nish.Http2Connection.goaway nish.Http3Connection.goaway nish.Http3Server.connection nish.Http3Server.holds nish.Http3Server.size nish.Http3Server.touch nish.HttpServer.h1Close nish.HttpServer.h1Conn nish.HttpServer.h1Holds nish.HttpServer.h1Resting nish.HttpServer.h2Close nish.HttpServer.h2Holds nish.HttpServer.h2Prefaced nish.HttpServer.h2Settle nish.HttpServer.settle nish.HttpServer.unlisten
+  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.unlisten#0 nish.HttpServer.unlisten#0 nish.HttpServer.unlisten#0 nish.HttpServer.unlisten#0 nish.HttpServer.h1Conn#0 nish.HttpServer.h1Holds#0 nish.HttpServer.settle#0 nish.HttpServer.h1Resting#0 nish.HttpServer.h1Close#0 nish.HttpServer.h2Holds#0 nish.HttpServer.h2Prefaced#0 nish.HttpServer.h2Close#0 nish.HttpServer.h2Settle#0
   stackSites=0 stackLocals=0
   callee +1:5 HttpServer.unlisten -> @nish.HttpServer.unlisten
   callee +2:5 HttpServer.unlisten -> @nish.HttpServer.unlisten
@@ -40966,23 +40967,25 @@ function HttpServer.drain(this: HttpServer): void -> @nish.HttpServer.drain [exp
   local +6:13 conn: Http1Connection | null (const)
   callee +6:53 HttpServer.h1Conn -> @nish.HttpServer.h1Conn
   callee +7:28 HttpServer.h1Holds -> @nish.HttpServer.h1Holds
-  callee +8:36 HttpServer.h1Resting -> @nish.HttpServer.h1Resting
-  callee +8:58 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
-  callee +9:11 HttpServer.h1Close -> @nish.HttpServer.h1Close
-  local +15:14 v: i32 (let)
-  callee +16:29 HttpServer.h2Holds -> @nish.HttpServer.h2Holds
-  local +17:15 conn: Http2Connection | null (const)
-  callee +17:46 HttpServer.h2Prefaced -> @nish.HttpServer.h2Prefaced
-  callee +20:11 HttpServer.h2Close -> @nish.HttpServer.h2Close
-  callee +22:11 Http2Connection.goaway -> @nish.Http2Connection.goaway
-  callee +23:11 HttpServer.h2Settle -> @nish.HttpServer.h2Settle
-  local +27:11 h3: Http3Server | null (const)
-  local +29:16 s: i32 (let)
-  callee +29:32 Http3Server.size -> @nish.Http3Server.size
-  callee +30:13 Http3Server.holds -> @nish.Http3Server.holds
-  callee +31:11 Http3Connection.goaway -> @nish.Http3Connection.goaway
-  callee +31:11 Http3Server.connection -> @nish.Http3Server.connection
-  callee +32:11 Http3Server.touch -> @nish.Http3Server.touch
+  callee +8:45 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+  callee +10:11 HttpServer.settle -> @nish.HttpServer.settle
+  callee +11:43 HttpServer.h1Resting -> @nish.HttpServer.h1Resting
+  callee +11:65 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+  callee +12:11 HttpServer.h1Close -> @nish.HttpServer.h1Close
+  local +18:14 v: i32 (let)
+  callee +19:29 HttpServer.h2Holds -> @nish.HttpServer.h2Holds
+  local +20:15 conn: Http2Connection | null (const)
+  callee +20:46 HttpServer.h2Prefaced -> @nish.HttpServer.h2Prefaced
+  callee +23:11 HttpServer.h2Close -> @nish.HttpServer.h2Close
+  callee +25:11 Http2Connection.goaway -> @nish.Http2Connection.goaway
+  callee +26:11 HttpServer.h2Settle -> @nish.HttpServer.h2Settle
+  local +30:11 h3: Http3Server | null (const)
+  local +32:16 s: i32 (let)
+  callee +32:32 Http3Server.size -> @nish.Http3Server.size
+  callee +33:13 Http3Server.holds -> @nish.Http3Server.holds
+  callee +34:11 Http3Connection.goaway -> @nish.Http3Connection.goaway
+  callee +34:11 Http3Server.connection -> @nish.Http3Server.connection
+  callee +35:11 Http3Server.touch -> @nish.Http3Server.touch
 function HttpServer.unlisten(this: HttpServer, fd: i32, token: i32): void -> @nish.HttpServer.unlisten [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_poll_remove
@@ -41127,6 +41130,14 @@ function HttpServer.h1Flush(this: HttpServer, s: HttpServerH1Slot): i32 -> @nish
   callee +1:31 Http1TlsServer.flush -> @nish.Http1TlsServer.flush
   local +3:11 h1: Http1Server | null (const)
   callee +4:26 Http1Server.flush -> @nish.Http1Server.flush
+function HttpServer.h1Sealing(this: HttpServer, s: HttpServerH1Slot, conn: Http1Connection, wants: i32): boolean -> @nish.HttpServer.h1Sealing [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.Http1Connection.isDone
+  pointer this: size=568 writesThrough=false captured=false
+  pointer s: size=40 writesThrough=false captured=false
+  pointer conn: size=312 writesThrough=false captured=false passedTo=nish.Http1Connection.isDone#0
+  stackSites=0 stackLocals=0
+  callee +0:55 Http1Connection.isDone -> @nish.Http1Connection.isDone
 function HttpServer.h1Resting(this: HttpServer, s: HttpServerH1Slot): boolean -> @nish.HttpServer.h1Resting [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Server.resting
@@ -41228,15 +41239,16 @@ function HttpServer.feedStarved(this: HttpServer): void -> @nish.HttpServer.feed
 function HttpServer.settle(this: HttpServer, s: HttpServerH1Slot, conn: Http1Connection): void -> @nish.HttpServer.settle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpServer.h1Flush
-  calls: nish.Http1Connection.wantsWrite nish.HttpServer.h1Arm nish.HttpServer.h1Close nish.HttpServer.h1Flush nish.HttpServer.h1Ready nish.HttpServer.roomy
-  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Flush#0 nish.HttpServer.h1Close#0 nish.HttpServer.h1Close#0 nish.HttpServer.h1Arm#0 nish.HttpServer.roomy#0 nish.HttpServer.h1Ready#0
-  pointer s: size=40 writesThrough=true captured=false passedTo=nish.HttpServer.h1Flush#1 nish.HttpServer.h1Close#1 nish.HttpServer.h1Close#1 nish.HttpServer.h1Arm#1 nish.HttpServer.roomy#1
-  pointer conn: size=312 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0 nish.HttpServer.roomy#2
+  calls: nish.Http1Connection.wantsWrite nish.HttpServer.h1Arm nish.HttpServer.h1Close nish.HttpServer.h1Flush nish.HttpServer.h1Ready nish.HttpServer.h1Sealing nish.HttpServer.roomy
+  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Flush#0 nish.HttpServer.h1Close#0 nish.HttpServer.h1Sealing#0 nish.HttpServer.h1Close#0 nish.HttpServer.h1Arm#0 nish.HttpServer.roomy#0 nish.HttpServer.h1Ready#0
+  pointer s: size=40 writesThrough=true captured=false passedTo=nish.HttpServer.h1Flush#1 nish.HttpServer.h1Close#1 nish.HttpServer.h1Sealing#1 nish.HttpServer.h1Close#1 nish.HttpServer.h1Arm#1 nish.HttpServer.roomy#1
+  pointer conn: size=312 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0 nish.HttpServer.h1Sealing#2 nish.HttpServer.roomy#2
   stackSites=0 stackLocals=0
   local +0:9 wants: i32 (let)
   callee +0:22 HttpServer.h1Flush -> @nish.HttpServer.h1Flush
   callee +2:7 HttpServer.h1Close -> @nish.HttpServer.h1Close
   callee +5:49 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+  callee +5:71 HttpServer.h1Sealing -> @nish.HttpServer.h1Sealing
   callee +6:7 HttpServer.h1Close -> @nish.HttpServer.h1Close
   callee +12:5 HttpServer.h1Arm -> @nish.HttpServer.h1Arm
   local +13:11 r: HttpServerRequest | null (const)

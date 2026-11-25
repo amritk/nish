@@ -2,7 +2,7 @@
 
 # nish/net/http-server
 
-One handler for HTTP/1.1, HTTP/2 (over TLS and cleartext) and HTTP/3, with Alt-Svc advertising the HTTP/3 port.
+One handler for HTTP/1.1 and HTTP/2 (each over TLS or cleartext) and HTTP/3, with Alt-Svc advertising the HTTP/3 port.
 
 ```ts
 import {
@@ -59,7 +59,7 @@ One request, whole, from any version: its head copied out of the carrier and its
 <scalar-callout type="info">
 
 `HttpServer` is `HttpHandler`'s pull loop (`nish/net/handler`) over up to
-four listeners at once. The program builds a `Router`, configures the
+five listeners at once. The program builds a `Router`, configures the
 listeners, and loops on `waitSigned` (or `wait`, when every listener is
 cleartext), `ready` and `take`, switching on `r.route`; one route body
 answers every version.
@@ -111,9 +111,10 @@ in the `h2Holds` family.
 ### HttpServer
 
 One handler for HTTP/1.1 (cleartext and over TLS), HTTP/2 (over TLS and
-cleartext) and HTTP/3: configure up to one listener of each kind, then loop on `waitSigned` (or `wait`), `ready` and
-`take`, answering each request with `send`, `json` and `sendJson`,
-`problem`, `refuse`, or `start`, `write` and `end`.
+cleartext) and HTTP/3: configure up to one listener of each kind, then
+loop on `waitSigned` (or `wait`), `ready` and `take`, answering each
+request with `send`, `json` and `sendJson`, `problem`, `refuse`, or
+`start`, `write` and `end`.
 
 ```ts
 class HttpServer
@@ -135,8 +136,8 @@ class HttpServer
 | `hungUp(r: HttpServerRequest): boolean` | Whether the client of `r` has hung up: its connection is closed or reused, its HTTP/2 or HTTP/3 stream was reset, or, on HTTP/1.1 and HTTP/2, the peer ended its byte stream while `r` is held. On HTTP/2 that is the connection's end of input, an end of file or a read error, so it includes a client that half-closed TCP after sending its request and may still read an answer: `send` then says which. Panics on another server's request. |
 | `json(): JsonWriter` | The JSON writer, reset onto the server's scratch buffer: write one value with it, then `sendJson`. One JSON body at a time, since every request shares the buffer. |
 | `listenH2c(fd: i32, config: Http2Config, slots: i32): void` | Serves cleartext HTTP/2 (h2c, prior knowledge: no Upgrade from HTTP/1.1) on `fd`, a listening TCP socket the program made, with up to `slots` connections. Meant for a server behind a TLS-terminating proxy or on a trusted network: nothing on it is encrypted. A connection that has not sent its 24-byte preface within `limits.prefaceTimeout` is closed, and one with no open stream after it within `limits.idleTimeout`. Its responses carry no Alt-Svc, and its requests say `secure` false. Each connection holds at most `config.maxStreams` requests and a quarter of `limits.requests`, as on `listenHttp2Tls`. Panics on a second h2c listener, a `maxHeaderListSize` past `limits.maxHead`, or `enableConnectProtocol`. `wait` serves it: it reads no key. |
-| `listenHttp1(fd: i32, config: Http1Config, slots: i32): void` | Serves HTTP/1.1 on `fd`, a listening TCP socket the program made, with up to `slots` connections. Panics on a second cleartext HTTP/1.1 listener, when `config` would let in a head past `limits.maxHead` (its `maxTarget`, its `maxHeaderBytes` and 44 bytes of request line) or more fields than `limits.maxFields`, or when the two HTTP/1.1 listeners' slots together pass 1048576. `config.maxBody` is set to `limits.maxBody`. |
-| `listenHttp1Tls(fd: i32, tls: TlsServerConfig, config: Http1Config, slots: i32): void` | Serves HTTP/1.1 over TLS (ALPN `http/1.1`, or none) on `fd`, a listening TCP socket the program made, with up to `slots` connections, on a port of its own: a client that offers only another protocol is shut down, never handed to the HTTP/2 listener. Its requests say `secure` true and its responses carry Alt-Svc as HTTP/2 over TLS ones do. Panics as `listenHttp1` does, on a second listener of this kind, or when the two HTTP/1.1 listeners' slots together pass 1048576. `config.maxBody` is set to `limits.maxBody`. Serve it with `waitSigned`. |
+| `listenHttp1(fd: i32, config: Http1Config, slots: i32): void` | Serves HTTP/1.1 on `fd`, a listening TCP socket the program made, with up to `slots` connections. Panics on a second cleartext HTTP/1.1 listener, when `config` would let in a head past `limits.maxHead` (its `maxTarget`, its `maxHeaderBytes` and 44 bytes of request line) or more fields than `limits.maxFields`, or when `slots`, with the TLS listener's if it came first, pass 1048576. `config.maxBody` is set to `limits.maxBody`. |
+| `listenHttp1Tls(fd: i32, tls: TlsServerConfig, config: Http1Config, slots: i32): void` | Serves HTTP/1.1 over TLS (ALPN `http/1.1`, or none) on `fd`, a listening TCP socket the program made, with up to `slots` connections, on a port of its own: a client that offers only another protocol is shut down, never handed to the HTTP/2 listener. Its requests say `secure` true and its responses carry Alt-Svc as HTTP/2 over TLS ones do. Panics as `listenHttp1` does, on a second listener of this kind, or when `slots`, with the cleartext listener's if it came first, pass 1048576. `config.maxBody` is set to `limits.maxBody`. Serve it with `waitSigned`. |
 | `listenHttp2Tls(fd: i32, tls: TlsServerConfig, config: Http2Config, slots: i32): void` | Serves HTTP/2 over TLS (ALPN `h2`) on `fd`, a listening TCP socket the program made, with up to `slots` connections. Each connection holds at most `config.maxStreams` requests and a quarter of `limits.requests`; a stream past that is refused with REFUSED_STREAM. Panics on a second listener of this kind, a `maxHeaderListSize` past `limits.maxHead`, or `enableConnectProtocol`. Serve it with `waitSigned`. |
 | `listenHttp3(fd: i32, quic: QuicServerConfig, config: Http3Config, slots: i32, entropy: u8[]): void` | Serves HTTP/3 on `fd`, a bound UDP socket the program made, with up to `slots` QUIC connections, and from then on names its port in an Alt-Svc field on every HTTP/1.1 and HTTP/2 response. Each connection holds at most `quic.maxStreamsBidi` requests and a quarter of `limits.requests`; a stream past that is rejected with H3_REQUEST_REJECTED. Panics on a second HTTP/3 listener, a `maxFieldSectionSize` past `limits.maxHead`, or `webtransportSessions` above 0. Serve it with `waitSigned`. |
 | `pending(r: HttpServerRequest): i32` | How many bytes of `r`'s response are written but not yet sent, so a program streaming an answer can wait for them to drain. |
