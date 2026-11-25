@@ -35,10 +35,9 @@ const JSON_ROUTE: i32 = 4
 const ASYNC_DB: i32 = 5
 const BASELINE2: i32 = 6
 
-/** `tcpListenFlags` bits: 1 is `SO_REUSEPORT`, 2 `TCP_NODELAY`, 4 steering by CPU. */
+/** `tcpListenFlags` bits: 1 is `SO_REUSEPORT`, 2 `TCP_NODELAY`. Prefork adds 4, steering by CPU, to pinned workers itself. */
 const REUSEPORT: i32 = 1
 const NODELAY: i32 = 2
-const STEER: i32 = 4
 /** The listen backlog. */
 const BACKLOG: i32 = 4096
 /** The signal descriptor's watch id: SIGINT or SIGTERM ends the worker. */
@@ -229,10 +228,11 @@ export class ArenaServer {
     if (this.h.fired(SIGNAL_ID)) {
       return false
     }
-    this.db.turn(this.h)
     while (this.h.ready()) {
       this.answer(this.h.take())
     }
+    // After the takes, so the queries they queued go out in this turn.
+    this.db.turn(this.h)
     this.release(monotonicNanos())
     return true
   }
@@ -432,7 +432,7 @@ export const arenaMain = (
     config.listenPort = port
     config.listenHost = host
     config.listenBacklog = BACKLOG
-    config.listenFlags = NODELAY | STEER
+    config.listenFlags = NODELAY
     config.pin = true
     worker = preforkWith(args, config)
     if (worker < 0) {
