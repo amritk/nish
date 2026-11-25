@@ -1204,18 +1204,24 @@ export class HttpHandler {
    */
   private drive(slot: i32): void {
     const conn: Http1Connection = this.server.connection(slot)
-    let event: i32 = this.server.next(slot)
-    while (event !== H1_NEED_MORE && event !== H1_ERROR) {
-      if (event === H1_REQUEST) {
-        this.begin(slot, conn)
-      } else if (event === H1_BODY) {
-        this.gather(slot, conn)
-      } else if (event === H1_END) {
-        this.whole(slot, conn)
-      } else if (event === H1_WRITE) {
-        this.resume(slot, conn)
-      }
+    let event: i32 = H1_NEED_MORE
+    if (!this.unended(slot)) {
       event = this.server.next(slot)
+      while (event !== H1_NEED_MORE && event !== H1_ERROR) {
+        if (event === H1_REQUEST) {
+          this.begin(slot, conn)
+        } else if (event === H1_BODY) {
+          this.gather(slot, conn)
+        } else if (event === H1_END) {
+          this.whole(slot, conn)
+        } else if (event === H1_WRITE) {
+          this.resume(slot, conn)
+        }
+        if (this.unended(slot)) {
+          break
+        }
+        event = this.server.next(slot)
+      }
     }
     if (event === H1_ERROR) {
       // The carrier has written its refusal and ends the connection; a
@@ -1235,6 +1241,19 @@ export class HttpHandler {
       }
     }
     this.settle(slot, conn)
+  }
+
+  /**
+   * Whether `slot`'s response is under way with every byte handed over but
+   * not yet ended. The carrier finishes a `Content-Length` response once its
+   * last byte is written and would read the next request on the next `next`,
+   * so `drive` does not ask the slot again until the program's `end`: until
+   * then the response is the program's, and a pipelined request behind it
+   * waits (#1556).
+   */
+  private unended(slot: i32): boolean {
+    const r: HttpRequest | null = this.requestAt(this.currentOf(slot))
+    return r !== null && r.state === HANDLER_STREAMING && r.pendingEnd === r.pendingStart
   }
 
   /**
