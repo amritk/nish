@@ -1653,7 +1653,7 @@
       "sites": {
         "array-length": 1
       },
-      "reason": "new Array(n) with n the plaintext length plus the 16-byte tag, below 2^31 by Seal's guard: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "reason": "new Array(n) with n the plaintext length plus the 16-byte tag, below 2^31 by Seal's guard: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
       "record": "docs/security/crypto-aead.md"
     },
     {
@@ -1662,7 +1662,7 @@
       "sites": {
         "array-length": 1
       },
-      "reason": "new Array(n) with n the sealed length less the tag: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "reason": "new Array(n) with n the sealed length less the tag: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
       "record": "docs/security/crypto-aead.md"
     },
     {
@@ -1671,7 +1671,7 @@
       "sites": {
         "array-length": 1
       },
-      "reason": "new Array(n) with n the sealed length less the tag: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "reason": "new Array(n) with n the sealed length less the tag: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
       "record": "docs/security/crypto-aead.md"
     }
   ]
