@@ -55,3 +55,17 @@ export const show = (a: AtomicI32Array): void => {
     console.log(a.load(i))
   }
 }
+
+/** Each element method of an `AtomicI64Array` under one guard; `-1` where it fails. */
+export const bump64 = (a: AtomicI64Array, i: i32): i64 => {
+  if (i >= 0 && i < a.length) {
+    a.store(i, TWO)
+    a.add(i, TWO)
+    a.sub(i, TWO)
+    a.min(i, TWO)
+    a.max(i, TWO)
+    a.exchange(i, a.load(i))
+    return a.compareExchange(i, TWO, TWO)
+  }
+  return -1
+}

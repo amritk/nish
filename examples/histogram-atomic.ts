@@ -1,8 +1,9 @@
 // Opt-out (`--allow-panics`), for one kept panic that is not a site of this
-// file's. Every `AtomicI32Array` index here is proven at its call, as `a[i]`
-// would be (docs/LANGUAGE.md, "Atomic arrays"; #2206): the `load` under
-// `b < bins.length`, the `add` in `binShard`'s loop that tests `s.bins.length`
-// too, and the `add` in `binPerValue` under `bin < s.bins.length`. And
+// file's. Every `AtomicI32Array` index here is proven at its call, by the
+// guard or loop test around it (docs/LANGUAGE.md, "Atomic arrays"; #2206):
+// the `load` under `b < bins.length`, the `add` in `binShard`'s loop that
+// tests `s.bins.length` too, and the `add` in `binPerValue` under
+// `bin < s.bins.length`. And
 // `new AtomicI32Array(BINS)`'s `array-length` site (std/threads.ts:826:21) is
 // proven by the length's type (#2279). What is left is the constructor's call
 // to `negativeAtomicLength` (790:3), a kept contract panic for a negative

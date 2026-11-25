@@ -1024,7 +1024,9 @@ route 3: 1 hits, 64 bytes
   `r < hits.length`, as the example's last loop is, or a test of
   `i >= 0 && i < hits.length` around the call. Test the same array's
   `length`: another array's proves nothing about this one, so that loop
-  proves `hits.load(r)` but not `bytes.load(r)`.
+  proves `hits.load(r)` but not `bytes.load(r)`. The method checks its
+  index after all its arguments have run, so that check proves nothing for
+  them: in `hits.store(i, xs[i])`, guard `xs[i]` itself.
 - **The rules are the atomic's.** Only call its methods; don't touch it in the
   scope's block once the first task is spawned; scopes opened by one `using`
   don't share one; make the updates commute. An `AtomicI64Array` holds `i64`s

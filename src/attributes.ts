@@ -2228,7 +2228,8 @@ class FactCollector {
    * where `src/bounds.ts` proves `dst[at]` would be (`PANIC_SPAWN_SLOT`),
    * a `parallelMapInto` instance's length check, proven by `src.length <=
    * dst.length` (`PANIC_PARALLEL_LENGTH`), and an atomic array's element
-   * method's index, proven where `a[i]` would be (`PANIC_INDEX`, #2206).
+   * method's index, proven by the guard or loop test around the call
+   * (`PANIC_INDEX`, #2206).
    */
   noteCall(node: Node, callee: FunctionSig): void {
     const proven = this.unit.program.nodeProvenIndex[node.id]
