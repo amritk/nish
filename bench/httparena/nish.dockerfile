@@ -28,6 +28,7 @@ COPY main.ts server.ts db.ts ./
 # A bench program, built as bench/techempower/run.sh builds one: the std
 # server's constructors keep their limit panics, so the package is held to the
 # noPanic list only.
+# strict: the image has a release from install.sh and no scripts/nish-compiler.sh, so it passes the flag itself
 RUN nish --allow-panics main.ts --link entry --profile speed
 
 EXPOSE 8080 8082
