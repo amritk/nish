@@ -89,10 +89,17 @@ const child = (port: i32): i32 => {
     console.log(`child: listen failed with ${listener}`)
     return 1
   }
+  // Only a negative errno is the kernel refusing rings, which the section
+  // counts as a skip. Any other state but 1 means the ring listen did not
+  // reach the rings, and the case fails.
   const state: i32 = netRingState()
-  if (state !== 1) {
+  if (state < 0) {
     console.log(`child: rings refused: ${state}`)
     return 2
+  }
+  if (state !== 1) {
+    console.log(`child: the ring listener left the ring state at ${state}`)
+    return 1
   }
   const router = new Router(new RouterLimits())
   const ROOT: i32 = router.add("GET", "/")
