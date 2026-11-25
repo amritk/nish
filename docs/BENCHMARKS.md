@@ -4053,6 +4053,39 @@ After against before, as `run.sh` prints it (the change in server CPU a request 
 What this does not say: these are one server process each on loopback, and only `--nodb`; a route over a real network, or a response large enough to need more than one segment, was not measured. Nor does it claim a latency change either way. The `p99` medians flip direction between the counts (`ring` 0.73 against `ring-base` 1.68 ms at 18,000, 2.66 against 1.36 at 96,000), and a build and its byte-identical copy differ by as much (`h1-ring` 2.66 against its copy's 1.65 ms at 96,000, 1.04 against 0.70 at 18,000), so the column is inside its own noise.
 <!-- handler-coalesce:end -->
 
+<!-- http-server-ring:begin -->
+## io_uring under the http-server façade (WP71 S3)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `bench/http-server-ring/server.ts` is one `nish/net/http-server` process (`HttpServer.listenHttp1`, `HttpServerLimits.requests` = 2,048, 2,048 slots) serving HttpArena's latency route, `GET /baseline11?a=1&b=2`, which it answers with the sum `3` as `text/plain`, read with `HttpServerRequest.query`: 102 bytes on the wire. The listener is opened with `tcpListenFlags` flag 8 (`NET_LISTEN_RING`, design **ring**: the façade's connections live in io_uring slots, and the server prints `rings 1` before the run goes on) or with flag 0 (design **epoll**: descriptors). **ring-copy** and **epoll-copy** run a byte-identical copy of the same build the same way; the gap between a design and its copy is that design's noise band. `tests/link/net_http_server_ring` is the check that flag 8 puts the façade's carriers on slots: it holds 100 connections under a descriptor limit of 32.
+
+`bench/http-server-ring/run.sh`'s `loadgen` (a copy of `bench/fd-limit/loadgen.c` that sends this route and prints a mean) holds HttpArena's 1,024 keep-alive connections and sends at a fixed total rate. Each reading is over a 20-second window after a 3-second warm-up: CPU per request is the server's user plus system time over the window (`/proc/<pid>/stat`) divided by the requests answered in it, and latency is from send to last byte, every response timed. The server runs on CPU 0 and the load on CPUs 1 to 3. The four designs run in turn at each rate, in an order rotated by one each round, for 5 rounds.
+
+`bash bench/http-server-ring/run.sh`, on an Intel Xeon @ 2.30GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, on 2026-11-25. The bench code is that of this section's commit, the squash commit of the pull request that added it; the compiler and `std/` are its parent's, which the pull request does not change.
+
+**The rates.** HttpArena's latency-10k profile offers 10,000 requests a second, and this run offers the same. Its latency-1m profile offers 1,000,000, which this box cannot: at 100,000 the load generator already starved in 11 of 20 runs (it wanted to send while every connection had a request outstanding), so 100,000 is latency-1m's stand-in here, not its rate. HttpArena keeps the best of 3 runs; this table takes the median of 5. The 8gbit profile was not measured: it waits on WP71 S2a.
+
+Medians of 5 (min to max). `CPU µs/req` is the server's, `user` and `sys` its two parts (medians), `max` the largest single latency in any round (a maximum, not a typical figure), `starved` summed over the rounds, `fds` the server's descriptors and PSS its proportional set size:
+
+| rate | design | CPU µs/req | user | sys | p99 ms | mean ms | max ms | starved | fds | PSS MB |
+| ---: | --- | --- | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: |
+| 10,000 | ring | 9.35 (7.85–11.45) | 1.70 | 7.75 | 0.284 (0.234–0.356) | 0.106 (0.091–0.136) | 12.416 | 0 | 8 | 7.3 |
+| 10,000 | ring-copy | 8.85 (7.85–10.00) | 1.50 | 7.20 | 0.300 (0.246–0.332) | 0.110 (0.093–0.111) | 17.664 | 0 | 8 | 6.6 |
+| 10,000 | epoll | 7.60 (6.40–9.70) | 1.35 | 6.25 | 0.260 (0.238–0.308) | 0.093 (0.081–0.106) | 11.648 | 0 | 1,029 | 3.4 |
+| 10,000 | epoll-copy | 8.30 (7.70–9.35) | 1.35 | 7.15 | 0.276 (0.268–0.316) | 0.099 (0.090–0.110) | 22.784 | 0 | 1,029 | 3.4 |
+| 100,000 | ring | 7.86 (7.35–8.27) | 1.21 | 6.64 | 0.616 (0.085–9.088) | 0.071 (0.040–0.303) | 28.416 | 8,525 | 8 | 8.2 |
+| 100,000 | ring-copy | 7.60 (7.10–8.15) | 1.19 | 6.38 | 0.792 (0.069–3.872) | 0.064 (0.034–0.139) | 29.440 | 5,895 | 8 | 8.0 |
+| 100,000 | epoll | 6.30 (5.90–7.19) | 1.05 | 5.22 | 0.552 (0.057–1.808) | 0.075 (0.029–0.088) | 26.368 | 2,477 | 1,029 | 4.6 |
+| 100,000 | epoll-copy | 6.45 (6.20–7.21) | 1.11 | 5.46 | 0.198 (0.150–0.808) | 0.048 (0.032–0.067) | 22.272 | 2,841 | 1,029 | 4.5 |
+
+Every run held all 1,024 connections, none closed, and no latency sample was lost. Each round at 10,000 answered between 10,000 and 10,001 requests a second; at 100,000 the medians were 99,977 (ring), 99,998, 100,000 and 99,990.
+
+The bands, each design's copy against it at the medians: at 10,000, CPU −5.3% (ring) and +9.2% (epoll), p99 +5.6% and +6.2%, mean +3.8% and +6.5%; at 100,000, CPU −3.3% and +2.4%, p99 +28.6% and −64.1%, mean −9.9% and −36.0%.
+
+**The verdict: the rings did not win.** At the medians ring spent 23.0% more server CPU a request than epoll at 10,000 (9.35 against 7.60 µs, bands up to 9.2%) and 24.8% more at 100,000 (7.86 against 6.30 µs, bands up to 3.3%); the copies agree, ring-copy against epoll-copy is +6.6% at 10,000 and +17.8% at 100,000. The extra is mostly system time. On latency, at 10,000 ring's p99 was 9.2% and its mean 14.0% above epoll's, against bands up to 6.2% and 6.5%: worse, by 0.024 and 0.013 ms. At 100,000 the latency bands are wider than any gap (p99 +11.6%, mean −5.3%, against 64.1% and 36.0%), so the run says nothing about latency there. CPU per request carries half of HttpArena's latency score, so the entry stays on flag 0; switching it to flag 8 is a later follow-up, to be taken only on a run where the rings win.
+
+What this does not say: these are one server process on loopback with 1,024 connections, where descriptors cost nothing that matters; the rings' case in WP63 S4 ([above](#io_uring-under-the-handler-wp63-s4)) was connection counts past the descriptor limit, which HttpArena's latency profiles do not reach. Nor is it HttpArena's own harness or rate for latency-1m.
+<!-- http-server-ring:end -->
+
 <!-- mul-high:begin -->
 ## The `mulHigh` builtin in P-256 and the JSON tokenizer (WP41 S1)
 
