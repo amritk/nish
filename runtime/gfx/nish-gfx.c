@@ -110,6 +110,7 @@ struct NishGfxWindow {
 
 struct NishGfxSurface {
   NishGfxInstance *instance;
+  SDL_Window *window; /* for its pixel size when the surface is reconfigured */
   SDL_MetalView metal_view;
   WGPUSurface surface;
   WGPUSurfaceConfiguration config;
@@ -241,7 +242,22 @@ NishGfxWindow *nishgfx_window_create(const char *title, uint32_t width, uint32_t
   const char *driver = SDL_GetCurrentVideoDriver();
   if (driver != NULL && strcmp(driver, "cocoa") == 0) flags |= SDL_WINDOW_METAL;
 #endif
-  w->window = SDL_CreateWindow(title != NULL ? title : "", (int)width, (int)height, flags);
+  /* wgpu-native draws the window, so it holds no GL context. Without this
+   * property SDL adds OpenGL to a macOS window that asks for no backend, and
+   * the offscreen driver fails loading GL ("That operation is not supported"). */
+  SDL_PropertiesID props = SDL_CreateProperties();
+  if (props == 0) {
+    free(w);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    return NULL;
+  }
+  SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, title != NULL ? title : "");
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, (Sint64)width);
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, (Sint64)height);
+  SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, (Sint64)flags);
+  SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN, true);
+  w->window = SDL_CreateWindowWithProperties(props);
+  SDL_DestroyProperties(props);
   if (w->window == NULL) {
     free(w);
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
@@ -340,6 +356,7 @@ NishGfxSurface *nishgfx_surface_create(NishGfxInstance *inst, NishGfxWindow *w) 
   NishGfxSurface *s = calloc(1, sizeof *s);
   if (s == NULL) return NULL;
   s->instance = inst;
+  s->window = w->window;
   WGPUSurfaceDescriptor desc = WGPU_SURFACE_DESCRIPTOR_INIT;
   const char *driver = SDL_GetCurrentVideoDriver();
   if (driver == NULL) driver = "";
@@ -414,6 +431,10 @@ static int has_mode(const WGPUSurfaceCapabilities *caps, WGPUPresentMode mode) {
 int32_t nishgfx_surface_configure(NishGfxSurface *s, NishGfxAdapter *adapter, NishGfxDevice *device,
                                   uint32_t width, uint32_t height, uint32_t vsync) {
   if (s == NULL || adapter == NULL || device == NULL) return -1;
+  if (width == 0 || height == 0) {
+    ring_push(&device->errors, NISHGFX_ERROR_VALIDATION, "a surface needs a width and height above 0", WGPU_STRLEN);
+    return -1;
+  }
   WGPUSurfaceCapabilities caps = WGPU_SURFACE_CAPABILITIES_INIT;
   if (wgpuSurfaceGetCapabilities(s->surface, adapter->adapter, &caps) != WGPUStatus_Success ||
       caps.formatCount == 0) {
@@ -457,6 +478,12 @@ NishGfxView *nishgfx_surface_acquire(NishGfxSurface *s) {
   case WGPUSurfaceGetCurrentTextureStatus_Outdated:
   case WGPUSurfaceGetCurrentTextureStatus_Lost:
     if (frame.texture != NULL) wgpuTextureRelease(frame.texture);
+    /* At the window's size now; a minimised window's 0 waits for a frame
+     * where it has one. */
+    int pw = 0, ph = 0;
+    if (!SDL_GetWindowSizeInPixels(s->window, &pw, &ph) || pw <= 0 || ph <= 0) return NULL;
+    s->config.width = (uint32_t)pw;
+    s->config.height = (uint32_t)ph;
     wgpuSurfaceConfigure(s->surface, &s->config);
     return NULL;
   default:

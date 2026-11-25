@@ -89,6 +89,8 @@ typedef struct NishGfxBufferDesc {
 
 /* A WebGPU instance. Answers null if wgpu-native refuses one. */
 NishGfxInstance *nishgfx_instance_create(void);
+/* Release it last: every surface, adapter and device made from it keeps it,
+ * and a device's readback drives events through it. */
 void nishgfx_instance_release(NishGfxInstance *instance);
 /* Drain one queued instance error (adapter or device refusal) into msg,
  * NUL-terminated and cut to cap - 1 bytes; answers its kind, 0 when empty. */
@@ -97,6 +99,7 @@ int32_t nishgfx_instance_error_next(NishGfxInstance *instance, void *msg, size_t
 /* An SDL3 window of width x height pixels; `title` is NUL-terminated UTF-8.
  * Answers null when SDL has no video driver. */
 NishGfxWindow *nishgfx_window_create(const char *title, uint32_t width, uint32_t height);
+/* Release a surface made on the window first: it reads the window's size. */
 void nishgfx_window_release(NishGfxWindow *window);
 /* Move every pending SDL event into the window's ring; answers how many were
  * queued. Events past the ring's size are dropped and counted. */
@@ -111,14 +114,15 @@ NishGfxSurface *nishgfx_surface_create(NishGfxInstance *instance, NishGfxWindow 
 void nishgfx_surface_release(NishGfxSurface *surface);
 /* Configure for width x height. vsync != 0 is Fifo; otherwise Mailbox, then
  * Immediate, then Fifo, whichever the surface offers first. Answers 0, or -1
- * when the surface offers no format. */
+ * (and queues a device error) for a 0 side or a surface with no format. */
 int32_t nishgfx_surface_configure(NishGfxSurface *surface, NishGfxAdapter *adapter, NishGfxDevice *device,
                                   uint32_t width, uint32_t height, uint32_t vsync);
 /* The WGPUTextureFormat configure picked. */
 uint32_t nishgfx_surface_format(NishGfxSurface *surface);
-/* The next frame's view, or null to skip this frame (an outdated or timed-out
- * surface is reconfigured; an error is queued on the device). The view lives
- * until nishgfx_surface_present(). */
+/* The next frame's view, or null to skip this frame (an outdated, lost or
+ * timed-out surface is reconfigured at the window's pixel size, or left until
+ * a frame where that size is above 0; any other failure queues a device
+ * error). The view lives until nishgfx_surface_present(). */
 NishGfxView *nishgfx_surface_acquire(NishGfxSurface *surface);
 void nishgfx_surface_present(NishGfxSurface *surface);
 

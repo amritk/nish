@@ -90,7 +90,7 @@ sha256() {
 # fetch <url> <file> <sha256>: download, then refuse a file whose digest is not the pin.
 fetch() {
   printf 'fetch-gfx: %s\n' "$1"
-  curl -fsSL --retry 3 -o "$2" "$1"
+  curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL --retry 3 -o "$2" "$1"
   got="$(sha256 "$2")"
   if [ "$got" != "$3" ]; then
     printf 'fetch-gfx: %s has sha256 %s, not the pinned %s\n' "$1" "$got" "$3" >&2

@@ -158,15 +158,37 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
       shown(r)
     )
   }
-  // The rule is written twice, once in each language; each copy is pinned to
-  // the same prefix here so an edit to one turns this red.
+  // The rule is written twice, once in each language. Both run here on the
+  // same IR: build.sh's own grep line, taken from the script, and run-cache.ts's
+  // `declaresPrefixed` with the prefixes `callsGfx` passes it, taken from the
+  // source with its type annotations dropped. An edit to either that changes
+  // an answer turns this red.
   const buildSh = fs.readFileSync(path.join(root, "scripts", "build.sh"), "utf8")
   const runCache = fs.readFileSync(path.join(root, "src", "run-cache.ts"), "utf8")
+  const grepLine = /grep -Eq '(\^declare [^']*@nishgfx_)'/.exec(buildSh)
+  const gfxPrefixes = /const callsGfx = \(ir: string\): boolean => declaresPrefixed\(ir, (\[[^\]]*\])\)/.exec(
+    runCache
+  )
+  const fnText = /const declaresPrefixed = [\s\S]*?\n}\n/.exec(runCache)
+  let callsGfx = null
+  try {
+    if (gfxPrefixes && fnText) {
+      const js = fnText[0].replace(/: (string\[\]|string|boolean)(?=[\s,)=])/g, "")
+      callsGfx = new Function(`${js}\nreturn (ir) => declaresPrefixed(ir, ${gfxPrefixes[1]})`)()
+    }
+  } catch {
+    callsGfx = null
+  }
+  const samples = { ...notCalls, calls }
+  const answers = Object.entries(samples).map(([name, ll]) => {
+    const sh = grepLine ? spawnSync("grep", ["-Eq", grepLine[1], ll]).status === 0 : null
+    const ts = callsGfx ? callsGfx(fs.readFileSync(ll, "utf8")) : null
+    return { name, sh, ts, want: name === "calls" }
+  })
   check(
     "gfx: scripts/build.sh and src/run-cache.ts callsGfx select the shim by the same declare prefix",
-    buildSh.includes(`grep -Eq '^declare [^"]*@nishgfx_'`) &&
-      /const callsGfx = \(ir: string\): boolean => declaresPrefixed\(ir, \["@nishgfx_"\]\)/.test(runCache),
-    "the two rules no longer read the same"
+    answers.every((a) => a.sh === a.want && a.ts === a.want),
+    answers.map((a) => `${a.name}: build.sh ${a.sh}, callsGfx ${a.ts}`).join("; ")
   )
 
   // ---- the shim, linked ------------------------------------------------------------
