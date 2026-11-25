@@ -482,6 +482,14 @@ function bufferElement(t: CType): string -> @bufferElement
   stackSites=0 stackLocals=0
   local +0:9 s: string (const)
   local +1:9 lent: boolean (const)
+function bufferWhy(t: CType): string -> @bufferWhy
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer t: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function nonNullBuffer(element: string): string -> @nonNullBuffer
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
 function CRecord.constructor(this: CRecord): void -> @CRecord.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=96 writesThrough=true captured=false
@@ -1620,7 +1628,7 @@ function Importer.readParamOverride(this: Importer, f: CFunc, o: FnOverride, par
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: param value
-  calls: CJson.at CJson.boolean CJson.keyAt CJson.keyIs CJson.kind CJson.length CJson.string CJson.stringEquals Importer.fail Importer.isCountType Importer.paramType Importer.paramWhere Importer.refuseDuplicate Importer.resolve bufferElement nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq
+  calls: CJson.at CJson.boolean CJson.keyAt CJson.keyIs CJson.kind CJson.length CJson.string CJson.stringEquals Importer.fail Importer.isCountType Importer.paramType Importer.paramWhere Importer.refuseDuplicate Importer.resolve bufferElement bufferWhy nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq nonNullBuffer
   pointer this: size=248 writesThrough=true captured=false passedTo=Importer.fail#0 Importer.fail#0 Importer.paramWhere#0 Importer.refuseDuplicate#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0 Importer.resolve#0 Importer.fail#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0 Importer.paramType#0 Importer.paramType#0 Importer.fail#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0 Importer.isCountType#0 Importer.resolve#0 Importer.fail#0 Importer.paramWhere#0 Importer.fail#0 Importer.paramWhere#0
   pointer f: size=48 writesThrough=false captured=false passedTo=Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1 Importer.paramWhere#1
   pointer o: size=56 writesThrough=false captured=false
@@ -1667,6 +1675,8 @@ function Importer.readParamOverride(this: Importer, f: CFunc, o: FnOverride, par
   callee -22:31 Importer.paramWhere -> @Importer.paramWhere
   callee -18:7 Importer.fail -> @Importer.fail
   callee -17:23 Importer.paramWhere -> @Importer.paramWhere
+  callee -17:65 nonNullBuffer -> @nonNullBuffer
+  callee -17:79 bufferElement -> @bufferElement
   callee -11:7 Importer.fail -> @Importer.fail
   callee -10:23 Importer.paramWhere -> @Importer.paramWhere
   local -2:13 before: string (const)
@@ -1679,6 +1689,7 @@ function Importer.readParamOverride(this: Importer, f: CFunc, o: FnOverride, par
   callee +10:23 bufferElement -> @bufferElement
   callee +12:9 Importer.fail -> @Importer.fail
   callee +13:25 Importer.paramWhere -> @Importer.paramWhere
+  callee +13:177 bufferWhy -> @bufferWhy
   callee +19:9 Importer.fail -> @Importer.fail
   callee +20:25 Importer.paramWhere -> @Importer.paramWhere
   callee +26:9 Importer.fail -> @Importer.fail
