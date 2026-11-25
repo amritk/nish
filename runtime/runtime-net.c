@@ -287,6 +287,7 @@ struct nish_uring_opts {
   int32_t cq_entries;
   int32_t buf_count;
   int32_t buf_size;
+  int32_t taskrun_worth;
 };
 int32_t nish_uring_probe(void);
 int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds);
@@ -362,7 +363,35 @@ struct nr_set {
   uint32_t *pend; /* wblocked or lingering slots, checked after each pump */
   uint32_t npend, pcap;
   int64_t windows, window_waits; /* batch windows, and the ring waits inside them, for the stats line */
+  uint8_t **rcache; /* first-size receive queues given back, reused last in, first out */
+  uint32_t nrcache;
 };
+
+/* Receive queues of NR_RECV_FIRST bytes a set keeps for reuse. Nearly every
+   request is one receive into a fresh queue that its read drains and frees,
+   and a pass holds more of them than malloc's per-thread cache keeps, so
+   kept here they come back hot and cost no allocator call. */
+#define NR_RCACHE 4096
+
+/* A queue of NR_RECV_FIRST bytes: a kept one, else malloc's. */
+static uint8_t *nr_rbuf_take(struct nr_set *S) {
+  if (S->nrcache > 0) return S->rcache[--S->nrcache];
+  return malloc(NR_RECV_FIRST);
+}
+
+/* `c`'s queue given back: kept when it is first-size and there is room. */
+static void nr_rbuf_give(struct nr_set *S, struct nr_conn *c) {
+  if (c->rbuf && c->rcap == NR_RECV_FIRST) {
+    if (!S->rcache) S->rcache = malloc(NR_RCACHE * sizeof *S->rcache);
+    if (S->rcache && S->nrcache < NR_RCACHE) {
+      S->rcache[S->nrcache++] = c->rbuf;
+      c->rbuf = NULL;
+      return;
+    }
+  }
+  free(c->rbuf);
+  c->rbuf = NULL;
+}
 
 static struct nr_set *nr_sets[NR_SETS];
 static int32_t nr_nsets;
@@ -541,7 +570,7 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
       if (c->rlen + n > c->rcap) {
         uint32_t nc = c->rcap ? c->rcap : NR_RECV_FIRST;
         while (nc < c->rlen + n) nc *= 2;
-        uint8_t *p = realloc(c->rbuf, nc);
+        uint8_t *p = c->rcap == 0 && nc == NR_RECV_FIRST ? nr_rbuf_take(S) : realloc(c->rbuf, nc);
         if (!p) {
           c->hup = 1;
           c->hup_res = -12;
@@ -739,6 +768,10 @@ static int32_t nr_close_listener(struct nr_set *S) {
   free(S->fifo);
   free(S->pend);
   S->fifo = S->pend = NULL;
+  for (uint32_t i = 0; i < S->nrcache; i++) free(S->rcache[i]);
+  free(S->rcache);
+  S->rcache = NULL;
+  S->nrcache = 0;
   S->dead = 1;
   return close(S->listener) != 0 ? nish_net_fail() : 0;
 }
@@ -780,9 +813,13 @@ static int32_t nr_read(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_
     /* A drained queue is freed and emptied, so an idle slot holds none
        (NURING-38) and a receive never finds roff at rlen past 0. */
     if (c->roff == c->rlen) {
-      free(c->rbuf);
-      c->rbuf = NULL;
+      nr_rbuf_give(S, c);
       c->rcap = c->roff = c->rlen = 0;
+      /* Drained, the slot is not ready, so it leaves the ready list now,
+         while its entry is in cache, rather than when the next collect
+         walks to it to find that out (one cache miss a request at
+         150,000 connections). */
+      if (c->v.listed && !(nr_bits(&c->v) & (c->v.events | 4))) nr_unlist(&c->v);
     }
     return (int32_t)n;
   }
@@ -841,8 +878,7 @@ static int32_t nr_close(struct nr_set *S, struct nr_conn *c, int32_t ring, int32
   nr_unregister(&c->v);
   c->gen++;
   c->roff = c->rlen = 0;
-  free(c->rbuf);
-  c->rbuf = NULL;
+  nr_rbuf_give(S, c);
   c->rcap = 0;
   int64_t q = nish_uring_queued(S->u, ring, slot);
   /* A peer that only stopped sending (a FIN) still takes what is queued, so

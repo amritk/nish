@@ -19142,6 +19142,7 @@ if (dealtHere("runtimeChecks")) {
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
         ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
+        ["taskrun1", "the same burst with taskrun_worth 1, entering again while any entry reaps a completion, is taken by one wait too"],
         ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
         ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
         ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],

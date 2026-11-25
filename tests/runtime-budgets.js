@@ -607,8 +607,15 @@ const RUNTIME_HOST_TEXT_BUDGET = 1024
  * the flag is set; `nish_tcp_listen_flags` +194, which reads the variable and installs
  * the handler when the first ring listener opens; and `nish_net_close` +24, the `close`
  * line. The budget is the next 256-byte boundary, leaving 53.
+ * **13,290 bytes** on 2026-11-25 with clang 18.1.3 on linux-x64, 13,014 on `main` before,
+ * once a ring set keeps its receive queues for reuse and a drained slot leaves the ready
+ * list at once (13,056 to 13,312): `nr_rbuf_give` 114, which keeps a first-size queue
+ * on the set's stack of 4,096 rather than freeing it; `nr_pump` +66, which takes one
+ * from it; `nish_net_close` +53, which gives the slot's back and frees the stack with
+ * its set; `nish_net_read` +44, which gives a drained queue back and unlists the slot.
+ * The budget is the next 256-byte boundary, leaving 22.
  */
-const NET_TEXT_BUDGET = 13056
+const NET_TEXT_BUDGET = 13312
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
