@@ -190,6 +190,37 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
     answers.map((a) => `${a.name}: build.sh ${a.sh}, callsGfx ${a.ts}`).join("; ")
   )
 
+  // ---- std/gpu/sys.ts is c-import's binding of the shim, as it stands -------------
+  // The module is written by the command on its own `Regenerate:` line, run
+  // from std/gpu/. That command runs again here into a scratch file, and any
+  // byte that differs from the checked-in module turns this red, the way
+  // `node scripts/gen-reference.mjs --check` holds docs/reference/.
+  const sysFile = path.join(root, "std", "gpu", "sys.ts")
+  const sysText = fs.existsSync(sysFile) ? fs.readFileSync(sysFile, "utf8") : ""
+  const regenLine = /^\/\/ Regenerate: nish (c-import .*) -o sys\.ts$/m.exec(sysText)
+  const regenDir = path.join(dir, "sys")
+  fs.mkdirSync(regenDir)
+  const regen = regenLine
+    ? spawnSync(nish, [...regenLine[1].split(" "), "-o", path.join(regenDir, "sys.ts")], {
+        cwd: path.dirname(sysFile),
+        encoding: "utf8",
+      })
+    : null
+  const regenText = regen?.status === 0 ? fs.readFileSync(path.join(regenDir, "sys.ts"), "utf8") : null
+  check(
+    "gfx: std/gpu/sys.ts is what nish c-import writes from runtime/gfx/nish-gfx.h and its overrides",
+    regenLine !== null &&
+      regenLine[1].startsWith(
+        "c-import ../../runtime/gfx/nish-gfx.h --overrides ../../runtime/gfx/nish-gfx.overrides.json "
+      ) &&
+      regenText === sysText,
+    regen === null
+      ? "std/gpu/sys.ts has no `// Regenerate: nish c-import ... -o sys.ts` line"
+      : regenText === null
+        ? shown(regen)
+        : "it differs: run the Regenerate line from std/gpu/"
+  )
+
   // ---- what scripts/fetch-gfx.sh counts as installed -------------------------------
   // A copy of the script runs in a scratch root (it works from its own `..`)
   // with a PATH that holds the few tools its "already there" test reads and no
