@@ -28,6 +28,8 @@ import {
   plainTimeCompare,
   plainTimeFrom,
   plainTimeFromOrNull,
+  tryPlainDate,
+  tryPlainDateFrom,
 } from "nish/temporal";
 ```
 
@@ -148,6 +150,18 @@ export const main = (): i32 => {
 <scalar-card title="plain​Time​From​Or​Null" icon="phosphor/regular/function" href="#plaintimefromornull">
 
 `plainTimeFrom`, answering `null` instead of panicking on a string it refuses.
+
+</scalar-card>
+
+<scalar-card title="try​Plain​Date" icon="phosphor/regular/function" href="#tryplaindate">
+
+`new PlainDate(isoYear, isoMonth, isoDay)`, answering fields that name no date, or one outside Temporal's range, as `Err` where the constructor panics.
+
+</scalar-card>
+
+<scalar-card title="try​Plain​Date​From" icon="phosphor/regular/function" href="#tryplaindatefrom">
+
+`plainDateFrom`, answering a string it refuses as `Err` where `plainDateFrom` panics.
 
 </scalar-card>
 
@@ -640,6 +654,67 @@ the time, or `null`
 
 </scalar-field>
 
+### tryPlainDate
+
+`new PlainDate(isoYear, isoMonth, isoDay)`, answering fields that name no
+date, or one outside Temporal's range, as `Err` where the constructor
+panics. Not part of Temporal.
+
+```ts
+const tryPlainDate: (
+  isoYear: i32,
+  isoMonth: i32,
+  isoDay: i32,
+) => Result<PlainDate, string>
+```
+
+<scalar-field name="isoYear" type="i32" required>
+
+the year
+
+</scalar-field>
+
+<scalar-field name="isoMonth" type="i32" required>
+
+the month, 1 to 12
+
+</scalar-field>
+
+<scalar-field name="isoDay" type="i32" required>
+
+the day of the month, from 1
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;PlainDate, string&gt;">
+
+the date, or `Err` with the `RangeError` text the constructor panics with
+
+</scalar-field>
+
+### tryPlainDateFrom
+
+`plainDateFrom`, answering a string it refuses as `Err` where
+`plainDateFrom` panics. Not part of Temporal.
+
+```ts
+const tryPlainDateFrom: (
+  text: string,
+) => Result<PlainDate, string>
+```
+
+<scalar-field name="text" type="string" required>
+
+such as `2024-01-15`
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;PlainDate, string&gt;">
+
+the date, or `Err` with the `RangeError` text `plainDateFrom` panics with
+
+</scalar-field>
+
 ## Classes
 
 ### Duration
@@ -654,7 +729,7 @@ class Duration
 
 | Member | |
 | --- | --- |
-| `new Duration(years: i64 = 0, months: i64 = 0, weeks: i64 = 0, days: i64 = 0, hours: i64 = 0, minutes: i64 = 0, seconds: i64 = 0, milliseconds: i64 = 0, microseconds: i64 = 0, nanoseconds: i64 = 0)` | The duration, as `new Temporal.Duration(...)`; every field defaults to 0. Panics with a `RangeError` when two fields have different signs, when `years`, `months` or `weeks` reaches 2^32, or when the rest comes to 2^53 seconds or more. |
+| `new Duration(years: i64 = 0, months: i64 = 0, weeks: i64 = 0, days: i64 = 0, hours: i64 = 0, minutes: i64 = 0, seconds: i64 = 0, milliseconds: i64 = 0, microseconds: i64 = 0, nanoseconds: i64 = 0)` | The duration, as `new Temporal.Duration(...)`; every field defaults to 0. Panics with a `RangeError` when two fields have different signs, when `years`, `months` or `weeks` reaches 2^32, when the rest comes to 2^53 seconds or more, or when `microseconds` or `nanoseconds` is the least `i64`, whose negation does not fit. |
 | `readonly blank: boolean` | Whether every field is zero. |
 | `readonly days: i64` | Days. |
 | `readonly hours: i64` | Hours. |
@@ -728,6 +803,7 @@ class PlainDate
 | `toJSON(): string` | The same string as `toString`, which is what `JSON.stringify` writes. |
 | `toPlainDateTime(time: PlainTime): PlainDateTime` | This date at `time`. |
 | `toString(): string` | The date as Temporal writes it: `2024-01-15`, or `+012345-01-15` for a year past 9999 or before 0. |
+| `tryAdd(duration: Duration): Result<PlainDate, string>` | `add`, answering an answer outside Temporal's range as `Err` where `add` panics. Not part of Temporal. |
 | `until(other: PlainDate): Duration` | The days from this date to `other`, as a duration of days alone (Temporal's default `largestUnit: "day"`); negative when `other` is earlier. |
 
 ### PlainDateTime

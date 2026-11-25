@@ -126,12 +126,12 @@ unsafe call 174:56 wrappingAdd (node 1885)
 unsafe call 175:11 uncheckedGet (node 1897)
 unsafe call 175:35 uncheckedGet (node 1903)
 unsafe call 175:56 wrappingAdd (node 1908)
-unsafe call 331:34 uncheckedGet (node 3253)
-unsafe call 332:5 uncheckedSet (node 3266)
-unsafe call 332:31 uncheckedGet (node 3276)
-unsafe call 339:5 uncheckedSet (node 3326)
-unsafe call 340:13 uncheckedGet (node 3336)
-unsafe call 340:39 uncheckedGet (node 3345)
+unsafe call 353:34 uncheckedGet (node 3346)
+unsafe call 354:5 uncheckedSet (node 3359)
+unsafe call 354:31 uncheckedGet (node 3369)
+unsafe call 361:5 uncheckedSet (node 3419)
+unsafe call 362:13 uncheckedGet (node 3429)
+unsafe call 362:39 uncheckedGet (node 3438)
 const CT_POLY1305_HIGH_BIT: i32 = 16777216
 function ctChacha20Word(buf: u8[], at: i32): u32 -> @ctChacha20Word
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -276,33 +276,35 @@ function ctChacha20Core(state: u32[], out: u32[]): void -> @ctChacha20Core [expo
   callee -4:11 ctChacha20Rotl -> @ctChacha20Rotl
   callee -2:10 ctChacha20Rotl -> @ctChacha20Rotl
 function ctChacha20XorInto(state: u32[], src: u8[], srcAt: i32, len: i32, dst: u8[], dstAt: i32): void -> @ctChacha20XorInto [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: ctChacha20Core nish.wipe$arr.u32 nish_panic_index nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: dstAt srcAt
+  calls: ctChacha20Core nish.wipe$arr.u32
   pointer state: size=0 writesThrough=true captured=false passedTo=ctChacha20Core#0
   pointer src: size=0 writesThrough=false captured=false
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local -4:9 keystream: u32[] (const)
-  local -3:7 done: i32 (let)
-  callee -1:5 ctChacha20Core -> @ctChacha20Core
-  local +1:11 take: i32 (const)
+  local -10:9 keystream: u32[] (const)
+  local -6:7 n: i32 (let)
+  local -5:7 s: i32 (let)
+  local -4:7 d: i32 (let)
+  callee -2:5 ctChacha20Core -> @ctChacha20Core
   local +2:14 w: i32 (let)
   local +3:13 word: u32 (const)
-  local +4:13 at: i32 (const)
-  local +12:18 k: i32 (let)
-  callee +19:3 wipe<u32[]> -> @nish.wipe$arr.u32
-function ctPoly1305AbsorbWhole(h: u64[], r: u64[], buf: u8[], at: i32, len: i32): void -> @ctPoly1305AbsorbWhole [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +22:15 k: i32 (let)
+  callee +34:3 wipe<u32[]> -> @nish.wipe$arr.u32
+function ctPoly1305AbsorbWhole(h: u64[], r: u64[], buf: u8[], len: i32): void -> @ctPoly1305AbsorbWhole [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ctPoly1305Block
-  calls: ctPoly1305Block nish_panic_overflow
+  calls: ctPoly1305Block
   pointer h: size=0 writesThrough=true captured=false passedTo=ctPoly1305Block#0
   pointer r: size=0 writesThrough=false captured=false passedTo=ctPoly1305Block#1
   pointer buf: size=0 writesThrough=false captured=false passedTo=ctPoly1305Block#2
   stackSites=0 stackLocals=0
   local +0:9 whole: i32 (const)
-  local +1:12 i: i32 (let)
-  callee +2:5 ctPoly1305Block -> @ctPoly1305Block
+  local +1:9 end: i32 (const)
+  local +2:12 off: i32 (let)
+  callee +3:5 ctPoly1305Block -> @ctPoly1305Block
 function ctChacha20XorIntoToZero(keystream: u32[], dst: u8[]): void -> @ctChacha20XorIntoToZero [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

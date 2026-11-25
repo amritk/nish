@@ -91,15 +91,23 @@ export const isForeignType = (table: TypeTable, t: i32): boolean =>
   isForeignScalar(t) || table.stripNull(t) === T_CPTR
 
 /**
- * A buffer a `declare function` takes (WP53 B1.1): a `u8[]` or a `readonly
- * u8[]`, which C sees as a pointer to its bytes and whose length is held to
- * the `u64` after it (`docs/wp53-ffi-buffers-handles.md` §3a). It is kept out
- * of `isForeignType` because it is not one value with nothing to be wrong
- * about: it is valid only in a run that a count closes, which is a rule about
- * the parameter list rather than about one type.
+ * A buffer a `declare function` takes (WP53 B1.1, WP89 S2): an array of `u8`,
+ * `u16`, `u32`, `i32` or `f32`, readonly or not, which C sees as a pointer to
+ * its elements and whose length is held to the count after it
+ * (`docs/wp53-ffi-buffers-handles.md` §3a). Those five elements have one size
+ * and alignment on every target Nish builds for; `f64` and `i64` are refused,
+ * since i386's C aligns them to 4 inside a struct a buffer could be cast to.
+ * It is kept out of `isForeignType` because it is not one value with nothing
+ * to be wrong about: it is valid only in a run that a count closes, which is a
+ * rule about the parameter list rather than about one type.
  */
-export const isForeignBuffer = (table: TypeTable, t: i32): boolean =>
-  t >= 0 && table.kindOf(t) === K_ARRAY && table.refOf(t) === T_U8
+export const isForeignBuffer = (table: TypeTable, t: i32): boolean => {
+  if (t < 0 || table.kindOf(t) !== K_ARRAY) {
+    return false
+  }
+  const e = table.refOf(t)
+  return e === T_U8 || e === T_U16 || e === T_U32 || e === T_I32 || e === T_F32
+}
 
 /**
  * A buffer window a host function takes (WP50 S3, `docs/wp50-wasm-host.md`

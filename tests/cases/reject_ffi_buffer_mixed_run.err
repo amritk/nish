@@ -1,0 +1,1 @@
+Parameter `mask` of `declare function blend` is readonly u8[] in a run that `dst` opened as f32[]: the one count after a run is in elements, so every buffer of a run has the same element type; close the run with its count first

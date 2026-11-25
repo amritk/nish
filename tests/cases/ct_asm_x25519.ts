@@ -219,13 +219,13 @@ export const fieldDecodeInto = (f: i64[], bytes: u8[]): void => {
       b = b & toI64(0x7f)
     }
     acc = acc | (b << bits)
-    bits = bits + toI64(8)
+    bits = (bits & toI64(0x3f)) + toI64(8)
     if (limb >= 0 && limb < 10) {
       const width: i64 = fieldWidth(limb)
       if (bits >= width) {
         uncheckedSet(f, limb, acc & fieldLimbMask(limb));
         acc = acc >> width
-        bits = bits - width
+        bits = (bits & toI64(0x3f)) - (width & toI64(0x1f))
         limb = limb + 1
       }
     }
@@ -257,11 +257,11 @@ export const fieldEncodeInto = (out: u8[], f: i64[]): void => {
   let at: i32 = 0
   for (let i: i32 = 0; i < 10; i++) {
     acc = acc | (uncheckedGet(h, i) << bits)
-    bits = bits + fieldWidth(i)
+    bits = (bits & toI64(0x3f)) + (fieldWidth(i) & toI64(0x1f))
     while (bits >= toI64(8) && at >= 0 && at < 32) {
       uncheckedSet(out, at, toU8(acc & toI64(0xff)));
       acc = acc >> toI64(8)
-      bits = bits - toI64(8)
+      bits = (bits & toI64(0x3f)) - toI64(8)
       at = at + 1
     }
   }

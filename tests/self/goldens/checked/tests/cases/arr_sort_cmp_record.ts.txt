@@ -23,7 +23,7 @@ function sortWith<Row, byKey>(xs: Row[], cmp: void): Row[] -> @nish.sortWith$$Ro
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.copyRun$$Row
   escaping: xs
-  calls: nish.copyRun$$Row nish.insertionRun$$Row$fn.5.byKey nish.mergePass$$Row$fn.5.byKey nish.stepTo nish_arena_mark nish_arena_release nish_panic
+  calls: nish.copyRun$$Row nish.insertionRun$$Row$fn.5.byKey nish.mergePass$$Row$fn.5.byKey nish.stepTo nish_arena_mark nish_arena_release
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$$Row#0 nish.insertionRun$$Row$fn.5.byKey#1 nish.mergePass$$Row$fn.5.byKey#1 nish.mergePass$$Row$fn.5.byKey#0 nish.copyRun$$Row#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
@@ -40,10 +40,10 @@ function sortWith<Row, byKey>(xs: Row[], cmp: void): Row[] -> @nish.sortWith$$Ro
   callee +24:13 stepTo -> @nish.stepTo
   callee +27:5 copyRun<Row> -> @nish.copyRun$$Row
 function sortWith<string, byLength>(xs: string[], cmp: void): string[] -> @nish.sortWith$str$fn.8.byLength [exported instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.copyRun$str
   escaping: xs
-  calls: nish.copyRun$str nish.insertionRun$str$fn.8.byLength nish.mergePass$str$fn.8.byLength nish.stepTo nish_arena_mark nish_arena_release nish_panic
+  calls: nish.copyRun$str nish.insertionRun$str$fn.8.byLength nish.mergePass$str$fn.8.byLength nish.stepTo nish_arena_mark nish_arena_release
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$str#0 nish.insertionRun$str$fn.8.byLength#1 nish.mergePass$str$fn.8.byLength#1 nish.mergePass$str$fn.8.byLength#0 nish.copyRun$str#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)

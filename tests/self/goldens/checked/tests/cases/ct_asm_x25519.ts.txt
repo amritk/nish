@@ -49,36 +49,36 @@ unsafe call 206:24 uncheckedGet (node 1523)
 unsafe call 207:5 uncheckedSet (node 1532)
 unsafe call 207:24 uncheckedGet (node 1538)
 unsafe call 217:24 uncheckedGet (node 1608)
-unsafe call 226:9 uncheckedSet (node 1675)
-unsafe call 248:27 uncheckedGet (node 1806)
-unsafe call 250:20 uncheckedGet (node 1844)
-unsafe call 252:3 uncheckedSet (node 1858)
-unsafe call 252:33 uncheckedGet (node 1868)
-unsafe call 254:3 uncheckedSet (node 1891)
-unsafe call 254:22 uncheckedGet (node 1897)
-unsafe call 259:18 uncheckedGet (node 1949)
-unsafe call 262:7 uncheckedSet (node 1986)
-unsafe call 269:5 uncheckedSet (node 2039)
-unsafe call 346:30 uncheckedGet (node 2478)
-unsafe call 397:10 uncheckedGet (node 3004)
-unsafe call 397:36 uncheckedGet (node 3013)
-unsafe call 414:23 uncheckedGet (node 3225)
-unsafe call 419:28 uncheckedGet (node 3292)
-unsafe call 432:5 uncheckedSet (node 3389)
-unsafe call 432:24 uncheckedGet (node 3395)
-unsafe call 433:17 uncheckedGet (node 3418)
-unsafe call 449:5 uncheckedSet (node 3502)
-unsafe call 449:24 uncheckedGet (node 3508)
-unsafe call 451:3 uncheckedSet (node 3515)
-unsafe call 451:22 uncheckedGet (node 3521)
-unsafe call 452:3 uncheckedSet (node 3534)
-unsafe call 452:24 uncheckedGet (node 3541)
-unsafe call 455:3 uncheckedSet (node 3587)
-unsafe call 460:3 uncheckedSet (node 3651)
-unsafe call 486:5 uncheckedSet (node 3970)
-unsafe call 497:26 uncheckedGet (node 4041)
-unsafe call 517:3 uncheckedSet (node 4172)
-unsafe call 519:3 uncheckedSet (node 4199)
+unsafe call 226:9 uncheckedSet (node 1682)
+unsafe call 248:27 uncheckedGet (node 1827)
+unsafe call 250:20 uncheckedGet (node 1865)
+unsafe call 252:3 uncheckedSet (node 1879)
+unsafe call 252:33 uncheckedGet (node 1889)
+unsafe call 254:3 uncheckedSet (node 1912)
+unsafe call 254:22 uncheckedGet (node 1918)
+unsafe call 259:18 uncheckedGet (node 1970)
+unsafe call 262:7 uncheckedSet (node 2021)
+unsafe call 269:5 uncheckedSet (node 2081)
+unsafe call 346:30 uncheckedGet (node 2520)
+unsafe call 397:10 uncheckedGet (node 3046)
+unsafe call 397:36 uncheckedGet (node 3055)
+unsafe call 414:23 uncheckedGet (node 3267)
+unsafe call 419:28 uncheckedGet (node 3334)
+unsafe call 432:5 uncheckedSet (node 3431)
+unsafe call 432:24 uncheckedGet (node 3437)
+unsafe call 433:17 uncheckedGet (node 3460)
+unsafe call 449:5 uncheckedSet (node 3544)
+unsafe call 449:24 uncheckedGet (node 3550)
+unsafe call 451:3 uncheckedSet (node 3557)
+unsafe call 451:22 uncheckedGet (node 3563)
+unsafe call 452:3 uncheckedSet (node 3576)
+unsafe call 452:24 uncheckedGet (node 3583)
+unsafe call 455:3 uncheckedSet (node 3629)
+unsafe call 460:3 uncheckedSet (node 3693)
+unsafe call 486:5 uncheckedSet (node 4012)
+unsafe call 497:26 uncheckedGet (node 4083)
+unsafe call 517:3 uncheckedSet (node 4214)
+unsafe call 519:3 uncheckedSet (node 4241)
 const HEX_DIGITS: string = "0123456789abcdef"
 function fieldAdd64(a: i64, b: i64): i64 -> @fieldAdd64
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -284,9 +284,9 @@ function condSwap(f: i64[], g: i64[], bit: i64): void -> @condSwap [exported]
   local -2:12 i: i32 (let)
   local -1:11 t: i64 (const)
 function fieldDecodeInto(f: i64[], bytes: u8[]): void -> @fieldDecodeInto [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: fieldLimbMask fieldWidth nish_panic_overflow
+  calls: fieldLimbMask fieldWidth
   pointer f: size=0 writesThrough=true captured=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -299,16 +299,16 @@ function fieldDecodeInto(f: i64[], bytes: u8[]): void -> @fieldDecodeInto [expor
   callee -2:26 fieldWidth -> @fieldWidth
   callee +0:37 fieldLimbMask -> @fieldLimbMask
 function fieldDecode(bytes: u8[]): i64[] -> @fieldDecode
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fieldDecodeInto
   pointer bytes: size=0 writesThrough=false captured=false passedTo=fieldDecodeInto#1
   stackSites=0 stackLocals=0
   local +0:9 f: i64[] (const)
   callee +1:3 fieldDecodeInto -> @fieldDecodeInto
 function fieldEncodeInto(out: u8[], f: i64[]): void -> @fieldEncodeInto [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: fieldAdd64 fieldCarry fieldCarryChain fieldCopy fieldLimbMask fieldMul64 fieldWidth nish_panic_overflow
+  calls: fieldAdd64 fieldCarry fieldCarryChain fieldCopy fieldLimbMask fieldMul64 fieldWidth
   pointer out: size=0 writesThrough=true captured=false
   pointer f: size=0 writesThrough=false captured=false passedTo=fieldCopy#1
   stackSites=1 stackLocals=1
@@ -329,9 +329,9 @@ function fieldEncodeInto(out: u8[], f: i64[]): void -> @fieldEncodeInto [exporte
   local -6:7 bits: i64 (let)
   local -5:7 at: i32 (let)
   local -4:12 i: i32 (let)
-  callee -2:19 fieldWidth -> @fieldWidth
+  callee -2:36 fieldWidth -> @fieldWidth
 function fieldEncode(f: i64[]): u8[] -> @fieldEncode
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fieldEncodeInto
   pointer f: size=0 writesThrough=false captured=false passedTo=fieldEncodeInto#1
   stackSites=0 stackLocals=0
@@ -504,7 +504,7 @@ function fieldAddUnrolled(out: i64[], f: i64[], g: i64[]): void -> @fieldAddUnro
   stackSites=0 stackLocals=0
   callee +0:3 fieldAdd -> @fieldAdd
 function ladder(scalar: u8[], uBytes: u8[]): u8[] -> @ladder
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fieldCopy fieldDecode fieldEncode fieldInvert fieldMul ladderLoop
   pointer scalar: size=0 writesThrough=false captured=false
   pointer uBytes: size=0 writesThrough=false captured=false passedTo=fieldDecode#0
@@ -560,7 +560,7 @@ function check(label: string, got: string, want: string): i32 -> @check
   calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
 function iterate(times: i32): string -> @iterate
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: ladder toHex
   stackSites=0 stackLocals=0

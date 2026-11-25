@@ -98,15 +98,19 @@ const POLY1305_HIGH_BIT: i32 = 0x1000000
 const chacha20Rotl = (x: u32, n: u32): u32 => (x << n) | (x >>> (32 - n))
 
 /**
- * The little-endian `u32` at `buf[at]` to `buf[at + 3]`. The last byte is read
- * first, so that its bounds check covers the other three; every caller passes
- * a window inside `buf`. `poly1305Le64` and `chacha20Poly1305TagMatch` read
- * theirs the same way. The copy `tests/cases/ct_asm_chacha20poly1305` holds to
- * the disassembly check reads with `uncheckedGet` and `wrappingAdd` instead,
- * because a bounds or overflow check is a branch that check refuses; the ones
- * here test only the public offset.
+ * The little-endian `u32` at `buf[at]` to `buf[at + 3]`, or 0 for a window
+ * outside `buf`, which no caller passes: the guard lets the range prover
+ * discharge every index, whatever order the bytes are read in.
+ * `poly1305Le64` guards its eight bytes the same way.
+ * The copy `tests/cases/ct_asm_chacha20poly1305` holds to the disassembly
+ * check reads with `uncheckedGet` and `wrappingAdd` instead, because a bounds
+ * or overflow check is a branch that check refuses; the ones here test only
+ * the public offset.
  */
 const chacha20Word = (buf: u8[], at: i32): u32 => {
+  if (at < 0 || at > toI32(buf.length) - 4) {
+    return 0
+  }
   const b3: u32 = toU32(buf[at + 3])
   return toU32(buf[at]) | (toU32(buf[at + 1]) << 8) | (toU32(buf[at + 2]) << 16) | (b3 << 24)
 }
@@ -250,35 +254,57 @@ const chacha20Core = (state: u32[], out: u32[]): void => {
 }
 
 /**
- * `dst[dstAt + i] = src[srcAt + i] ^ keystream` for `len` bytes, the keystream
- * running from `state`'s counter on, and the counter left one past the last
- * block used (RFC 8439 §2.4). The caller has checked every window and that
- * the counter does not wrap. The last keystream block is wiped before it
- * returns; `state` is the caller's to wipe.
+ * `dst[dstAt + i] = src[srcAt + i] ^ keystream[i]` for each `i` below `len`,
+ * the keystream running from `state`'s counter on, and the counter left one
+ * past the last block used (RFC 8439 §2.4). The caller has checked both
+ * windows and that the counter does not wrap; a window that ran short would
+ * end the loop there rather than panic. The last keystream block is wiped
+ * before it returns; `state` is the caller's to wipe.
  */
 const chacha20XorInto = (state: u32[], src: u8[], srcAt: i32, len: i32, dst: u8[], dstAt: i32): void => {
   const keystream: u32[] = new Array<u32>(16)
-  let done: i32 = 0
-  while (done < len) {
+  // `n` bytes done, read from `s` and written to `d`. Each cursor moves only
+  // under a guard that bounds it, so the range prover discharges every index
+  // and sum; a window the caller checked passes every guard.
+  let n: i32 = 0
+  let s: i32 = srcAt
+  let d: i32 = dstAt
+  while (n < len && s >= 0 && s < toI32(src.length) && d >= 0 && d < toI32(dst.length)) {
     chacha20Core(state, keystream)
-    state[12] = state[12] + 1
-    const take: i32 = len - done < 64 ? len - done : 64
+    if (toI32(state.length) > 12) {
+      state[12] = state[12] + 1
+    }
     for (let w: i32 = 0; w < 16 && w < toI32(keystream.length); w++) {
       const word: u32 = keystream[w]
-      const at: i32 = done + 4 * w
-      if (at + 4 <= done + take) {
+      if (
+        n <= 2147483643 &&
+        n + 4 <= len &&
+        s >= 0 &&
+        s <= toI32(src.length) - 4 &&
+        d >= 0 &&
+        d <= toI32(dst.length) - 4
+      ) {
         // A whole word, the common case: four bytes with fixed shifts.
-        dst[dstAt + at] = src[srcAt + at] ^ toU8(word)
-        dst[dstAt + at + 1] = src[srcAt + at + 1] ^ toU8(word >>> 8)
-        dst[dstAt + at + 2] = src[srcAt + at + 2] ^ toU8(word >>> 16)
-        dst[dstAt + at + 3] = src[srcAt + at + 3] ^ toU8(word >>> 24)
+        dst[d] = src[s] ^ toU8(word)
+        dst[d + 1] = src[s + 1] ^ toU8(word >>> 8)
+        dst[d + 2] = src[s + 2] ^ toU8(word >>> 16)
+        dst[d + 3] = src[s + 3] ^ toU8(word >>> 24)
+        n = n + 4
+        s = s + 4
+        d = d + 4
       } else {
-        for (let k: i32 = 0; at + k < done + take; k++) {
-          dst[dstAt + at + k] = src[srcAt + at + k] ^ toU8(word >>> toU32(8 * k))
+        for (
+          let k: i32 = 0;
+          k < 4 && n < len && s >= 0 && s < toI32(src.length) && d >= 0 && d < toI32(dst.length);
+          k++
+        ) {
+          dst[d] = src[s] ^ toU8(word >>> toU32(8 * k))
+          n = n + 1
+          s = s + 1
+          d = d + 1
         }
       }
     }
-    done = done + take
   }
   wipe(keystream)
 }
@@ -395,8 +421,11 @@ export const chacha20 = (key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[]
   return out
 }
 
-/** The little-endian `u64` at `buf[at]` to `buf[at + 7]`. */
+/** The little-endian `u64` at `buf[at]` to `buf[at + 7]`, or 0 for a window outside `buf`, as in `chacha20Word`. */
 const poly1305Le64 = (buf: u8[], at: i32): u64 => {
+  if (at < 0 || at > toI32(buf.length) - 8) {
+    return 0
+  }
   const b7: u64 = toU64(buf[at + 7])
   return (
     toU64(buf[at]) |
@@ -451,7 +480,7 @@ const poly1305Clamp = (key: u8[], r: u64[]): void => {
  */
 const poly1305Block = (h: u64[], r: u64[], m: u8[], at: i32, high: u64): void => {
   const lo: u64 = poly1305Le64(m, at)
-  const hi: u64 = poly1305Le64(m, toI32(toU32(at) + 8))
+  const hi: u64 = poly1305Le64(m, at + 8)
   const h0: u64 = h[0] + (lo & 0x3ffffff)
   const h1: u64 = h[1] + ((lo >>> 26) & 0x3ffffff)
   const h2: u64 = h[2] + (((lo >>> 52) | (hi << 12)) & 0x3ffffff)
@@ -567,23 +596,22 @@ const poly1305Finish = (h: u64[], key: u8[], tag: u8[]): void => {
 }
 
 /**
- * Feeds the `len` bytes of `buf` from `at` to the accumulator `h`, sixteen at
+ * Feeds the first `len` bytes of `buf` to the accumulator `h`, sixteen at
  * a time. A short last block is padded one of two ways: `zeroPad` is the
  * AEAD's (RFC 8439 §2.8, zeros up to 16 bytes and the block counted as whole),
  * and otherwise it is §2.5.1's, a 0x01 byte after the message and zeros after
  * that, with no bit at 2^128.
  */
-const poly1305Absorb = (h: u64[], r: u64[], buf: u8[], at: i32, len: i32, zeroPad: boolean): void => {
-  const whole: i32 = len >> 4
-  for (let i: i32 = 0; i < whole; i++) {
-    poly1305Block(h, r, buf, at + 16 * i, toU64(POLY1305_HIGH_BIT))
+const poly1305Absorb = (h: u64[], r: u64[], buf: u8[], len: i32, zeroPad: boolean): void => {
+  const whole: i32 = (len >> 4) & 0x7ffffff
+  const end: i32 = 16 * whole
+  for (let off: i32 = 0; off < end; off += 16) {
+    poly1305Block(h, r, buf, off, toU64(POLY1305_HIGH_BIT))
   }
   const tail: i32 = len & 15
   if (tail > 0) {
     const last: u8[] = new Array<u8>(16)
-    // Where the tail starts, summed in `u32`: it is inside `buf`, so the sum
-    // cannot wrap, and the loop stops at the end of `buf` all the same.
-    let k: i32 = toI32(toU32(at) + (toU32(whole) << 4))
+    let k: i32 = end
     for (let i: i32 = 0; i < tail && i < toI32(last.length) && k >= 0 && k < toI32(buf.length); i++) {
       last[i] = buf[k]
       k = k + 1
@@ -615,7 +643,7 @@ export const poly1305 = (key: u8[], msg: u8[]): u8[] | null => {
   const h: u64[] = new Array<u64>(5)
   const r: u64[] = new Array<u64>(5)
   poly1305Clamp(key, r)
-  poly1305Absorb(h, r, msg, 0, toI32(msg.length), false)
+  poly1305Absorb(h, r, msg, toI32(msg.length), false)
   // `POLY1305_TAG_SIZE`, written out because a literal length is what proves
   // `poly1305Finish`'s stores in range.
   const tag: u8[] = new Array<u8>(16)
@@ -648,17 +676,17 @@ export const poly1305KeyGen = (key: u8[], nonce: u8[]): u8[] | null => {
 }
 
 /**
- * The AEAD tag of RFC 8439 §2.8 over `aad` and the `len` bytes of ciphertext
- * at `ct[at]`: Poly1305 under `polyKey` of the AAD and the ciphertext, each
- * zero-padded to 16 bytes, and then both lengths as little-endian `u64`s.
+ * The AEAD tag of RFC 8439 §2.8 over `aad` and the first `len` bytes of `ct`:
+ * Poly1305 under `polyKey` of the AAD and the ciphertext, each zero-padded to
+ * 16 bytes, and then both lengths as little-endian `u64`s.
  */
-const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i32): u8[] => {
+const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], len: i32): u8[] => {
   const aadLen: i32 = toI32(aad.length)
   const h: u64[] = new Array<u64>(5)
   const r: u64[] = new Array<u64>(5)
   poly1305Clamp(polyKey, r)
-  poly1305Absorb(h, r, aad, 0, aadLen, true)
-  poly1305Absorb(h, r, ct, at, len, true)
+  poly1305Absorb(h, r, aad, aadLen, true)
+  poly1305Absorb(h, r, ct, len, true)
   const lengths: u8[] = new Array<u8>(16)
   for (let i: i32 = 0; i < 4; i++) {
     lengths[i] = toU8(aadLen >>> (8 * i))
@@ -681,7 +709,8 @@ const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i
  * first difference is.
  *
  * Written out byte by byte and without a length check so that `tests/cases/ct_asm_chacha20poly1305` can hold a copy of it to the
- * disassembly check; the caller has checked that `sealed` holds the window.
+ * disassembly check. Its one caller passes the received tag copied into a
+ * 16-byte array, at 0, so the range prover discharges every index.
  */
 const chacha20Poly1305TagMatch = (tag: u8[], sealed: u8[], at: i32): u32 => {
   const last: u32 = toU32(tag[15] ^ sealed[at + 15])
@@ -723,24 +752,25 @@ const chacha20Poly1305TagMatch = (tag: u8[], sealed: u8[], at: i32): u32 => {
 export const chacha20Poly1305Seal = (key: u8[], nonce: u8[], aad: u8[], plaintext: u8[]): u8[] | null => {
   const len: i32 = toI32(plaintext.length)
   // 2^31 - 17: the longest plaintext whose sealed form, sixteen bytes longer,
-  // is still an array length.
-  const longest: i32 = 0x7fffffef
+  // is still an array length. Written in decimal, since the range prover
+  // reads a decimal bound and not a hex one.
+  if (len > 2147483631) {
+    return null
+  }
   if (
     toI32(key.length) !== CHACHA20_KEY_SIZE ||
     toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE ||
-    len > longest ||
     !chacha20CounterFits(1, len)
   ) {
     return null
   }
-  // Summed in `u32`: `len` is at most `longest`, so the sum is at most
-  // 2^31 - 1 and reads back as the same `i32`.
-  const total: i32 = toI32(toU32(len) + toU32(POLY1305_TAG_SIZE))
+  // `len` is at most 2^31 - 17, so the sum is at most 2^31 - 1.
+  const total: i32 = len + POLY1305_TAG_SIZE
   const state: u32[] = chacha20State(key, 0, nonce, 0)
   const polyKey: u8[] = chacha20Poly1305Setup(state)
   const sealed: u8[] = new Array<u8>(total)
   chacha20XorInto(state, plaintext, 0, len, sealed, 0)
-  const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, 0, len)
+  const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, len)
   let k: i32 = len
   for (let i: i32 = 0; i < toI32(tag.length) && k >= 0 && k < toI32(sealed.length); i++) {
     sealed[k] = tag[i]
@@ -783,10 +813,21 @@ export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: 
   }
   const state: u32[] = chacha20State(key, 0, nonce, 0)
   const polyKey: u8[] = chacha20Poly1305Setup(state)
-  const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, 0, len)
+  const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, len)
+  // The received tag, copied out so that the compare reads two 16-byte arrays
+  // at offsets the range prover can see; `len` is `total - 16`, so every
+  // guard holds.
+  const received: u8[] = new Array<u8>(16)
+  let j: i32 = len
+  for (let i: i32 = 0; i < 16; i++) {
+    if (j >= 0 && j < toI32(sealed.length)) {
+      received[i] = sealed[j]
+      j = j + 1
+    }
+  }
   // The one branch on the comparison, and it is on the answer the caller is
   // about to learn anyway.
-  const match: u32 = chacha20Poly1305TagMatch(tag, sealed, len)
+  const match: u32 = chacha20Poly1305TagMatch(tag, received, 0)
   wipe(polyKey)
   wipe(tag)
   let plaintext: u8[] | null = null

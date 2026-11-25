@@ -7,16 +7,19 @@
 @.str.3 = private unnamed_addr constant { i64, [70 x i8] } { i64 69, [70 x i8] c"`z_sum`: argument 1 (n) counts more bytes than argument 2 (src) holds\00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [78 x i8] } { i64 77, [78 x i8] c"`z_copy`: argument 2 (destLen) counts more bytes than argument 1 (dest) holds\00" }, align 8
 @.str.5 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"z_copy: \00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"z_first: \00" }, align 8
 
 declare i32 @z_fill(i8*, i32, i8 zeroext)
 declare i32 @z_sum(i16 zeroext, i8*)
 declare i32 @z_copy(i8*, %struct.OutLen*, i8*, i64)
+declare float @z_first(i32, i8*)
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #1
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
@@ -35,6 +38,9 @@ entry:
   %arr.hdr.2 = alloca %struct.nish_array, align 8
   %arr.data.2 = alloca [3 x i8], align 8
   %status.addr = alloca i32, align 4
+  %xs.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr.3 = alloca %struct.nish_array, align 8
+  %arr.data.3 = alloca [2 x float], align 8
   %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 6, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -224,16 +230,41 @@ bounds.ok.3:
   %120 = call i8* @nish_str_from_u64(i64 %119)
   %121 = call i8* @nish_str_concat(i8* %109, i8* %120)
   call void @nish_print(i8* %121)
-  %122 = load i32, i32* %status.addr, align 4
+  %122 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 0
+  store i64 2, i64* %122, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %123 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 1
+  store i64 2, i64* %123, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %124 = bitcast [2 x float]* %arr.data.3 to i8*
+  %125 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 2
+  store i8* %124, i8** %125, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %126 = bitcast i8* %124 to float*
+  %127 = getelementptr inbounds float, float* %126, i64 0
+  store float 0x3FF8000000000000, float* %127, align 4, !alias.scope !4, !noalias !3, !tbaa !16
+  %128 = getelementptr inbounds float, float* %126, i64 1
+  store float 0x4000000000000000, float* %128, align 4, !alias.scope !4, !noalias !3, !tbaa !16
+  store %struct.nish_array* %arr.hdr.3, %struct.nish_array** %xs.addr, align 8
+  %129 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %130 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %129, i64 0, i32 0
+  %131 = load i64, i64* %130, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %132 = trunc i64 %131 to i32
+  %133 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %134 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %133, i64 0, i32 2
+  %135 = load i8*, i8** %134, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %136 = call float @z_first(i32 %132, i8* %135)
+  %137 = fpext float %136 to double
+  %138 = call i8* @nish_str_from_f64(double %137)
+  %139 = call i8* @nish_str_concat(i8* bitcast ({ i64, [10 x i8] }* @.str.6 to i8*), i8* %138)
+  call void @nish_print(i8* %139)
+  %140 = load i32, i32* %status.addr, align 4
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %122
+  ret i32 %140
 }
 
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!15, !16, !17, !18, !19}
+!llvm.module.flags = !{!17, !18, !19, !20, !21}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -249,8 +280,10 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element i8", !6, i64 0}
 !14 = !{!13, !13, i64 0}
-!15 = !{i32 8, !"cf-protection-branch", i32 1}
-!16 = !{i32 8, !"cf-protection-return", i32 1}
-!17 = !{i32 8, !"branch-target-enforcement", i32 1}
-!18 = !{i32 8, !"sign-return-address", i32 1}
-!19 = !{i32 4, !"probe-stack", !"inline-asm"}
+!15 = !{!"element float", !6, i64 0}
+!16 = !{!15, !15, i64 0}
+!17 = !{i32 8, !"cf-protection-branch", i32 1}
+!18 = !{i32 8, !"cf-protection-return", i32 1}
+!19 = !{i32 8, !"branch-target-enforcement", i32 1}
+!20 = !{i32 8, !"sign-return-address", i32 1}
+!21 = !{i32 4, !"probe-stack", !"inline-asm"}

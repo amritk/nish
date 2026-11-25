@@ -1,0 +1,2 @@
+error: `slice` may panic here
+`String.fromBytes` panics when `[from, i)` is outside `buf`, and nothing proves it in range here: guard the call — `if (from >= 0 && from <= i && i <= buf.length)` proves it

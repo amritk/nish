@@ -1411,9 +1411,14 @@ export class StaticFiles {
       }
       return
     }
-    if (status !== 304) {
+    const path: u8[] = this.path
+    const m: i32 = this.pathLength
+    // `0 <= pathLength <= path.length` holds once `staticResolve` sets it;
+    // the guard keeps `String.fromBytes` proven for a `--deny-panics` caller.
+    if (status !== 304 && m >= 0 && m <= toI32(path.length)) {
+      const type: string = staticContentType(String.fromBytes(path, 0, m))
       names.push(httpFieldBytes("content-type"))
-      values.push(httpFieldBytes(staticContentType(String.fromBytes(this.path, 0, this.pathLength))))
+      values.push(httpFieldBytes(type))
     }
     if (this.etagLength > 0) {
       names.push(httpFieldBytes("etag"))

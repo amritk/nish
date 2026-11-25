@@ -3091,13 +3091,16 @@ export class Http1Server {
     this.date.hold()
     const fd: i32 = conn.fd
     let moved: boolean = false
+    const scratch: u8[] = this.scratch
     while (true) {
       const room: i32 = conn.inputRoom()
-      const want: i32 = room < toI32(this.scratch.length) ? room : toI32(this.scratch.length)
-      if (want <= 0) {
+      const size: i32 = toI32(scratch.length)
+      const want: i32 = room < size ? room : size
+      // `0 < want <= scratch.length`, spelled so the prover reads the window.
+      if (want <= 0 || want > toI32(scratch.length)) {
         break
       }
-      const n: i32 = netRead(fd, this.scratch, H1_ZERO, want)
+      const n: i32 = netRead(fd, scratch, 0, want)
       if (n <= 0) {
         if (n === 0) {
           conn.endInput()
@@ -3107,7 +3110,7 @@ export class Http1Server {
         break
       }
       moved = true
-      conn.feed(this.scratch, H1_ZERO, n)
+      conn.feed(scratch, H1_ZERO, n)
       // A short read emptied the socket. The loop's readiness is
       // level-triggered, so more input, or the peer's close, wakes it again;
       // reading once more here would only answer -11, at the price of a
@@ -3217,13 +3220,14 @@ export class Http1Server {
    */
   private drain(conn: Http1Connection): i32 {
     const fd: i32 = conn.fd
+    const scratch: u8[] = this.scratch
     while (true) {
-      const size: i32 = toI32(this.scratch.length)
+      const size: i32 = toI32(scratch.length)
       // `0 <= 0 <= size <= scratch.length`: a scratch with no room drains nothing.
       if (size <= 0) {
         return H1_DONE
       }
-      const n: i32 = netRead(fd, this.scratch, H1_ZERO, size)
+      const n: i32 = netRead(fd, scratch, 0, size)
       if (n === H1_AGAIN) {
         return H1_WANT_READ
       }
@@ -3279,7 +3283,7 @@ export class Http1Server {
         conn.abort()
         break
       }
-      const n: i32 = netWrite(fd, conn.output, start, http1ServerSub(end, start))
+      const n: i32 = netWrite(fd, conn.output, start, end - start)
       if (n <= 0) {
         if (n !== H1_AGAIN) {
           conn.abort()

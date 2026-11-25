@@ -1057,23 +1057,24 @@ function emitNetCall(emitter: Emitter, expr: Node, name: string): string -> @emi
   local +14:13 value: string (const)
   callee +14:21 Emitter.emitExpression -> @Emitter.emitExpression
   callee +29:5 Emitter.declareType -> @Emitter.declareType
-  local +33:12 at: i32 (let)
-  callee +34:9 isNetRangeBuffer -> @isNetRangeBuffer
-  local +36:13 buffer: string (const)
-  local +37:13 offset: string (const)
-  local +38:13 length: string (const)
-  local +39:13 end: string (const)
-  callee +39:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local +40:13 field: string (const)
-  callee +40:21 IRFunction.emitValue -> @IRFunction.emitValue
-  local +43:13 size: string (const)
-  callee +43:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +43:59 Emitter.align8 -> @Emitter.align8
-  callee +44:7 emitSliceCheck -> @emitSliceCheck
-  callee +49:28 isWasmBuild -> @isWasmBuild
-  callee +52:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +52:35 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +52:54 netSymbol -> @netSymbol
+  local +34:9 proven: boolean (const)
+  local +35:12 at: i32 (let)
+  callee +36:9 isNetRangeBuffer -> @isNetRangeBuffer
+  local +38:13 buffer: string (const)
+  local +39:13 offset: string (const)
+  local +40:13 length: string (const)
+  local +41:13 end: string (const)
+  callee +41:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local +42:13 field: string (const)
+  callee +42:21 IRFunction.emitValue -> @IRFunction.emitValue
+  local +45:13 size: string (const)
+  callee +45:20 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +45:59 Emitter.align8 -> @Emitter.align8
+  callee +46:7 emitSliceCheck -> @emitSliceCheck
+  callee +51:28 isWasmBuild -> @isWasmBuild
+  callee +54:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +54:35 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +54:54 netSymbol -> @netSymbol
 function emitNamespaceProperty(emitter: Emitter, name: string): string -> @emitNamespaceProperty [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareType

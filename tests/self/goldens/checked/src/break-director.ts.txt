@@ -1903,40 +1903,27 @@ const BASE64_ALPHABET: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu
 const BASE64_PAD: i32 = 61
 function base64EncodedLength(n: i32): i32 -> @nish.base64EncodedLength [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic nish_panic_overflow
+  calls: nish_panic
   stackSites=0 stackLocals=0
-function base64CharOf(v: i32): u8 -> @nish.base64CharOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
-  stackSites=0 stackLocals=0
+  local +0:9 groups: i32 (const)
 function base64EncodeInto(src: u8[], off: i32, len: i32, dst: u8[], at: i32): i32 -> @nish.base64EncodeInto [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off
-  calls: nish.base64CharOf nish.base64EncodedLength nish_panic nish_panic_index nish_panic_overflow
+  calls: nish.base64EncodedLength nish_panic
   pointer src: size=0 writesThrough=false captured=false
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -16:9 srcLength: i32 (const)
-  local -15:9 dstLength: i32 (const)
-  local -11:9 need: i32 (const)
-  callee -11:21 base64EncodedLength -> @nish.base64EncodedLength
+  local -19:9 srcLength: i32 (const)
+  local -18:9 dstLength: i32 (const)
+  local -14:9 need: i32 (const)
+  callee -14:21 base64EncodedLength -> @nish.base64EncodedLength
+  local -8:9 abc: string (const)
   local -7:7 i: i32 (let)
   local -6:7 o: i32 (let)
-  local -5:9 whole: i32 (const)
+  local -5:7 rest: i32 (let)
   local -1:11 group: i32 (const)
-  callee +0:14 base64CharOf -> @nish.base64CharOf
-  callee +1:18 base64CharOf -> @nish.base64CharOf
-  callee +2:18 base64CharOf -> @nish.base64CharOf
-  callee +3:18 base64CharOf -> @nish.base64CharOf
-  local +7:9 tail: i32 (const)
-  local +9:11 group: i32 (const)
-  callee +10:14 base64CharOf -> @nish.base64CharOf
-  callee +11:18 base64CharOf -> @nish.base64CharOf
-  local +16:11 group: i32 (const)
-  callee +17:14 base64CharOf -> @nish.base64CharOf
-  callee +18:18 base64CharOf -> @nish.base64CharOf
-  callee +19:18 base64CharOf -> @nish.base64CharOf
+  local +13:7 group: i32 (let)
 function base64Encode(bytes: u8[]): string -> @nish.base64Encode [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.base64EncodeInto nish.base64EncodedLength nish_panic nish_panic_slice nish_str_new
@@ -2412,49 +2399,26 @@ function drawStatsOverlay(screen: Screen, stats: TermStats, corner: i32): void -
   callee +14:3 Screen.text -> @nish.Screen.text
   callee +15:3 Screen.text -> @nish.Screen.text
 module std/random.ts [package nish]
-import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
-import wrappingMul from "nish:unsafe" -> builtin wrappingMul
-import wrappingSub from "nish:unsafe" -> builtin wrappingSub
-unsafe import 48:10 wrappingAdd from "nish:unsafe"
-unsafe import 48:23 wrappingMul from "nish:unsafe"
-unsafe import 48:36 wrappingSub from "nish:unsafe"
-unsafe call 82:30 wrappingSub (node 115)
-unsafe call 89:21 wrappingAdd (node 150)
-unsafe call 90:21 wrappingSub (node 166)
-unsafe call 91:24 wrappingSub (node 177)
-unsafe call 91:49 wrappingAdd (node 183)
-unsafe call 98:7 wrappingMul (node 219)
-unsafe call 100:7 wrappingMul (node 237)
-unsafe call 131:18 wrappingAdd (node 288)
-unsafe call 171:23 wrappingAdd (node 385)
-unsafe call 171:35 wrappingSub (node 389)
-unsafe call 176:36 wrappingSub (node 418)
-unsafe call 181:12 wrappingAdd (node 453)
-const GOLDEN: i32 = -1640531527
+const GOLDEN: f64 = 2654435769
 const MIX_1: i32 = -2048144789
 const MIX_2: i32 = -1028477387
 const TWO_26: f64 = 67108864
+const TWO_31: f64 = 2147483648
+const TWO_32: f64 = 4294967296
 const TWO_53: f64 = 9007199254740992
-const SIGN: i32 = -2147483648
-const MAX: i32 = 2147483647
 struct Rng (class) size=4 align=4 exported
   field state: i32 index=0 offset=0
   constructor -> @nish.Rng.constructor
   method nextI32 -> @nish.Rng.nextI32
   method nextF64 -> @nish.Rng.nextF64
   method nextInt -> @nish.Rng.nextInt
-function below(a: i32, b: i32): boolean -> @nish.below
+function unsigned(x: i32): f64 -> @nish.unsigned
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function remainder(a: i32, m: i32): i32 -> @nish.remainder
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: a m
-  calls: nish.below nish_panic_div
+function bits(u: f64): i32 -> @nish.bits
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64
   stackSites=0 stackLocals=0
-  callee +0:12 below -> @nish.below
-  local +6:9 low: i32 (const)
-  local +7:9 high: i32 (const)
-  local +8:9 room: i32 (const)
 function mix(h: i32): i32 -> @nish.mix
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: h
@@ -2468,9 +2432,12 @@ function Rng.constructor(this: Rng, seed: i32): void -> @nish.Rng.constructor [e
 function Rng.nextI32(this: Rng): i32 -> @nish.Rng.nextI32 [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.mix
+  calls: nish.bits nish.mix nish.unsigned
   pointer this: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local -1:11 next: f64 (const)
+  callee -1:23 unsigned -> @nish.unsigned
+  callee +0:18 bits -> @nish.bits
   callee +1:12 mix -> @nish.mix
 function Rng.nextF64(this: Rng): f64 -> @nish.Rng.nextF64 [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -2485,18 +2452,17 @@ function Rng.nextF64(this: Rng): f64 -> @nish.Rng.nextF64 [exported method]
 function Rng.nextInt(this: Rng, lo: i32, hi: i32): i32 -> @nish.Rng.nextInt [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Rng.nextI32
-  calls: nish.Rng.nextI32 nish.below nish.remainder nish_panic
+  calls: llvm.fptosi.sat.i32.f64 nish.Rng.nextI32 nish.unsigned nish_panic
   pointer this: size=4 writesThrough=true captured=false passedTo=nish.Rng.nextI32#0 nish.Rng.nextI32#0 nish.Rng.nextI32#0
   stackSites=0 stackLocals=0
-  local +0:11 span: i32 (const)
+  local +0:11 span: f64 (const)
   callee +2:14 Rng.nextI32 -> @nish.Rng.nextI32
-  local +5:11 refused: i32 (const)
-  callee +5:26 remainder -> @nish.remainder
-  local +6:9 draw: i32 (let)
-  callee +6:21 Rng.nextI32 -> @nish.Rng.nextI32
-  callee +7:12 below -> @nish.below
-  callee +8:14 Rng.nextI32 -> @nish.Rng.nextI32
-  callee +10:28 remainder -> @nish.remainder
+  local +4:11 refused: f64 (const)
+  local +5:9 draw: f64 (let)
+  callee +5:21 unsigned -> @nish.unsigned
+  callee +5:30 Rng.nextI32 -> @nish.Rng.nextI32
+  callee +7:14 unsigned -> @nish.unsigned
+  callee +7:23 Rng.nextI32 -> @nish.Rng.nextI32
 import ACTION_PRESS from "nish/term" -> const ACTION_PRESS
 import EVENT_KEY from "nish/term" -> const EVENT_KEY
 import KEY_CHAR from "nish/term" -> const KEY_CHAR

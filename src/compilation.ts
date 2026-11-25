@@ -159,6 +159,7 @@ import {
   LANGUAGE,
   PACKAGE_CONDITION,
   packageConditionFor,
+  WASM_PACKAGE_CONDITION,
   STD_PREFIX,
   VERSION,
 } from "./branding"
@@ -196,7 +197,9 @@ import {
   stdModuleName,
   stdModuleNames,
   stdModulePath,
+  wasmTwinOf,
 } from "./std-modules"
+import { twinMismatch } from "./module-twins"
 import {
   allocationWarning,
   arenaMessage,
@@ -401,6 +404,12 @@ export class EmittedModule {
   }
 }
 
+/** Whether a file is there to read; its text is dropped with the arena that read it. */
+const hasFile = (path: string): boolean => {
+  using _a = arena()
+  return readFileSyncOrNull(path) !== null
+}
+
 /** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 const isRetentionCode = (code: string): boolean =>
   code === "NL9002" ||
@@ -458,6 +467,15 @@ export class Compilation {
    */
   packageIndex: StringMap
   packageCopies: PackageCopy[]
+  /**
+   * A resolved module path -> index into `twinPartners`: the other file of a
+   * module and its wasm32 twin (WP89 S6), whichever of the two this build
+   * picked, so the import that reaches it can compare their exports once.
+   */
+  twinIndex: StringMap
+  twinPartners: string[]
+  /** The picked paths whose pair has been compared already. */
+  twinsCompared: StringSet
   /**
    * The working directory as an absolute path, or `""` when it cannot be
    * resolved. It is read for two things: `identityOf`'s fallback, and
@@ -586,6 +604,9 @@ export class Compilation {
     this.modules = []
     this.byPath = new StringMap()
     this.packageIndex = new StringMap()
+    this.twinIndex = new StringMap()
+    this.twinPartners = []
+    this.twinsCompared = new StringSet()
     this.packageCopies = []
     const cwd = realpathSync(".")
     this.workingDir = cwd === null ? "" : cwd
@@ -1119,9 +1140,52 @@ export class Compilation {
         failedDecl = imp.decl
       } else {
         unit.resolved.set(imp.specifier, this.byPath.get(targetIdentity, -1))
+        const mismatch = this.twinMismatchOf(target)
+        if (mismatch.length > 0) {
+          checker.ctx.errorAtSpecifier(imp.decl, mismatch)
+          checker.ctx.errored = false
+          ok = false
+        }
       }
     }
     return ok
+  }
+
+  /** Records that the module at `picked` has `partner` as its other target's file. */
+  recordTwin(picked: string, partner: string): void {
+    if (this.twinIndex.get(picked, -1) >= 0) {
+      return
+    }
+    this.twinIndex.set(picked, this.twinPartners.length)
+    this.twinPartners.push(partner)
+  }
+
+  /**
+   * NL3063's sentence for the module at `picked` when it has a twin whose
+   * exports differ, else `""`. Asked once per module, by the first import that
+   * reaches it, so a pair is reported once however many modules import it. A
+   * partner that cannot be read is not compared: the build that picks it
+   * reports that it is missing.
+   */
+  twinMismatchOf(picked: string): string {
+    const at = this.twinIndex.get(picked, -1)
+    if (at < 0 || this.twinsCompared.has(picked)) {
+      return ""
+    }
+    this.twinsCompared.add(picked)
+    const partner = this.twinPartners[at]
+    const wasm = isWasmBuild(this.opts)
+    const nativePath = wasm ? partner : picked
+    const twinPath = wasm ? picked : partner
+    const nativeText = readFileSyncOrNull(nativePath)
+    const twinText = readFileSyncOrNull(twinPath)
+    if (nativeText === null || twinText === null) {
+      return ""
+    }
+    const detail = twinMismatch(nativePath, nativeText, twinPath, twinText)
+    return detail.length === 0
+      ? ""
+      : `\`${twinPath}\` is the wasm32 twin of \`${nativePath}\` and must export the same names with the same signatures, because a wasm32 build compiles it in its place: ${detail}`
   }
 
   /**
@@ -1195,9 +1259,20 @@ export class Compilation {
       // dumped at all. `compile.ts` always hands over a root, so the command
       // never reaches this: a `std/` in whatever directory it was started in
       // is not the library (docs/security/cli.md, CLI-2).
+      //
+      // A library module with a `<name>.wasm32.ts` beside it is a pair, and a
+      // wasm build compiles the twin in its place (WP89 S6). Both builds
+      // record the pair, so each compares the two files' exports.
+      const nativePath = stdModulePath(this.libraryRoot(), specifier)
+      const twinPath = wasmTwinOf(nativePath)
+      const wasm = isWasmBuild(this.opts)
+      const paired = hasFile(twinPath)
+      if (paired) {
+        this.recordTwin(wasm ? twinPath : nativePath, wasm ? nativePath : twinPath)
+      }
       const std: ResolvedModule = {
-        path: stdModulePath(this.libraryRoot(), specifier),
-        name: stdModuleName(specifier),
+        path: paired && wasm ? twinPath : nativePath,
+        name: paired && wasm ? wasmTwinOf(stdModuleName(specifier)) : stdModuleName(specifier),
         packageName: CLI,
         error: "",
       }
@@ -1300,9 +1375,11 @@ export class Compilation {
       failed.error = ceiling
       return failed
     }
+    const targeted = isWasmBuild(this.opts) ? WASM_PACKAGE_CONDITION : ""
     const entry = nishExportEntry(
       text,
       parsed.subpath,
+      targeted,
       packageConditionFor(mode),
       PACKAGE_CONDITION,
       packageConditionFor(otherMode)
@@ -1332,7 +1409,7 @@ export class Compilation {
       // message a reader of S2 learned still matches: it says what this
       // compiler came away with, then why.
       if (entry.status === MANIFEST_NOT_NISH) {
-        failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\`, because that entry declares none of the conditions this compiler compiles source from (\`${PACKAGE_CONDITION}\`, \`${packageConditionFor(mode)}\`, \`${packageConditionFor(otherMode)}\`)`
+        failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\`, because that entry declares none of the conditions this compiler compiles source from (\`${PACKAGE_CONDITION}\`, \`${packageConditionFor(mode)}\`, \`${packageConditionFor(otherMode)}\`${targeted.length > 0 ? `, \`${targeted}\`` : ""})`
         return failed
       }
       // What is left: no `exports` at all, no key for this subpath, or a value
@@ -1358,6 +1435,19 @@ export class Compilation {
     // does not use it). Through a link it is under the real directory, spelled
     // as above.
     const resolvedPath = joinPath([packageDir, target])
+    // The entry the other build takes, so a package whose `nish-wasm32` file
+    // and native file differ is a pair both builds compare (WP89 S6).
+    const partner = nishExportEntry(
+      text,
+      parsed.subpath,
+      targeted.length > 0 ? "" : WASM_PACKAGE_CONDITION,
+      packageConditionFor(mode),
+      PACKAGE_CONDITION,
+      packageConditionFor(otherMode)
+    )
+    if (partner.status === MANIFEST_FOUND && partner.target !== target) {
+      this.recordTwin(resolvedPath, joinPath([packageDir, partner.target]))
+    }
     const resolved: ResolvedModule = {
       path: resolvedPath,
       name: resolvedPath,

@@ -29,6 +29,9 @@ int32_t z_copy(unsigned char *dest, uLongf *destLen, const unsigned char *source
   *destLen = sourceLen;
   return 0;
 }
+float z_first(uint32_t n, const float *xs) {
+  return n > 0 ? xs[0] : 0;
+}
 int32_t run(void);
 int main(void) {
   int32_t r = run();

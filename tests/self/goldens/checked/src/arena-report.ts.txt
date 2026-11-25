@@ -121,7 +121,7 @@ function Around.constructor(this: Around, pass: LoopScope | null, block: Node | 
 function ArenaWalk.constructor(this: ArenaWalk, unit: AnalysisUnit, facts: FactsTable, sig: FunctionSig, f: FunctionFacts, table: TypeTable | null, drops: CalleeDrops): void -> @ArenaWalk.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: drops f facts sig table unit
-  calls: nish_panic nish_panic_index reclaimsReturnedString
+  calls: nish_panic_index reclaimsReturnedString
   pointer this: size=120 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true passedTo=reclaimsReturnedString#1

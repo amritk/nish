@@ -108,7 +108,7 @@ function nishsqlite_open(path: string, flags: i32): i32 -> @nishsqlite_open
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
-function nishsqlite_open_errmsg(): string -> @nishsqlite_open_errmsg
+function nishsqlite_open_errmsg(): string | null -> @nishsqlite_open_errmsg
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
@@ -120,7 +120,7 @@ function nishsqlite_exec(h: i32, sql: string): i32 -> @nishsqlite_exec
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
-function nishsqlite_errmsg(h: i32): string -> @nishsqlite_errmsg
+function nishsqlite_errmsg(h: i32): string | null -> @nishsqlite_errmsg
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
@@ -136,7 +136,7 @@ function nishsqlite_prepare(h: i32, sql: string): i32 -> @nishsqlite_prepare
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
-function nishsqlite_stmt_errmsg(h: i32): string -> @nishsqlite_stmt_errmsg
+function nishsqlite_stmt_errmsg(h: i32): string | null -> @nishsqlite_stmt_errmsg
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
@@ -280,20 +280,21 @@ function nishsqlite_cursor_rowid(h: i32): i64 -> @nishsqlite_cursor_rowid
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
-function sqlite3_errstr(code: i32): string -> @sqlite3_errstr
+function sqlite3_errstr(code: i32): string | null -> @sqlite3_errstr
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
-function sqlite3_libversion(): string -> @sqlite3_libversion
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+function sqlite3_libversion_number(): i32 -> @sqlite3_libversion_number
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
 function sqliteVersion(): string -> @nish.sqliteVersion [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via sqlite3_libversion
-  calls: nish_panic nish_str_new sqlite3_libversion
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via sqlite3_libversion_number
+  calls: nish_str_concat nish_str_from_i32 sqlite3_libversion_number
   stackSites=0 stackLocals=0
-  callee +0:44 sqlite3_libversion -> @sqlite3_libversion
+  local +0:9 n: i32 (const)
+  callee +0:18 sqlite3_libversion_number -> @sqlite3_libversion_number
 function SqliteError.constructor(this: SqliteError, extendedCode: i32, message: string): void -> @nish.SqliteError.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: extendedCode message
@@ -303,14 +304,22 @@ function done(rc: i32): Result<void, i32> -> @nish.done
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   escaping: rc
   stackSites=2 stackLocals=0
-function messageFor(code: i32, connection: string): string -> @nish.messageFor
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function describe(code: i32): string -> @nish.describe
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via sqlite3_errstr
+  escaping: code
+  calls: nish_str_concat nish_str_from_i32 nish_str_new sqlite3_errstr
+  stackSites=0 stackLocals=0
+  local +0:9 text: string | null (const)
+  callee +0:16 sqlite3_errstr -> @sqlite3_errstr
+function messageFor(code: i32, connection: string | null): string -> @nish.messageFor
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.describe
   escaping: code connection
-  calls: nish_panic nish_str_new sqlite3_errstr
+  calls: nish.describe
   stackSites=0 stackLocals=0
   local +0:9 primary: i32 (const)
-  callee +2:12 sqlite3_errstr -> @sqlite3_errstr
+  callee +7:12 describe -> @nish.describe
 function moved(r: i32): Result<boolean, i32> -> @nish.moved
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: nish_panic_overflow
@@ -319,13 +328,16 @@ function openDatabase(path: string, flags: i32): Result<Database, SqliteError> -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via nishsqlite_open
   escaping: flags path
-  calls: nish.Database.constructor nish.SqliteError.constructor nish_alloc_struct nish_panic nish_panic_overflow nish_str_index_of nish_str_new nishsqlite_open nishsqlite_open_errmsg
+  calls: nish.Database.constructor nish.SqliteError.constructor nish.describe nish_alloc_struct nish_panic nish_panic_overflow nish_str_index_of nish_str_new nishsqlite_open nishsqlite_open_errmsg
   stackSites=0 stackLocals=0
   local +0:9 h: i32 (const)
   callee +0:18 nishsqlite_open -> @nishsqlite_open
-  callee +2:16 new SqliteError -> @nish.SqliteError.constructor
-  callee +2:36 nishsqlite_open_errmsg -> @nishsqlite_open_errmsg
-  callee +4:13 new Database -> @nish.Database.constructor
+  local +2:11 code: i32 (const)
+  local +3:11 message: string | null (const)
+  callee +3:21 nishsqlite_open_errmsg -> @nishsqlite_open_errmsg
+  callee +4:16 new SqliteError -> @nish.SqliteError.constructor
+  callee +4:57 describe -> @nish.describe
+  callee +6:13 new Database -> @nish.Database.constructor
 function Database.constructor(this: Database, handle: i32): void -> @nish.Database.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: handle
@@ -386,9 +398,10 @@ function Database.openCursor(this: Database, name: string, columns: string): Res
   stackSites=0 stackLocals=0
   local +0:11 h: i32 (const)
   callee +0:20 nishsqlite_cursor_open -> @nishsqlite_cursor_open
-  callee +4:11 new SqliteError -> @nish.SqliteError.constructor
-  callee +7:18 Database.error -> @nish.Database.error
-  callee +9:15 new Cursor -> @nish.Cursor.constructor
+  local +2:13 code: i32 (const)
+  callee +5:11 new SqliteError -> @nish.SqliteError.constructor
+  callee +8:18 Database.error -> @nish.Database.error
+  callee +10:15 new Cursor -> @nish.Cursor.constructor
 function Database.prepare(this: Database, sql: string): Result<Statement, SqliteError> -> @nish.Database.prepare [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via nishsqlite_prepare
@@ -401,10 +414,10 @@ function Database.prepare(this: Database, sql: string): Result<Statement, Sqlite
   callee +2:18 Database.error -> @nish.Database.error
   callee +4:15 new Statement -> @nish.Statement.constructor
 function Database.error(this: Database, code: i32): SqliteError -> @nish.Database.error [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via nish.messageFor
   escaping: code
-  calls: nish.SqliteError.constructor nish.messageFor nish_alloc_struct nish_panic nish_str_new nishsqlite_errmsg
+  calls: nish.SqliteError.constructor nish.messageFor nish_alloc_struct nish_str_new nishsqlite_errmsg
   pointer this: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 new SqliteError -> @nish.SqliteError.constructor
@@ -583,10 +596,10 @@ function Statement.columnInto(this: Statement, c: i32, buf: u8[], at: i32): Resu
   local +0:11 n: i32 (const)
   callee +0:20 nishsqlite_column_into -> @nishsqlite_column_into
 function Statement.error(this: Statement, code: i32): SqliteError -> @nish.Statement.error [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via nish.messageFor
   escaping: code
-  calls: nish.SqliteError.constructor nish.messageFor nish_alloc_struct nish_panic nish_str_new nishsqlite_stmt_errmsg
+  calls: nish.SqliteError.constructor nish.messageFor nish_alloc_struct nish_str_new nishsqlite_stmt_errmsg
   pointer this: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 new SqliteError -> @nish.SqliteError.constructor
@@ -789,14 +802,14 @@ function Cursor.close(this: Cursor): Result<void, i32> -> @nish.Cursor.close [ex
   callee +0:12 done -> @nish.done
   callee +0:17 nishsqlite_cursor_close -> @nishsqlite_cursor_close
 function Cursor.error(this: Cursor, code: i32): SqliteError -> @nish.Cursor.error [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
-  sharedWrite: via sqlite3_errstr
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  sharedWrite: via nish.describe
   escaping: code
-  calls: nish.SqliteError.constructor nish_alloc_struct nish_panic nish_str_new sqlite3_errstr
+  calls: nish.SqliteError.constructor nish.describe nish_alloc_struct
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 new SqliteError -> @nish.SqliteError.constructor
-  callee +0:34 sqlite3_errstr -> @sqlite3_errstr
+  callee +0:34 describe -> @nish.describe
 import OPEN_READWRITE from "nish/sqlite" -> const OPEN_READWRITE
 import OPEN_URI from "nish/sqlite" -> const OPEN_URI
 import SEEK_GE from "nish/sqlite" -> const SEEK_GE

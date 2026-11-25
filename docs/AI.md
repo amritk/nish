@@ -1601,11 +1601,12 @@ export const main = (): i32 => {
 };
 ```
 
-- **A parameter is a scalar, a `CPtr`, a borrowed `string`, a `u8[]` buffer
-  with its count or a borrowed `declare class`; a return is a scalar, a `CPtr`
-  or a copied `string`.** The scalars are the integer and float widths,
-  `boolean` and `void`. Any other array, a Nish class or an interface is
-  rejected, in either position, and a `declare class` is never a return.
+- **A parameter is a scalar, a `CPtr`, a borrowed `string`, a buffer with its
+  count or a borrowed `declare class`; a return is a scalar, a `CPtr` or a
+  copied `string`.** The scalars are the integer and float widths, `boolean`
+  and `void`. A buffer is a `u8[]`, `u16[]`, `u32[]`, `i32[]` or `f32[]`,
+  readonly or not. Any other array, a Nish class or an interface is rejected,
+  in either position, and a `declare class` is never a return.
 - **A `declare class` is a C struct, lent by pointer.** Its fields are laid out
   in declaration order at C's alignment, and `new Name()` zero-fills it. A
   field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
@@ -1646,16 +1647,21 @@ export const main = (): i32 => {
 };
 ```
 
-- **A run of `u8[]` / `readonly u8[]` parameters is followed by exactly one
-  `u64`**, the byte count C may touch in each (`memcpy(dst: u8[], src:
-  readonly u8[], n: u64)`). `readonly` is C's `const`. A run without its count
-  is NL2549, a count that is not `u64` NL2550, `i32[]` NL2551, `u8[] | null`
-  NL2552. Declare `fwrite` as `(buf: readonly u8[], n: u64, one: u64, f: CPtr)`
-  and pass `1` for `one`. A call passes the data pointer and first checks the
-  count against every buffer of the run: a larger count is an `ffi-length`
-  panic, and only `toU64(buf.length)` of the buffer itself is proved. C
-  borrows the bytes for the call and may write a `u8[]`; a spawned task may
-  not make the call.
+- **A run of buffer parameters is followed by exactly one `u64`**, the
+  count of elements C may touch in each (`memcpy(dst: u8[], src: readonly
+  u8[], n: u64)`, `scale(xs: f32[], n: u64, k: f32)`). The five element types
+  are `u8`, `u16`, `u32`, `i32` and `f32` (C's `uint8_t`, `uint16_t`,
+  `uint32_t`, `int32_t`, `float`); the count is in elements, so 4 for an
+  `f32[]` of 4 is 16 bytes. `readonly` is C's `const`. A run without its count
+  is NL2549, a count that is not `u64` NL2550, any other element (`f64[]`,
+  `i64[]`) NL2551, `u8[] | null` NL2552, and a run that mixes element types
+  (`f32[]` then `readonly u8[]`) NL2824: give each its own count. Declare
+  `fwrite` as `(buf: readonly u8[], n: u64, one: u64, f: CPtr)` and pass `1`
+  for `one`. A call passes the data pointer and first checks the count against
+  every buffer of the run: a larger count is an `ffi-length` panic, and only
+  `toU64(buf.length)` of the buffer itself is proved. C borrows the elements
+  for the call and may write a buffer that is not `readonly`; a spawned task
+  may not make the call.
 
 <!-- nish:err NL2549 -->
 ```ts
@@ -3073,8 +3079,7 @@ tag under one key (NL2721) as a different string (NL2720). A `tag` on a class
 no union holds does nothing, and a JSON call on that class refuses its
 enum-member field.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -3546,7 +3551,13 @@ its fix, and there are five:
   `--number-mode f64` — has no guard, so index with an `i32` or a `u32`),
   `if (d !== 0 && d !== -1)` before `a / d` (a
   constant divisor needs nothing), `if (xs.length > 0)` before `xs.pop()`,
-  `if (n >= 0 && n <= 9)` before `n` enters `integer<0, 9>`.
+  `if (n >= 0 && n <= 9)` before `n` enters `integer<0, 9>`, `if (n >= 0)`
+  before `new Array<T>(n)` of an `i32` (a local of `integer<0, N>` needs
+  nothing), `if (start >= 0 && start <= end && end <= bytes.length)` before
+  `s.slice(start, end)`, `xs.slice(start, end)` or
+  `String.fromBytes(bytes, start, end)`, `if (src.length <= dst.length)`
+  before `dst.set(src, 0)`, and `if (n >= 0 && n <= buf.length)` before
+  `writeBytes(buf, 0, n)` or `netRead(fd, buf, 0, n)`.
 - **Bound a signed `+ - *`, or say it wraps**: an `i32`/`i64` operation the
   checker cannot prove fits is an `overflow` site; bound its operands (a loop
   below a length, a guard on the value), compute in `u32`/`u64`, or write

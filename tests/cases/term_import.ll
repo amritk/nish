@@ -10,7 +10,6 @@ declare noundef i32 @nish_read_stdin(%struct.nish_array* noundef nonnull align 8
 declare zeroext i1 @nish_wait_stdin(i32 noundef) #0
 declare zeroext i1 @nish_is_terminal(i32 noundef) #1
 declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext) #0
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
@@ -62,45 +61,32 @@ while.body:
   %13 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
   %14 = trunc i64 %11 to i32
   %15 = sext i32 %14 to i64
-  %16 = add i64 0, %15
-  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 0
-  %18 = load i64, i64* %17, align 8
-  %19 = icmp ule i64 0, %16
-  %20 = icmp ule i64 %16, %18
-  %21 = and i1 %19, %20
-  br i1 %21, label %net.ok, label %net.fail
-
-net.fail:
-  call void @nish_panic_slice(i64 0, i64 %16, i64 %18)
-  unreachable
-
-net.ok:
-  %22 = call i32 @nish_read_stdin(%struct.nish_array* %13, i64 0, i64 %15)
-  store i32 %22, i32* %n.addr, align 4
-  %23 = load i32, i32* %n.addr, align 4
-  %24 = icmp sle i32 %23, 0
-  br i1 %24, label %if.then, label %if.end
+  %16 = call i32 @nish_read_stdin(%struct.nish_array* %13, i64 0, i64 %15)
+  store i32 %16, i32* %n.addr, align 4
+  %17 = load i32, i32* %n.addr, align 4
+  %18 = icmp sle i32 %17, 0
+  br i1 %18, label %if.then, label %if.end
 
 if.then:
   br label %while.end
 
 if.end:
-  %25 = load i32, i32* %total.addr, align 4
-  %26 = load i32, i32* %n.addr, align 4
-  %27 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %25, i32 %26)
-  %28 = extractvalue { i32, i1 } %27, 0
-  %29 = extractvalue { i32, i1 } %27, 1
-  br i1 %29, label %ovf.fail, label %ovf.ok
+  %19 = load i32, i32* %total.addr, align 4
+  %20 = load i32, i32* %n.addr, align 4
+  %21 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %20)
+  %22 = extractvalue { i32, i1 } %21, 0
+  %23 = extractvalue { i32, i1 } %21, 1
+  br i1 %23, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %28, i32* %total.addr, align 4
+  store i32 %22, i32* %total.addr, align 4
   br label %while.cond
 
 while.end:
-  %30 = load i32, i32* %total.addr, align 4
-  %31 = call i8* @nish_str_from_i32(i32 %30)
-  call void @nish_print(i8* %31)
-  %32 = call i32 @nish_set_raw_mode(i1 zeroext false)
+  %24 = load i32, i32* %total.addr, align 4
+  %25 = call i8* @nish_str_from_i32(i32 %24)
+  call void @nish_print(i8* %25)
+  %26 = call i32 @nish_set_raw_mode(i1 zeroext false)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

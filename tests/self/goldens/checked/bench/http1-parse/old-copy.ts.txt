@@ -198,7 +198,7 @@ function H1bParser.buffered(this: H1bParser): i32 -> @H1bParser.buffered [export
   stackSites=0 stackLocals=0
 function H1bParser.upgradeBytes(this: H1bParser): u8[] -> @H1bParser.upgradeBytes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic nish_panic_index nish_panic_overflow
+  calls: nish_panic_index nish_panic_overflow
   pointer this: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (let)

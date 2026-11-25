@@ -1,0 +1,2 @@
+error: `slice` may panic here
+`fileReadAt` panics when its window is outside `buf`, and a later argument may call something that changes `buf` after `buf.length` was read: compute that argument into a `const` before the call

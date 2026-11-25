@@ -7,14 +7,13 @@ import wipe from "nish:secret" -> generic function wipe
 import x25519Secret from "nish/crypto/x25519" -> function @nish.x25519
 import x25519BaseSecret from "nish/crypto/x25519" -> function @nish.x25519Base
 function copyOf(bytes: u8[]): u8[] -> @copyOf [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 i: i32 (let)
 function x25519Plain(scalar: u8[], u: u8[]): u8[] | null -> @x25519Plain [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.x25519
   calls: copyOf nish.expose$arr.u8$arr.u8$fn.6.copyOf nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish.x25519
   pointer scalar: size=0 writesThrough=false captured=false passedTo=copyOf#0
@@ -30,7 +29,7 @@ function x25519Plain(scalar: u8[], u: u8[]): u8[] | null -> @x25519Plain [export
   callee +6:21 expose<u8[], u8[], copyOf> -> @nish.expose$arr.u8$arr.u8$fn.6.copyOf
   callee +7:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
 function x25519BasePlain(scalar: u8[]): u8[] | null -> @x25519BasePlain [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.x25519Base
   calls: copyOf nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish.x25519Base
   pointer scalar: size=0 writesThrough=false captured=false passedTo=copyOf#0

@@ -6,7 +6,7 @@ struct Point (class) size=8 align=4
   field y: i32 index=1 offset=4 initialized
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow nish_panic nish_panic_index nish_panic_overflow
+  calls: nish_array_grow nish_panic_index nish_panic_overflow
   stackSites=4 stackLocals=4
   local +0:7 total: i32 (let)
   local +4:12 i: i32 (let)

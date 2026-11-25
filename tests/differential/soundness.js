@@ -448,7 +448,7 @@ const ending = (r) => {
  * (`emitForeignBuffers` in `src/emit-strings.ts`).
  */
 const RUNTIME_PANIC =
-  /^(index out of range: |slice out of range: |attempt to |nish: out of memory$|`[^`]+`: argument \d+ \(.*\) counts more bytes than )/
+  /^(index out of range: |slice out of range: |attempt to |nish: out of memory$|`[^`]+`: argument \d+ \(.*\) counts more (?:bytes|elements) than )/
 
 /**
  * The panic line a run printed, or null: a runtime panic's line, else, for a

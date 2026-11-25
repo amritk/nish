@@ -1,0 +1,12 @@
+tryPlainDate(2024, 2, 29) => ok 2024-02-29
+tryPlainDate(2023, 2, 29) => err PlainDate: day 29 is outside 1 to 28
+tryPlainDate(300000, 1, 1) => err PlainDate: year 300000 is outside -271821 to 275760
+tryPlainDate(-271821, 4, 18) => err PlainDate: the date is outside Temporal's range
+tryPlainDateFrom("2024-01-15") => ok 2024-01-15
+tryPlainDateFrom("2024-13-45") => err PlainDate: cannot parse "2024-13-45"
+tryPlainDateFrom("not a date") => err PlainDate: cannot parse "not a date"
+tryPlainDateFrom("+999999-01-01") => err PlainDate: cannot parse "+999999-01-01"
+tryPlainDateFrom("-500000-01-01") => err PlainDate: cannot parse "-500000-01-01"
+2024-01-31.tryAdd(P1M) => ok 2024-02-29
++275760-09-13.tryAdd(P1D) => err PlainDate: the date is outside Temporal's range
+2024-01-01.tryAdd(P4000000Y) => err PlainDate: the date is outside Temporal's range

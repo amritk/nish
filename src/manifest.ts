@@ -1385,6 +1385,12 @@ const manifestHasKeyOrValue = (object: string, scan: i32): boolean => {
  * compiled in, and is only ever asked about to name the failure: a package
  * that offers it and neither of the other two supports the other mode only.
  *
+ * `targeted` is asked about before either: the target-qualified condition
+ * (`nish-wasm32`) a wasm build reads, or empty for a native build, which reads
+ * no target row. It outranks `primary` for the reason `branding.ts` gives, and
+ * a `targeted` key whose value is not a target answers no file, as `primary`'s
+ * does.
+ *
  * The whole object is asked for `primary` before it is asked for `fallback`,
  * rather than both being asked for in one walk: the mode-qualified condition is
  * the plain one refined, so a manifest that declares `nish` above `nish-f64`
@@ -1398,6 +1404,7 @@ const manifestHasKeyOrValue = (object: string, scan: i32): boolean => {
 export const nishExportEntry = (
   manifest: string,
   subpath: string,
+  targeted: string,
   primary: string,
   fallback: string,
   other: string
@@ -1422,7 +1429,10 @@ export const nishExportEntry = (
   if (conditions.length === 0) {
     return new ManifestEntry(MANIFEST_NO_FILE, "")
   }
-  let selected = manifestField(conditions, primary)
+  let selected = targeted.length > 0 ? manifestField(conditions, targeted) : ""
+  if (selected.length === 0) {
+    selected = manifestField(conditions, primary)
+  }
   if (selected.length === 0) {
     selected = manifestField(conditions, fallback)
   }
@@ -1468,7 +1478,7 @@ export const nishExportTarget = (
   primary: string,
   fallback: string
 ): string | null => {
-  const entry = nishExportEntry(manifest, subpath, primary, fallback, "")
+  const entry = nishExportEntry(manifest, subpath, "", primary, fallback, "")
   return entry.status === MANIFEST_FOUND ? entry.target : null
 }
 

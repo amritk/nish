@@ -47,7 +47,7 @@ Whether `base` is a URL this module will ask: `https://`, or `http://` only to t
 
 <scalar-card title="release​Cache​Fresh" icon="phosphor/regular/function" href="#releasecachefresh">
 
-Whether a cache checked at `checkedMs` still answers at `nowMs`: younger than `maxAgeMs`, and not dated in the future, which a clock set back or a planted file would give.
+Whether a cache checked at `checkedMs` still answers at `nowMs`: younger than `maxAgeMs`, and not dated in the future, which a clock set back or a planted file would give, which covers a clock before 1970.
 
 </scalar-card>
 
@@ -196,7 +196,8 @@ True when the URL may be fetched.
 
 Whether a cache checked at `checkedMs` still answers at `nowMs`: younger
 than `maxAgeMs`, and not dated in the future, which a clock set back or a
-planted file would give.
+planted file would give, which covers a clock before 1970. A cache dated
+before 1970, which only a hand-built one can be, is not fresh either.
 
 ```ts
 const releaseCacheFresh: (

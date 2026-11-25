@@ -18,7 +18,6 @@ declare noundef i32 @nish_file_read_at(i32 noundef, %struct.nish_array* noundef 
 declare noundef i64 @nish_file_size(i32 noundef) #0
 declare noundef i32 @nish_file_close(i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
 
 define noundef i32 @openFile(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
 entry:
@@ -32,21 +31,8 @@ entry:
   %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %2 = trunc i64 %1 to i32
   %3 = sext i32 %2 to i64
-  %4 = add i64 0, %3
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %into, i64 0, i32 0
-  %6 = load i64, i64* %5, align 8
-  %7 = icmp ule i64 0, %4
-  %8 = icmp ule i64 %4, %6
-  %9 = and i1 %7, %8
-  br i1 %9, label %net.ok, label %net.fail
-
-net.fail:
-  call void @nish_panic_slice(i64 0, i64 %4, i64 %6)
-  unreachable
-
-net.ok:
-  %10 = call i32 @nish_file_read_at(i32 %fd, %struct.nish_array* %into, i64 0, i64 %3, i64 %pos)
-  ret i32 %10
+  %4 = call i32 @nish_file_read_at(i32 %fd, %struct.nish_array* %into, i64 0, i64 %3, i64 %pos)
+  ret i32 %4
 }
 
 define noundef i64 @sizeOf(i32 noundef %fd) #0 {

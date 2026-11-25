@@ -1,0 +1,1 @@
+and must export the same names with the same signatures, because a wasm32 build compiles it in its place: `scale` is `export const scale = (x: i32): i32 =>` in

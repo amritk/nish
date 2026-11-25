@@ -1386,17 +1386,50 @@ are not all in `[0, length)`; and the second check of a compound store
 - *What proves it away:* a dominating `if (a.length > 0)`, the length fact the
   bounds proof already keeps (`tests/cases/panics_pop`)
 
-**`slice`**: `s.slice(a, b)`, `dst.set(src, at)`,
+**`slice`**: `s.slice(a, b)`, an array's `xs.slice(a, b)`, `dst.set(src, at)`,
 `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`,
-`netWrite`, `netWrite2`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the
-range outside the receiver
+`netWrite`, `netWrite2`, `writeBytes`, `readStdin`, `fileReadAt`,
+`udpSendTo` and `udpRecvFrom`: the range outside the receiver
 
-- *What proves it away:* nothing yet: `substring` clamps instead, and is not a
-  site; an array's `xs.slice` is not a `slice` site but a `call` reaching
-  `std/array.ts`'s `panic` ([Callback methods and
-  `slice`](builtins.md#callback-methods-and-slice)) (`tests/cases/panics_slice`,
-  `str_from_bytes_oob`, `reject_deny_panics_from_bytes`,
-  `io_write_bytes_bounds`, `net_write2_bounds`)
+- *What proves it away:* the bounds walk, at the call, in the state every
+  argument leaves: `0 <= start <= end <= length` for a `slice` and for
+  `String.fromBytes`, read from a guard such as
+  `if (start >= 0 && start <= end && end <= bytes.length)`, from literals the
+  length is known to reach (`if (2 <= bytes.length)` proves
+  `String.fromBytes(bytes, 0, 2)`), and from `start <= end` between two
+  locals, which a guard, a copy (`const from = i`) or an offset
+  (`const j = i + 1`) records, an increment of the larger keeps, and an
+  increment of the smaller or a decrement of the larger drops;
+  `dst.set(src)` or `dst.set(src, 0)` under `src.length <= dst.length`, and
+  no other offset yet; and a buffer window
+  `[off, off + len)` whose `off` is 0 and `len` within the buffer, whose
+  `len` is a literal `off` reaches that far below the length, or whose `len`
+  is `end - off` for an `end` the range `[off, end)` holds as a `slice`'s
+  does (`0 <= off <= end <= buf.length`, the rest of the buffer
+  `buf.length - off` among them). When `end` is a local of the same integer
+  type that the guard keeps at or above `off >= 0`, it also proves
+  `end - off` does not overflow, since that lies in `[0, end]`; an `end` of
+  `buf.length`, `off + c` or `toI32(buf.length)` leaves the subtraction its
+  overflow check. A bound held in a field is copied into a local the guard
+  tests (`const end = this.end`), and a write to that local after the guard
+  drops what it proved. Every bound is a literal, a constant, a local, a `.length`, or a sum or difference of them, and no later
+  argument assigns or calls anything but a builtin integer conversion, since
+  the check reads the length after every argument has run. A proven check is left out of the IR, but for an
+  array's `slice`, whose check `std/array.ts` still makes and its caller does
+  not follow ([Callback methods and `slice`](builtins.md#callback-methods-and-slice)).
+  `substring` clamps instead, and is not a site (`tests/cases/panics_slice`,
+  `deny_panics_ranges`, `str_from_bytes_oob`, `io_write_bytes_bounds`,
+  `net_write2_bounds`; `reject_deny_panics_from_bytes`,
+  `reject_deny_panics_arr_slice`, `reject_deny_panics_array_slice`,
+  `reject_deny_panics_set_offset`, `reject_deny_panics_write_bytes`,
+  `reject_deny_panics_range_decrement`, `reject_deny_panics_range_increment`,
+  `reject_deny_panics_range_negative_start` and
+  `reject_deny_panics_range_rebound`, `reject_deny_panics_window_shrink`,
+  `reject_deny_panics_window_unordered`,
+  `reject_deny_panics_window_negative_start`,
+  `reject_deny_panics_window_past_end` and
+  `reject_deny_panics_window_rewritten` stay refused;
+  `deny_panics_window` builds)
 
 **`divide`**: integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1`
 when signed
@@ -1451,7 +1484,15 @@ integer, a `u32` under `--number-mode i32`)
   integer constant (as for `divide`) from 0 to 2^31 - 1 inclusive, one more
   than a named divisor or `&`/`>>>` operand is read up to, which is not checked
   and not a site (`tests/cases/panics_array_length`, `deny_panics_const_names`;
-  a negative constant stays refused, `reject_deny_panics_const_negative_length`)
+  a negative constant stays refused, `reject_deny_panics_const_negative_length`).
+  An `i32` length is checked only for being negative, since no `i32` passes
+  the limit, so the bounds walk proves it where the `new` runs once the
+  length is known non-negative: a local of a range from 0 such as
+  `integer<0, N>` (the call reads a ranged value as its base `i32`, so it is a
+  site, proven as it stands), a guard such as `if (n >= 0)`, or a literal, a
+  `.length` or a sum of them; the site is listed as proven and the IR has no
+  check (`deny_panics_ranges`; `reject_deny_panics_array_length_unguarded`
+  and `reject_deny_panics_array_length`, an `i64`, stay refused)
 
 **`panic`**: `panic(message)`
 
@@ -1512,7 +1553,7 @@ or the pointer of a
   `tests/cases/panics_ffi_read_cstring_null`)
 
 **`ffi-length`**: a call to a
-[`declare function`](declarations.md#a-u8-parameter-a-buffer-and-its-count) whose count is
+[`declare function`](declarations.md#a-typed-array-parameter-a-buffer-and-its-count) whose count is
 larger than a `u8[]` buffer of its run:
 `` `name`: argument N (count) counts more bytes than argument M (buf) holds ``,
 compared unsigned, so a count that wrapped below zero fails too
@@ -1719,6 +1760,16 @@ file, the network or the command line, a limit the input can reach — is
 answered with a `Result` or `null`, not a panic. A fix removes the failure or
 returns it; it does not hide the check behind `nish:unsafe` or a guard that
 answers a made-up value.
+
+**A site of another kind that stays is named, with its reason, in the
+file's `residual` list**, by module, function and kind, with the
+`docs/security/` record that gives the reason: an `array-length` whose length
+is the caller's input, which the prover cannot bound, or a constant-time
+function's first read of an array its caller passes in, where the length test
+that would prove it is an early return, a branch in a constant-time path. In a
+module with an entry, the counted sites must be the entries, function by
+function and kind by kind, so a kept site that moves, or a new one in a
+listed function, fails; the record must exist and name the function.
 
 **Kept means only that the ratchet accepts the site.** It is still a panic
 site: a call from the [no-panic scope](#the-no-panic-scope) that reaches it is

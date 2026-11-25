@@ -1,0 +1,2 @@
+error: `slice` may panic here
+`slice` panics when `[a, b)` is outside `xs`, and nothing proves it in range here: guard the call — `if (a >= 0 && a <= b && b <= xs.length)` proves it

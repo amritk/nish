@@ -1,0 +1,2 @@
+error: `array-length` may panic here
+`new Array` panics on a negative length, and `n` is not proven non-negative here: guard it with a test that reaches the call — `if (n >= 0)` proves it — or give the local a range from 0, `integer<0, N>`, or write the length as a literal
