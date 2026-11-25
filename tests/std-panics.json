@@ -2,9 +2,10 @@
   "note": [
     "The panic sites std/ still holds, per module and per kind, counted by tests/run.js (the std-panics section) from each git-tracked std/ module's --emit-panics report: not proven, not allowed, not of kind call, oom or unchecked, deduped by module:line:col:kind.",
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
-    "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
+    "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
+    "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1167,
+  "total": 1092,
   "explicit": {
     "kept": 364,
     "toFix": 7
@@ -40,25 +41,14 @@
     },
     "std/crypto/aes.ts": {
       "array-length": 2,
-      "index": 15,
-      "overflow": 7
+      "index": 7
     },
     "std/crypto/base64url.ts": {
       "array-length": 2,
       "panic": 7
     },
-    "std/crypto/bcrypt-batch.ts": {
-      "index": 1,
-      "overflow": 4
-    },
-    "std/crypto/bcrypt.ts": {
-      "index": 8,
-      "overflow": 8
-    },
     "std/crypto/chacha20poly1305.ts": {
-      "array-length": 4,
-      "index": 16,
-      "overflow": 19
+      "array-length": 4
     },
     "std/crypto/hkdf.ts": {
       "panic": 14
@@ -82,9 +72,6 @@
     },
     "std/crypto/sha512.ts": {
       "panic": 3
-    },
-    "std/crypto/x25519.ts": {
-      "overflow": 4
     },
     "std/crypto/x509-random.ts": {
       "io-exit": 2
@@ -1628,6 +1615,107 @@
       "module": "std/yaml.ts",
       "function": "parseYamlWith",
       "reason": "options.maxDepth must be 1 to 1000; the caller sets it statically, and the YAML text itself yields diagnostics"
+    }
+  ],
+  "residual": [
+    {
+      "module": "std/crypto/aes.ts",
+      "function": "aesSbox",
+      "sites": {
+        "index": 1
+      },
+      "reason": "a constant-time bitsliced step's first read of a state or key array its exported caller passes in; the read proves the rest, and a length guard would be an early return in a constant-time path, so the bounds check stays as the one site",
+      "record": "docs/security/crypto-aead.md"
+    },
+    {
+      "module": "std/crypto/aes.ts",
+      "function": "aesShiftRows",
+      "sites": {
+        "index": 1
+      },
+      "reason": "a constant-time bitsliced step's first read of a state or key array its exported caller passes in; the read proves the rest, and a length guard would be an early return in a constant-time path, so the bounds check stays as the one site",
+      "record": "docs/security/crypto-aead.md"
+    },
+    {
+      "module": "std/crypto/aes.ts",
+      "function": "aesMixColumns",
+      "sites": {
+        "index": 1
+      },
+      "reason": "a constant-time bitsliced step's first read of a state or key array its exported caller passes in; the read proves the rest, and a length guard would be an early return in a constant-time path, so the bounds check stays as the one site",
+      "record": "docs/security/crypto-aead.md"
+    },
+    {
+      "module": "std/crypto/aes.ts",
+      "function": "aesAddRoundKey",
+      "sites": {
+        "index": 3
+      },
+      "reason": "the constant-time AddRoundKey's first reads of the round keys (rk[base], rk[base + 7]) and of the state (q[7]); they prove the other thirteen, and a length guard would be an early return in a constant-time path",
+      "record": "docs/security/crypto-aead.md"
+    },
+    {
+      "module": "std/crypto/aes.ts",
+      "function": "ghashMultiply",
+      "sites": {
+        "index": 1
+      },
+      "reason": "the constant-time GHASH multiply's first read of y, an exported function's argument; it proves the second, and a length guard would be an early return in a constant-time path",
+      "record": "docs/security/crypto-aead.md"
+    },
+    {
+      "module": "std/crypto/aes.ts",
+      "function": "aesGcmSeal",
+      "sites": {
+        "array-length": 1
+      },
+      "reason": "new Array(n) with n the plaintext length plus the 16-byte tag, below 2^31 by Seal's guard: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "record": "docs/security/crypto-aead.md"
+    },
+    {
+      "module": "std/crypto/aes.ts",
+      "function": "aesGcmOpen",
+      "sites": {
+        "array-length": 1
+      },
+      "reason": "new Array(n) with n the sealed length less the tag: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "record": "docs/security/crypto-aead.md"
+    },
+    {
+      "module": "std/crypto/chacha20poly1305.ts",
+      "function": "chacha20QuarterRound",
+      "sites": {
+        "array-length": 1
+      },
+      "reason": "new Array(n) with n the given state's length: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "record": "docs/security/crypto-aead.md"
+    },
+    {
+      "module": "std/crypto/chacha20poly1305.ts",
+      "function": "chacha20",
+      "sites": {
+        "array-length": 1
+      },
+      "reason": "new Array(n) with n the input's length: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "record": "docs/security/crypto-aead.md"
+    },
+    {
+      "module": "std/crypto/chacha20poly1305.ts",
+      "function": "chacha20Poly1305Seal",
+      "sites": {
+        "array-length": 1
+      },
+      "reason": "new Array(n) with n the plaintext length plus the 16-byte tag, bounded by Seal's guard: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "record": "docs/security/crypto-aead.md"
+    },
+    {
+      "module": "std/crypto/chacha20poly1305.ts",
+      "function": "chacha20Poly1305Open",
+      "sites": {
+        "array-length": 1
+      },
+      "reason": "new Array(n) with n the sealed length less the tag: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "record": "docs/security/crypto-aead.md"
     }
   ]
 }

@@ -135,7 +135,7 @@ randomness: 32 random bytes for the ClientHello and a 32-byte private key per
 key-exchange group. Use a fresh key from a secure random source for every
 connection; the fixed bytes below are only for the example:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/tls/client.ts` code that reaches `std/crypto/x25519.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/tls/client.ts` code that reaches `std/crypto/sha512.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { TLS_LEVEL_INITIAL } from "nish/net/tls";

@@ -491,20 +491,26 @@ const aesMixColumns = (q: u64[]): void => {
   q[7] = t6 ^ n7 ^ aesRowAfterNext(t7)
 }
 
-/** AddRoundKey (FIPS 197 §5.1.4): the eight words of `rk` from `at` into the state. */
+/**
+ * AddRoundKey (FIPS 197 §5.1.4): the eight words of `rk` from `at` into the
+ * state. Its callers pass `8 * round` for a round of at most 14, so `at` is at
+ * most 112 and the mask `at & 127` changes nothing; it bounds `base + 7`, so
+ * the sum cannot overflow, with no branch.
+ */
 const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
+  const base: i32 = at & 127
   // The first and last key words and the last plane first: their checked
   // reads prove every other index below.
-  const k0: u64 = rk[at]
-  const k7: u64 = rk[at + 7]
+  const k0: u64 = rk[base]
+  const k7: u64 = rk[base + 7]
   const q7: u64 = q[7]
   q[0] = q[0] ^ k0
-  q[1] = q[1] ^ rk[at + 1]
-  q[2] = q[2] ^ rk[at + 2]
-  q[3] = q[3] ^ rk[at + 3]
-  q[4] = q[4] ^ rk[at + 4]
-  q[5] = q[5] ^ rk[at + 5]
-  q[6] = q[6] ^ rk[at + 6]
+  q[1] = q[1] ^ rk[base + 1]
+  q[2] = q[2] ^ rk[base + 2]
+  q[3] = q[3] ^ rk[base + 3]
+  q[4] = q[4] ^ rk[base + 4]
+  q[5] = q[5] ^ rk[base + 5]
+  q[6] = q[6] ^ rk[base + 6]
   q[7] = q7 ^ k7
 }
 
@@ -529,17 +535,20 @@ export const aesBitslicedRound = (q: u64[], rk: u64[], at: i32): void => {
 
 /**
  * The cipher (FIPS 197 §5.1) on the four blocks of `buf[0 .. 64)`, in place,
- * under the bitsliced round keys `rk`. `q` is scratch.
+ * under the bitsliced round keys `rk`. `q` is scratch. `rounds` is 10 or 14,
+ * so `rounds & 15` is `rounds`: the mask lets the bounds prover see that
+ * neither `8 * round` nor `8 * last` can overflow.
  */
 const aesEncryptBatch = (rk: u64[], rounds: i32, buf: u8[], q: u64[]): void => {
   aesPack(q, buf)
   aesAddRoundKey(q, rk, 0)
-  for (let round: i32 = 1; round < rounds; round++) {
+  const last: i32 = rounds & 15
+  for (let round: i32 = 1; round < last; round++) {
     aesBitslicedRound(q, rk, 8 * round)
   }
   aesSbox(q)
   aesShiftRows(q)
-  aesAddRoundKey(q, rk, 8 * rounds)
+  aesAddRoundKey(q, rk, 8 * last)
   aesUnpack(buf, q)
 }
 
@@ -570,26 +579,34 @@ const aesSubWord = (w: u32, q: u64[]): u32 => {
   return out
 }
 
-/** Four bytes of `data` from `at` as a big-endian word; the caller has checked the window. */
+/**
+ * Four bytes of `data` from `at` as a big-endian word, or 0 for a window
+ * outside `data`, which no caller passes: each has checked it.
+ */
 const aesLoad32 = (data: u8[], at: i32): u32 => {
-  // The last byte first: every caller's `at` is non-negative, so its checked
-  // read proves the other three.
-  const b3: u32 = toU32(data[at + 3])
+  if (at < 0 || at > toI32(data.length) - 4) {
+    return 0
+  }
   return (
     (toU32(data[at]) << toU32(24)) |
     (toU32(data[at + 1]) << toU32(16)) |
     (toU32(data[at + 2]) << toU32(8)) |
-    b3
+    toU32(data[at + 3])
   )
 }
 
-/** `w` big-endian into `out[at .. at + 4)`; the caller has checked the window. */
+/**
+ * `w` big-endian into `out[at .. at + 4)`, or nothing for a window outside
+ * `out`, which no caller passes: each has checked it.
+ */
 const aesStore32 = (out: u8[], at: i32, w: u32): void => {
-  // The first and last bytes first: their checked stores prove the two between.
+  if (at < 0 || at > toI32(out.length) - 4) {
+    return
+  }
   out[at] = toU8(w >> toU32(24))
-  out[at + 3] = toU8(w)
   out[at + 1] = toU8(w >> toU32(16))
   out[at + 2] = toU8(w >> toU32(8))
+  out[at + 3] = toU8(w)
 }
 
 /**
@@ -612,8 +629,9 @@ const aesScheduleInto = (key: u8[], rounds: i32, rk: u64[]): void => {
   const nk: integer<4, 8> = aes128 ? 4 : 8
   const total: integer<44, 60> = aes128 ? 44 : 60
   const lastRound: integer<10, 14> = aes128 ? 10 : 14
-  // Sized for AES-256; AES-128 uses the first 44 words.
-  const w: u32[] = new Array<u32>(60)
+  // Sized for AES-256 and rounded up to 64 so a mask bounds its index;
+  // AES-128 uses the first 44 words.
+  const w: u32[] = new Array<u32>(64)
   const q: u64[] = new Array<u64>(8)
   const keyLength: i32 = toI32(key.length)
   // The key's own Nk words.
@@ -638,7 +656,9 @@ const aesScheduleInto = (key: u8[], rounds: i32, rk: u64[]): void => {
     } else if (nk > 6 && pos === 4) {
       temp = aesSubWord(temp, q)
     }
-    const word: u32 = w[i - nk] ^ temp
+    // `i - nk` is in [0, 56): the mask is a no-op the bounds prover can read.
+    const back: i32 = (i - nk) & 63
+    const word: u32 = w[back] ^ temp
     w[i] = word
     prev = word
   }
@@ -683,13 +703,20 @@ const aesLoad64 = (data: u8[], at: i32, end: i32): u64 => {
   return v
 }
 
-/** `v` big-endian into `out[at .. at + 8)`; a byte outside `out` is dropped. */
+/**
+ * `v` big-endian into `out[at .. at + 8)`, or nothing for a window outside
+ * `out`, which no caller passes: each writes inside an array it sized.
+ */
 const aesStore64 = (out: u8[], at: i32, v: u64): void => {
+  if (at < 0 || at > toI32(out.length) - 8) {
+    return
+  }
   const length: i32 = toI32(out.length)
+  let to: i32 = at
   for (let i: i32 = 0; i < 8; i++) {
-    const to: i32 = at + i
-    if (to >= 0 && to < length) {
+    if (to < length) {
       out[to] = toU8(v >> toU64((7 - i) * 8))
+      to = to + 1
     }
   }
 }
@@ -823,9 +850,11 @@ export const aesKeyInto = (key: u8[], out: AesKey): boolean => {
   out.rounds = rounds
   const h: u8[] = new Array<u8>(AES_BLOCK)
   aesEncryptOne(out, new Array<u8>(AES_BLOCK), h)
-  // The second word first: its checked store proves the first.
-  hash[1] = aesLoad64(h, 8, 16)
-  hash[0] = aesLoad64(h, 0, 8)
+  // Checked above; tested again here, where the bounds prover can see it.
+  if (toI32(hash.length) > 1) {
+    hash[0] = aesLoad64(h, 0, 8)
+    hash[1] = aesLoad64(h, 8, 16)
+  }
   wipe(h)
   return true
 }
@@ -1173,9 +1202,12 @@ const aesGcmTag = (
   ghashLengths(y, hHi, hLo, aadLength, textLength)
   const mask: u8[] = new Array<u8>(AES_BLOCK)
   aesEncryptOne(key, j0, mask)
-  // The second word first: its checked read proves the first.
-  y[1] = y[1] ^ aesLoad64(mask, 8, 16)
-  y[0] = y[0] ^ aesLoad64(mask, 0, 16)
+  // Every caller passes two words; tested here, where the bounds prover can
+  // see it past the calls above.
+  if (toI32(y.length) > 1) {
+    y[0] = y[0] ^ aesLoad64(mask, 0, 16)
+    y[1] = y[1] ^ aesLoad64(mask, 8, 16)
+  }
   wipe(mask)
 }
 
@@ -1215,7 +1247,7 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
   // is still an array length.
   const h: u64[] = key.h
   if (
-    length > 0x7fffffef ||
+    length > 2147483631 ||
     toI32(h.length) !== 2 ||
     !aesKeyUsable(key) ||
     toI32(iv.length) === 0 ||
@@ -1231,10 +1263,11 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
   aesGcmCtr(key, j0, plaintext, out, length)
   const tag: u64[] = new Array<u64>(2)
   aesGcmTag(tag, key, hHi, hLo, j0, aad, out, length)
-  // The second word first: its checked read proves the first.
-  const tagLo: u64 = tag[1]
-  aesStore64(out, length, tag[0])
-  aesStore64(out, length + 8, tagLo)
+  // Two words, as made above; tested where the bounds prover can see it.
+  if (toI32(tag.length) > 1) {
+    aesStore64(out, length, tag[0])
+    aesStore64(out, length + 8, tag[1])
+  }
   wipe(j0)
   return out
 }
@@ -1277,14 +1310,17 @@ export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[]
   const j0: u8[] = aesGcmJ0(key, hHi, hLo, iv)
   const tag: u64[] = new Array<u64>(2)
   aesGcmTag(tag, key, hHi, hLo, j0, aad, sealed, length)
-  // The second word first: its checked read proves the first.
-  const tagLo: u64 = tag[1]
-  const same: u64 = aesGcmTagMask(
-    tag[0],
-    tagLo,
-    aesLoad64(sealed, length, total),
-    aesLoad64(sealed, length + 8, total)
-  )
+  // Two words, as made above; tested where the bounds prover can see it, and
+  // a tag it could not read matches nothing.
+  let same: u64 = 0
+  if (toI32(tag.length) > 1) {
+    same = aesGcmTagMask(
+      tag[0],
+      tag[1],
+      aesLoad64(sealed, length, total),
+      aesLoad64(sealed, length + 8, total)
+    )
+  }
   wipe(tag)
   let out: u8[] | null = null
   if ((same & hashKeySet) !== toU64(0)) {
