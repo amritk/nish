@@ -452,8 +452,8 @@ const temporalPutFraction = (out: u8[], at: i32, ns: i32): i32 => {
     return at
   }
   const rest: i32 = ns % 100000000
-  let end: i32 = temporalPutByte(out, temporalPutByte(out, at, 46), 48 + ns / 100000000)
-  end = temporalPut4(out, temporalPut4(out, end, rest / 10000), rest % 10000)
+  let end: i32 = temporalPutByte(out, temporalPutByte(out, at, 46), 48 + toI32(ns / 100000000))
+  end = temporalPut4(out, temporalPut4(out, end, toI32(rest / 10000)), rest % 10000)
   // Give back the zeros after the first digit, `last` the byte before `end`.
   const first: i64 = toI64(at) + 1
   let last: i32 = toI32(toI64(end) - 1)
