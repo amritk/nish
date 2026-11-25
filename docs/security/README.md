@@ -82,7 +82,8 @@ the record that found it. The notes below the table name each such finding.
 | Header import, `nish c-import` | [c-import.md](c-import.md) | `src/c-import.ts`, `src/c-import-model.ts`, `src/c-import-json.ts`; the NL3062 data-model refusal in `src/compilation.ts` | 0 / 0 / 3 / 5 | 0 / 0 / 0 / 1 ³¹ |
 | Protobuf wire format | [protobuf.md](https://github.com/amritk/nish/blob/main/docs/security/protobuf.md) | `std/net/protobuf.ts`; `src/proto-lex.ts`, `src/proto-parse.ts`, `src/proto-emit.ts`, `src/proto-cli.ts` and the `decode` methods they write | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | gRPC calls, unary and streaming | [grpc.md](https://github.com/amritk/nish/blob/main/docs/security/grpc.md) | `std/net/grpc.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ³³ |
-| **Total** ⁸ | | | **3 / 19 / 109 / 230** | **0 / 0 / 2 / 47** |
+| Graphics shim over wgpu-native and SDL3 | [gfx.md](https://github.com/amritk/nish/blob/main/docs/security/gfx.md) | `runtime/gfx/nish-gfx.c`, `runtime/gfx/nish-gfx.h` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 4 ³⁴ |
+| **Total** ⁸ | | | **3 / 19 / 109 / 231** | **0 / 0 / 2 / 51** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -488,6 +489,9 @@ the record that found it. The notes below the table name each such finding.
     stream slot every Trailers-Only answer kept until its connection closed,
     on `main` before it. GR-1 to GR-4 and GR-7 are properties and are not
     counted. The Total moves by this row: fixed +1 Medium.
+34. GFX-1 (Low) was fixed in the stage that wrote the record: a bind group
+    entry of size 0 that aborted the process in wgpu-native. GFX-2 to GFX-5
+    (Low) are open. The Total moves by this row: fixed +1 Low, open +4 Low.
 
 ## Fuzzed
 
@@ -517,7 +521,8 @@ building the runtime for the harness, not by a target.
 ## Not yet audited
 
 Files of the attacker-facing surface (`std/net/**/*.ts`, `std/crypto/*.ts`,
-`runtime/*.c`) that no record's `## Scope` table names yet.
+`runtime/*.c`, `runtime/gfx/**/*.c`) that no record's `## Scope` table names
+yet.
 `node scripts/security-scope.mjs` (run by `npm test` and CI) fails on a file
 of that surface that is in no scope and not listed here, and on a row here
 whose file is now in a scope or gone, so this list only shrinks: a new module
