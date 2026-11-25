@@ -6882,16 +6882,22 @@ if (dealtHere("stdPanics")) {
     extra !== null && residualMismatches([...sites.values(), extra], residual).length === 1,
     "residualMismatches did not report a fabricated extra site"
   )
-  const badRecords = residual.filter((r) => {
-    const file = path.join(root, r.record ?? "")
-    return (
+  // Each record read once, however many entries cite it; null when missing.
+  const recordText = new Map()
+  const readRecord = (record) => {
+    if (!recordText.has(record)) {
+      const file = path.join(root, record)
+      recordText.set(record, fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null)
+    }
+    return recordText.get(record)
+  }
+  const badRecords = residual.filter(
+    (r) =>
       typeof r.reason !== "string" ||
       r.reason.length === 0 ||
       !r.record?.startsWith("docs/security/") ||
-      !fs.existsSync(file) ||
-      !fs.readFileSync(file, "utf8").includes(r.function)
-    )
-  })
+      !(readRecord(r.record)?.includes(r.function) ?? false)
+  )
   check(
     `std-panics: every residual entry says why, and its docs/security record exists and names its function`,
     residual.length > 0 && badRecords.length === 0,

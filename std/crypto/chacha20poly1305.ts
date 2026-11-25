@@ -100,8 +100,8 @@ const chacha20Rotl = (x: u32, n: u32): u32 => (x << n) | (x >>> (32 - n))
 /**
  * The little-endian `u32` at `buf[at]` to `buf[at + 3]`, or 0 for a window
  * outside `buf`, which no caller passes: the guard lets the range prover
- * discharge every index, and the last byte is read first so that one check
- * covers the other three. `poly1305Le64` reads its eight bytes the same way.
+ * discharge every index, whatever order the bytes are read in.
+ * `poly1305Le64` guards its eight bytes the same way.
  * The copy `tests/cases/ct_asm_chacha20poly1305` holds to the disassembly
  * check reads with `uncheckedGet` and `wrappingAdd` instead, because a bounds
  * or overflow check is a branch that check refuses; the ones here test only
@@ -676,9 +676,9 @@ export const poly1305KeyGen = (key: u8[], nonce: u8[]): u8[] | null => {
 }
 
 /**
- * The AEAD tag of RFC 8439 §2.8 over `aad` and the first `len` bytes of
- * ciphertext in `ct`: Poly1305 under `polyKey` of the AAD and the ciphertext, each
- * zero-padded to 16 bytes, and then both lengths as little-endian `u64`s.
+ * The AEAD tag of RFC 8439 §2.8 over `aad` and the first `len` bytes of `ct`:
+ * Poly1305 under `polyKey` of the AAD and the ciphertext, each zero-padded to
+ * 16 bytes, and then both lengths as little-endian `u64`s.
  */
 const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], len: i32): u8[] => {
   const aadLen: i32 = toI32(aad.length)
@@ -819,7 +819,7 @@ export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: 
   // guard holds.
   const received: u8[] = new Array<u8>(16)
   let j: i32 = len
-  for (let i: i32 = 0; i < 16 && i < toI32(received.length); i++) {
+  for (let i: i32 = 0; i < 16; i++) {
     if (j >= 0 && j < toI32(sealed.length)) {
       received[i] = sealed[j]
       j = j + 1
