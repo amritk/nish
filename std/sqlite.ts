@@ -80,14 +80,14 @@
 // runtime's (NL2202). scripts/build.sh links SQLite for a module that declares
 // an `sqlite3_` or a `nishsqlite_` function, as this one does.
 declare function nishsqlite_open(path: string, flags: i32): i32
-declare function nishsqlite_open_errmsg(): string
+declare function nishsqlite_open_errmsg(): string | null
 declare function nishsqlite_close(h: i32): i32
 declare function nishsqlite_exec(h: i32, sql: string): i32
-declare function nishsqlite_errmsg(h: i32): string
+declare function nishsqlite_errmsg(h: i32): string | null
 declare function nishsqlite_last_insert_rowid(h: i32): i64
 declare function nishsqlite_changes(h: i32): i64
 declare function nishsqlite_prepare(h: i32, sql: string): i32
-declare function nishsqlite_stmt_errmsg(h: i32): string
+declare function nishsqlite_stmt_errmsg(h: i32): string | null
 declare function nishsqlite_finalize(h: i32): i32
 declare function nishsqlite_step(h: i32): i32
 declare function nishsqlite_reset(h: i32): i32
@@ -130,8 +130,8 @@ declare function nishsqlite_cursor_column_type(h: i32, c: i32): i32
 declare function nishsqlite_cursor_column_i64(h: i32, c: i32): i64
 declare function nishsqlite_cursor_column_into(h: i32, c: i32, buf: u8[], n: u64, at: i32): i32
 declare function nishsqlite_cursor_rowid(h: i32): i64
-declare function sqlite3_errstr(code: i32): string
-declare function sqlite3_libversion(): string
+declare function sqlite3_errstr(code: i32): string | null
+declare function sqlite3_libversion_number(): i32
 
 /** Success. */
 export const SQLITE_OK: i32 = 0
@@ -216,7 +216,12 @@ export const SEEK_LT: i32 = 4
  *
  * @returns The version string, such as `3.50.4`.
  */
-export const sqliteVersion = (): string => sqlite3_libversion()
+export const sqliteVersion = (): string => {
+  // SQLite numbers 3.50.4 as 3050004, the major times a million plus the minor
+  // times a thousand plus the patch.
+  const n: i32 = sqlite3_libversion_number()
+  return `${n / 1000000}.${(n / 1000) % 1000}.${n % 1000}`
+}
 
 /** A failure, with SQLite's message for it. Built only when asked for, by `error(code)`. */
 export class SqliteError {
@@ -250,15 +255,31 @@ const done = (rc: i32): Result<void, i32> => {
 }
 
 /**
+ * SQLite's description of `code`, such as `constraint failed`. The C type lets
+ * `sqlite3_errstr` answer NULL, so the code stands in for the text then, as
+ * `error 19`, rather than stop the program over a message.
+ */
+const describe = (code: i32): string => {
+  const text = sqlite3_errstr(code)
+  return text === null ? `error ${code}` : text
+}
+
+/**
  * The message for `code`: the connection's own, unless the code is one the
  * adapter can answer without SQLite (`MISUSE`, `RANGE`, `NOMEM` for a full
  * handle table or a failed conversion), where the connection's message may
- * still be that of some earlier failure.
+ * still be that of some earlier failure, or the connection has no message
+ * (NULL), where SQLite's description of the code stands in.
  */
-const messageFor = (code: i32, connection: string): string => {
+const messageFor = (code: i32, connection: string | null): string => {
   const primary: i32 = code & 0xff
-  if (primary === SQLITE_MISUSE || primary === SQLITE_RANGE || primary === SQLITE_NOMEM) {
-    return sqlite3_errstr(code)
+  if (
+    connection === null ||
+    primary === SQLITE_MISUSE ||
+    primary === SQLITE_RANGE ||
+    primary === SQLITE_NOMEM
+  ) {
+    return describe(code)
   }
   return connection
 }
@@ -286,7 +307,9 @@ const moved = (r: i32): Result<boolean, i32> => {
 export const openDatabase = (path: string, flags: i32): Result<Database, SqliteError> => {
   const h: i32 = nishsqlite_open(path, flags)
   if (h < 0) {
-    return Err(new SqliteError(-h, nishsqlite_open_errmsg()))
+    const code: i32 = -h
+    const message = nishsqlite_open_errmsg()
+    return Err(new SqliteError(code, message === null ? describe(code) : message))
   }
   return Ok(new Database(h))
 }
@@ -391,12 +414,13 @@ export class Database {
   openCursor(name: string, columns: string): Result<Cursor, SqliteError> {
     const h: i32 = nishsqlite_cursor_open(this.handle, name, columns)
     if (h < 0) {
-      if (-h === SQLITE_SCHEMA) {
+      const code: i32 = -h
+      if (code === SQLITE_SCHEMA) {
         return Err(
-          new SqliteError(-h, `no table or index ${name} with columns "${columns}" that a cursor reads`)
+          new SqliteError(code, `no table or index ${name} with columns "${columns}" that a cursor reads`)
         )
       }
-      return Err(this.error(-h))
+      return Err(this.error(code))
     }
     return Ok(new Cursor(h))
   }
@@ -1103,6 +1127,6 @@ export class Cursor {
    * @returns The error, with SQLite's description of the code.
    */
   error(code: i32): SqliteError {
-    return new SqliteError(code, sqlite3_errstr(code))
+    return new SqliteError(code, describe(code))
   }
 }

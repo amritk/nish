@@ -4,17 +4,15 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 1263,
+  "total": 1167,
   "explicit": {
     "kept": 364,
-    "toFix": 8
+    "toFix": 7
   },
   "modules": {
     "std/base64.ts": {
       "array-length": 1,
-      "index": 12,
-      "overflow": 5,
-      "panic": 6,
+      "panic": 5,
       "slice": 1
     },
     "std/bytes.ts": {
@@ -113,10 +111,6 @@
     "std/json-value.ts": {
       "array-length": 1,
       "slice": 2
-    },
-    "std/math.ts": {
-      "index": 6,
-      "overflow": 42
     },
     "std/net/buffer-pool.ts": {
       "array-length": 1,
@@ -271,24 +265,17 @@
       "panic": 2
     },
     "std/random.ts": {
-      "divide": 4,
       "panic": 1
     },
     "std/raster.ts": {
       "array-length": 12
     },
-    "std/regex.ts": {
-      "array-length": 2
-    },
     "std/release.ts": {
-      "index": 5,
-      "overflow": 5,
       "slice": 10
     },
     "std/sqlite.ts": {
       "ffi-nul": 7,
-      "ffi-null": 6,
-      "overflow": 9
+      "overflow": 7
     },
     "std/sync/ring.ts": {
       "panic": 16
@@ -316,9 +303,6 @@
     },
     "std/term.ts": {
       "slice": 1
-    },
-    "std/testing.ts": {
-      "overflow": 6
     },
     "std/text.ts": {
       "panic": 1,

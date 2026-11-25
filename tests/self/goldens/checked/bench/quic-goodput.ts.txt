@@ -21998,6 +21998,7 @@ function (bytes) => ...(bytes: u8[]): i32 -> @nish.TlsRecordProtection.advanceHe
   stackSites=0 stackLocals=0
 module std/testing.ts [package nish]
 const TESTING_EXCERPT: i32 = 200
+const TESTING_I32_MAX: i32 = 2147483647
 struct Suite (class) size=32 align=8 exported
   field name: string index=0 offset=0
   field passed: i32 index=1 offset=8 initialized
@@ -22035,32 +22036,39 @@ function testingFirstDifferentLine(actual: string[], expected: string[]): i32 ->
   local +1:9 expectedLength: i32 (const)
   local +2:9 shorter: i32 (const)
   local +3:7 i: i32 (let)
+function testingCount(n: i32): i32 -> @nish.testingCount
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  stackSites=0 stackLocals=0
 function Suite.constructor(this: Suite, name: string): void -> @nish.Suite.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: name
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Suite.pass(this: Suite, name: string): boolean -> @nish.Suite.pass [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat
+  calls: nish.testingCount nish_arena_mark nish_arena_release nish_print nish_str_concat
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  callee +0:19 testingCount -> @nish.testingCount
 function Suite.fail(this: Suite, name: string, detail: string): boolean -> @nish.Suite.fail [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: name
-  calls: nish_array_grow nish_panic_overflow nish_print nish_str_concat
+  calls: nish.testingCount nish_array_grow nish_print nish_str_concat
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  callee +0:19 testingCount -> @nish.testingCount
 function Suite.skip(this: Suite, name: string, reason: string): void -> @nish.Suite.skip [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat
+  calls: nish.testingCount nish_arena_mark nish_arena_release nish_print nish_str_concat
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  callee +0:20 testingCount -> @nish.testingCount
 function Suite.ok(this: Suite, name: string, condition: boolean): boolean -> @nish.Suite.ok [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Suite.pass
   escaping: name
   calls: nish.Suite.fail nish.Suite.pass
@@ -22069,7 +22077,7 @@ function Suite.ok(this: Suite, name: string, condition: boolean): boolean -> @ni
   callee +0:14 Suite.pass -> @nish.Suite.pass
   callee +2:12 Suite.fail -> @nish.Suite.fail
 function Suite.eqBool(this: Suite, name: string, actual: boolean, expected: boolean): boolean -> @nish.Suite.eqBool [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Suite.pass
   escaping: name
   calls: nish.Suite.fail nish.Suite.pass nish_str_concat
@@ -22078,7 +22086,7 @@ function Suite.eqBool(this: Suite, name: string, actual: boolean, expected: bool
   callee +0:14 Suite.pass -> @nish.Suite.pass
   callee +2:12 Suite.fail -> @nish.Suite.fail
 function Suite.eqI32(this: Suite, name: string, actual: i32, expected: i32): boolean -> @nish.Suite.eqI32 [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Suite.pass
   escaping: name
   calls: nish.Suite.fail nish.Suite.pass nish_str_concat nish_str_from_i32
@@ -22087,7 +22095,7 @@ function Suite.eqI32(this: Suite, name: string, actual: i32, expected: i32): boo
   callee +0:14 Suite.pass -> @nish.Suite.pass
   callee +2:12 Suite.fail -> @nish.Suite.fail
 function Suite.eqI64(this: Suite, name: string, actual: i64, expected: i64): boolean -> @nish.Suite.eqI64 [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Suite.pass
   escaping: name
   calls: nish.Suite.fail nish.Suite.pass nish_str_concat nish_str_from_i64
@@ -22096,7 +22104,7 @@ function Suite.eqI64(this: Suite, name: string, actual: i64, expected: i64): boo
   callee +0:14 Suite.pass -> @nish.Suite.pass
   callee +2:12 Suite.fail -> @nish.Suite.fail
 function Suite.eqF64(this: Suite, name: string, actual: f64, expected: f64): boolean -> @nish.Suite.eqF64 [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Suite.pass
   escaping: name
   calls: nish.Suite.fail nish.Suite.pass nish_str_concat nish_str_from_f64
@@ -22105,7 +22113,7 @@ function Suite.eqF64(this: Suite, name: string, actual: f64, expected: f64): boo
   callee +0:14 Suite.pass -> @nish.Suite.pass
   callee +2:12 Suite.fail -> @nish.Suite.fail
 function Suite.nearF64(this: Suite, name: string, actual: f64, expected: f64, tolerance: f64): boolean -> @nish.Suite.nearF64 [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Suite.pass
   escaping: name
   calls: nish.Suite.fail nish.Suite.pass nish_str_concat nish_str_from_f64
@@ -22115,7 +22123,7 @@ function Suite.nearF64(this: Suite, name: string, actual: f64, expected: f64, to
   callee +5:14 Suite.pass -> @nish.Suite.pass
   callee +7:12 Suite.fail -> @nish.Suite.fail
 function Suite.eqStr(this: Suite, name: string, actual: string, expected: string): boolean -> @nish.Suite.eqStr [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Suite.pass
   escaping: name
   calls: nish.Suite.fail nish.Suite.pass nish_str_concat nish_str_eq
@@ -22124,7 +22132,7 @@ function Suite.eqStr(this: Suite, name: string, actual: string, expected: string
   callee +0:14 Suite.pass -> @nish.Suite.pass
   callee +2:12 Suite.fail -> @nish.Suite.fail
 function Suite.contains(this: Suite, name: string, haystack: string, needle: string): boolean -> @nish.Suite.contains [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Suite.pass
   escaping: haystack name
   calls: nish.Suite.fail nish.Suite.pass nish.testingExcerpt nish_str_concat nish_str_index_of nish_str_index_of_from
@@ -22134,10 +22142,10 @@ function Suite.contains(this: Suite, name: string, haystack: string, needle: str
   callee +2:12 Suite.fail -> @nish.Suite.fail
   callee +2:69 testingExcerpt -> @nish.testingExcerpt
 function Suite.containsAll(this: Suite, name: string, haystack: string, needles: string[]): boolean -> @nish.Suite.containsAll [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Suite.pass
   escaping: name
-  calls: nish.Suite.fail nish.Suite.pass nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from
+  calls: nish.Suite.fail nish.Suite.pass nish.testingCount nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from
   pointer this: size=32 writesThrough=true captured=false passedTo=nish.Suite.pass#0 nish.Suite.fail#0 nish.Suite.fail#0
   pointer needles: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -22145,14 +22153,16 @@ function Suite.containsAll(this: Suite, name: string, haystack: string, needles:
   local +1:9 missing: i32 (let)
   local +2:9 first: string (let)
   local +3:16 needle: string (const)
+  callee +7:16 testingCount -> @nish.testingCount
+  callee +9:19 testingCount -> @nish.testingCount
   callee +16:14 Suite.pass -> @nish.Suite.pass
   callee +19:14 Suite.fail -> @nish.Suite.fail
   callee +23:12 Suite.fail -> @nish.Suite.fail
 function Suite.eqLines(this: Suite, name: string, actual: string[], expected: string[]): boolean -> @nish.Suite.eqLines [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Suite.pass
   escaping: name
-  calls: nish.Suite.fail nish.Suite.pass nish.testingFirstDifferentLine nish_panic_overflow nish_str_concat nish_str_from_i32
+  calls: nish.Suite.fail nish.Suite.pass nish.testingFirstDifferentLine nish_str_concat nish_str_from_i64
   pointer this: size=32 writesThrough=true captured=false passedTo=nish.Suite.pass#0 nish.Suite.fail#0
   pointer actual: size=0 writesThrough=false captured=false passedTo=nish.testingFirstDifferentLine#0
   pointer expected: size=0 writesThrough=false captured=false passedTo=nish.testingFirstDifferentLine#1

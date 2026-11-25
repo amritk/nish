@@ -3,126 +3,44 @@
 @.str.0 = private unnamed_addr constant { i64, [35 x i8] } { i64 34, [35 x i8] c"Rng.nextInt: lo is greater than hi\00" }, align 8
 
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
-declare void @nish_panic_div(i1 noundef zeroext) #3
+declare i32 @llvm.fptosi.sat.i32.f64(double) #0
 
-define internal noundef zeroext i1 @nish.below(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef double @nish.unsigned(i32 noundef %x) #0 {
 entry:
-  %0 = xor i32 %a, -2147483648
-  %1 = xor i32 %b, -2147483648
-  %2 = icmp slt i32 %0, %1
-  ret i1 %2
-}
-
-define internal noundef i32 @nish.remainder(i32 noundef %a, i32 noundef %m) #1 {
-entry:
-  %low.addr = alloca i32, align 4
-  %high.addr = alloca i32, align 4
-  %room.addr = alloca i32, align 4
-  %0 = icmp slt i32 %m, 0
-  br i1 %0, label %if.then, label %if.end
-
-if.then:
-  %1 = call i1 @nish.below(i32 %a, i32 %m)
-  br i1 %1, label %cond.true, label %cond.false
+  %0 = icmp slt i32 %x, 0
+  br i1 %0, label %cond.true, label %cond.false
 
 cond.true:
+  %1 = sitofp i32 %x to double
+  %2 = fadd double %1, 0x41F0000000000000
   br label %cond.end
 
 cond.false:
-  %2 = sub i32 %a, %m
+  %3 = sitofp i32 %x to double
   br label %cond.end
 
 cond.end:
-  %3 = phi i32 [ %a, %cond.true ], [ %2, %cond.false ]
-  ret i32 %3
+  %4 = phi double [ %2, %cond.true ], [ %3, %cond.false ]
+  ret double %4
+}
 
-if.end:
-  %4 = icmp sge i32 %a, 0
-  br i1 %4, label %if.then.1, label %if.end.1
+define internal noundef i32 @nish.bits(double noundef %u) #0 {
+entry:
+  %0 = fcmp olt double %u, 0x41E0000000000000
+  br i1 %0, label %cond.true, label %cond.false
 
-if.then.1:
-  %5 = icmp eq i32 %m, 0
-  %6 = icmp eq i32 %a, -2147483648
-  %7 = icmp eq i32 %m, -1
-  %8 = and i1 %6, %7
-  %9 = or i1 %5, %8
-  br i1 %9, label %div.fail, label %div.ok
+cond.true:
+  %1 = call i32 @llvm.fptosi.sat.i32.f64(double %u)
+  br label %cond.end
 
-div.fail:
-  call void @nish_panic_div(i1 zeroext %5)
-  unreachable
+cond.false:
+  %2 = fsub double %u, 0x41F0000000000000
+  %3 = call i32 @llvm.fptosi.sat.i32.f64(double %2)
+  br label %cond.end
 
-div.ok:
-  %10 = srem i32 %a, %m
-  ret i32 %10
-
-if.end.1:
-  %11 = xor i32 %a, -2147483648
-  %12 = icmp eq i32 %m, 0
-  %13 = icmp eq i32 %11, -2147483648
-  %14 = icmp eq i32 %m, -1
-  %15 = and i1 %13, %14
-  %16 = or i1 %12, %15
-  br i1 %16, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %12)
-  unreachable
-
-div.ok.1:
-  %17 = srem i32 %11, %m
-  store i32 %17, i32* %low.addr, align 4
-  %18 = icmp eq i32 %m, 0
-  %19 = icmp eq i32 2147483647, -2147483648
-  %20 = icmp eq i32 %m, -1
-  %21 = and i1 %19, %20
-  %22 = or i1 %18, %21
-  br i1 %22, label %div.fail.2, label %div.ok.2
-
-div.fail.2:
-  call void @nish_panic_div(i1 zeroext %18)
-  unreachable
-
-div.ok.2:
-  %23 = srem i32 2147483647, %m
-  %24 = add i32 %23, 1
-  %25 = icmp eq i32 %m, 0
-  %26 = icmp eq i32 %24, -2147483648
-  %27 = icmp eq i32 %m, -1
-  %28 = and i1 %26, %27
-  %29 = or i1 %25, %28
-  br i1 %29, label %div.fail.3, label %div.ok.3
-
-div.fail.3:
-  call void @nish_panic_div(i1 zeroext %25)
-  unreachable
-
-div.ok.3:
-  %30 = srem i32 %24, %m
-  store i32 %30, i32* %high.addr, align 4
-  %31 = load i32, i32* %high.addr, align 4
-  %32 = sub i32 %m, %31
-  store i32 %32, i32* %room.addr, align 4
-  %33 = load i32, i32* %low.addr, align 4
-  %34 = load i32, i32* %room.addr, align 4
-  %35 = icmp sge i32 %33, %34
-  br i1 %35, label %cond.true.1, label %cond.false.1
-
-cond.true.1:
-  %36 = load i32, i32* %low.addr, align 4
-  %37 = load i32, i32* %room.addr, align 4
-  %38 = sub i32 %36, %37
-  br label %cond.end.1
-
-cond.false.1:
-  %39 = load i32, i32* %low.addr, align 4
-  %40 = load i32, i32* %high.addr, align 4
-  %41 = add i32 %39, %40
-  br label %cond.end.1
-
-cond.end.1:
-  %42 = phi i32 [ %38, %cond.true.1 ], [ %41, %cond.false.1 ]
-  ret i32 %42
+cond.end:
+  %4 = phi i32 [ %1, %cond.true ], [ %3, %cond.false ]
+  ret i32 %4
 }
 
 define internal noundef i32 @nish.mix(i32 noundef %h) #0 {
@@ -154,27 +72,46 @@ entry:
   ret i32 %16
 }
 
-define void @nish.Rng.constructor(%struct.Rng* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %seed) #2 {
+define void @nish.Rng.constructor(%struct.Rng* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %seed) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Rng, %struct.Rng* %this, i32 0, i32 0
   store i32 %seed, i32* %0, align 4, !tbaa !4
   ret void
 }
 
-define noundef i32 @nish.Rng.nextI32(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture %this) #2 {
+define noundef i32 @nish.Rng.nextI32(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture %this) #1 {
 entry:
+  %next.addr = alloca double, align 8
   %0 = getelementptr inbounds %struct.Rng, %struct.Rng* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4, !tbaa !4
-  %2 = add i32 %1, -1640531527
-  %3 = getelementptr inbounds %struct.Rng, %struct.Rng* %this, i32 0, i32 0
-  store i32 %2, i32* %3, align 4, !tbaa !4
-  %4 = getelementptr inbounds %struct.Rng, %struct.Rng* %this, i32 0, i32 0
-  %5 = load i32, i32* %4, align 4, !tbaa !4
-  %6 = tail call i32 @nish.mix(i32 %5)
-  ret i32 %6
+  %2 = call double @nish.unsigned(i32 %1)
+  %3 = fadd double %2, 0x41E3C6EF37200000
+  store double %3, double* %next.addr, align 8
+  %4 = load double, double* %next.addr, align 8
+  %5 = fcmp olt double %4, 0x41F0000000000000
+  br i1 %5, label %cond.true, label %cond.false
+
+cond.true:
+  %6 = load double, double* %next.addr, align 8
+  br label %cond.end
+
+cond.false:
+  %7 = load double, double* %next.addr, align 8
+  %8 = fsub double %7, 0x41F0000000000000
+  br label %cond.end
+
+cond.end:
+  %9 = phi double [ %6, %cond.true ], [ %8, %cond.false ]
+  %10 = call i32 @nish.bits(double %9)
+  %11 = getelementptr inbounds %struct.Rng, %struct.Rng* %this, i32 0, i32 0
+  store i32 %10, i32* %11, align 4, !tbaa !4
+  %12 = getelementptr inbounds %struct.Rng, %struct.Rng* %this, i32 0, i32 0
+  %13 = load i32, i32* %12, align 4, !tbaa !4
+  %14 = tail call i32 @nish.mix(i32 %13)
+  ret i32 %14
 }
 
-define noundef double @nish.Rng.nextF64(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture %this) #2 {
+define noundef double @nish.Rng.nextF64(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture %this) #1 {
 entry:
   %hi.addr = alloca i32, align 4
   %lo.addr = alloca i32, align 4
@@ -194,11 +131,11 @@ entry:
   ret double %10
 }
 
-define noundef i32 @nish.Rng.nextInt(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %lo, i32 noundef %hi) #1 {
+define noundef i32 @nish.Rng.nextInt(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %lo, i32 noundef %hi) #2 {
 entry:
-  %span.addr = alloca i32, align 4
-  %refused.addr = alloca i32, align 4
-  %draw.addr = alloca i32, align 4
+  %span.addr = alloca double, align 8
+  %refused.addr = alloca double, align 8
+  %draw.addr = alloca double, align 8
   %0 = icmp sgt i32 %lo, %hi
   br i1 %0, label %if.then, label %if.end
 
@@ -207,49 +144,53 @@ if.then:
   unreachable
 
 if.end:
-  %1 = sub i32 %hi, %lo
-  %2 = add i32 %1, 1
-  store i32 %2, i32* %span.addr, align 4
-  %3 = load i32, i32* %span.addr, align 4
-  %4 = icmp eq i32 %3, 0
-  br i1 %4, label %if.then.1, label %if.end.1
+  %1 = sitofp i32 %hi to double
+  %2 = sitofp i32 %lo to double
+  %3 = fsub double %1, %2
+  %4 = fadd double %3, 0x3FF0000000000000
+  store double %4, double* %span.addr, align 8
+  %5 = load double, double* %span.addr, align 8
+  %6 = fcmp oeq double %5, 0x41F0000000000000
+  br i1 %6, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %5 = call i32 @nish.Rng.nextI32(%struct.Rng* %this)
-  ret i32 %5
+  %7 = call i32 @nish.Rng.nextI32(%struct.Rng* %this)
+  ret i32 %7
 
 if.end.1:
-  %6 = load i32, i32* %span.addr, align 4
-  %7 = sub i32 0, %6
-  %8 = load i32, i32* %span.addr, align 4
-  %9 = call i32 @nish.remainder(i32 %7, i32 %8)
-  store i32 %9, i32* %refused.addr, align 4
+  %8 = load double, double* %span.addr, align 8
+  %9 = frem double 0x41F0000000000000, %8
+  store double %9, double* %refused.addr, align 8
   %10 = call i32 @nish.Rng.nextI32(%struct.Rng* %this)
-  store i32 %10, i32* %draw.addr, align 4
+  %11 = call double @nish.unsigned(i32 %10)
+  store double %11, double* %draw.addr, align 8
   br label %while.cond
 
 while.cond:
-  %11 = load i32, i32* %draw.addr, align 4
-  %12 = load i32, i32* %refused.addr, align 4
-  %13 = call i1 @nish.below(i32 %11, i32 %12)
-  br i1 %13, label %while.body, label %while.end
+  %12 = load double, double* %draw.addr, align 8
+  %13 = load double, double* %refused.addr, align 8
+  %14 = fcmp olt double %12, %13
+  br i1 %14, label %while.body, label %while.end
 
 while.body:
-  %14 = call i32 @nish.Rng.nextI32(%struct.Rng* %this)
-  store i32 %14, i32* %draw.addr, align 4
+  %15 = call i32 @nish.Rng.nextI32(%struct.Rng* %this)
+  %16 = call double @nish.unsigned(i32 %15)
+  store double %16, double* %draw.addr, align 8
   br label %while.cond
 
 while.end:
-  %15 = load i32, i32* %draw.addr, align 4
-  %16 = load i32, i32* %span.addr, align 4
-  %17 = call i32 @nish.remainder(i32 %15, i32 %16)
-  %18 = add i32 %lo, %17
-  ret i32 %18
+  %17 = sitofp i32 %lo to double
+  %18 = load double, double* %draw.addr, align 8
+  %19 = load double, double* %span.addr, align 8
+  %20 = frem double %18, %19
+  %21 = fadd double %17, %20
+  %22 = call i32 @llvm.fptosi.sat.i32.f64(double %21)
+  ret i32 %22
 }
 
 attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
-attributes #1 = { nounwind "probe-stack"="inline-asm" }
-attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
 attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!5, !6, !7, !8, !9}
