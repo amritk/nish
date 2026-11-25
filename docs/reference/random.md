@@ -42,19 +42,15 @@ splittable pseudorandom number generators", OOPSLA 2014), on 32 bits.
 
 <scalar-detail title="The same bits under Node">
 
-The two operations that wrap are spelled
-`wrappingAdd` and `wrappingMul` from `nish:unsafe`, which define the
-two's-complement wrap natively and answer `(a + b) | 0` and `Math.imul(a, b)`
-under Node (docs/LANGUAGE.md, "nish:unsafe"); every shift has a constant
+A wrapping multiply is `Math.imul`, the low
+32 bits of the product both ways. Every other sum, difference and remainder
+is taken in `f64` on the state read as an unsigned count below 2^32, where
+each answer is an integer below 2^33 and so exact, and comes back to an
+`i32` only once a compare has put it in range. Every shift has a constant
 count, and `^` and `>>> 16` answer the same 32 bits in JavaScript as in the
-compiled program.
-
-`nextInt` reads its span and its draws as unsigned counts with no `u32`
-(whose conversions saturate under Node): the sign bit flipped orders them
-under a signed compare, and the remainder is taken in pieces that stay below
-2^31. `nextF64` builds its double from integers below 2^53, so its products
-and sums are exact both ways. The program a test prints under Node is the one
-it prints compiled (docs/RUN_UNDER_NODE.md).
+compiled program. `nextF64` builds its double from integers below 2^53, so
+its products and sums are exact both ways. The program a test prints under
+Node is the one it prints compiled (docs/RUN_UNDER_NODE.md).
 
 </scalar-detail>
 

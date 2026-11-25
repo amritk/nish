@@ -125,6 +125,12 @@ const testingFirstDifferentLine = (actual: string[], expected: string[]): i32 =>
   return actualLength === expectedLength ? -1 : shorter
 }
 
+/** The largest `i32`, where a tally stops rather than wraps. */
+const TESTING_I32_MAX: i32 = 2147483647
+
+/** `n` plus one, or `n` when it is already the largest `i32`. */
+const testingCount = (n: i32): i32 => (n < TESTING_I32_MAX ? n + 1 : n)
+
 /**
  * One run of checks, and the tally it reports.
  *
@@ -137,7 +143,8 @@ export class Suite {
   private name: string
   // These three have initializers because the constructor does not assign them,
   // and every field holds a value once it returns. `name` does not, and an
-  // initializer there would only be a store the constructor overwrites.
+  // initializer there would only be a store the constructor overwrites. Each
+  // stops at the largest `i32` (`testingCount`).
   private passed: i32 = 0
   private failed: i32 = 0
   private skipped: i32 = 0
@@ -167,7 +174,7 @@ export class Suite {
    * @returns `true`, so a check of its own shape can answer what this answers.
    */
   pass(name: string): boolean {
-    this.passed += 1
+    this.passed = testingCount(this.passed)
     console.log(`PASS  ${name}`)
     return true
   }
@@ -182,7 +189,7 @@ export class Suite {
    * @returns `false`, so a check of its own shape can answer what this answers.
    */
   fail(name: string, detail: string): boolean {
-    this.failed += 1
+    this.failed = testingCount(this.failed)
     this.failures.push(name)
     console.log(`FAIL  ${name}`)
     if (toI32(detail.length) > 0) {
@@ -200,7 +207,7 @@ export class Suite {
    * @param reason why it did not run, printed in parentheses after the name.
    */
   skip(name: string, reason: string): void {
-    this.skipped += 1
+    this.skipped = testingCount(this.skipped)
     console.log(`SKIP  ${name} (${reason})`)
   }
 
@@ -378,9 +385,9 @@ export class Suite {
       if (toI32(needle.length) === 0) {
         continue
       }
-      looked += 1
+      looked = testingCount(looked)
       if (toI32(haystack.indexOf(needle)) < 0) {
-        missing += 1
+        missing = testingCount(missing)
         if (toI32(first.length) === 0) {
           first = needle
         }
@@ -421,7 +428,7 @@ export class Suite {
     }
     const wanted = at < toI32(expected.length) ? `"${expected[at]}"` : "<end of input>"
     const saw = at < toI32(actual.length) ? `"${actual[at]}"` : "<end of input>"
-    return this.fail(name, `line ${at + 1}: expected ${wanted}, got ${saw}`)
+    return this.fail(name, `line ${toI64(at) + 1}: expected ${wanted}, got ${saw}`)
   }
 
   /**

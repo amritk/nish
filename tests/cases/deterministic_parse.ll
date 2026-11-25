@@ -6,18 +6,14 @@
 @.str.5 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"+0x10\00" }, align 8
 @.str.6 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"-0x1fffffffffffff1\00" }, align 8
 
-declare void @nish_free_arena() #3
-declare noundef i64 @nish_arena_mark() #3
-declare void @nish_arena_release(i64 noundef) #3
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
-declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #3
-declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #3
-declare void @nish_panic_index(i64 noundef, i64 noundef) #4
-declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare void @nish_free_arena() #4
+declare noundef i64 @nish_arena_mark() #4
+declare void @nish_arena_release(i64 noundef) #4
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #4
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #4
+declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #4
+declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #4
 declare i32 @llvm.fptosi.sat.i32.f64(double) #1
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
-declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 declare i32 @llvm.ctlz.i32(i32, i1) #1
 
 define noundef i32 @nish_main() #0 {
@@ -80,22 +76,18 @@ entry:
   store i32 %3, i32* %h.addr, align 4
   %4 = load i32, i32* %h.addr, align 4
   %5 = icmp ne i32 %4, 0
-  br i1 %5, label %cond.true, label %cond.false
+  br i1 %5, label %if.then, label %if.end
 
-cond.true:
+if.then:
   %6 = load i32, i32* %h.addr, align 4
   %7 = call i32 @llvm.ctlz.i32(i32 %6, i1 false)
-  br label %cond.end
+  ret i32 %7
 
-cond.false:
+if.end:
   %8 = trunc i64 %v to i32
   %9 = call i32 @llvm.ctlz.i32(i32 %8, i1 false)
   %10 = add nsw i32 %9, 32
-  br label %cond.end
-
-cond.end:
-  %11 = phi i32 [ %7, %cond.true ], [ %10, %cond.false ]
-  ret i32 %11
+  ret i32 %10
 }
 
 define internal noundef i32 @nish.hexDigit(i32 noundef %c) #1 {
@@ -263,10 +255,10 @@ while.end:
   ret i32 %19
 }
 
-define internal noundef double @nish.hexValue(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %start, i32 noundef %end) #0 {
+define internal noundef double @nish.hexValue(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %start, i32 noundef %end) #2 {
 entry:
   %m.addr = alloca i64, align 8
-  %scale.addr = alloca i32, align 4
+  %scale.addr = alloca double, align 8
   %sticky.addr = alloca i1, align 1
   %k.addr = alloca i32, align 4
   %d.addr = alloca i32, align 4
@@ -277,7 +269,7 @@ entry:
   %v.addr = alloca double, align 8
   %0 = sext i32 0 to i64
   store i64 %0, i64* %m.addr, align 8
-  store i32 0, i32* %scale.addr, align 4
+  store double 0x0000000000000000, double* %scale.addr, align 8
   store i1 false, i1* %sticky.addr, align 1
   store i32 %start, i32* %k.addr, align 4
   br label %while.cond
@@ -326,595 +318,452 @@ while.body:
   br i1 %24, label %if.then, label %if.else
 
 if.then:
-  %25 = load i32, i32* %scale.addr, align 4
-  %26 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %25, i32 4)
-  %27 = extractvalue { i32, i1 } %26, 0
-  %28 = extractvalue { i32, i1 } %26, 1
-  br i1 %28, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  store i32 %27, i32* %scale.addr, align 4
-  %29 = load i1, i1* %sticky.addr, align 1
-  br i1 %29, label %lor.end, label %lor.rhs
+  %25 = load double, double* %scale.addr, align 8
+  %26 = fadd double %25, 0x4010000000000000
+  store double %26, double* %scale.addr, align 8
+  %27 = load i1, i1* %sticky.addr, align 1
+  br i1 %27, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %30 = load i32, i32* %d.addr, align 4
-  %31 = icmp ne i32 %30, 0
+  %28 = load i32, i32* %d.addr, align 4
+  %29 = icmp ne i32 %28, 0
   br label %lor.end
 
 lor.end:
-  %32 = phi i1 [ true, %ovf.ok ], [ %31, %lor.rhs ]
-  store i1 %32, i1* %sticky.addr, align 1
+  %30 = phi i1 [ true, %if.then ], [ %29, %lor.rhs ]
+  store i1 %30, i1* %sticky.addr, align 1
   br label %if.end
 
 if.else:
-  %33 = load i64, i64* %m.addr, align 8
-  %34 = sext i32 4 to i64
-  %35 = and i64 %34, 63
-  %36 = shl i64 %33, %35
-  %37 = load i32, i32* %d.addr, align 4
-  %38 = sext i32 %37 to i64
-  %39 = or i64 %36, %38
-  store i64 %39, i64* %m.addr, align 8
+  %31 = load i64, i64* %m.addr, align 8
+  %32 = sext i32 4 to i64
+  %33 = and i64 %32, 63
+  %34 = shl i64 %31, %33
+  %35 = load i32, i32* %d.addr, align 4
+  %36 = sext i32 %35 to i64
+  %37 = or i64 %34, %36
+  store i64 %37, i64* %m.addr, align 8
   br label %if.end
 
 if.end:
-  %40 = load i32, i32* %k.addr, align 4
-  %41 = add nsw i32 %40, 1
-  store i32 %41, i32* %k.addr, align 4
+  %38 = load i32, i32* %k.addr, align 4
+  %39 = add nsw i32 %38, 1
+  store i32 %39, i32* %k.addr, align 4
   br label %while.cond
 
 while.end:
-  %42 = load i64, i64* %m.addr, align 8
-  %43 = sext i32 0 to i64
-  %44 = icmp eq i64 %42, %43
-  br i1 %44, label %cond.true, label %cond.false
+  %40 = load i64, i64* %m.addr, align 8
+  %41 = sext i32 0 to i64
+  %42 = icmp eq i64 %40, %41
+  br i1 %42, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
 
 cond.false:
-  %45 = load i64, i64* %m.addr, align 8
-  %46 = call i32 @nish.clz64(i64 %45)
-  %47 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 64, i32 %46)
-  %48 = extractvalue { i32, i1 } %47, 0
-  %49 = extractvalue { i32, i1 } %47, 1
-  br i1 %49, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
+  %43 = load i64, i64* %m.addr, align 8
+  %44 = call i32 @nish.clz64(i64 %43)
+  %45 = sub nsw i32 64, %44
   br label %cond.end
 
 cond.end:
-  %50 = phi i32 [ 0, %cond.true ], [ %48, %ovf.ok.1 ]
-  store i32 %50, i32* %bits.addr, align 4
-  %51 = load i32, i32* %bits.addr, align 4
-  %52 = icmp sgt i32 %51, 53
-  br i1 %52, label %if.then.1, label %if.end.1
+  %46 = phi i32 [ 0, %cond.true ], [ %45, %cond.false ]
+  store i32 %46, i32* %bits.addr, align 4
+  %47 = load i32, i32* %bits.addr, align 4
+  %48 = icmp sgt i32 %47, 53
+  br i1 %48, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %53 = load i32, i32* %bits.addr, align 4
-  %54 = sub nsw i32 %53, 53
-  store i32 %54, i32* %shift.addr, align 4
-  %55 = load i64, i64* %m.addr, align 8
-  %56 = sext i32 1 to i64
-  %57 = load i32, i32* %shift.addr, align 4
-  %58 = sext i32 %57 to i64
-  %59 = and i64 %58, 63
-  %60 = shl i64 %56, %59
-  %61 = sext i32 1 to i64
-  %62 = sub i64 %60, %61
-  %63 = and i64 %55, %62
-  store i64 %63, i64* %low.addr, align 8
-  %64 = sext i32 1 to i64
-  %65 = load i32, i32* %shift.addr, align 4
-  %66 = sub nsw i32 %65, 1
-  %67 = sext i32 %66 to i64
-  %68 = and i64 %67, 63
-  %69 = shl i64 %64, %68
-  store i64 %69, i64* %half.addr, align 8
-  %70 = load i64, i64* %m.addr, align 8
-  %71 = load i32, i32* %shift.addr, align 4
-  %72 = sext i32 %71 to i64
-  %73 = and i64 %72, 63
-  %74 = lshr i64 %70, %73
-  store i64 %74, i64* %m.addr, align 8
-  %75 = load i64, i64* %low.addr, align 8
-  %76 = load i64, i64* %half.addr, align 8
-  %77 = icmp ugt i64 %75, %76
-  br i1 %77, label %lor.end.1, label %lor.rhs.1
+  %49 = load i32, i32* %bits.addr, align 4
+  %50 = sub nsw i32 %49, 53
+  store i32 %50, i32* %shift.addr, align 4
+  %51 = load i64, i64* %m.addr, align 8
+  %52 = sext i32 1 to i64
+  %53 = load i32, i32* %shift.addr, align 4
+  %54 = sext i32 %53 to i64
+  %55 = and i64 %54, 63
+  %56 = shl i64 %52, %55
+  %57 = sext i32 1 to i64
+  %58 = sub i64 %56, %57
+  %59 = and i64 %51, %58
+  store i64 %59, i64* %low.addr, align 8
+  %60 = sext i32 1 to i64
+  %61 = load i32, i32* %shift.addr, align 4
+  %62 = sub nsw i32 %61, 1
+  %63 = sext i32 %62 to i64
+  %64 = and i64 %63, 63
+  %65 = shl i64 %60, %64
+  store i64 %65, i64* %half.addr, align 8
+  %66 = load i64, i64* %m.addr, align 8
+  %67 = load i32, i32* %shift.addr, align 4
+  %68 = sext i32 %67 to i64
+  %69 = and i64 %68, 63
+  %70 = lshr i64 %66, %69
+  store i64 %70, i64* %m.addr, align 8
+  %71 = load i64, i64* %low.addr, align 8
+  %72 = load i64, i64* %half.addr, align 8
+  %73 = icmp ugt i64 %71, %72
+  br i1 %73, label %lor.end.1, label %lor.rhs.1
 
 lor.rhs.1:
-  %78 = load i64, i64* %low.addr, align 8
-  %79 = load i64, i64* %half.addr, align 8
-  %80 = icmp eq i64 %78, %79
-  br i1 %80, label %land.rhs.2, label %land.end.2
+  %74 = load i64, i64* %low.addr, align 8
+  %75 = load i64, i64* %half.addr, align 8
+  %76 = icmp eq i64 %74, %75
+  br i1 %76, label %land.rhs.2, label %land.end.2
 
 land.rhs.2:
-  %81 = load i1, i1* %sticky.addr, align 1
-  br i1 %81, label %lor.end.2, label %lor.rhs.2
+  %77 = load i1, i1* %sticky.addr, align 1
+  br i1 %77, label %lor.end.2, label %lor.rhs.2
 
 lor.rhs.2:
-  %82 = load i64, i64* %m.addr, align 8
-  %83 = sext i32 1 to i64
-  %84 = and i64 %82, %83
-  %85 = sext i32 0 to i64
-  %86 = icmp ne i64 %84, %85
+  %78 = load i64, i64* %m.addr, align 8
+  %79 = sext i32 1 to i64
+  %80 = and i64 %78, %79
+  %81 = sext i32 0 to i64
+  %82 = icmp ne i64 %80, %81
   br label %lor.end.2
 
 lor.end.2:
-  %87 = phi i1 [ true, %land.rhs.2 ], [ %86, %lor.rhs.2 ]
+  %83 = phi i1 [ true, %land.rhs.2 ], [ %82, %lor.rhs.2 ]
   br label %land.end.2
 
 land.end.2:
-  %88 = phi i1 [ false, %lor.rhs.1 ], [ %87, %lor.end.2 ]
+  %84 = phi i1 [ false, %lor.rhs.1 ], [ %83, %lor.end.2 ]
   br label %lor.end.1
 
 lor.end.1:
-  %89 = phi i1 [ true, %if.then.1 ], [ %88, %land.end.2 ]
-  br i1 %89, label %if.then.2, label %if.end.2
+  %85 = phi i1 [ true, %if.then.1 ], [ %84, %land.end.2 ]
+  br i1 %85, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %90 = load i64, i64* %m.addr, align 8
-  %91 = sext i32 1 to i64
-  %92 = add i64 %90, %91
-  store i64 %92, i64* %m.addr, align 8
+  %86 = load i64, i64* %m.addr, align 8
+  %87 = sext i32 1 to i64
+  %88 = add i64 %86, %87
+  store i64 %88, i64* %m.addr, align 8
   br label %if.end.2
 
 if.end.2:
-  %93 = load i32, i32* %scale.addr, align 4
-  %94 = load i32, i32* %shift.addr, align 4
-  %95 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %93, i32 %94)
-  %96 = extractvalue { i32, i1 } %95, 0
-  %97 = extractvalue { i32, i1 } %95, 1
-  br i1 %97, label %ovf.fail, label %ovf.ok.2
-
-ovf.ok.2:
-  store i32 %96, i32* %scale.addr, align 4
+  %89 = load double, double* %scale.addr, align 8
+  %90 = load i32, i32* %shift.addr, align 4
+  %91 = sitofp i32 %90 to double
+  %92 = fadd double %89, %91
+  store double %92, double* %scale.addr, align 8
   br label %if.end.1
 
 if.end.1:
-  %98 = load i64, i64* %m.addr, align 8
-  %99 = uitofp i64 %98 to double
-  store double %99, double* %v.addr, align 8
+  %93 = load i64, i64* %m.addr, align 8
+  %94 = uitofp i64 %93 to double
+  store double %94, double* %v.addr, align 8
   br label %while.cond.1
 
 while.cond.1:
-  %100 = load i32, i32* %scale.addr, align 4
-  %101 = icmp sgt i32 %100, 0
-  br i1 %101, label %land.rhs.3, label %land.end.3
+  %95 = load double, double* %scale.addr, align 8
+  %96 = fcmp ogt double %95, 0x0000000000000000
+  br i1 %96, label %land.rhs.3, label %land.end.3
 
 land.rhs.3:
-  %102 = load double, double* %v.addr, align 8
-  %103 = fcmp ole double %102, 0x7FEFFFFFFFFFFFFF
+  %97 = load double, double* %v.addr, align 8
+  %98 = fcmp ole double %97, 0x7FEFFFFFFFFFFFFF
   br label %land.end.3
 
 land.end.3:
-  %104 = phi i1 [ false, %while.cond.1 ], [ %103, %land.rhs.3 ]
-  br i1 %104, label %while.body.1, label %while.end.1
+  %99 = phi i1 [ false, %while.cond.1 ], [ %98, %land.rhs.3 ]
+  br i1 %99, label %while.body.1, label %while.end.1
 
 while.body.1:
-  %105 = load double, double* %v.addr, align 8
-  %106 = fmul double %105, 0x4000000000000000
-  store double %106, double* %v.addr, align 8
-  %107 = load i32, i32* %scale.addr, align 4
-  %108 = sub nsw i32 %107, 1
-  store i32 %108, i32* %scale.addr, align 4
+  %100 = load double, double* %v.addr, align 8
+  %101 = fmul double %100, 0x4000000000000000
+  store double %101, double* %v.addr, align 8
+  %102 = load double, double* %scale.addr, align 8
+  %103 = fsub double %102, 0x3FF0000000000000
+  store double %103, double* %scale.addr, align 8
   br label %while.cond.1
 
 while.end.1:
-  %109 = load double, double* %v.addr, align 8
-  ret double %109
-
-ovf.fail:
-  %ovf.op = phi i32 [ 0, %if.then ], [ 1, %cond.false ], [ 0, %if.end.2 ]
-  call void @nish_panic_overflow(i32 %ovf.op)
-  unreachable
+  %104 = load double, double* %v.addr, align 8
+  ret double %104
 }
 
-define internal noundef zeroext i1 @nish.isHexPrefix(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %at) #0 {
+define internal noundef i32 @nish.hexDigitsAt(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %at) #3 {
 entry:
-  %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %at, i32 1)
-  %1 = extractvalue { i32, i1 } %0, 0
-  %2 = extractvalue { i32, i1 } %0, 1
-  br i1 %2, label %ovf.fail, label %ovf.ok
+  %0 = icmp sge i32 %at, 0
+  br i1 %0, label %land.rhs.2, label %land.end.2
 
-ovf.ok:
-  %3 = bitcast i8* %s to i64*
-  %4 = load i64, i64* %3, align 8
-  %5 = trunc i64 %4 to i32
-  %6 = icmp slt i32 %1, %5
+land.rhs.2:
+  %1 = bitcast i8* %s to i64*
+  %2 = load i64, i64* %1, align 8
+  %3 = trunc i64 %2 to i32
+  %4 = sub nsw i32 %3, 1
+  %5 = icmp slt i32 %at, %4
+  br label %land.end.2
+
+land.end.2:
+  %6 = phi i1 [ false, %entry ], [ %5, %land.rhs.2 ]
   br i1 %6, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
   %7 = sext i32 %at to i64
-  %8 = bitcast i8* %s to i64*
-  %9 = load i64, i64* %8, align 8
-  %10 = icmp ult i64 %7, %9
-  br i1 %10, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %7, i64 %9)
-  unreachable
-
-bounds.ok:
-  %11 = getelementptr inbounds i8, i8* %s, i64 8
-  %12 = getelementptr inbounds i8, i8* %11, i64 %7
-  %13 = load i8, i8* %12, align 1
-  %14 = zext i8 %13 to i32
-  %15 = icmp eq i32 %14, 48
+  %8 = getelementptr inbounds i8, i8* %s, i64 8
+  %9 = getelementptr inbounds i8, i8* %8, i64 %7
+  %10 = load i8, i8* %9, align 1
+  %11 = zext i8 %10 to i32
+  %12 = icmp eq i32 %11, 48
   br label %land.end.1
 
 land.end.1:
-  %16 = phi i1 [ false, %ovf.ok ], [ %15, %bounds.ok ]
-  br i1 %16, label %land.rhs, label %land.end
+  %13 = phi i1 [ false, %land.end.2 ], [ %12, %land.rhs.1 ]
+  br i1 %13, label %land.rhs, label %land.end
 
 land.rhs:
-  %17 = add nsw i32 %at, 1
-  %18 = sext i32 %17 to i64
-  %19 = bitcast i8* %s to i64*
-  %20 = load i64, i64* %19, align 8
-  %21 = icmp ult i64 %18, %20
-  br i1 %21, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 %18, i64 %20)
-  unreachable
-
-bounds.ok.1:
-  %22 = getelementptr inbounds i8, i8* %s, i64 8
-  %23 = getelementptr inbounds i8, i8* %22, i64 %18
-  %24 = load i8, i8* %23, align 1
-  %25 = zext i8 %24 to i32
-  %26 = or i32 %25, 32
-  %27 = icmp eq i32 %26, 120
+  %14 = add nsw i32 %at, 1
+  %15 = sext i32 %14 to i64
+  %16 = getelementptr inbounds i8, i8* %s, i64 8
+  %17 = getelementptr inbounds i8, i8* %16, i64 %15
+  %18 = load i8, i8* %17, align 1
+  %19 = zext i8 %18 to i32
+  %20 = or i32 %19, 32
+  %21 = icmp eq i32 %20, 120
   br label %land.end
 
 land.end:
-  %28 = phi i1 [ false, %land.end.1 ], [ %27, %bounds.ok.1 ]
-  ret i1 %28
+  %22 = phi i1 [ false, %land.end.1 ], [ %21, %land.rhs ]
+  br i1 %22, label %if.then, label %if.end
 
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
+if.then:
+  %23 = add nsw i32 %at, 2
+  ret i32 %23
+
+if.end:
+  ret i32 -1
+}
+
+define internal noundef i32 @nish.signEnd(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %p) #3 {
+entry:
+  %0 = icmp sge i32 %p, 0
+  br i1 %0, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %1 = bitcast i8* %s to i64*
+  %2 = load i64, i64* %1, align 8
+  %3 = trunc i64 %2 to i32
+  %4 = icmp slt i32 %p, %3
+  br label %land.end.1
+
+land.end.1:
+  %5 = phi i1 [ false, %entry ], [ %4, %land.rhs.1 ]
+  br i1 %5, label %land.rhs, label %land.end
+
+land.rhs:
+  %6 = sext i32 %p to i64
+  %7 = getelementptr inbounds i8, i8* %s, i64 8
+  %8 = getelementptr inbounds i8, i8* %7, i64 %6
+  %9 = load i8, i8* %8, align 1
+  %10 = zext i8 %9 to i32
+  %11 = icmp eq i32 %10, 45
+  br i1 %11, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %12 = sext i32 %p to i64
+  %13 = getelementptr inbounds i8, i8* %s, i64 8
+  %14 = getelementptr inbounds i8, i8* %13, i64 %12
+  %15 = load i8, i8* %14, align 1
+  %16 = zext i8 %15 to i32
+  %17 = icmp eq i32 %16, 43
+  br label %lor.end
+
+lor.end:
+  %18 = phi i1 [ true, %land.rhs ], [ %17, %lor.rhs ]
+  br label %land.end
+
+land.end:
+  %19 = phi i1 [ false, %land.end.1 ], [ %18, %lor.end ]
+  br i1 %19, label %cond.true, label %cond.false
+
+cond.true:
+  %20 = add nsw i32 %p, 1
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %21 = phi i32 [ %20, %cond.true ], [ %p, %cond.false ]
+  ret i32 %21
+}
+
+define internal noundef zeroext i1 @nish.isMinus(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %p) #3 {
+entry:
+  %0 = icmp sge i32 %p, 0
+  br i1 %0, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %1 = bitcast i8* %s to i64*
+  %2 = load i64, i64* %1, align 8
+  %3 = trunc i64 %2 to i32
+  %4 = icmp slt i32 %p, %3
+  br label %land.end.1
+
+land.end.1:
+  %5 = phi i1 [ false, %entry ], [ %4, %land.rhs.1 ]
+  br i1 %5, label %land.rhs, label %land.end
+
+land.rhs:
+  %6 = sext i32 %p to i64
+  %7 = getelementptr inbounds i8, i8* %s, i64 8
+  %8 = getelementptr inbounds i8, i8* %7, i64 %6
+  %9 = load i8, i8* %8, align 1
+  %10 = zext i8 %9 to i32
+  %11 = icmp eq i32 %10, 45
+  br label %land.end
+
+land.end:
+  %12 = phi i1 [ false, %land.end.1 ], [ %11, %land.rhs ]
+  ret i1 %12
 }
 
 define internal noundef double @nish.numberExact(i8* noundef nonnull noalias readonly align 8 %s) #0 {
 entry:
   %p.addr = alloca i32, align 4
   %negative.addr = alloca i1, align 1
-  %q.addr = alloca i32, align 4
+  %h.addr = alloca i32, align 4
   %end.addr = alloca i32, align 4
   %zero.addr = alloca double, align 8
   %v.addr = alloca double, align 8
   %0 = call i32 @nish.skipSpaces(i8* %s, i32 0)
   store i32 %0, i32* %p.addr, align 4
   %1 = load i32, i32* %p.addr, align 4
-  %2 = bitcast i8* %s to i64*
-  %3 = load i64, i64* %2, align 8
-  %4 = trunc i64 %3 to i32
-  %5 = icmp slt i32 %1, %4
-  br i1 %5, label %land.rhs, label %land.end
+  %2 = call i1 @nish.isMinus(i8* %s, i32 %1)
+  store i1 %2, i1* %negative.addr, align 1
+  %3 = load i32, i32* %p.addr, align 4
+  %4 = call i32 @nish.signEnd(i8* %s, i32 %3)
+  %5 = call i32 @nish.hexDigitsAt(i8* %s, i32 %4)
+  store i32 %5, i32* %h.addr, align 4
+  %6 = load i32, i32* %h.addr, align 4
+  %7 = icmp slt i32 %6, 0
+  br i1 %7, label %if.then, label %if.end
 
-land.rhs:
-  %6 = load i32, i32* %p.addr, align 4
-  %7 = sext i32 %6 to i64
-  %8 = bitcast i8* %s to i64*
-  %9 = load i64, i64* %8, align 8
-  %10 = icmp ult i64 %7, %9
-  br i1 %10, label %bounds.ok, label %bounds.fail
+if.then:
+  %8 = call double @nish_parse_number(i8* %s, i32 1)
+  ret double %8
 
-bounds.fail:
-  call void @nish_panic_index(i64 %7, i64 %9)
-  unreachable
-
-bounds.ok:
-  %11 = getelementptr inbounds i8, i8* %s, i64 8
-  %12 = getelementptr inbounds i8, i8* %11, i64 %7
-  %13 = load i8, i8* %12, align 1
-  %14 = zext i8 %13 to i32
-  %15 = icmp eq i32 %14, 45
-  br label %land.end
-
-land.end:
-  %16 = phi i1 [ false, %entry ], [ %15, %bounds.ok ]
-  store i1 %16, i1* %negative.addr, align 1
-  %17 = load i32, i32* %p.addr, align 4
-  %18 = bitcast i8* %s to i64*
-  %19 = load i64, i64* %18, align 8
-  %20 = trunc i64 %19 to i32
-  %21 = icmp slt i32 %17, %20
-  br i1 %21, label %land.rhs.1, label %land.end.1
-
-land.rhs.1:
-  %22 = load i1, i1* %negative.addr, align 1
-  br i1 %22, label %lor.end, label %lor.rhs
+if.end:
+  %9 = load i32, i32* %h.addr, align 4
+  %10 = call i32 @nish.hexEnd(i8* %s, i32 %9)
+  store i32 %10, i32* %end.addr, align 4
+  %11 = load i32, i32* %end.addr, align 4
+  %12 = load i32, i32* %h.addr, align 4
+  %13 = icmp eq i32 %11, %12
+  br i1 %13, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %23 = load i32, i32* %p.addr, align 4
-  %24 = sext i32 %23 to i64
-  %25 = bitcast i8* %s to i64*
-  %26 = load i64, i64* %25, align 8
-  %27 = icmp ult i64 %24, %26
-  br i1 %27, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 %24, i64 %26)
-  unreachable
-
-bounds.ok.1:
-  %28 = getelementptr inbounds i8, i8* %s, i64 8
-  %29 = getelementptr inbounds i8, i8* %28, i64 %24
-  %30 = load i8, i8* %29, align 1
-  %31 = zext i8 %30 to i32
-  %32 = icmp eq i32 %31, 43
+  %14 = load i32, i32* %end.addr, align 4
+  %15 = call i32 @nish.skipSpaces(i8* %s, i32 %14)
+  %16 = bitcast i8* %s to i64*
+  %17 = load i64, i64* %16, align 8
+  %18 = trunc i64 %17 to i32
+  %19 = icmp ne i32 %15, %18
   br label %lor.end
 
 lor.end:
-  %33 = phi i1 [ true, %land.rhs.1 ], [ %32, %bounds.ok.1 ]
-  br label %land.end.1
-
-land.end.1:
-  %34 = phi i1 [ false, %land.end ], [ %33, %lor.end ]
-  br i1 %34, label %cond.true, label %cond.false
-
-cond.true:
-  %35 = load i32, i32* %p.addr, align 4
-  %36 = add nsw i32 %35, 1
-  br label %cond.end
-
-cond.false:
-  %37 = load i32, i32* %p.addr, align 4
-  br label %cond.end
-
-cond.end:
-  %38 = phi i32 [ %36, %cond.true ], [ %37, %cond.false ]
-  store i32 %38, i32* %q.addr, align 4
-  %39 = load i32, i32* %q.addr, align 4
-  %40 = call i1 @nish.isHexPrefix(i8* %s, i32 %39)
-  %41 = xor i1 %40, true
-  br i1 %41, label %if.then, label %if.end
-
-if.then:
-  %42 = call double @nish_parse_number(i8* %s, i32 1)
-  ret double %42
-
-if.end:
-  %43 = load i32, i32* %q.addr, align 4
-  %44 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %43, i32 2)
-  %45 = extractvalue { i32, i1 } %44, 0
-  %46 = extractvalue { i32, i1 } %44, 1
-  br i1 %46, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  %47 = call i32 @nish.hexEnd(i8* %s, i32 %45)
-  store i32 %47, i32* %end.addr, align 4
-  %48 = load i32, i32* %end.addr, align 4
-  %49 = load i32, i32* %q.addr, align 4
-  %50 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %49, i32 2)
-  %51 = extractvalue { i32, i1 } %50, 0
-  %52 = extractvalue { i32, i1 } %50, 1
-  br i1 %52, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  %53 = icmp eq i32 %48, %51
-  br i1 %53, label %lor.end.1, label %lor.rhs.1
-
-lor.rhs.1:
-  %54 = load i32, i32* %end.addr, align 4
-  %55 = call i32 @nish.skipSpaces(i8* %s, i32 %54)
-  %56 = bitcast i8* %s to i64*
-  %57 = load i64, i64* %56, align 8
-  %58 = trunc i64 %57 to i32
-  %59 = icmp ne i32 %55, %58
-  br label %lor.end.1
-
-lor.end.1:
-  %60 = phi i1 [ true, %ovf.ok.1 ], [ %59, %lor.rhs.1 ]
-  br i1 %60, label %if.then.1, label %if.end.1
+  %20 = phi i1 [ true, %if.end ], [ %19, %lor.rhs ]
+  br i1 %20, label %if.then.1, label %if.end.1
 
 if.then.1:
   store double 0x0000000000000000, double* %zero.addr, align 8
-  %61 = load double, double* %zero.addr, align 8
-  %62 = load double, double* %zero.addr, align 8
-  %63 = fdiv double %61, %62
-  ret double %63
+  %21 = load double, double* %zero.addr, align 8
+  %22 = load double, double* %zero.addr, align 8
+  %23 = fdiv double %21, %22
+  ret double %23
 
 if.end.1:
-  %64 = load i32, i32* %q.addr, align 4
-  %65 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %64, i32 2)
-  %66 = extractvalue { i32, i1 } %65, 0
-  %67 = extractvalue { i32, i1 } %65, 1
-  br i1 %67, label %ovf.fail, label %ovf.ok.2
+  %24 = load i32, i32* %h.addr, align 4
+  %25 = load i32, i32* %end.addr, align 4
+  %26 = call double @nish.hexValue(i8* %s, i32 %24, i32 %25)
+  store double %26, double* %v.addr, align 8
+  %27 = load i1, i1* %negative.addr, align 1
+  br i1 %27, label %cond.true, label %cond.false
 
-ovf.ok.2:
-  %68 = load i32, i32* %end.addr, align 4
-  %69 = call double @nish.hexValue(i8* %s, i32 %66, i32 %68)
-  store double %69, double* %v.addr, align 8
-  %70 = load i1, i1* %negative.addr, align 1
-  br i1 %70, label %cond.true.1, label %cond.false.1
+cond.true:
+  %28 = load double, double* %v.addr, align 8
+  %29 = fneg double %28
+  br label %cond.end
 
-cond.true.1:
-  %71 = load double, double* %v.addr, align 8
-  %72 = fneg double %71
-  br label %cond.end.1
+cond.false:
+  %30 = load double, double* %v.addr, align 8
+  br label %cond.end
 
-cond.false.1:
-  %73 = load double, double* %v.addr, align 8
-  br label %cond.end.1
-
-cond.end.1:
-  %74 = phi double [ %72, %cond.true.1 ], [ %73, %cond.false.1 ]
-  ret double %74
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
+cond.end:
+  %31 = phi double [ %29, %cond.true ], [ %30, %cond.false ]
+  ret double %31
 }
 
 define internal noundef double @nish.parseFloatExact(i8* noundef nonnull noalias readonly align 8 %s) #0 {
 entry:
   %p.addr = alloca i32, align 4
   %negative.addr = alloca i1, align 1
-  %q.addr = alloca i32, align 4
+  %h.addr = alloca i32, align 4
   %end.addr = alloca i32, align 4
   %v.addr = alloca double, align 8
   %0 = call i32 @nish.skipSpaces(i8* %s, i32 0)
   store i32 %0, i32* %p.addr, align 4
   %1 = load i32, i32* %p.addr, align 4
-  %2 = bitcast i8* %s to i64*
-  %3 = load i64, i64* %2, align 8
-  %4 = trunc i64 %3 to i32
-  %5 = icmp slt i32 %1, %4
-  br i1 %5, label %land.rhs, label %land.end
+  %2 = call i1 @nish.isMinus(i8* %s, i32 %1)
+  store i1 %2, i1* %negative.addr, align 1
+  %3 = load i32, i32* %p.addr, align 4
+  %4 = call i32 @nish.signEnd(i8* %s, i32 %3)
+  %5 = call i32 @nish.hexDigitsAt(i8* %s, i32 %4)
+  store i32 %5, i32* %h.addr, align 4
+  %6 = load i32, i32* %h.addr, align 4
+  %7 = icmp slt i32 %6, 0
+  br i1 %7, label %if.then, label %if.end
 
-land.rhs:
-  %6 = load i32, i32* %p.addr, align 4
-  %7 = sext i32 %6 to i64
-  %8 = bitcast i8* %s to i64*
-  %9 = load i64, i64* %8, align 8
-  %10 = icmp ult i64 %7, %9
-  br i1 %10, label %bounds.ok, label %bounds.fail
+if.then:
+  %8 = call double @nish_parse_number(i8* %s, i32 0)
+  ret double %8
 
-bounds.fail:
-  call void @nish_panic_index(i64 %7, i64 %9)
-  unreachable
-
-bounds.ok:
-  %11 = getelementptr inbounds i8, i8* %s, i64 8
-  %12 = getelementptr inbounds i8, i8* %11, i64 %7
-  %13 = load i8, i8* %12, align 1
-  %14 = zext i8 %13 to i32
-  %15 = icmp eq i32 %14, 45
-  br label %land.end
-
-land.end:
-  %16 = phi i1 [ false, %entry ], [ %15, %bounds.ok ]
-  store i1 %16, i1* %negative.addr, align 1
-  %17 = load i32, i32* %p.addr, align 4
-  %18 = bitcast i8* %s to i64*
-  %19 = load i64, i64* %18, align 8
-  %20 = trunc i64 %19 to i32
-  %21 = icmp slt i32 %17, %20
-  br i1 %21, label %land.rhs.1, label %land.end.1
-
-land.rhs.1:
-  %22 = load i1, i1* %negative.addr, align 1
-  br i1 %22, label %lor.end, label %lor.rhs
-
-lor.rhs:
-  %23 = load i32, i32* %p.addr, align 4
-  %24 = sext i32 %23 to i64
-  %25 = bitcast i8* %s to i64*
-  %26 = load i64, i64* %25, align 8
-  %27 = icmp ult i64 %24, %26
-  br i1 %27, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 %24, i64 %26)
-  unreachable
-
-bounds.ok.1:
-  %28 = getelementptr inbounds i8, i8* %s, i64 8
-  %29 = getelementptr inbounds i8, i8* %28, i64 %24
-  %30 = load i8, i8* %29, align 1
-  %31 = zext i8 %30 to i32
-  %32 = icmp eq i32 %31, 43
-  br label %lor.end
-
-lor.end:
-  %33 = phi i1 [ true, %land.rhs.1 ], [ %32, %bounds.ok.1 ]
-  br label %land.end.1
-
-land.end.1:
-  %34 = phi i1 [ false, %land.end ], [ %33, %lor.end ]
-  br i1 %34, label %cond.true, label %cond.false
+if.end:
+  %9 = load i32, i32* %h.addr, align 4
+  %10 = call i32 @nish.hexEnd(i8* %s, i32 %9)
+  store i32 %10, i32* %end.addr, align 4
+  %11 = load i32, i32* %end.addr, align 4
+  %12 = load i32, i32* %h.addr, align 4
+  %13 = icmp eq i32 %11, %12
+  br i1 %13, label %cond.true, label %cond.false
 
 cond.true:
-  %35 = load i32, i32* %p.addr, align 4
-  %36 = add nsw i32 %35, 1
   br label %cond.end
 
 cond.false:
-  %37 = load i32, i32* %p.addr, align 4
+  %14 = load i32, i32* %h.addr, align 4
+  %15 = load i32, i32* %end.addr, align 4
+  %16 = call double @nish.hexValue(i8* %s, i32 %14, i32 %15)
   br label %cond.end
 
 cond.end:
-  %38 = phi i32 [ %36, %cond.true ], [ %37, %cond.false ]
-  store i32 %38, i32* %q.addr, align 4
-  %39 = load i32, i32* %q.addr, align 4
-  %40 = call i1 @nish.isHexPrefix(i8* %s, i32 %39)
-  %41 = xor i1 %40, true
-  br i1 %41, label %if.then, label %if.end
-
-if.then:
-  %42 = call double @nish_parse_number(i8* %s, i32 0)
-  ret double %42
-
-if.end:
-  %43 = load i32, i32* %q.addr, align 4
-  %44 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %43, i32 2)
-  %45 = extractvalue { i32, i1 } %44, 0
-  %46 = extractvalue { i32, i1 } %44, 1
-  br i1 %46, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  %47 = call i32 @nish.hexEnd(i8* %s, i32 %45)
-  store i32 %47, i32* %end.addr, align 4
-  %48 = load i32, i32* %end.addr, align 4
-  %49 = load i32, i32* %q.addr, align 4
-  %50 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %49, i32 2)
-  %51 = extractvalue { i32, i1 } %50, 0
-  %52 = extractvalue { i32, i1 } %50, 1
-  br i1 %52, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  %53 = icmp eq i32 %48, %51
-  br i1 %53, label %cond.true.1, label %cond.false.1
+  %17 = phi double [ 0x0000000000000000, %cond.true ], [ %16, %cond.false ]
+  store double %17, double* %v.addr, align 8
+  %18 = load i1, i1* %negative.addr, align 1
+  br i1 %18, label %cond.true.1, label %cond.false.1
 
 cond.true.1:
+  %19 = load double, double* %v.addr, align 8
+  %20 = fneg double %19
   br label %cond.end.1
 
 cond.false.1:
-  %54 = load i32, i32* %q.addr, align 4
-  %55 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %54, i32 2)
-  %56 = extractvalue { i32, i1 } %55, 0
-  %57 = extractvalue { i32, i1 } %55, 1
-  br i1 %57, label %ovf.fail, label %ovf.ok.2
-
-ovf.ok.2:
-  %58 = load i32, i32* %end.addr, align 4
-  %59 = call double @nish.hexValue(i8* %s, i32 %56, i32 %58)
+  %21 = load double, double* %v.addr, align 8
   br label %cond.end.1
 
 cond.end.1:
-  %60 = phi double [ 0x0000000000000000, %cond.true.1 ], [ %59, %ovf.ok.2 ]
-  store double %60, double* %v.addr, align 8
-  %61 = load i1, i1* %negative.addr, align 1
-  br i1 %61, label %cond.true.2, label %cond.false.2
-
-cond.true.2:
-  %62 = load double, double* %v.addr, align 8
-  %63 = fneg double %62
-  br label %cond.end.2
-
-cond.false.2:
-  %64 = load double, double* %v.addr, align 8
-  br label %cond.end.2
-
-cond.end.2:
-  %65 = phi double [ %63, %cond.true.2 ], [ %64, %cond.false.2 ]
-  ret double %65
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
+  %22 = phi double [ %20, %cond.true.1 ], [ %21, %cond.false.1 ]
+  ret double %22
 }
 
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #2 = { nounwind readonly "probe-stack"="inline-asm" }
-attributes #3 = { nounwind willreturn "probe-stack"="inline-asm" }
-attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}
