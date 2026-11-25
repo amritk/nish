@@ -404,13 +404,13 @@ export class EmittedModule {
   }
 }
 
-/** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 /** Whether a file is there to read; its text is dropped with the arena that read it. */
 const hasFile = (path: string): boolean => {
   using _a = arena()
   return readFileSyncOrNull(path) !== null
 }
 
+/** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 const isRetentionCode = (code: string): boolean =>
   code === "NL9002" ||
   code === "NL9003" ||
