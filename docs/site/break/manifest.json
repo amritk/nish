@@ -25,14 +25,14 @@
     "std/host/ring.ts": "62a49a15338588f0bc2ffe2c3298d01cbd888661b1e033fddcc7ee1de3f795ae",
     "std/input.ts": "3f8c9ab34f172ad387160339f8f2ce35b22f944f02e617c2d26982396563cdc7",
     "std/random.ts": "ca09ff71df26311dadeda12fd3d4e7976c310a5aef8a1ecc5934a04f6596239e",
-    "std/raster.ts": "39ee064efe4152b8196d6ee1e6f5dab9eb74ab5537b3d1d7b61950fb1fb572f1",
+    "std/raster.ts": "ddecb2fb1556964aa51ad565d56b747aea6a7e8c169bcc629781d4a5712d0842",
     "std/synth.ts": "ab54dc2da8ae24809c7f61cca540e1830406c07c1ce5624baabd602deee7e7e7",
     "std/term-pixels.ts": "2661f3e82e36dc53dcb6c13442ef4eb6a46353378b33ae2ed3828da4068dbff5",
     "std/term-rate.ts": "4a243784275d2dbd6c38e6f146a812e52b3af0b2d0bb0c440074da07da24a7f0",
     "std/term.ts": "ff894deb594f84c3c7045a274c5f0d63f82bea7e3abba10570d4c28cde431b38"
   },
   "outputs": {
-    "game.wasm": "05fb1bd9fc82f661846b4f002bc8750462fac5fb19036ab9d31c9f2f21ae37aa",
+    "game.wasm": "95f512fbe805b78f4d36ee0a508fdf84bf746bf356f909ded742395365b9fb6f",
     "game.mjs": "89afb35db565a760c7e8693506c6dd6c8a110d5f68d1bf895bcd917aaf140564",
     "break.mjs": "30b71116a94aced439fd9b8ee25e6a17f2d848e9180bc762495a087ed09bfcba",
     "shell.mjs": "13d4a2ad70204d34c4dd623b9baff0de9792375b74a7585b8857d358d9e08518",

@@ -764,28 +764,39 @@ export const rasterTrail = (
   const head: i32 = trail.head
   // The oldest point is `count` slots behind the head, wrapping once. A head
   // out of the ring (a caller can set the field) still has the slots that land
-  // in it drawn. The slot is counted in f64, where it is exact for any head,
-  // so no sum can overflow.
+  // in it drawn. Point i sits at `head - count + i`, counted in f64, where it
+  // is exact for any head, so no sum can overflow. The points before slot 0
+  // wrap to the ring's end and are older than the rest, so they are drawn
+  // first, as one run of slots, and the others as a second.
   if (count <= 0) {
     return
   }
   const size: f64 = toF64(n)
-  let raw: f64 = toF64(head) - toF64(count)
-  for (let i: i32 = 0; i < count; i++) {
-    const at: f64 = raw < 0.0 ? raw + size : raw
-    if (at >= 0.0 && at < size) {
-      const slot: i32 = toI32(at)
-      // The first two are always true after the test on `at` and prove the
-      // indexes; the third skips a slot a shorter `ys` does not hold.
-      if (slot >= 0 && slot < n && slot < toI32(ys.length)) {
-        const f: f64 = (toF64(i) + 1.0) / (toF64(count) + 1.0)
-        const radius: f64 = r * (f * 0.6 + 0.4)
-        const cx: f64 = offsetX + xs[slot] * scale
-        const cy: f64 = offsetY + ys[slot] * scale
-        rasterDisc(pixels, width, height, cx, cy, radius * scale, colour, alpha * f)
+  const ysLength: i32 = toI32(ys.length)
+  const first: f64 = toF64(head) - toF64(count)
+  const steps: f64 = toF64(count) + 1.0
+  for (let pass: i32 = 0; pass < 2; pass++) {
+    // Point i of this run sits at slot `base + i`.
+    const base: f64 = pass === 0 ? first + size : first
+    const lo: f64 = Math.max(base, 0.0)
+    const hi: f64 = Math.min(base + toF64(count), size)
+    if (lo < hi) {
+      const end: i32 = toI32(hi)
+      // How far along the trail the point is, from 1 for the oldest.
+      let step: f64 = lo - base + 1.0
+      for (let slot: i32 = toI32(lo); slot < end; slot++) {
+        // The first two are always true in the run and prove the indexes; the
+        // third skips a slot a shorter `ys` does not hold.
+        if (slot >= 0 && slot < n && slot < ysLength) {
+          const f: f64 = step / steps
+          const radius: f64 = r * (f * 0.6 + 0.4)
+          const cx: f64 = offsetX + xs[slot] * scale
+          const cy: f64 = offsetY + ys[slot] * scale
+          rasterDisc(pixels, width, height, cx, cy, radius * scale, colour, alpha * f)
+        }
+        step = step + 1.0
       }
     }
-    raw = raw + 1.0
   }
 }
 
