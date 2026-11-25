@@ -57,11 +57,9 @@ export const base64EncodedLength = (n: i32): i32 => {
   if (n > 1610612733) {
     panic("base64EncodedLength: the encoding is longer than 2^31 - 1 characters")
   }
-  return (((n + 2) / 3) | 0) * 4
+  const groups: i32 = toI32((n + 2) / 3)
+  return groups * 4
 }
-
-/** The byte of the character for the sextet `v` (`0 <= v <= 63`). */
-const base64CharOf = (v: i32): u8 => toU8(BASE64_ALPHABET.charCodeAt(v))
 
 /**
  * Write the base64 of `src[off..off+len)` into `dst` from index `at`, and
@@ -91,40 +89,41 @@ export const base64EncodeInto = (src: u8[], off: i32, len: i32, dst: u8[], at: i
     panic("base64EncodeInto: the source range is outside the array")
   }
   const need: i32 = base64EncodedLength(len)
-  if (at < 0 || at > dstLength - need) {
+  if (at < 0 || need > dstLength - at) {
     panic("base64EncodeInto: the encoding does not fit in the destination")
   }
+  // A local, so that `abc.length >= 64` below is a fact about the string each
+  // character is read from.
+  const abc: string = BASE64_ALPHABET
   let i: i32 = off
   let o: i32 = at
-  const whole: i32 = off + len - (len % 3)
+  let rest: i32 = len
   // The checks above make every term after the first true; they are written out
   // because they are what proves the loop's accesses in range.
-  while (i < whole && i >= 0 && i + 2 < srcLength && o >= 0 && o + 3 < dstLength) {
+  while (rest >= 3 && i >= 0 && i < srcLength - 2 && o >= 0 && o < dstLength - 3 && abc.length >= 64) {
     const group: i32 = (toI32(src[i]) << 16) | (toI32(src[i + 1]) << 8) | toI32(src[i + 2])
-    dst[o] = base64CharOf(group >> 18)
-    dst[o + 1] = base64CharOf((group >> 12) & 63)
-    dst[o + 2] = base64CharOf((group >> 6) & 63)
-    dst[o + 3] = base64CharOf(group & 63)
+    dst[o] = toU8(abc.charCodeAt((group >> 18) & 63))
+    dst[o + 1] = toU8(abc.charCodeAt((group >> 12) & 63))
+    dst[o + 2] = toU8(abc.charCodeAt((group >> 6) & 63))
+    dst[o + 3] = toU8(abc.charCodeAt(group & 63))
     i = i + 3
     o = o + 4
+    rest = rest - 3
   }
-  const tail: i32 = len % 3
-  if (tail === 1) {
-    const group: i32 = toI32(src[i]) << 16
-    dst[o] = base64CharOf(group >> 18)
-    dst[o + 1] = base64CharOf((group >> 12) & 63)
-    dst[o + 2] = toU8(BASE64_PAD)
-    dst[o + 3] = toU8(BASE64_PAD)
-    o = o + 4
-  } else if (tail === 2) {
-    const group: i32 = (toI32(src[i]) << 16) | (toI32(src[i + 1]) << 8)
-    dst[o] = base64CharOf(group >> 18)
-    dst[o + 1] = base64CharOf((group >> 12) & 63)
-    dst[o + 2] = base64CharOf((group >> 6) & 63)
-    dst[o + 3] = toU8(BASE64_PAD)
-    o = o + 4
+  // A short final group of one or two bytes, padded. As in the loop, the
+  // checks above make every term after the first false.
+  if (rest === 0 || i < 0 || i >= srcLength || o < 0 || o >= dstLength - 3 || abc.length < 64) {
+    return o
   }
-  return o
+  let group: i32 = toI32(src[i]) << 16
+  if (rest === 2 && i < srcLength - 1) {
+    group = group | (toI32(src[i + 1]) << 8)
+  }
+  dst[o] = toU8(abc.charCodeAt((group >> 18) & 63))
+  dst[o + 1] = toU8(abc.charCodeAt((group >> 12) & 63))
+  dst[o + 2] = rest === 2 ? toU8(abc.charCodeAt((group >> 6) & 63)) : toU8(BASE64_PAD)
+  dst[o + 3] = toU8(BASE64_PAD)
+  return o + 4
 }
 
 /**
@@ -135,9 +134,8 @@ export const base64EncodeInto = (src: u8[], off: i32, len: i32, dst: u8[], at: i
  * @returns A fresh string holding the padded encoding.
  */
 export const base64Encode = (bytes: u8[]): string => {
-  if (bytes.length > 2147483647) {
-    panic("base64Encode: more than 2^31 - 1 bytes")
-  }
+  // `base64EncodedLength` refuses a count past 1,610,612,733, and the largest
+  // `i32` that `toI32` saturates a longer length to under `--number-mode f64`.
   const n: i32 = toI32(bytes.length)
   const out: u8[] = new Array<u8>(base64EncodedLength(n))
   const end: i32 = base64EncodeInto(bytes, 0, n, out, 0)
