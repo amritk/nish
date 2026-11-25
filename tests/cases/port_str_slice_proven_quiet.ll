@@ -1,12 +1,12 @@
 @.str.0 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"abcdef\00" }, align 8
 
-declare void @nish_free_arena() #1
-declare noundef i64 @nish_arena_mark() #1
-declare void @nish_arena_release(i64 noundef) #1
-declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
 
 define internal noundef nonnull align 8 i8* @head(i8* noundef nonnull noalias readonly align 8 %s, i32 noundef %n) #0 {
@@ -29,27 +29,17 @@ if.then:
   %6 = bitcast i8* %s to i64*
   %7 = load i64, i64* %6, align 8
   %8 = sext i32 %n to i64
-  %9 = icmp ule i64 0, %8
-  %10 = icmp ule i64 %8, %7
-  %11 = and i1 %9, %10
-  br i1 %11, label %slice.ok, label %slice.fail
-
-slice.fail:
-  call void @nish_panic_slice(i64 0, i64 %8, i64 %7)
-  unreachable
-
-slice.ok:
-  %12 = sub i64 %8, 0
-  %13 = getelementptr inbounds i8, i8* %s, i64 8
-  %14 = getelementptr inbounds i8, i8* %13, i64 0
-  %15 = call i8* @nish_str_new(i8* %14, i64 %12)
-  ret i8* %15
+  %9 = sub i64 %8, 0
+  %10 = getelementptr inbounds i8, i8* %s, i64 8
+  %11 = getelementptr inbounds i8, i8* %10, i64 0
+  %12 = call i8* @nish_str_new(i8* %11, i64 %9)
+  ret i8* %12
 
 if.end:
   ret i8* %s
 }
 
-define internal noundef nonnull align 8 i8* @rest(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %from) #0 {
+define internal noundef nonnull align 8 i8* @rest(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %from) #1 {
 entry:
   %n.addr = alloca i32, align 4
   %0 = bitcast i8* %s to i64*
@@ -96,7 +86,7 @@ if.end:
   ret i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*)
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %word.addr = alloca i8*, align 8
   %arena.mark = call i64 @nish_arena_mark()
@@ -114,32 +104,24 @@ entry:
   %8 = load i8*, i8** %word.addr, align 8
   %9 = bitcast i8* %8 to i64*
   %10 = load i64, i64* %9, align 8
-  %11 = icmp ule i64 0, %10
-  br i1 %11, label %slice.ok, label %slice.fail
-
-slice.fail:
-  call void @nish_panic_slice(i64 0, i64 %10, i64 %10)
-  unreachable
-
-slice.ok:
-  %12 = sub i64 %10, 0
-  %13 = getelementptr inbounds i8, i8* %8, i64 8
-  %14 = getelementptr inbounds i8, i8* %13, i64 0
-  %15 = call i8* @nish_str_new(i8* %14, i64 %12)
-  call void @nish_print(i8* %15)
+  %11 = sub i64 %10, 0
+  %12 = getelementptr inbounds i8, i8* %8, i64 8
+  %13 = getelementptr inbounds i8, i8* %12, i64 0
+  %14 = call i8* @nish_str_new(i8* %13, i64 %11)
+  call void @nish_print(i8* %14)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind "probe-stack"="inline-asm" }
-attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
 attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}

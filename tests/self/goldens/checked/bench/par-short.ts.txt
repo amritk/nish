@@ -186,7 +186,7 @@ function negativeAtomicLength(): void -> @nish.negativeAtomicLength
 function AtomicI32Array.constructor(this: AtomicI32Array, length: i32): void -> @nish.AtomicI32Array.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: length
-  calls: nish.negativeAtomicLength nish_panic
+  calls: nish.negativeAtomicLength
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:7 negativeAtomicLength -> @nish.negativeAtomicLength
@@ -239,7 +239,7 @@ function AtomicI32Array.compareExchange(this: AtomicI32Array, i: i32, expected: 
 function AtomicI64Array.constructor(this: AtomicI64Array, length: i32): void -> @nish.AtomicI64Array.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: length
-  calls: nish.negativeAtomicLength nish_panic
+  calls: nish.negativeAtomicLength
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:7 negativeAtomicLength -> @nish.negativeAtomicLength

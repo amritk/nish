@@ -1560,7 +1560,7 @@ function exposeWith<u8[], u8[], void, tlsHeldCopy>(s: Secret<u8[]>, arg: u8[], f
   stackSites=0 stackLocals=0
   callee +0:93 tlsHeldCopy -> @nish.tlsHeldCopy
 function exposeWith<u8[], u8[], u8[], tlsTicketSealExposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.25.nish.tlsTicketSealExposed [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsTicketSealExposed
   calls: nish.tlsTicketSealExposed
   pointer s: size=8 writesThrough=false captured=false
@@ -1576,7 +1576,7 @@ function exposeWith<u8[], u8[], u8[], tlsTicketOpenExposed>(s: Secret<u8[]>, arg
   stackSites=0 stackLocals=0
   callee +0:93 tlsTicketOpenExposed -> @nish.tlsTicketOpenExposed
 function expose<u8[], u8[], copyOf>(s: Secret<u8[]>, f: void): u8[] -> @nish.expose$arr.u8$arr.u8$fn.6.copyOf [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: copyOf
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -2468,9 +2468,9 @@ function chacha20CounterFits(counter: u32, len: i32): boolean -> @nish.chacha20C
   stackSites=0 stackLocals=0
   local +0:9 blocks: u64 (const)
 function chacha20QuarterRound(state: u32[], a: i32, b: i32, c: i32, d: i32): u32[] | null -> @nish.chacha20QuarterRound [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a b c d
-  calls: nish.chacha20Rotl nish_panic
+  calls: nish.chacha20Rotl
   pointer state: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 x: u32[] (const)
@@ -2494,10 +2494,10 @@ function chacha20Block(key: u8[], counter: u32, nonce: u8[]): u8[] | null -> @ni
   callee +2:3 chacha20XorInto -> @nish.chacha20XorInto
   callee +3:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function chacha20(key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[] | null -> @nish.chacha20 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20XorInto
   escaping: counter
-  calls: nish.chacha20CounterFits nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32 nish_panic
+  calls: nish.chacha20CounterFits nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.chacha20XorInto#1
@@ -2661,9 +2661,9 @@ function chacha20Poly1305TagMatch(tag: u8[], sealed: u8[], at: i32): u32 -> @nis
   local +0:9 last: u32 (const)
   local +1:9 diff: u32 (const)
 function chacha20Poly1305Seal(key: u8[], nonce: u8[], aad: u8[], plaintext: u8[]): u8[] | null -> @nish.chacha20Poly1305Seal [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20Poly1305Setup
-  calls: nish.chacha20CounterFits nish.chacha20Poly1305Setup nish.chacha20Poly1305Tag nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32 nish.wipe$arr.u8 nish_panic
+  calls: nish.chacha20CounterFits nish.chacha20Poly1305Setup nish.chacha20Poly1305Tag nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Tag#1
@@ -4242,7 +4242,7 @@ function pbkdf2Finish(keyedOuter: Sha256, work: Sha256, out: u8[]): void -> @nis
 function pbkdf2HmacSha256Exposed(password: u8[], request: Pbkdf2Request): u8[] | null -> @nish.pbkdf2HmacSha256Exposed
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacKeySha256
-  calls: nish.Sha256.constructor nish.Sha256.update nish.hmacCopySha256 nish.hmacKeySha256 nish.hmacWipeSha256 nish.pbkdf2Finish nish.wipe$arr.u8 nish_panic
+  calls: nish.Sha256.constructor nish.Sha256.update nish.hmacCopySha256 nish.hmacKeySha256 nish.hmacWipeSha256 nish.pbkdf2Finish nish.wipe$arr.u8
   pointer password: size=0 writesThrough=false captured=false passedTo=nish.hmacKeySha256#2
   pointer request: size=16 writesThrough=false captured=false
   stackSites=3 stackLocals=3
@@ -19872,7 +19872,7 @@ function tlsTicketRange(buf: u8[], from: i32, to: i32): u8[] -> @nish.tlsTicketR
   local +8:9 out: u8[] (const)
   callee +9:8 tlsTicketCopy -> @nish.tlsTicketCopy
 function tlsTicketSealExposed(key: u8[], input: u8[]): u8[] -> @nish.tlsTicketSealExposed
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20Poly1305Seal
   calls: nish.chacha20Poly1305Seal nish.tlsTicketRange nish.wipe$arr.u8
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Seal#0
@@ -19888,7 +19888,7 @@ function tlsTicketSealExposed(key: u8[], input: u8[]): u8[] -> @nish.tlsTicketSe
   callee +8:3 wipe<u8[]> -> @nish.wipe$arr.u8
   local +10:11 none: u8[] (const)
 function tlsTicketSeal(key: Secret<u8[]>, info: TlsTicketKeyInfo, state: TlsTicketState, now: i64, out: u8[]): i32 -> @nish.tlsTicketSeal [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: now
   calls: nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.25.nish.tlsTicketSealExposed nish.tlsTicketAdd nish.tlsTicketCopy nish.tlsTicketKeySeals nish.tlsTicketPlainLength nish.tlsTicketPut nish.tlsTicketSize nish_arena_mark nish_arena_release nish_random_fill nish_wipe

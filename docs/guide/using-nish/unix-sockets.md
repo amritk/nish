@@ -32,15 +32,14 @@ and it goes away with the last socket bound to it. Any other path makes a
 socket file. The client connects with the same name, and the listener takes
 the connection once the loop says it is readable.
 
-The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): the range of a
-`u8[]` that `netRead` and `netWrite` take is checked while the program
-runs, a check no proof removes yet, and the later ones also index arrays
-without a guard; a test such as `i < xs.length` before each index proves
+The range of a `u8[]` that `netRead` and `netWrite` take is checked, and the
+compiler proves the check away for a window it can see is inside the buffer,
+such as `buf, 0, buf.length`. The later examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): they index arrays
+without a guard, and a test such as `i < xs.length` before each index proves
 those.
 
-<!-- allow-panics: slices with bounds it does not test -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import {
   netClose,

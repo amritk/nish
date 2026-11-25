@@ -142,7 +142,7 @@ function chacha20CounterFits(counter: u32, len: i32): boolean -> @chacha20Counte
 function chacha20QuarterRound(state: u32[], a: i32, b: i32, c: i32, d: i32): u32[] | null -> @chacha20QuarterRound [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a b c d
-  calls: chacha20Rotl nish_panic nish_panic_index
+  calls: chacha20Rotl nish_panic_index
   pointer state: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
@@ -169,7 +169,7 @@ function chacha20(key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[] | null
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via chacha20XorInto
   escaping: counter
-  calls: chacha20CounterFits chacha20State chacha20XorInto nish.wipe$arr.u32 nish_panic
+  calls: chacha20CounterFits chacha20State chacha20XorInto nish.wipe$arr.u32
   pointer key: size=0 writesThrough=false captured=false passedTo=chacha20State#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=chacha20State#2
   pointer data: size=0 writesThrough=false captured=false passedTo=chacha20XorInto#1

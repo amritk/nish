@@ -1408,6 +1408,12 @@ export const WASM_HOST_SIZE_BUDGETS = [
  * runtime-wasm.c defines nish_arena_keep, the call-site reclaim's keep, as the
  * identity, so string code reached from wasm (nish/term) links
  * (docs/wp6-memory.md §2a), and `--export-all` keeps it in every module.
+ *
+ * #2207 moved arrays.ts's `--profile wasm` and `wasm-host` digests, and the
+ * native and wasm32 IR digests in tests/run.js: `new Float64Array(xs.length)`
+ * and `new BigInt64Array(xs.length)` are proven non-negative, so their length
+ * checks and panic blocks leave the IR (`squares`' `new Int32Array(n)` keeps
+ * its own). The `.d.ts` and the loader are unchanged.
  */
 export const WASM_PLAIN_DIGESTS = [
   {
@@ -1421,8 +1427,8 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/arrays.ts",
     dts: "e01467ab59357645168a86b4defe2aa137a0c2395e1b211993379957899154b7",
     loader: "894b7789a0be7f7fb39bdcd252d58dd321e6912cb425db7e459f0cbc11c2500a",
-    wasm: "bb48e976a4bf87d39260add7b57da65f45387a1b822e144d902ae94417a4b004",
-    host: "93a7dc1238aa9f6548de14593dd1fe0f99b6b732a5e2ec5b31543799ab5dd548",
+    wasm: "0072d08fedfcfc3c994874791197b1dbe78b12549cefb12d8338ce545036d9f3",
+    host: "887b960efd3aafb2ae62bfcf0a49e8d3a146a8afaef7ab1fe96111295e5eba67",
   },
   {
     src: "examples/results.ts",

@@ -3977,10 +3977,12 @@ only, where string `slice` takes any integer type: an `i64` or `u32` bound is
 refused (`` Argument 2 of `slice`: expected i32, got i64 ``;
 `reject_arr_slice_i64_bound`), so convert it first: with `toI32(n)` in the
 default i32 mode, and with `Number(n)` under `--number-mode f64`, where the
-message reads `expected f64`. Neither conversion works in the other mode. An array's `slice` is not a
-`slice` [panic site](semantics-decisions.md#panic-sites): its check is `std/array.ts`'s own
-`panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
-proof at the call removes, and the no-panic scope refuses it
+message reads `expected f64`. Neither conversion works in the other mode. An array's `slice` is a
+`slice` [panic site](semantics-decisions.md#panic-sites) of its caller: its check is
+`std/array.ts`'s own `panic(...)`, which a caller does not follow, and the
+range is judged at the call as a string `slice`'s is, so a guard such as
+`if (a >= 0 && a <= b && b <= xs.length)` proves it (`deny_panics_ranges`)
+and the no-panic scope refuses one nothing bounds
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
 words, so the two agree on every input; `map`, `filter`, `some`, `every`,

@@ -1197,7 +1197,7 @@ function Importer.arrayField(this: Importer, t: CType): string -> @Importer.arra
 function Importer.outClass(this: Importer, scalar: string): string -> @Importer.outClass [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_array_grow nish_panic_index nish_panic_slice nish_str_concat nish_str_eq nish_str_new
+  calls: nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_new
   pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -2:11 name: string (const)

@@ -2158,24 +2158,12 @@ while.end.9:
   %244 = load i64, i64* %243, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %245 = trunc i64 %244 to i32
   %246 = sext i32 %245 to i64
-  %247 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %241, i64 0, i32 0
-  %248 = load i64, i64* %247, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %249 = icmp ule i64 0, %246
-  %250 = icmp ule i64 %246, %248
-  %251 = and i1 %249, %250
-  br i1 %251, label %bytes.ok, label %bytes.fail
-
-bytes.fail:
-  call void @nish_panic_slice(i64 0, i64 %246, i64 %248)
-  unreachable
-
-bytes.ok:
-  %252 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %241, i64 0, i32 2
-  %253 = load i8*, i8** %252, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %254 = getelementptr inbounds i8, i8* %253, i64 0
-  %255 = sub i64 %246, 0
-  %256 = call i8* @nish_str_new(i8* %254, i64 %255)
-  ret i8* %256
+  %247 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %241, i64 0, i32 2
+  %248 = load i8*, i8** %247, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %249 = getelementptr inbounds i8, i8* %248, i64 0
+  %250 = sub i64 %246, 0
+  %251 = call i8* @nish_str_new(i8* %249, i64 %250)
+  ret i8* %251
 }
 
 define noundef nonnull align 8 i8* @nish.replaceAll(i8* noundef nonnull noalias readonly align 8 %text, i8* noundef nonnull noalias readonly align 8 nocapture %needle, i8* noundef nonnull noalias readonly align 8 nocapture %replacement) #1 {

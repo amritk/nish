@@ -5,7 +5,7 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1092,
+  "total": 1040,
   "explicit": {
     "kept": 364,
     "toFix": 7
@@ -48,17 +48,15 @@
       "panic": 7
     },
     "std/crypto/chacha20poly1305.ts": {
-      "array-length": 4
+      "array-length": 1
     },
     "std/crypto/hkdf.ts": {
       "panic": 14
     },
     "std/crypto/hmac.ts": {
-      "array-length": 1,
       "panic": 10
     },
     "std/crypto/jwt.ts": {
-      "array-length": 3,
       "panic": 1
     },
     "std/crypto/p256.ts": {
@@ -76,18 +74,9 @@
     "std/crypto/x509-random.ts": {
       "io-exit": 2
     },
-    "std/crypto/x509.ts": {
-      "slice": 1
-    },
-    "std/host/text.ts": {
-      "slice": 1
-    },
     "std/json-equal.ts": {
       "index": 4,
       "pop": 2
-    },
-    "std/json-number.ts": {
-      "slice": 1
     },
     "std/json-tokenizer.ts": {
       "slice": 1
@@ -96,8 +85,7 @@
       "slice": 3
     },
     "std/json-value.ts": {
-      "array-length": 1,
-      "slice": 2
+      "array-length": 1
     },
     "std/net/buffer-pool.ts": {
       "array-length": 1,
@@ -115,7 +103,7 @@
     "std/net/dns.ts": {
       "io-exit": 1,
       "panic": 4,
-      "slice": 4
+      "slice": 3
     },
     "std/net/fetch.ts": {
       "io-exit": 3,
@@ -149,7 +137,7 @@
     },
     "std/net/http1-server.ts": {
       "panic": 2,
-      "slice": 4
+      "slice": 2
     },
     "std/net/http2-cleartext.ts": {
       "panic": 2,
@@ -179,22 +167,21 @@
     "std/net/postgres-async.ts": {
       "io-exit": 1,
       "panic": 10,
-      "slice": 14
+      "slice": 10
     },
     "std/net/postgres-carrier.ts": {
       "io-exit": 4,
       "panic": 12,
-      "slice": 6
+      "slice": 5
     },
     "std/net/postgres.ts": {
-      "array-length": 27,
+      "array-length": 23,
       "index": 16,
       "panic": 44,
       "slice": 12
     },
     "std/net/prefork.ts": {
-      "panic": 1,
-      "slice": 1
+      "panic": 1
     },
     "std/net/qpack.ts": {
       "panic": 3
@@ -212,13 +199,12 @@
       "panic": 6
     },
     "std/net/serve.ts": {
-      "array-length": 3,
       "panic": 3,
       "slice": 8
     },
     "std/net/static.ts": {
       "panic": 1,
-      "slice": 4
+      "slice": 3
     },
     "std/net/tls-tcp.ts": {
       "io-exit": 3,
@@ -236,12 +222,12 @@
     },
     "std/net/upstream.ts": {
       "panic": 4,
-      "slice": 3
+      "slice": 1
     },
     "std/net/url.ts": {
-      "array-length": 3,
+      "array-length": 2,
       "panic": 2,
-      "slice": 7
+      "slice": 6
     },
     "std/net/websocket.ts": {
       "panic": 2
@@ -258,7 +244,7 @@
       "array-length": 12
     },
     "std/release.ts": {
-      "slice": 10
+      "slice": 6
     },
     "std/sqlite.ts": {
       "ffi-nul": 7,
@@ -278,7 +264,7 @@
       "slice": 1
     },
     "std/term-io.ts": {
-      "slice": 3
+      "slice": 2
     },
     "std/term-pixels.ts": {
       "array-length": 6,
@@ -293,10 +279,9 @@
     },
     "std/text.ts": {
       "panic": 1,
-      "slice": 2
+      "slice": 1
     },
     "std/threads.ts": {
-      "array-length": 2,
       "index": 32,
       "overflow": 4,
       "panic": 4
@@ -309,11 +294,10 @@
       "overflow": 12
     },
     "std/yaml-write.ts": {
-      "overflow": 13,
-      "slice": 1
+      "overflow": 13
     },
     "std/yaml.ts": {
-      "array-length": 13,
+      "array-length": 3,
       "index": 12,
       "overflow": 275,
       "panic": 1,
@@ -1669,7 +1653,7 @@
       "sites": {
         "array-length": 1
       },
-      "reason": "new Array(n) with n the plaintext length plus the 16-byte tag, below 2^31 by Seal's guard: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "reason": "new Array(n) with n the plaintext length plus the 16-byte tag, below 2^31 by Seal's guard: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
       "record": "docs/security/crypto-aead.md"
     },
     {
@@ -1678,34 +1662,7 @@
       "sites": {
         "array-length": 1
       },
-      "reason": "new Array(n) with n the sealed length less the tag: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/chacha20poly1305.ts",
-      "function": "chacha20QuarterRound",
-      "sites": {
-        "array-length": 1
-      },
-      "reason": "new Array(n) with n the given state's length: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/chacha20poly1305.ts",
-      "function": "chacha20",
-      "sites": {
-        "array-length": 1
-      },
-      "reason": "new Array(n) with n the input's length: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/chacha20poly1305.ts",
-      "function": "chacha20Poly1305Seal",
-      "sites": {
-        "array-length": 1
-      },
-      "reason": "new Array(n) with n the plaintext length plus the 16-byte tag, bounded by Seal's guard: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "reason": "new Array(n) with n the sealed length less the tag: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
       "record": "docs/security/crypto-aead.md"
     },
     {
@@ -1714,7 +1671,7 @@
       "sites": {
         "array-length": 1
       },
-      "reason": "new Array(n) with n the sealed length less the tag: the prover cannot bound an allocation length that is not a literal, and the length is the caller's input, so the array-length check stays",
+      "reason": "new Array(n) with n the sealed length less the tag: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
       "record": "docs/security/crypto-aead.md"
     }
   ]

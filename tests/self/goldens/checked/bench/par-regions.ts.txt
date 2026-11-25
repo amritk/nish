@@ -186,7 +186,7 @@ function negativeAtomicLength(): void -> @nish.negativeAtomicLength
 function AtomicI32Array.constructor(this: AtomicI32Array, length: i32): void -> @nish.AtomicI32Array.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: length
-  calls: nish.negativeAtomicLength nish_panic
+  calls: nish.negativeAtomicLength
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:7 negativeAtomicLength -> @nish.negativeAtomicLength
@@ -239,7 +239,7 @@ function AtomicI32Array.compareExchange(this: AtomicI32Array, i: i32, expected: 
 function AtomicI64Array.constructor(this: AtomicI64Array, length: i32): void -> @nish.AtomicI64Array.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: length
-  calls: nish.negativeAtomicLength nish_panic
+  calls: nish.negativeAtomicLength
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:7 negativeAtomicLength -> @nish.negativeAtomicLength
@@ -321,7 +321,7 @@ function scramble(x: i32): i32 -> @scramble$
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.parallelMapInto$i32$i32$fn.8.scramble nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 scramble$
+  calls: nish.parallelMapInto$i32$i32$fn.8.scramble nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 scramble$
   stackSites=0 stackLocals=0
   local -6:9 rounds: i32 (const)
   local -5:9 n: i32 (const)

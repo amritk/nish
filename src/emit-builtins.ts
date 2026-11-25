@@ -1670,9 +1670,11 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
   if (buffers) {
     emitter.declareType(ARRAY_TYPE)
   }
-  // Every triple, in argument order: `netWrite2` has two.
+  // Every triple, in argument order: `netWrite2` has two. None where
+  // `src/bounds.ts` proved every window of the call (`judgeRangeCheck`).
   // The loop bound `at + 2 < values.length` proves all three reads in range.
-  for (let at = 0; at + 2 < values.length && values.length === params.length; at++) {
+  const proven = emitter.program.nodeProvenIndex[expr.id]
+  for (let at = 0; !proven && at + 2 < values.length && values.length === params.length; at++) {
     if (isNetRangeBuffer(name, at)) {
       // All three are read before the first emit, which the proof does not cross.
       const buffer = values[at]

@@ -132,6 +132,7 @@ import {
   CheckedProgram,
   FunctionSig,
   inlineElementStruct,
+  isArraySliceInstance,
   JSON_DECODE,
   JSON_DECODE_UNION,
   JSON_NONE,
@@ -2231,6 +2232,11 @@ class FactCollector {
     if (isSpawnEntry(callee) && !isVoidSpawn(callee)) {
       this.noteSite(node, PANIC_SPAWN_SLOT, proven, "")
     }
+    // `xs.slice(a, b)`: `std/array.ts` checks the range, and the check is the
+    // call's, proven as `s.slice(a, b)` is (`isArraySliceInstance`).
+    if (isArraySliceInstance(callee)) {
+      this.noteSite(node, PANIC_SLICE, proven, "")
+    }
     if (parallelRoleOf(callee) === PAR_MAP) {
       this.noteSite(node, PANIC_PARALLEL_LENGTH, proven, "")
     }
@@ -3934,7 +3940,7 @@ class FactCollector {
       if (name === "charCodeAt") {
         this.noteSite(node, PANIC_INDEX, program.nodeProvenIndex[node.id], "")
       } else if (name === "slice") {
-        this.noteSite(node, PANIC_SLICE, false, "")
+        this.noteSite(node, PANIC_SLICE, program.nodeProvenIndex[node.id], "")
       }
       return
     }
@@ -4151,20 +4157,24 @@ class FactCollector {
         this.facts.effect = EFFECT_WRITE
       }
       // Mirrors `emitNewArray`: a length it checks can panic, which costs the
-      // function `willreturn` exactly where the check is in its IR.
+      // function `willreturn` exactly where the check is in its IR, and a
+      // length `src/bounds.ts` proved non-negative is checked nowhere.
       if (node.kind === NodeKind.New) {
         const length = node.children[2].children[0]
         const constant = program.nodeConstants[unwrapParens(length).id]
         if (
           newArrayLengthChecked(length, program.nodeTypes[length.id], constant, this.opts.numberMode, table)
         ) {
-          const tail: string[] = []
-          panicTailCallees(tail)
-          // A panic's tail, not output (`FunctionFacts.writesOutput`).
-          for (const name of tail) {
-            this.facts.callees.add(name)
+          const proven = program.nodeProvenIndex[node.id]
+          if (!proven) {
+            const tail: string[] = []
+            panicTailCallees(tail)
+            // A panic's tail, not output (`FunctionFacts.writesOutput`).
+            for (const name of tail) {
+              this.facts.callees.add(name)
+            }
           }
-          this.noteSite(node, PANIC_ARRAY_LENGTH, false, "")
+          this.noteSite(node, PANIC_ARRAY_LENGTH, proven, "")
         }
       }
       return
@@ -4244,8 +4254,12 @@ class FactCollector {
       this.notePointerStore(methodReceiver(call), this.elementTypeOf(methodReceiver(call)))
       if (method === "set") {
         this.facts.readsMemory = true
-        this.facts.callees.add("nish_panic_slice")
-        this.noteSite(call, PANIC_SLICE, false, "")
+        // `emitSet` leaves out a range `src/bounds.ts` proved.
+        const proven = this.unit.program.nodeProvenIndex[call.id]
+        if (!proven) {
+          this.facts.callees.add("nish_panic_slice")
+        }
+        this.noteSite(call, PANIC_SLICE, proven, "")
       }
       return
     }
@@ -4364,12 +4378,17 @@ class FactCollector {
    * The site a builtin call is, by the name the analysis resolved it to
    * (`builtinPanicKind`). A `nish:simd` access is proven exactly when
    * `bounds.ts` discharged its bound, the fact `emitVectorAccess` reads to
-   * drop the check, so the table and the IR agree.
+   * drop the check, and a range check (`String.fromBytes`, `writeBytes`, a
+   * `nish:net` window) exactly when it proved the range, the fact
+   * `emitFromBytes` and `emitNetCall` read, so the table and the IR agree.
+   * Their callee lists keep `nish_panic_slice` either way, which costs a
+   * proven call's caller nothing but `willreturn`.
    */
   noteBuiltinSite(call: Node, name: string): void {
     const kind = builtinPanicKind(name)
     if (kind >= 0) {
-      this.noteSite(call, kind, isSimdAccess(name) && this.unit.program.nodeProvenIndex[call.id], "")
+      const checked = isSimdAccess(name) || kind === PANIC_SLICE
+      this.noteSite(call, kind, checked && this.unit.program.nodeProvenIndex[call.id], "")
     }
   }
 
@@ -4545,7 +4564,8 @@ const collectStatedFacts = (
   // none of its own; `isStackSite` reads past the end as false.
   const facts = new FunctionFacts(sig.paramNames, known === null || ownMemory ? 0 : nodeCount)
   facts.callerProven =
-    (sig.sourceName === "slotOutOfRange" || sig.sourceName === "dstTooShort") && isThreadsModule(program)
+    ((sig.sourceName === "slotOutOfRange" || sig.sourceName === "dstTooShort") && isThreadsModule(program)) ||
+    isArraySliceInstance(sig)
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
   facts.returnDeref = structSize(program, table, opts, sig.returnType)
   facts.returnAlign = pointerAlign(program, table, sig.returnType)

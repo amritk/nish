@@ -3079,8 +3079,7 @@ tag under one key (NL2721) as a different string (NL2720). A `tag` on a class
 no union holds does nothing, and a JSON call on that class refuses its
 enum-member field.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -3552,7 +3551,13 @@ its fix, and there are five:
   `--number-mode f64` — has no guard, so index with an `i32` or a `u32`),
   `if (d !== 0 && d !== -1)` before `a / d` (a
   constant divisor needs nothing), `if (xs.length > 0)` before `xs.pop()`,
-  `if (n >= 0 && n <= 9)` before `n` enters `integer<0, 9>`.
+  `if (n >= 0 && n <= 9)` before `n` enters `integer<0, 9>`, `if (n >= 0)`
+  before `new Array<T>(n)` of an `i32` (a local of `integer<0, N>` needs
+  nothing), `if (start >= 0 && start <= end && end <= bytes.length)` before
+  `s.slice(start, end)`, `xs.slice(start, end)` or
+  `String.fromBytes(bytes, start, end)`, `if (src.length <= dst.length)`
+  before `dst.set(src, 0)`, and `if (n >= 0 && n <= buf.length)` before
+  `writeBytes(buf, 0, n)` or `netRead(fd, buf, 0, n)`.
 - **Bound a signed `+ - *`, or say it wraps**: an `i32`/`i64` operation the
   checker cannot prove fits is an `overflow` site; bound its operands (a loop
   below a length, a guard on the value), compute in `u32`/`u64`, or write

@@ -18,7 +18,7 @@ function sum(xs: i32[], n: i32): i32 -> @sum
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: fill nish_arena_mark nish_arena_release nish_panic nish_print nish_str_from_i32 sum
+  calls: fill nish_arena_mark nish_arena_release nish_print nish_str_from_i32 sum
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 xs: i32[] (const)

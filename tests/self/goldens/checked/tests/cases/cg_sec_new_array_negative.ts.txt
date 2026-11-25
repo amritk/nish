@@ -12,9 +12,8 @@ function ranged(n: integer<-4, 4>): u8[] -> @ranged
   calls: nish_panic
   stackSites=0 stackLocals=0
 function counts(n: integer<0, 4>): i32[] -> @counts
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: n
-  calls: nish_panic
   stackSites=0 stackLocals=0
 function negativeI32(): i32 -> @negativeI32 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false

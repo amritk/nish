@@ -14,10 +14,11 @@ one as a pair of offsets into the target, in an `i32[]` you made once.
 
 The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/router`
-keeps panic sites no proof removes yet, and so does the range check of
-`String.fromBytes`, so those calls are refused by default for now. The indexes
-and the `panic` call in your own code build under the default once a guard such
-as `i < xs.length` proves each index and the `panic` becomes an error answer.
+keeps panic sites no proof removes yet, so those calls are refused by default
+for now. The indexes, the `String.fromBytes` ranges and the `panic` call in
+your own code build under the default once a guard such as `i < xs.length`
+proves each index, one such as `start >= 0 && start <= end && end <= buf.length`
+each range, and the `panic` becomes an error answer.
 
 <!-- allow-panics: calls `panic`; slices with bounds it does not test; indexes an array without a guard the checker reads; calls `std/net/router.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->

@@ -247,6 +247,8 @@ cases/deny_panics_i32_mask_const added after R6: no rewriter to freeze it with
 cases/deny_panics_mask added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_proven added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it with
+cases/deny_panics_ranges added after R6: no rewriter to freeze it with
+cases/deny_panics_ranges_shapes added after R6: no rewriter to freeze it with
 cases/deny_panics_trim_end added after R6: no rewriter to freeze it with
 cases/deny_panics_unsafe added after R6: no rewriter to freeze it with
 cases/deny_retention_clean added after R6: no rewriter to freeze it with

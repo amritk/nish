@@ -4297,7 +4297,7 @@ function runTokenize(doc: u8[], iterations: i32, at: i32): i64 -> @runTokenize
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.constructor
   escaping: at
-  calls: fold mutate nish.JsonLimits.constructor nish.JsonTokenizer.constructor nish_monotonic_nanos nish_panic nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 tokenizeOnce
+  calls: fold mutate nish.JsonLimits.constructor nish.JsonTokenizer.constructor nish_monotonic_nanos nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 tokenizeOnce
   pointer doc: size=0 writesThrough=true captured=true passedTo=nish.JsonTokenizer.constructor#1 mutate#0 tokenizeOnce#1 tokenizeOnce#1
   stackSites=3 stackLocals=2
   local +0:9 out: u8[] (const)

@@ -127,7 +127,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "array-length", "at": "std/threads.ts:826:21", "proven": false },
+                { "kind": "array-length", "at": "std/threads.ts:826:21", "proven": true },
                 { "kind": "oom", "at": "std/threads.ts:826:21", "allowed": true },
                 { "kind": "call", "at": "std/threads.ts:828:7", "callee": "negativeAtomicLength", "via": "panic" },
                 { "kind": "oom", "at": "std/threads.ts:830:21", "allowed": true }
@@ -274,7 +274,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "array-length", "at": "std/threads.ts:982:21", "proven": false },
+                { "kind": "array-length", "at": "std/threads.ts:982:21", "proven": true },
                 { "kind": "oom", "at": "std/threads.ts:982:21", "allowed": true },
                 { "kind": "call", "at": "std/threads.ts:984:7", "callee": "negativeAtomicLength", "via": "panic" },
                 { "kind": "oom", "at": "std/threads.ts:986:21", "allowed": true }

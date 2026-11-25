@@ -1,2 +1,2 @@
 error: `array-length` may panic here
-`new Array` checks a length of this type before it allocates: give the length a type that needs no check — `u8`, `u16` or a range starting at 0, `integer<0, N>` — or write it as a literal
+`new Array` checks a length of type `i64` before it allocates, whatever is known about it: convert it to an `i32` proven non-negative — `const m = toI32(n)` and then `if (m >= 0)` — or give it a type that needs no check, `u8` or `u16`, or write it as a literal

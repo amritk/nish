@@ -149,7 +149,7 @@ function StringMap.insertAt(this: StringMap, bucket: i32, key: string, hash: u32
 function StringMap.grow(this: StringMap): void -> @StringMap.grow [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: home nish_panic nish_panic_index nish_panic_overflow slotOf
+  calls: home nish_panic_index nish_panic_overflow slotOf
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:11 wider: i32 (const)
