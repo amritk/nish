@@ -319,7 +319,7 @@ function messageFor(code: i32, connection: string | null): string -> @nish.messa
   calls: nish.describe
   stackSites=0 stackLocals=0
   local +0:9 primary: i32 (const)
-  callee +2:12 describe -> @nish.describe
+  callee +7:12 describe -> @nish.describe
 function moved(r: i32): Result<boolean, i32> -> @nish.moved
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: nish_panic_overflow

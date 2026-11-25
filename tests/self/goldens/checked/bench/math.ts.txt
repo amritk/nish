@@ -100,23 +100,23 @@ function trigLarge(x: f64, ix: i32, hx: i32, mode: i32): f64 -> @nish.trigLarge
   local +44:9 a: f64 (const)
   callee +44:43 exp2Bits -> @nish.exp2Bits
   local +45:9 b: f64 (const)
-  callee +45:81 exp2Bits -> @nish.exp2Bits
-  local +47:9 p1h: f64 (const)
-  local +48:9 p1l: f64 (const)
-  local +49:9 t: f64 (const)
-  local +50:9 split: f64 (const)
-  local +51:9 ac: f64 (const)
-  local +52:9 ah: f64 (const)
-  local +53:9 al: f64 (const)
-  local +54:9 pc: f64 (const)
-  local +55:9 ph: f64 (const)
-  local +56:9 pl: f64 (const)
-  local +57:9 err: f64 (const)
-  local +58:9 tail: f64 (const)
-  local +59:7 y0: f64 (let)
-  local +60:7 y1: f64 (let)
-  local +66:9 quadrant: i32 (const)
-  callee +67:10 trigKernel -> @nish.trigKernel
+  callee +47:5 exp2Bits -> @nish.exp2Bits
+  local +49:9 p1h: f64 (const)
+  local +50:9 p1l: f64 (const)
+  local +51:9 t: f64 (const)
+  local +52:9 split: f64 (const)
+  local +53:9 ac: f64 (const)
+  local +54:9 ah: f64 (const)
+  local +55:9 al: f64 (const)
+  local +56:9 pc: f64 (const)
+  local +57:9 ph: f64 (const)
+  local +58:9 pl: f64 (const)
+  local +59:9 err: f64 (const)
+  local +60:9 tail: f64 (const)
+  local +61:7 y0: f64 (let)
+  local +62:7 y1: f64 (let)
+  local +68:9 quadrant: i32 (const)
+  callee +69:10 trigKernel -> @nish.trigKernel
 function kernelTan(x0: f64, y0: f64, odd: boolean): f64 -> @nish.kernelTan
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x0 y0
@@ -324,7 +324,7 @@ function withHi(x: f64, hi: i32): f64 -> @nish.withHi
   escaping: x
   calls: llvm.fptosi.sat.i64.f64 nish.loWord
   stackSites=0 stackLocals=0
-  callee +0:46 loWord -> @nish.loWord
+  callee +0:85 loWord -> @nish.loWord
 function withLo(x: f64, lo: u32): f64 -> @nish.withLo
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.fptosi.sat.i64.f64
@@ -493,26 +493,27 @@ function powF64(x: f64, y: f64): f64 -> @nish.powF64 [exported]
   local +110:11 half: i32 (const)
   local +111:11 thn: f64 (const)
   callee +111:22 withHi -> @nish.withHi
-  local +112:9 th: f64 (let)
-  callee +112:25 withHi -> @nish.withHi
-  local +113:9 tl: f64 (let)
-  local +114:11 sl: f64 (const)
-  local +115:9 s2: f64 (let)
-  local +116:11 l3: f64 (const)
-  local +118:9 r: f64 (let)
-  callee +124:10 withLo -> @nish.withLo
-  local +126:11 pu: f64 (const)
-  local +127:11 pv: f64 (const)
-  local +128:11 ph: f64 (const)
-  callee +128:21 withLo -> @nish.withLo
-  local +129:11 pl: f64 (const)
-  local +130:11 zh: f64 (const)
-  local +131:11 zl: f64 (const)
-  local +132:11 t: f64 (const)
-  callee +133:10 withLo -> @nish.withLo
-  local +136:9 y1: f64 (const)
-  callee +136:19 withLo -> @nish.withLo
-  callee +137:10 powExp2 -> @nish.powExp2
+  local +112:11 thSmall: f64 (const)
+  local +113:9 th: f64 (let)
+  callee +113:25 withHi -> @nish.withHi
+  local +114:9 tl: f64 (let)
+  local +115:11 sl: f64 (const)
+  local +116:9 s2: f64 (let)
+  local +117:11 l3: f64 (const)
+  local +119:9 r: f64 (let)
+  callee +125:10 withLo -> @nish.withLo
+  local +127:11 pu: f64 (const)
+  local +128:11 pv: f64 (const)
+  local +129:11 ph: f64 (const)
+  callee +129:21 withLo -> @nish.withLo
+  local +130:11 pl: f64 (const)
+  local +131:11 zh: f64 (const)
+  local +132:11 zl: f64 (const)
+  local +133:11 t: f64 (const)
+  callee +134:10 withLo -> @nish.withLo
+  local +137:9 y1: f64 (const)
+  callee +137:19 withLo -> @nish.withLo
+  callee +138:10 powExp2 -> @nish.powExp2
 function fmodF64(x: f64, y: f64): f64 -> @nish.fmodF64 [exported]
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x y

@@ -2686,6 +2686,7 @@ entry:
   %sh.addr = alloca double, align 8
   %half.addr = alloca i32, align 4
   %thn.addr = alloca double, align 8
+  %thSmall.addr = alloca double, align 8
   %th.addr = alloca double, align 8
   %tl.addr = alloca double, align 8
   %sl.addr = alloca double, align 8
@@ -3367,179 +3368,181 @@ cond.end.12:
   %260 = add nsw i32 %259, 1073741824
   %261 = call double @nish.withHi(double 0x0000000000000000, i32 %260)
   store double %261, double* %thn.addr, align 8
-  %262 = load i1, i1* %big.addr, align 1
-  br i1 %262, label %cond.true.13, label %cond.false.13
+  %262 = load i32, i32* %k.addr, align 4
+  %263 = icmp eq i32 %262, 0
+  br i1 %263, label %cond.true.13, label %cond.false.13
 
 cond.true.13:
-  %263 = load i32, i32* %half.addr, align 4
-  %264 = add nsw i32 %263, 1073217536
-  %265 = call double @nish.withHi(double 0x0000000000000000, i32 %264)
+  %264 = load double, double* %thn.addr, align 8
   br label %cond.end.13
 
 cond.false.13:
-  %266 = load i32, i32* %k.addr, align 4
-  %267 = icmp eq i32 %266, 0
-  br i1 %267, label %cond.true.14, label %cond.false.14
-
-cond.true.14:
-  %268 = load double, double* %thn.addr, align 8
-  br label %cond.end.14
-
-cond.false.14:
-  %269 = load double, double* %thn.addr, align 8
-  %270 = fadd double %269, 0x3FE0000000000000
-  br label %cond.end.14
-
-cond.end.14:
-  %271 = phi double [ %268, %cond.true.14 ], [ %270, %cond.false.14 ]
+  %265 = load double, double* %thn.addr, align 8
+  %266 = fadd double %265, 0x3FE0000000000000
   br label %cond.end.13
 
 cond.end.13:
-  %272 = phi double [ %265, %cond.true.13 ], [ %271, %cond.end.14 ]
-  store double %272, double* %th.addr, align 8
-  %273 = load double, double* %ax.addr, align 8
-  %274 = load double, double* %th.addr, align 8
-  %275 = load double, double* %bp.addr, align 8
-  %276 = fsub double %274, %275
-  %277 = fsub double %273, %276
-  store double %277, double* %tl.addr, align 8
-  %278 = load double, double* %v.addr.1, align 8
-  %279 = load double, double* %u.addr.1, align 8
-  %280 = load double, double* %sh.addr, align 8
-  %281 = load double, double* %th.addr, align 8
-  %282 = fmul double %280, %281
-  %283 = fsub double %279, %282
-  %284 = load double, double* %sh.addr, align 8
-  %285 = load double, double* %tl.addr, align 8
-  %286 = fmul double %284, %285
-  %287 = fsub double %283, %286
-  %288 = fmul double %278, %287
-  store double %288, double* %sl.addr, align 8
-  %289 = load double, double* %ss.addr, align 8
+  %267 = phi double [ %264, %cond.true.13 ], [ %266, %cond.false.13 ]
+  store double %267, double* %thSmall.addr, align 8
+  %268 = load i1, i1* %big.addr, align 1
+  br i1 %268, label %cond.true.14, label %cond.false.14
+
+cond.true.14:
+  %269 = load i32, i32* %half.addr, align 4
+  %270 = add nsw i32 %269, 1073217536
+  %271 = call double @nish.withHi(double 0x0000000000000000, i32 %270)
+  br label %cond.end.14
+
+cond.false.14:
+  %272 = load double, double* %thSmall.addr, align 8
+  br label %cond.end.14
+
+cond.end.14:
+  %273 = phi double [ %271, %cond.true.14 ], [ %272, %cond.false.14 ]
+  store double %273, double* %th.addr, align 8
+  %274 = load double, double* %ax.addr, align 8
+  %275 = load double, double* %th.addr, align 8
+  %276 = load double, double* %bp.addr, align 8
+  %277 = fsub double %275, %276
+  %278 = fsub double %274, %277
+  store double %278, double* %tl.addr, align 8
+  %279 = load double, double* %v.addr.1, align 8
+  %280 = load double, double* %u.addr.1, align 8
+  %281 = load double, double* %sh.addr, align 8
+  %282 = load double, double* %th.addr, align 8
+  %283 = fmul double %281, %282
+  %284 = fsub double %280, %283
+  %285 = load double, double* %sh.addr, align 8
+  %286 = load double, double* %tl.addr, align 8
+  %287 = fmul double %285, %286
+  %288 = fsub double %284, %287
+  %289 = fmul double %279, %288
+  store double %289, double* %sl.addr, align 8
   %290 = load double, double* %ss.addr, align 8
-  %291 = fmul double %289, %290
-  store double %291, double* %s2.addr, align 8
-  %292 = load double, double* %s2.addr, align 8
+  %291 = load double, double* %ss.addr, align 8
+  %292 = fmul double %290, %291
+  store double %292, double* %s2.addr, align 8
   %293 = load double, double* %s2.addr, align 8
   %294 = load double, double* %s2.addr, align 8
-  %295 = fmul double %294, 0x3FCA7E284A454EEF
-  %296 = fadd double %295, 0x3FCD864A93C9DB65
-  %297 = fmul double %293, %296
-  %298 = fadd double %297, 0x3FD17460A91D4101
-  %299 = fmul double %292, %298
-  store double %299, double* %l3.addr, align 8
-  %300 = load double, double* %s2.addr, align 8
+  %295 = load double, double* %s2.addr, align 8
+  %296 = fmul double %295, 0x3FCA7E284A454EEF
+  %297 = fadd double %296, 0x3FCD864A93C9DB65
+  %298 = fmul double %294, %297
+  %299 = fadd double %298, 0x3FD17460A91D4101
+  %300 = fmul double %293, %299
+  store double %300, double* %l3.addr, align 8
   %301 = load double, double* %s2.addr, align 8
-  %302 = fmul double %300, %301
-  %303 = load double, double* %s2.addr, align 8
+  %302 = load double, double* %s2.addr, align 8
+  %303 = fmul double %301, %302
   %304 = load double, double* %s2.addr, align 8
-  %305 = load double, double* %l3.addr, align 8
-  %306 = fadd double %305, 0x3FD55555518F264D
-  %307 = fmul double %304, %306
-  %308 = fadd double %307, 0x3FDB6DB6DB6FABFF
-  %309 = fmul double %303, %308
-  %310 = fadd double %309, 0x3FE3333333333303
-  %311 = fmul double %302, %310
-  store double %311, double* %r.addr, align 8
-  %312 = load double, double* %r.addr, align 8
-  %313 = load double, double* %sl.addr, align 8
-  %314 = load double, double* %sh.addr, align 8
-  %315 = load double, double* %ss.addr, align 8
-  %316 = fadd double %314, %315
-  %317 = fmul double %313, %316
-  %318 = fadd double %312, %317
-  store double %318, double* %r.addr, align 8
-  %319 = load double, double* %sh.addr, align 8
+  %305 = load double, double* %s2.addr, align 8
+  %306 = load double, double* %l3.addr, align 8
+  %307 = fadd double %306, 0x3FD55555518F264D
+  %308 = fmul double %305, %307
+  %309 = fadd double %308, 0x3FDB6DB6DB6FABFF
+  %310 = fmul double %304, %309
+  %311 = fadd double %310, 0x3FE3333333333303
+  %312 = fmul double %303, %311
+  store double %312, double* %r.addr, align 8
+  %313 = load double, double* %r.addr, align 8
+  %314 = load double, double* %sl.addr, align 8
+  %315 = load double, double* %sh.addr, align 8
+  %316 = load double, double* %ss.addr, align 8
+  %317 = fadd double %315, %316
+  %318 = fmul double %314, %317
+  %319 = fadd double %313, %318
+  store double %319, double* %r.addr, align 8
   %320 = load double, double* %sh.addr, align 8
-  %321 = fmul double %319, %320
-  store double %321, double* %s2.addr, align 8
-  %322 = load double, double* %s2.addr, align 8
-  %323 = fadd double %322, 0x4008000000000000
-  %324 = load double, double* %r.addr, align 8
-  %325 = fadd double %323, %324
-  %326 = call double @nish.withLo(double %325, i32 0)
-  store double %326, double* %th.addr, align 8
-  %327 = load double, double* %r.addr, align 8
-  %328 = load double, double* %th.addr, align 8
-  %329 = fsub double %328, 0x4008000000000000
-  %330 = load double, double* %s2.addr, align 8
-  %331 = fsub double %329, %330
-  %332 = fsub double %327, %331
-  store double %332, double* %tl.addr, align 8
-  %333 = load double, double* %sh.addr, align 8
-  %334 = load double, double* %th.addr, align 8
-  %335 = fmul double %333, %334
-  store double %335, double* %pu.addr, align 8
-  %336 = load double, double* %sl.addr, align 8
-  %337 = load double, double* %th.addr, align 8
-  %338 = fmul double %336, %337
-  %339 = load double, double* %tl.addr, align 8
-  %340 = load double, double* %ss.addr, align 8
-  %341 = fmul double %339, %340
-  %342 = fadd double %338, %341
-  store double %342, double* %pv.addr, align 8
-  %343 = load double, double* %pu.addr, align 8
-  %344 = load double, double* %pv.addr, align 8
-  %345 = fadd double %343, %344
-  %346 = call double @nish.withLo(double %345, i32 0)
-  store double %346, double* %ph.addr, align 8
-  %347 = load double, double* %pv.addr, align 8
-  %348 = load double, double* %ph.addr, align 8
-  %349 = load double, double* %pu.addr, align 8
-  %350 = fsub double %348, %349
-  %351 = fsub double %347, %350
-  store double %351, double* %pl.addr, align 8
-  %352 = load double, double* %ph.addr, align 8
-  %353 = fmul double %352, 0x3FEEC709E0000000
-  store double %353, double* %zh.addr, align 8
-  %354 = load double, double* %ph.addr, align 8
-  %355 = fneg double 0x3E3E2FE0145B01F5
-  %356 = fmul double %354, %355
-  %357 = load double, double* %pl.addr, align 8
-  %358 = fmul double %357, 0x3FEEC709DC3A03FD
-  %359 = fadd double %356, %358
-  %360 = load double, double* %dpl.addr, align 8
-  %361 = fadd double %359, %360
-  store double %361, double* %zl.addr, align 8
-  %362 = load double, double* %dn.addr, align 8
-  store double %362, double* %t.addr.1, align 8
-  %363 = load double, double* %zh.addr, align 8
-  %364 = load double, double* %zl.addr, align 8
-  %365 = fadd double %363, %364
-  %366 = load double, double* %dph.addr, align 8
-  %367 = fadd double %365, %366
-  %368 = load double, double* %t.addr.1, align 8
-  %369 = fadd double %367, %368
-  %370 = call double @nish.withLo(double %369, i32 0)
-  store double %370, double* %t1.addr, align 8
-  %371 = load double, double* %zl.addr, align 8
-  %372 = load double, double* %t1.addr, align 8
-  %373 = load double, double* %t.addr.1, align 8
-  %374 = fsub double %372, %373
-  %375 = load double, double* %dph.addr, align 8
-  %376 = fsub double %374, %375
-  %377 = load double, double* %zh.addr, align 8
-  %378 = fsub double %376, %377
-  %379 = fsub double %371, %378
-  store double %379, double* %t2.addr, align 8
+  %321 = load double, double* %sh.addr, align 8
+  %322 = fmul double %320, %321
+  store double %322, double* %s2.addr, align 8
+  %323 = load double, double* %s2.addr, align 8
+  %324 = fadd double %323, 0x4008000000000000
+  %325 = load double, double* %r.addr, align 8
+  %326 = fadd double %324, %325
+  %327 = call double @nish.withLo(double %326, i32 0)
+  store double %327, double* %th.addr, align 8
+  %328 = load double, double* %r.addr, align 8
+  %329 = load double, double* %th.addr, align 8
+  %330 = fsub double %329, 0x4008000000000000
+  %331 = load double, double* %s2.addr, align 8
+  %332 = fsub double %330, %331
+  %333 = fsub double %328, %332
+  store double %333, double* %tl.addr, align 8
+  %334 = load double, double* %sh.addr, align 8
+  %335 = load double, double* %th.addr, align 8
+  %336 = fmul double %334, %335
+  store double %336, double* %pu.addr, align 8
+  %337 = load double, double* %sl.addr, align 8
+  %338 = load double, double* %th.addr, align 8
+  %339 = fmul double %337, %338
+  %340 = load double, double* %tl.addr, align 8
+  %341 = load double, double* %ss.addr, align 8
+  %342 = fmul double %340, %341
+  %343 = fadd double %339, %342
+  store double %343, double* %pv.addr, align 8
+  %344 = load double, double* %pu.addr, align 8
+  %345 = load double, double* %pv.addr, align 8
+  %346 = fadd double %344, %345
+  %347 = call double @nish.withLo(double %346, i32 0)
+  store double %347, double* %ph.addr, align 8
+  %348 = load double, double* %pv.addr, align 8
+  %349 = load double, double* %ph.addr, align 8
+  %350 = load double, double* %pu.addr, align 8
+  %351 = fsub double %349, %350
+  %352 = fsub double %348, %351
+  store double %352, double* %pl.addr, align 8
+  %353 = load double, double* %ph.addr, align 8
+  %354 = fmul double %353, 0x3FEEC709E0000000
+  store double %354, double* %zh.addr, align 8
+  %355 = load double, double* %ph.addr, align 8
+  %356 = fneg double 0x3E3E2FE0145B01F5
+  %357 = fmul double %355, %356
+  %358 = load double, double* %pl.addr, align 8
+  %359 = fmul double %358, 0x3FEEC709DC3A03FD
+  %360 = fadd double %357, %359
+  %361 = load double, double* %dpl.addr, align 8
+  %362 = fadd double %360, %361
+  store double %362, double* %zl.addr, align 8
+  %363 = load double, double* %dn.addr, align 8
+  store double %363, double* %t.addr.1, align 8
+  %364 = load double, double* %zh.addr, align 8
+  %365 = load double, double* %zl.addr, align 8
+  %366 = fadd double %364, %365
+  %367 = load double, double* %dph.addr, align 8
+  %368 = fadd double %366, %367
+  %369 = load double, double* %t.addr.1, align 8
+  %370 = fadd double %368, %369
+  %371 = call double @nish.withLo(double %370, i32 0)
+  store double %371, double* %t1.addr, align 8
+  %372 = load double, double* %zl.addr, align 8
+  %373 = load double, double* %t1.addr, align 8
+  %374 = load double, double* %t.addr.1, align 8
+  %375 = fsub double %373, %374
+  %376 = load double, double* %dph.addr, align 8
+  %377 = fsub double %375, %376
+  %378 = load double, double* %zh.addr, align 8
+  %379 = fsub double %377, %378
+  %380 = fsub double %372, %379
+  store double %380, double* %t2.addr, align 8
   br label %if.end.22
 
 if.end.22:
-  %380 = call double @nish.withLo(double %y, i32 0)
-  store double %380, double* %y1.addr, align 8
-  %381 = load double, double* %y1.addr, align 8
-  %382 = load double, double* %t1.addr, align 8
-  %383 = fmul double %381, %382
-  %384 = load double, double* %y1.addr, align 8
-  %385 = fsub double %y, %384
-  %386 = load double, double* %t1.addr, align 8
-  %387 = fmul double %385, %386
-  %388 = load double, double* %t2.addr, align 8
-  %389 = fmul double %y, %388
-  %390 = fadd double %387, %389
-  %391 = load double, double* %s.addr, align 8
-  %392 = tail call double @nish.powExp2(double %383, double %390, double %391)
-  ret double %392
+  %381 = call double @nish.withLo(double %y, i32 0)
+  store double %381, double* %y1.addr, align 8
+  %382 = load double, double* %y1.addr, align 8
+  %383 = load double, double* %t1.addr, align 8
+  %384 = fmul double %382, %383
+  %385 = load double, double* %y1.addr, align 8
+  %386 = fsub double %y, %385
+  %387 = load double, double* %t1.addr, align 8
+  %388 = fmul double %386, %387
+  %389 = load double, double* %t2.addr, align 8
+  %390 = fmul double %y, %389
+  %391 = fadd double %388, %390
+  %392 = load double, double* %s.addr, align 8
+  %393 = tail call double @nish.powExp2(double %384, double %391, double %392)
+  ret double %393
 }
 
 define internal noundef double @nish.fmodF64(double noundef %x, double noundef %y) #2 {
