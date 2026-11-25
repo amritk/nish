@@ -29511,6 +29511,7 @@ import netShutdown from "nish:net" -> builtin netShutdown
 import netWrite from "nish:net" -> builtin netWrite
 import netWrite2 from "nish:net" -> builtin netWrite2
 import tcpAccept from "nish:net" -> builtin tcpAccept
+import HTTP1_BAD_WINDOW from "nish/net/http1-codec" -> const HTTP1_BAD_WINDOW
 import HTTP1_BODY from "nish/net/http1-codec" -> const HTTP1_BODY
 import HTTP1_CHUNKED from "nish/net/http1-codec" -> const HTTP1_CHUNKED
 import HTTP1_CLOSED from "nish/net/http1-codec" -> const HTTP1_CLOSED
@@ -29524,7 +29525,7 @@ import HTTP1_REFUSED from "nish/net/http1-codec" -> const HTTP1_REFUSED
 import HTTP1_UPGRADE from "nish/net/http1-codec" -> const HTTP1_UPGRADE
 import Http1Parser from "nish/net/http1-codec" -> struct Http1Parser
 import http1BytesAre from "nish/net/http1-codec" -> function @nish.http1BytesAre
-import http1WriteChunk from "nish/net/http1-codec" -> function @nish.http1WriteChunk
+import http1TryWriteChunk from "nish/net/http1-codec" -> function @nish.http1TryWriteChunk
 import http1WriteLastChunk from "nish/net/http1-codec" -> function @nish.http1WriteLastChunk
 import http1WriteResponseHead from "nish/net/http1-codec" -> function @nish.http1WriteResponseHead
 import WS_CLOSE from "nish/net/websocket" -> const WS_CLOSE
@@ -30444,9 +30445,9 @@ function Http1Connection.write(this: Http1Connection, buf: readonly u8[], off: i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: len off
-  calls: nish.Http1Connection.bodyRoom nish.http1ServerCheckWindow nish.http1ServerCopy nish.http1ServerSub nish.http1WriteChunk
+  calls: nish.Http1Connection.bodyRoom nish.http1ServerCheckWindow nish.http1ServerCopy nish.http1ServerSub nish.http1TryWriteChunk
   pointer this: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.http1WriteChunk#2 nish.http1ServerCopy#2
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.http1TryWriteChunk#2 nish.http1ServerCopy#2
   stackSites=0 stackLocals=0
   callee -22:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
   local -15:11 chunked: boolean (const)
@@ -30455,9 +30456,10 @@ function Http1Connection.write(this: Http1Connection, buf: readonly u8[], off: i
   local -10:9 take: i32 (let)
   local -8:13 fits: i32 (const)
   callee -8:25 http1ServerSub -> @nish.http1ServerSub
-  callee +4:24 http1WriteChunk -> @nish.http1WriteChunk
-  callee +6:24 http1ServerCopy -> @nish.http1ServerCopy
-  callee +8:29 http1ServerSub -> @nish.http1ServerSub
+  local +5:13 end: i32 (const)
+  callee +5:24 http1TryWriteChunk -> @nish.http1TryWriteChunk
+  callee +11:24 http1ServerCopy -> @nish.http1ServerCopy
+  callee +13:29 http1ServerSub -> @nish.http1ServerSub
 function Http1Connection.sendBody(this: Http1Connection, buf: readonly u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.sendBody [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
