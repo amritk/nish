@@ -1,7 +1,8 @@
 # Security record: one HTTP server for HTTP/1.1, 2 and 3
 
 The record of WP39's G7 stage: `nish/net/http-server`, one request pool and
-one answer API over the HTTP/1.1 carrier, HTTP/2 over TLS, cleartext HTTP/2
+one answer API over the HTTP/1.1 carrier (cleartext, and over TLS on a port
+of its own), HTTP/2 over TLS, cleartext HTTP/2
 (h2c) and HTTP/3
 ([http-one-handler.md](https://github.com/amritk/nish/blob/main/docs/http-one-handler.md)).
 It says what the façade holds per connection and per request, what it
@@ -10,8 +11,8 @@ stream, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the HTTP application layer
 starts from evidence.
 
-Anchors are function names in `std/net/http-server.ts` at `b1947910`, the
-last commit to change it on the head that merges this record.
+Anchors are function names in `std/net/http-server.ts` at the commit that
+adds `listenHttp1Tls`, the last to change it on the head that merges this record.
 
 **Result.** The façade parses nothing itself. A request's bytes are read by
 its carrier: the HTTP/1.1 head and body framing by `nish/net/http1-server`
@@ -46,6 +47,9 @@ field a step added could be sent twice beside the one the server adds
 through a streamed body left the request with the program, never handed back
 (HTTPSRV-18, Medium), and such a request, once handed back, kept its stream
 open, so the connection never closed (HTTPSRV-21, Medium).
+One was fixed before HTTP/1.1 over TLS was merged: a connection whose
+handshake chose `h2` on the HTTP/1.1 over TLS listener had a request it sent
+after its Finished handed to the program (HTTPSRV-22, Medium).
 One is left open: the cap that keeps one connection from taking the pool is
 per connection, not per peer, so a client with many connections can still
 fill it (HTTPSRV-6, Low).
@@ -60,7 +64,7 @@ on the wire (HTTPSRV-11), and the deadline of a streamed body, which
 
 | File | Functions |
 | --- | --- |
-| `std/net/http-server.ts` | `HttpServerLimits`; `HttpServerRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpServer` (`streamBody`, `consume`, `listenHttp1`, `listenH2c`, `listenHttp2Tls`, `listenHttp3`, `checkHttp2`, `watch`, `fired`, `wait`, `waitSigned`, `turnWith`, `drain`, `connections`, `ready`, `take`, `hungUp`, `before`, `after`, `field`, `start`, `write`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `refuse`, `trailers`, and the private `restListener`, `acceptHttp1`, `h1Serve`, `drive`, `starve`, `feedStarved`, `settle`, `roomy`, `begin`, `gather`, `whole`, `resume`, `pushH1`, `finishH1`, `releaseReading`, `h1Close`, `h1Forget`, `h1Sweep`, `h1Ready`, `h1Screen`, `declared`, `growBody`, `sweepCap`, `setAltSvc`, `h3Drained`, `h3Owned`, `obtain`, `admit`, `route`, `append`, `enqueue`, `release`, `drop`, `taken`, `keep`, `own`, `live`, `unlink`, `outFields`, `hasField`, `digits`, `abort`, `carry`, `nudge`, `push`, `writeProblem`, `writeProblemObject`, `allowFor`, `h1Of`, `h2Of`, `h3Of`, `screen`, `fromFields`, `put`, `putField`, `acceptHttp2`, `h2Serve`, `h2Event`, `h2Direct`, `h2Entry`, `h2Find`, `h2Settle`, `h2PushAll`, `moves`, `h2Close`, `h2Forget`, `h3Turn`, `h3Serve`, `h3Event`, `h3Direct`, `h3Entry`, `h3Find`, `h3Clear`, `expireAll`, `late`, `h2Expire`, `h3Expire`, `carryEnd`, `carryTrailers`, `perOf`, `h2Grow`, `rest`, `unlisten`, `acceptH2c`, `h2Opened`, `h2Holds`, `h2Conn`, `h2Next`, `h2Flush`, `h2FdOf`, `h2cOf`, `streamsBody`, `requeue`, `unqueue`, `h2Piece`, `h2Ended`), and the method `pending`; the helpers `httpServerLimit`, `httpServerAllowAppend`, `httpServerGrown`, `httpServerSpanIs`, `httpServerDecimal`, `httpServerFormByte`, `httpServerFormIs`, `httpServerFormDecode` |
+| `std/net/http-server.ts` | `HttpServerLimits`; `HttpServerRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpServer` (`streamBody`, `consume`, `listenHttp1`, `listenHttp1Tls`, `listenH2c`, `listenHttp2Tls`, `listenHttp3`, `checkHttp2`, `watch`, `fired`, `wait`, `waitSigned`, `turnWith`, `drain`, `connections`, `ready`, `take`, `hungUp`, `before`, `after`, `field`, `start`, `write`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `refuse`, `trailers`, and the private `restListener`, `acceptHttp1`, `acceptHttp1Tls`, `checkHttp1`, `h1Grow`, `h1Record`, `h1Opened`, `h1Holds`, `h1Conn`, `h1ConnOf`, `h1Next`, `h1Flush`, `h1Resting`, `h1Arm`, `driveOf`, `drivePass`, `h1Serve`, `drive`, `starve`, `feedStarved`, `settle`, `roomy`, `begin`, `gather`, `whole`, `resume`, `pushH1`, `finishH1`, `releaseReading`, `h1Close`, `h1Forget`, `h1Sweep`, `h1Ready`, `h1Screen`, `declared`, `growBody`, `sweepCap`, `setAltSvc`, `h3Drained`, `h3Owned`, `obtain`, `admit`, `route`, `append`, `enqueue`, `release`, `drop`, `taken`, `keep`, `own`, `live`, `unlink`, `outFields`, `hasField`, `digits`, `abort`, `carry`, `nudge`, `push`, `writeProblem`, `writeProblemObject`, `allowFor`, `h1Of`, `h2Of`, `h3Of`, `screen`, `fromFields`, `put`, `putField`, `acceptHttp2`, `h2Serve`, `h2Event`, `h2Direct`, `h2Entry`, `h2Find`, `h2Settle`, `h2PushAll`, `moves`, `h2Close`, `h2Forget`, `h3Turn`, `h3Serve`, `h3Event`, `h3Direct`, `h3Entry`, `h3Find`, `h3Clear`, `expireAll`, `late`, `h2Expire`, `h3Expire`, `carryEnd`, `carryTrailers`, `perOf`, `h2Grow`, `rest`, `unlisten`, `acceptH2c`, `h2Opened`, `h2Holds`, `h2Conn`, `h2Next`, `h2Flush`, `h2FdOf`, `h2cOf`, `streamsBody`, `requeue`, `unqueue`, `h2Piece`, `h2Ended`), and the method `pending`; the helpers `httpServerLimit`, `httpServerAllowAppend`, `httpServerGrown`, `httpServerSpanIs`, `httpServerDecimal`, `httpServerFormByte`, `httpServerFormIs`, `httpServerFormDecode` |
 
 Out of scope, each with its own record: the carriers
 (`std/net/http1-server.ts`, `std/net/http2*.ts`, `std/net/http3*.ts`,
@@ -95,7 +99,7 @@ Rows HTTPSRV-1 to HTTPSRV-5, HTTPSRV-7, HTTPSRV-10, HTTPSRV-13, HTTPSRV-14,
 HTTPSRV-17 and HTTPSRV-19 are the shapes an attacker's traffic can take, each
 checked and found to hold. HTTPSRV-6 is open. HTTPSRV-8, HTTPSRV-9,
 HTTPSRV-11, HTTPSRV-15 and HTTPSRV-20 are accepted. HTTPSRV-12, HTTPSRV-16,
-HTTPSRV-18 and HTTPSRV-21 were fixed in review, each with a test that failed
+HTTPSRV-18, HTTPSRV-21 and HTTPSRV-22 were fixed in review, each with a test that failed
 before the fix.
 
 | Id | Severity | Where | Description | Disposition |
@@ -121,6 +125,7 @@ before the fix.
 | HTTPSRV-19 | High if it failed | `h2Piece`, `requeue`, `unqueue`, `release`, `ready` | A streamed request whose stream is reset or whose connection is lost must reach the program again as hung up, and its answer must go nowhere (HTTPSRV-3); one answered before its body ended must not keep the peer sending into nothing; and a request queued twice must not be taken twice or outlive its release in the queue. | **Holds.** `h2Piece` marks a reset, drops the request (HTTPSRV-3) and queues it again through `requeue`, which queues a request the program holds at most once until `take` hands it over; `release` takes a second place out of the queue (`unqueue`), so a request answered while queued again is not taken after it is free. A request reset before the program first took it is released by `ready` unseen, as a whole-body one is. A request queued again and answered since (`end`, `trailers`) is flushing on its own, and `ready` skips its queue place rather than hand it to `take` a second time; review found it handed back, and "a request answered since it was queued again stays out of take" failed before the fix. An answer before the body ends is followed by RST_STREAM NO_ERROR (RFC 9113 §8.1); with no room in the output for that frame the stream stays held, so the peer stops at the window. DATA for a streamed request already answered and still flushing is credited back at once. The second queue place (`unqueue`) and that credit are by construction; no test reaches them. `link/net_http_server_stream` pins the rest on both carriers: "a cancelled body comes back hung up", "the cancelled request's answer is dropped", "the unconsumed request comes back hung up", "the unconsumed request's answer is dropped", "the answer goes out with the body unfinished", "then RST_STREAM NO_ERROR for the rest". |
 | HTTPSRV-20 | Low | `late`, `take` | `bodyTimeout` runs only while the server reads a body; a streamed request is the program's from its head, so a peer that sends its head and then nothing holds a pool entry, and up to one stream window, for as long as the program waits. | **Accepted**, as HTTPSRV-8: how long the program waits for a piece is its decision. The guide page says to keep a deadline of its own for each streamed request and to answer one that misses it (a 408, say), after which the server resets the rest of its stream with NO_ERROR, as for any early answer (HTTPSRV-19). |
 | HTTPSRV-21 | Medium | `h2Ended`, `release`, `live` | A streamed request whose connection's input ended was handed back hung up, but its stream stayed open: `release` resets only a live request's stream, so the connection, which closes when no stream is open, lingered for good, and its socket's hang-up woke every turn of the loop without end. | **Fixed.** `h2Ended` resets the stream CANCEL when it hands the request back (commit `325de11`). `link/net_http_server_stream` pins it: "h2c: and the connection it was on closes", which failed before the fix, and the same over TLS. |
+| HTTPSRV-22 | Medium | `h1Next`, `listenHttp1Tls` | The HTTP/1.1 over TLS listener must serve only a connection whose handshake chose `http/1.1` or no protocol. `Http1TlsServer` shuts a slot with another ALPN down, and its own refusal reads the TLS state, which that shutdown moves past open; so a client that offered only `h2` to a listener offering `http/1.1` and `h2`, and sent a GET right after its Finished, had that GET read and handed to the program as an HTTP/1.1 request. | **Fixed.** `h1Next` reads the slot's chosen protocol and answers `H1_ERROR`, which closes the slot, unless it is `""` or `http/1.1`, before it asks the carrier for an event, in the change that adds the listener. `link/net_http_server_h1_tls` pins it: "then the server closes", "with close_notify, and no HTTP byte" and "no request taken", which failed before the fix (one request taken, the connection left open); and, against a listener offering `http/1.1` alone, "but a fatal no_application_protocol alert", "and the connection closed, no request taken". |
 
 ## Properties verified
 
@@ -137,6 +142,20 @@ body deadline (HTTPSRV-5): "a body trickled inside the idle timeout is cut
 off at the body deadline", "with no answer", "and its slot is freed"; and the
 drain: "a draining connection's answer says it closes", "and the pipelined
 request is not read: the connection closes".
+
+HTTP/1.1 over TLS is pinned by
+`link/net_http_server_h1_tls: exits with 0 and stdout matches expected.out`,
+whose scripted client drives the listener beside a cleartext one: "a TLS
+handshake offering http/1.1, the server's signature and Finished verified",
+"a GET of /hello: 200 and its body, with alt-svc naming the HTTP/3 port"
+(HTTPSRV-7), "every request was taken, and said secure", "which did not say
+secure" (the cleartext GET), "and the server's waitSigned and send kept 0
+arena bytes for them" over 32 warmed requests, "is served as HTTP/1.1: 200
+hello" with no ALPN, the ALPN refusals of HTTPSRV-22, and `idleTimeout` and
+`bodyTimeout` (HTTPSRV-5): "is closed by the server", "never handed to the
+program". Its configuration panics exit 1 with their message:
+`link/net_http_server_h1_tls_twice`, `net_http_server_h1_tls_wait` and
+`net_http_server_h1_tls_slots`.
 
 HTTP/2 over TLS and HTTP/3 are pinned by
 `link/net_http_server_carriers: exits with 0 and stdout matches expected.out`,
