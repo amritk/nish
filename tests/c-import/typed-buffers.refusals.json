@@ -1,0 +1,69 @@
+[
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "mix_f64": {
+          "out": {
+            "buffer": "n"
+          }
+        }
+      }
+    },
+    "message": "overrides: `mix_f64` parameter `out` is a buffer, so it must be a `void *` or `char *`, or a pointer to `uint16_t`, `uint32_t`, `int32_t` or `float`"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "mix_i16": {
+          "out": {
+            "buffer": "n"
+          }
+        }
+      }
+    },
+    "message": "overrides: `mix_i16` parameter `out` is a buffer, so it must be a `void *` or `char *`, or a pointer to `uint16_t`, `uint32_t`, `int32_t` or `float`"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "mix_i64": {
+          "out": {
+            "buffer": "n"
+          }
+        }
+      }
+    },
+    "message": "overrides: `mix_i64` parameter `out` is a buffer, so it must be a `void *` or `char *`, or a pointer to `uint16_t`, `uint32_t`, `int32_t` or `float`"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "upload_f32": {
+          "verts": {
+            "buffer": "n",
+            "readonly": true
+          }
+        }
+      }
+    },
+    "message": "overrides: `upload_f32` parameter `verts` is `const` in the header, so it is bound `readonly f32[]` already and \"readonly\" changes nothing"
+  },
+  {
+    "overrides": {
+      "header": "typed-buffers.h",
+      "functions": {
+        "upload_u16": {
+          "indices": {
+            "buffer": "n",
+            "readonly": true
+          }
+        }
+      }
+    },
+    "message": "overrides: `upload_u16` parameter `indices` is `const` in the header, so it is bound `readonly u16[]` already and \"readonly\" changes nothing"
+  }
+]

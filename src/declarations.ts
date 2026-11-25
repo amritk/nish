@@ -834,8 +834,9 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
  * WP89 S2: parameter `i` of `declare function name` is a buffer whose element
  * is not `elem`, the element of the buffer `first` that opened its run. One
  * count in elements cannot bound both, so the run is refused rather than the
- * count read in the first one's units. Its own function for the reason
- * `refuseUnknownCount` is.
+ * count read in the first one's units. Reported at that parameter, found in
+ * the declaration's list by name, or at the declaration when none answers.
+ * Its own function for the reason `refuseUnknownCount` is.
  */
 const refuseMixedRun = (
   ctx: CheckContext,
@@ -846,8 +847,15 @@ const refuseMixedRun = (
   first: string,
   elem: i32
 ): void => {
+  let at = decl
+  for (const param of decl.children[1].children) {
+    if (param.children[0].text === sig.paramNames[i]) {
+      at = param
+      break
+    }
+  }
   ctx.error(
-    decl,
+    at,
     `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${ctx.table.typeName(sig.paramTypes[i])} in a run that \`${first}\` opened as ${ctx.table.typeName(elem)}[]: the one count after a run is in elements, so every buffer of a run has the same element type; close the run with its count first`
   )
 }

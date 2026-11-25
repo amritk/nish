@@ -375,7 +375,7 @@ function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, 
   calls: CheckContext.error FunctionSig.body TypeTable.isOpaque TypeTable.isRanged TypeTable.kindOf TypeTable.refOf TypeTable.stripNull TypeTable.typeName checkCountedBuffers isForeignBuffer isForeignType layoutClass nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq refuseForeignRange refuseMixedRun
   pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseMixedRun#0 refuseForeignRange#0 CheckContext.error#0 CheckContext.error#0 checkCountedBuffers#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0
   pointer sig: size=224 writesThrough=false captured=false passedTo=FunctionSig.body#0 refuseMixedRun#1 checkCountedBuffers#1
-  pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 refuseMixedRun#2 refuseForeignRange#1 CheckContext.error#1 CheckContext.error#1 checkCountedBuffers#2
+  pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 refuseMixedRun#2 refuseForeignRange#1 CheckContext.error#1 CheckContext.error#1 checkCountedBuffers#2
   stackSites=0 stackLocals=0
   callee +0:7 FunctionSig.body -> @FunctionSig.body
   callee +1:5 CheckContext.error -> @CheckContext.error
@@ -419,17 +419,19 @@ function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, 
   callee +119:21 TypeTable.typeName -> @TypeTable.typeName
   callee +120:5 CheckContext.error -> @CheckContext.error
 function refuseMixedRun(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string, i: i32, first: string, elem: i32): void -> @refuseMixedRun
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
-  escaping: elem i
-  calls: CheckContext.error TypeTable.typeName nish_panic_index nish_str_concat
+  escaping: decl elem i
+  calls: CheckContext.error TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq
   pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer sig: size=224 writesThrough=false captured=false
-  pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  pointer decl: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee +0:3 CheckContext.error -> @CheckContext.error
-  callee +2:78 TypeTable.typeName -> @TypeTable.typeName
-  callee +2:156 TypeTable.typeName -> @TypeTable.typeName
+  local +0:7 at: Node (let)
+  local +1:14 param: Node (const)
+  callee +7:3 CheckContext.error -> @CheckContext.error
+  callee +9:78 TypeTable.typeName -> @TypeTable.typeName
+  callee +9:156 TypeTable.typeName -> @TypeTable.typeName
 function checkCountedBuffers(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void -> @checkCountedBuffers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseUnknownCount

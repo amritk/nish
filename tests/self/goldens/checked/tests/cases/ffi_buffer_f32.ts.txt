@@ -12,10 +12,14 @@ function sum_f32(xs: readonly f32[], n: u64): f32 -> @sum_f32
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function run(): i32 -> @run [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via scale_f32
-  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64 scale_f32 sum_f32
-  stackSites=1 stackLocals=1
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_print nish_str_concat nish_str_from_f64 scale_f32 sum_f32
+  stackSites=2 stackLocals=2
   local +0:9 xs: f32[] (const)
   callee +1:3 scale_f32 -> @scale_f32
   callee +5:23 sum_f32 -> @sum_f32
+  local +6:9 ys: f32[] (const)
+  local +7:7 i: i32 (let)
+  callee +12:3 scale_f32 -> @scale_f32
+  callee +13:25 sum_f32 -> @sum_f32

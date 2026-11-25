@@ -383,7 +383,8 @@ The `const` is the same promise the borrow is. C can cast it away, and the
 compiler cannot check that (§3c).
 
 Only `u8` is admitted. `i32[]` or `f64[]` across the boundary is refused
-(`reject_ffi_buffer_element`). Other element types raise endianness, alignment
+(`reject_ffi_buffer_element`). (Superseded by WP89 S2: `u16[]`, `u32[]`,
+`i32[]` and `f32[]` cross too, counted in elements; see [LANGUAGE.md](LANGUAGE.md#a-typed-array-parameter-a-buffer-and-its-count).) Other element types raise endianness, alignment
 and BLAS-shaped questions that no motivating program asks yet. The rest of
 the shape is refused too:
 - a nullable buffer, `u8[] | null` (`reject_ffi_buffer_nullable`, and `reject_ffi_buffer_nullable_in_run` inside a run). S3.3
@@ -1176,7 +1177,7 @@ case. A review that finds one of them probes the rest in the same round.
 | 18 | An explicit dispose call on any receiver: `f[Symbol.dispose]()`, and inside the class `this[Symbol.dispose]()` and `other[Symbol.dispose]()` | Refused (§4c) | `reject_ffi_handle_dispose_call` |
 | 19 | An exported handle class or a re-export of one, an exported function taking one, or a method of an exported class (handle or not) taking one | Refused: an H2 parameter's function and class are not exported (§4d, §5) | `reject_ffi_handle_export`, `reject_ffi_handle_exported_param` |
 | 20 | A buffer, through its paired count: the next parameter is missing or is not a `u64` | Refused (§3a) | `reject_ffi_buffer_length_missing`, `reject_ffi_buffer_length_type` |
-| 21 | A buffer of another element type, a nullable buffer, or a returned buffer | Refused (§3b) | `reject_ffi_buffer_element`, `reject_ffi_buffer_nullable`, `reject_ffi_buffer_nullable_in_run`, `reject_ffi_buffer_return` |
+| 21 | A buffer of another element type, a nullable buffer, or a returned buffer | Refused (§3b). Superseded by WP89 S2 for `u16`, `u32`, `i32` and `f32` elements, which cross; see [LANGUAGE.md](LANGUAGE.md#a-typed-array-parameter-a-buffer-and-its-count) | `reject_ffi_buffer_element`, `reject_ffi_buffer_nullable`, `reject_ffi_buffer_nullable_in_run`, `reject_ffi_buffer_return` |
 | 22 | A close of the owned field written by hand, in a method or the constructor, through the dispose's close function, on `this.f` or a field-derived local | Option A: refused, and rows 15, 16a and 16b leave it no other name to reach. Option B: a stated C contract. The owner chooses (§4c, Q9) | `reject_ffi_handle_close_call` (option A only) |
 | 23 | The owned field passed to another C function that closes, replaces, keeps or returns it (`freopen`, `setvbuf`, `ident(this.f)`, `close(fileno(p))`), or two objects owning one pointer a C getter shares | A C contract under either option, named in the LANGUAGE.md rule (§4c) | none: the compiler cannot see it |
 | 24 | A buffer's `data` or `len` read at a stale moment, because a later argument resizes the array | Both are loaded after every argument is evaluated (§3a, Q10). The elided check also requires that no later argument may resize | `ffi_buffer_late_load` (positive, both arms) |
