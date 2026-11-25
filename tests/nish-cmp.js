@@ -519,6 +519,10 @@ const asyncFetch = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why }))
   )
+// The held pipelined request behind a length-finished stream lands under
+// this PR's subject.
+const HANDLER_PIPELINED_STREAM_END =
+  "HttpHandler holds a length-finished stream's pipelined request until its end"
 // Echoing ECN counts lands under this PR's subject.
 const ECN_ECHO = "ECN counts in the QUIC server's ACKs"
 const ecnEcho = (why, filesByProgram) =>
@@ -23473,7 +23477,7 @@ const DECLARED = [
   ].map((file) => ({
     program: "tests/link/net_handler_pipelined_stream/main.ts",
     file,
-    changelog: "HttpHandler holds a length-finished stream's pipelined request until its end",
+    changelog: HANDLER_PIPELINED_STREAM_END,
     why: "the case is new to the corpus and the seed's std predates HttpHandler.drive's `unended` gate (#1556) and the HTTP stack this branch links, so every module it writes differs from the seed's",
   })),
 ]
