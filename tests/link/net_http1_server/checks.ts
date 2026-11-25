@@ -465,6 +465,42 @@ const tlsAcceptWaiting = (server: Http1TlsServer, loop: i32, ready: i32[]): i32 
   return slot;
 };
 
+/**
+ * `tick`: a ticked server stamps an accept with the tick's instant rather
+ * than reading the clock, so its idle timeout (1 s here) runs from there; a
+ * tick of 0 goes back to the clock. The instant is 1 s after the clock's
+ * epoch, long before now, so an accept stamped by the clock instead would
+ * not expire at it.
+ */
+const tickedClock = (t: Suite): void => {
+  const listener: i32 = tcpListen("127.0.0.1", ZERO, toI32(16));
+  const addr: u8[] = new Array<u8>(18);
+  netAddress(addr, "127.0.0.1", netLocalPort(listener));
+  const loop: i32 = pollCreate();
+  pollAdd(loop, listener, toI32(1), ZERO);
+  const ready: i32[] = new Array<i32>(8);
+  const server = new Http1Server(testConfig(), listener, toI32(2));
+  const second: i64 = toI64(1000000000);
+  server.tick(second);
+  const first: i32 = tcpConnect(addr);
+  const ticked: i32 = acceptWaiting(server, loop, ready);
+  t.ok(
+    "tick: an accept is stamped with the tick's instant, so it is idle a second after it and closed two seconds after",
+    ticked >= 0 && server.expire(second + toI64(1)) === 0 && server.expire(second * toI64(3)) === 1 && server.busy() === 0
+  );
+  server.tick(toI64(0));
+  const other: i32 = tcpConnect(addr);
+  const clocked: i32 = acceptWaiting(server, loop, ready);
+  t.ok(
+    "tick: after a tick of 0 an accept reads the clock, so the old instant expires nothing and a time past now does",
+    clocked >= 0 && server.expire(second * toI64(3)) === 0 && server.busy() === 1 && server.expire(monotonicNanos() + second * toI64(2)) === 1
+  );
+  netClose(first);
+  netClose(other);
+  netClose(loop);
+  netClose(listener);
+};
+
 /** `acceptOrder` for `Http1TlsServer`: a slot's connection and TLS state built on its first accept, in order, and kept. */
 const tlsAcceptOrder = (t: Suite): void => {
   const listener: i32 = tcpListen("127.0.0.1", ZERO, toI32(16));
@@ -1110,6 +1146,7 @@ export const serverChecks = (): i32 => {
   );
   t.ok("a slot out of range names the first connection", lb.plain.connection(toI32(9)) === lb.plain.connection(ZERO) && lb.plain.size() === 4);
   acceptOrder(t);
+  tickedClock(t);
   neverBuilt(t);
   tlsAcceptOrder(t);
   tlsNeverBuilt(t);

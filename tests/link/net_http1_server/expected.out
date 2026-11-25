@@ -104,6 +104,8 @@ PASS  with size slots busy the next is shed with H1_POOL_FULL and nothing more i
 PASS  a closed slot is taken again, the connection it was lent kept spare and lent again rather than built anew
 PASS  the first accept into a slot grows the arena; closing it and accepting into it again grows it by nothing
 PASS  expiring a pool with one of its three built slots free closes the other two
+PASS  tick: an accept is stamped with the tick's instant, so it is idle a second after it and closed two seconds after
+PASS  tick: after a tick of 0 an accept reads the clock, so the old instant expires nothing and a time past now does
 PASS  a pool of 16,384 reports its size with no slot built
 PASS  a slot never built holds nothing: no descriptor, H1_ERROR to next, done to the rest
 PASS  closing it and rearming it change nothing
@@ -256,7 +258,7 @@ PASS  so do they while a byte of the next request is unread
 PASS  which is read whole
 PASS  and once nothing is open or unread both go back
 PASS  the next byte takes them again, making none
-http1 server: 258 passed, 0 failed, 0 skipped
+http1 server: 260 passed, 0 failed, 0 skipped
 PASS  a pooled connection reads a request holding no output buffer
 PASS  its response borrows one
 PASS  which it keeps while bytes wait to be sent

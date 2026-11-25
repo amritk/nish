@@ -2124,6 +2124,89 @@ const jsonPutF64Walk = (buf: u8[], at: i32, v: f64): i32 => {
   return j
 }
 
+/**
+ * `src[from .. to)` as a JSON string, quotes included, in `dst` from `at`:
+ * the new end, or -1 when `at` is negative or the text does not fit before
+ * `dst.length`, when the bytes from `at` may have been written. The caller
+ * has checked `0 <= from <= to <= src.length`. Natively the compiler
+ * replaces the one call to it with the runtime's `nish_json_put_string`
+ * (`src/kernels.ts`), which copies sixteen bytes a block; as written, which
+ * is what Node and `--emit-ts` run, it is `jsonWriterPutBytes`'s loop.
+ */
+const jsonPutStringWalk = (dst: u8[], at: i32, src: readonly u8[], from: i32, to: i32): i32 => {
+  const cap: i32 = toI32(dst.length)
+  let o: i32 = at
+  if (o < 0 || o >= cap) {
+    return -1
+  }
+  dst[o] = toU8(JSON_QUOTE)
+  o += 1
+  for (let i: i32 = from; i >= 0 && i < to && i < toI32(src.length); i += 1) {
+    const code: i32 = toI32(src[i])
+    if (jsonIsPlainByte(code)) {
+      if (o < 0 || o >= cap) {
+        return -1
+      }
+      dst[o] = toU8(code)
+      o += 1
+      continue
+    }
+    const letter: i32 = jsonShortEscape(code)
+    if (letter !== 0) {
+      if (o < 0 || o >= cap - 1) {
+        return -1
+      }
+      dst[o] = toU8(JSON_BACKSLASH)
+      dst[o + 1] = toU8(letter)
+      o += 2
+      continue
+    }
+    if (o < 0 || o >= cap - 5) {
+      return -1
+    }
+    dst[o] = toU8(JSON_BACKSLASH)
+    dst[o + 1] = toU8(JSON_LETTER_U)
+    dst[o + 2] = toU8(JSON_DIGIT_ZERO)
+    dst[o + 3] = toU8(JSON_DIGIT_ZERO)
+    dst[o + 4] = toU8(jsonHexByte(code >> 4))
+    dst[o + 5] = toU8(jsonHexByte(code & 15))
+    o += 6
+  }
+  if (o < 0 || o >= cap) {
+    return -1
+  }
+  dst[o] = toU8(JSON_QUOTE)
+  return o + 1
+}
+
+/**
+ * `src[from .. from + len)`, UTF-8 or any bytes, as a JSON string with its
+ * quotes, written into `dst` from `at`, as `JsonWriter.stringBytes` writes a
+ * string value: `"`, `\` and the bytes below a space are escaped, the five
+ * with a short form as `\n`, `\t`, `\r`, `\b` and `\f` and the rest as
+ * `\u00XX`, and every other byte is copied as it is. It writes no comma or
+ * key, so a program that builds its JSON from pre-encoded pieces writes its
+ * strings with it. Natively the copy is the runtime's
+ * `nish_json_put_string`, sixteen bytes a block, and allocates nothing.
+ *
+ * @param dst - the buffer written into; it is never grown.
+ * @param at - where the opening quote goes.
+ * @param src - the bytes of the string.
+ * @param from - the offset in `src` of its first byte.
+ * @param len - how many bytes it is.
+ * @returns The index after the closing quote, or -1 when a window lies
+ *   outside its array or the string does not fit in `dst`: then the bytes
+ *   of `dst` from `at` may have been written, and the caller grows `dst` and
+ *   writes again from `at`.
+ */
+export const jsonPutString = (dst: u8[], at: i32, src: readonly u8[], from: i32, len: i32): i32 => {
+  if (from < 0 || len < 0 || from > toI32(src.length) - len) {
+    return -1
+  }
+  // In u32, which cannot wrap: the window was checked to lie inside `src`.
+  return jsonPutStringWalk(dst, at, src, from, toI32(toU32(from) + toU32(len)))
+}
+
 /** The digits `${v}` spells for a finite `v`, at the cursor; all of them or, with `JSON_WRITE_FULL`, none. */
 const jsonWriterPutF64 = (w: JsonWriter, v: f64): boolean => {
   const stop: i32 = jsonPutF64Walk(w.buf, w.end, v)

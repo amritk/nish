@@ -303,6 +303,7 @@ int nish_f64_format(double v, char out[NISH_F64_MAX]);
    end, or -1, with nothing written, when `at < 0` or they do not fit before
    `len`. `buf` may be null only when nothing fits. */
 int32_t nish_json_put_f64(uint8_t *buf, int32_t len, int32_t at, double v);
+int32_t nish_json_put_string(uint8_t *buf, int32_t len, int32_t at, const uint8_t *src, int64_t from, int64_t to);
 nish_str *nish_str_from_i64(int64_t v);
 /* Unsigned decimal (WP15). u8/u16/u32 are zero-extended by the caller, so one
    symbol serves every unsigned width. */

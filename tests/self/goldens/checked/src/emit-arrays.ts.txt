@@ -41,6 +41,7 @@ import IRBlock from "./ir" -> struct IRBlock
 import BYTES_WALK_COPY from "./kernels" -> const BYTES_WALK_COPY
 import bytesKernelOf from "./kernels" -> function @bytesKernelOf
 import JSON_PUT_F64_KERNEL from "./kernels" -> const JSON_PUT_F64_KERNEL
+import JSON_PUT_STRING_KERNEL from "./kernels" -> const JSON_PUT_STRING_KERNEL
 import Node from "./nodes" -> struct Node
 import bindsHiddenReceiver from "./nodes" -> function @bindsHiddenReceiver
 import simdSuffix from "./nish-modules" -> function @simdSuffix
@@ -2296,6 +2297,27 @@ function emitJsonPutF64Kernel(emitter: Emitter, values: string[]): string -> @em
   callee +2:44 loadLength -> @loadLength
   callee +3:10 IRFunction.emitValue -> @IRFunction.emitValue
   callee +4:17 Emitter.useRuntime -> @Emitter.useRuntime
+function emitJsonPutStringKernel(emitter: Emitter, values: string[]): string -> @emitJsonPutStringKernel [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via loadData
+  calls: Emitter.useRuntime IRFunction.emitValue loadData loadLength nish_panic_index nish_str_concat
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=loadData#0 loadLength#0 loadData#0 Emitter.useRuntime#0
+  pointer values: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 data: string (const)
+  callee +1:16 loadData -> @loadData
+  local +2:9 length: string (const)
+  callee +2:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:44 loadLength -> @loadLength
+  local +3:9 src: string (const)
+  callee +3:15 loadData -> @loadData
+  local +4:9 from: string (const)
+  callee +4:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +5:9 to: string (const)
+  callee +5:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +6:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +7:17 Emitter.useRuntime -> @Emitter.useRuntime
 function bytePointer(emitter: Emitter, arr: string, at: string): string -> @bytePointer
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via loadData

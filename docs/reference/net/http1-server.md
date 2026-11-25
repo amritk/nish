@@ -436,6 +436,7 @@ class Http1Server
 | `resting(slot: i32): boolean` | Whether `slot` holds a connection that rests between requests and has given its `Http1Connection` back: nothing is open, unread or unsent on it, so closing it loses nothing. It does not give the slot a connection, as `connection` does. |
 | `size(): i32` | How many slots the pool has, built or not. |
 | `spares(): i32` | How many connections no slot holds now, of the `connections` built. |
+| `tick(now: i64): void` | Sets the instant, in `monotonicNanos`, that the server stamps activity with until the next `tick`: a loop that calls it once a pass spares every `readable` and `flush` of the pass its own clock read, and a timeout, counted in seconds, moves by the pass's length at most. 0 goes back to reading the clock at each stamp, which is what a server that is never ticked does. |
 | `writable(slot: i32): i32` | The socket of `slot` is writable: sends, and begins a serve call as `readable` does. Answers the interest. |
 
 ### Http1TlsServer

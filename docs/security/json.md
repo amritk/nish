@@ -644,7 +644,7 @@ JSON-10 is fixed; JSON-8, JSON-9 and JSON-11 are accepted, all Low.
 | File | What |
 | --- | --- |
 | `std/json-value.ts` | `JsonDocument`: `parse`, `parseRanged`, `parseText`, `parseTextRanged`, `close`, `closeRanged`, `duplicateKeys`, `duplicateKeysRanged`, `repeat`, `sortPending`, `sortPendingRanged`, `index`, `handle`, `newNode`, the readers (`kind` to `f64`, `unsigned`, `readNumber`), the ranges (`start`, `end`, `keyStart`, `keyEnd`, `hasValueRange`, `hasKeyRange`, `rangeArrays`, `ownRanges`, `keySlot`, `setRange`, `setKeyRange`), the builders (`new*`, `push`, `set`, `adoptable`, `append`, `moveSlots`, `moveKeyRanges`), `write`, `stringify`; the helpers `jsonValueGet`, `jsonValuePut`, `jsonValueRoom`, `jsonValueRoomI32`, `jsonValueCompareBytes` |
-| `std/json.ts` | `JsonWriter.keyBytes` and `stringBytes`, `jsonWriterPutBytes`, `jsonWriterBreakBeforeKey`; `JsonWriter.f64`'s `jsonWriterPutF64` and `jsonPutF64Walk`, which a native build replaces with the runtime's `nish_json_put_f64` (its bounds are [`runtime.md`](runtime.md)'s) |
+| `std/json.ts` | `JsonWriter.keyBytes` and `stringBytes`, `jsonWriterPutBytes`, `jsonWriterBreakBeforeKey`; `JsonWriter.f64`'s `jsonWriterPutF64` and `jsonPutF64Walk`, which a native build replaces with the runtime's `nish_json_put_f64` (its bounds are [`runtime.md`](runtime.md)'s); `jsonPutString` and `jsonPutStringWalk`, which a native build replaces with `nish_json_put_string` (the same) |
 
 ### Threat model
 
@@ -762,6 +762,22 @@ exact fit and the one byte short), and the recognition is the standard
 library's only: a root-package `std/json.ts` calls its walk ("json_f64_seam:
 std/json.ts compiled as a root is an ordinary module, so JsonWriter.f64 calls
 its walk and not the kernel").
+
+**A string goes out in place too.** `jsonPutString` checks its source
+window against the source array (`-1` when it lies outside), and a native
+build lowers its walk to one call of `nish_json_put_string` on the
+destination's data, its length and the cursor: the plain bytes go sixteen at
+a time, each escape is written only when all of it fits, and a string that
+does not fit answers `-1` with the bytes from the cursor on written as far as
+they went. The bytes are `JsonWriter.stringBytes`'s, held by
+`tests/link/std_json_writer/put-string.ts` on every byte value at every
+offset of strings up to 40 bytes and on 2,000 pseudo-random strings, natively
+and under Node, each also into a destination one byte short ("json_string_seam:
+put-string.ts built natively writes through the kernel and prints
+put-string.out"); the cursor and room bounds are `tests/runtime-test.c`'s.
+The recognition is the standard library's only, as for `f64`
+("json_string_seam: std/json.ts compiled as a root is an ordinary module, so
+jsonPutString calls its walk and not the kernel").
 
 **The sort is n log n.** An object of more than eight members is checked by a
 bottom-up merge sort of its keys (`std/json-value.ts:795`, `sortPending`, and `:839`, `sortPendingRanged`), so no choice of

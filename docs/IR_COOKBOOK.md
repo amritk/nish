@@ -34565,6 +34565,7 @@ declare i64 @nish_bytes_skip_json_text(i8* noundef readonly nocapture, i64 nound
 declare i64 @nish_bytes_skip_json_plain(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #6
 declare i32 @nish_json_put_f64(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, double noundef) #2
+declare i32 @nish_json_put_string(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, i8* noundef nocapture readonly, i64 noundef, i64 noundef) #2
 declare double @nish_floor(double) #0
 declare double @nish_ceil(double) #0
 declare double @nish_trunc(double) #0
