@@ -175,7 +175,7 @@ int main(void) {
 
   /* The shim refuses 0 and anything past 16384 a side before wgpu-native sees
    * it. 16384 itself reaches the device, which may hold a lower limit
-   * (lavapipe's is 8192): that is a reported error, never an abort. */
+   * (Metal's default is 8192): that is a reported error, never an abort. */
   {
     if (nishgfx_offscreen_create(dev, 16385, 1) != NULL || nishgfx_offscreen_create(dev, 1, 16385) != NULL ||
         nishgfx_offscreen_create(dev, 0, 1) != NULL || nishgfx_offscreen_create(dev, 1, 0) != NULL)
@@ -204,7 +204,10 @@ int main(void) {
    * reach a 64-entry ring, which keeps the first 64 and counts 6 dropped. */
   SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
   NishGfxWindow *win = nishgfx_window_create("triangle", 64, 64);
-  if (win == NULL) return fail("no offscreen window");
+  if (win == NULL) {
+    fprintf(stderr, "triangle: no offscreen window: %s\n", SDL_GetError());
+    return 1;
+  }
   nishgfx_events_poll(win);
   NishGfxEvent ev;
   while (nishgfx_event_next(win, &ev) != NISHGFX_EVENT_NONE) {

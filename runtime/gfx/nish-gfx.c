@@ -928,8 +928,8 @@ void nishgfx_pass_end(NishGfxPass *p) {
 /* ---- offscreen --------------------------------------------------------- */
 
 NishGfxOffscreen *nishgfx_offscreen_create(NishGfxDevice *dev, uint32_t width, uint32_t height) {
-  /* 16384 is WebGPU's default maxTextureDimension2D, so width * 4 rounded to
-   * 256 and its product with height fit in 32 and 64 bits. */
+  /* The shim's cap (WebGPU's default limit is 8192, a device reports past it):
+   * width * 4 rounded to 256 and its product with height fit 32 and 64 bits. */
   if (dev == NULL || width == 0 || height == 0 || width > 16384 || height > 16384) return NULL;
   NishGfxOffscreen *o = calloc(1, sizeof *o);
   if (o == NULL) return NULL;
