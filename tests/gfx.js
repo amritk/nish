@@ -216,15 +216,12 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
         encoding: "utf8",
         env: { PATH: fetchBin, HOME: fake },
       })
-    const stampText = /^want="(.*)"$/m.exec(
-      fs.readFileSync(path.join(root, "scripts", "fetch-gfx.sh"), "utf8")
-    )
-    const versions = /^wgpu_version=(\S+)$[\s\S]*^sdl_version=(\S+)$/m.exec(
-      fs.readFileSync(path.join(root, "scripts", "fetch-gfx.sh"), "utf8")
-    )
+    const fetchSh = fs.readFileSync(path.join(fake, "scripts", "fetch-gfx.sh"), "utf8")
+    const stampText = /^want="(.*)"$/m.exec(fetchSh)
+    const versions = /^wgpu_version=(\S+)$[\s\S]*^sdl_version=(\S+)$/m.exec(fetchSh)
     if (toolsFound && stampText && versions) {
       const want = stampText[1].replace("$wgpu_version", versions[1]).replace("$sdl_version", versions[2])
-      for (const f of PREFIX_FILES.filter((f) => f.startsWith("lib/"))) {
+      for (const f of PREFIX_FILES.filter((p) => p.startsWith("lib/"))) {
         fs.mkdirSync(path.dirname(path.join(fetchDest, f)), { recursive: true })
         fs.writeFileSync(path.join(fetchDest, f), "")
       }
