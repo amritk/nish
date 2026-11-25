@@ -143,9 +143,27 @@ One of them is reachable from a caller's code and is tested:
 
 | Panic at main | What it does now | Evidence |
 | --- | --- | --- |
-| `Screen.flush`: the drawn and sent buffers disagree in length | flushes the cells all of them hold (the shortest buffer, within the room `resize` gave the flush) and drops the rest | "link/std_term_buffers_disagree: exits with 0 and stdout matches expected.out": a grown glyph buffer flushes its 2 cells, and a shortened `glyphs`, `fgs`, `bgs` or `attrs` 2 of 3. The four sent buffers are private, so no caller can shorten them |
+| `Screen.flush`: the drawn and sent buffers disagree in length | flushes the cells all of them hold (the shortest buffer, within the room `resize` gave the flush) and drops the rest. This is specified behaviour, not a stopgap (the owner's decision on #2290) | "link/std_term_buffers_disagree: exits with 0 and stdout matches expected.out": a grown glyph buffer flushes its 2 cells, and a shortened `glyphs`, `fgs`, `bgs` or `attrs` 2 of 3. The four sent buffers are private, so no caller can shorten them |
 
-The other four became defensive bounds, recorded under **Open** below as untested.
+The other four became defensive bounds. Three are tested by WP85 S5, below;
+`termBytesText`'s clamp is recorded under **Open** as untested.
+
+### WP85 S5: the defensive bounds tested
+
+No public input reaches the value these three guards stop, so removing one
+changes no output. What fails is the std-panics ratchet: without the guard the
+prover can no longer discharge an index, and `std/term.ts` gains a site
+`tests/std-panics.json` does not allow. Each row was checked by removing its
+guard and running `node tests/run.js std-panics` (with `std/term.ts` as at `c5265f9c`), which
+failed with the sites listed; with the guard in place it passes.
+"link/std_term_decoder_bounds: exits with 0 and stdout matches expected.out"
+pins what the public API gives at each guard's edge.
+
+| Guard | Inputs pinned at its edge | Fails without it |
+| --- | --- | --- |
+| `KeyDecoder.keep`: a negative `used` is clamped to 0 | an empty read (`used` 0) with an ESC held, which neither loses the ESC nor restarts its 50 ms clock; a count of -3, -1 and past the buffer, through `feed` and `feedEvents`; a byte more of a held `ESC [` restarting the clock | "std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows (…)", on `std/term.ts:1772:17:index (KeyDecoder.keep)` |
+| `termDecodeKeys`: the loop condition `i >= 0` stops a cursor stepped back | a 3- and a 4-byte character cut at the end of a read, held, then finished or given up as U+FFFD; a lone continuation byte; `ESC O` cut at the end; a CSI run past the 32-parameter cap | the same check, on `std/term.ts:2170:26:index (termDecodeKeys)` |
+| `termDecodeEvents`: the same loop condition | `ESC O` cut at the end and finished by the next read; Alt with a key; a 2-byte character cut, then given up; a lone continuation byte | the same check, on `std/term.ts:2995:26:index (termDecodeEvents)` and five in `termDecodeString`, which it hands the cursor (`2940:27`, `2940:55`, `2941:20`, `2960:19` index, `2954:23` overflow) |
 
 The decoders were checked against main's by a scratch fuzzer: 190,000 random
 inputs, fed whole and in random splits, gave byte-identical events. The fuzzer
@@ -158,17 +176,21 @@ buffer's length first, so it cannot fail, but the prover cannot see a slice boun
 Building the string a byte at a time, as the Node path does, would avoid the slice; that is expected,
 not measured, to slow every frame, so it waits for #2208.
 
-**Open: untested defensive bounds.** These replaced explicit panics. Read from
-the code, each one's callers never pass the value it guards against, and no
-test fails when the bound is removed:
-- `termBytesText`: a count past the buffer is clamped to the buffer. Its
-  callers pass a whole buffer or a screen's `outLen`.
-- `KeyDecoder.keep`: a negative `used` is clamped to 0.
-- `termDecodeKeys` and `termDecodeEvents`: a cursor stepped back is stopped by
-  the loop condition, which holds the cursor's range.
+**Open: untested defensive bound.** `termBytesText` clamps a count past its
+buffer to the buffer, and one below 0 to 0. This replaced an explicit panic.
+Read from the code, its callers pass a whole buffer or a screen's `outLen`,
+which `put` keeps within `out`, so no public input reaches either clamp. No
+check fails when both are removed: WP85 S5 removed them and ran
+`node tests/run.js std-panics` (passes: no new site, the slice was already counted)
+and `node tests/run.js std_term` (every behavioural check passes; only the
+`term.ll` IR golden, which moves with any edit, fails).
+"link/std_term_decoder_bounds: exits with 0 and stdout matches expected.out"
+pins the counts it is handed: 0 bytes, and whole buffers.
 
 Tests:
 - `link/std_term_buffers_disagree: exits with 0 and stdout matches expected.out` (WP85 S3)
+- `link/std_term_decoder_bounds: exits with 0 and stdout matches expected.out` (WP85 S5)
+- `std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows (…)` (WP85 S5: fails without `KeyDecoder.keep`'s, `termDecodeKeys`'s or `termDecodeEvents`'s guard)
 - `term_calls: over a pipe readStdin reads the four bytes waiting, waitStdin sees the end, and the terminal questions answer false and -25`
 - `term_calls: over a pipe held open with nothing in it readStdin answers -11 and waitStdin(50) times out after at least 50 ms`
 - `term_import: waitStdin and readStdin drain a thousand piped bytes and stop at the end of the stream`
