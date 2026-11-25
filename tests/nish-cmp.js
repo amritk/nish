@@ -22977,6 +22977,7 @@ const DECLARED = [
       "tests/link/sync_ring_inplace_memmove/main.ts": ["testing.ll"],
       "tests/link/sync_ring_inplace_partial/main.ts": ["testing.ll"],
       "tests/link/sync_shm/main.ts": ["testing.ll"],
+      "tests/link/sync_shm_window/main.ts": ["testing.ll"],
     }
   ),
 ]
