@@ -15,11 +15,16 @@
  * as `<name>.ts`, so its `Regenerate:` line reads as a user's would, then
  * moved aside, since a `.ts` file here would be a module no program imports.
  *
+ * A header may also have `<name>.refusals.json`: a list of
+ * `{ "overrides": {...}, "message": "..." }`, each an override file the
+ * import must refuse, exiting 1, writing nothing and printing the message.
+ *
  * Prints one line per header, `ok <name>` or `FAIL <name>` with the first
  * differing line, and exits 1 when any fails (2 when clang is missing).
  */
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 
 const here = path.dirname(new URL(import.meta.url).pathname)
@@ -77,4 +82,33 @@ for (const header of headers) {
     )
   }
 }
+
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "nish-c-import-refusals-"))
+for (const header of headers) {
+  const name = header.slice(0, -2)
+  const listed = path.join(here, `${name}.refusals.json`)
+  if (!fs.existsSync(listed)) {
+    continue
+  }
+  const out = path.join(scratch, `${name}.ts`)
+  const file = path.join(scratch, `${name}.overrides.json`)
+  for (const [at, { overrides, message }] of JSON.parse(fs.readFileSync(listed, "utf8")).entries()) {
+    fs.writeFileSync(file, JSON.stringify(overrides))
+    fs.rmSync(out, { force: true })
+    const target = name.endsWith("-wasm32") ? "wasm32-unknown-unknown" : "x86_64-unknown-linux-gnu"
+    const run = spawnSync(nish, ["c-import", header, "--overrides", file, "--target", target, "-o", out], {
+      cwd: here,
+      encoding: "utf8",
+    })
+    if (run.status === 1 && run.stderr.includes(message) && !fs.existsSync(out)) {
+      console.log(`ok ${name} refusal ${at + 1}`)
+    } else {
+      failed++
+      console.log(
+        `FAIL ${name} refusal ${at + 1}: exit ${run.status}\n  wanted: ${message}\n  stderr: ${run.stderr}`
+      )
+    }
+  }
+}
+fs.rmSync(scratch, { recursive: true, force: true })
 process.exit(failed === 0 ? 0 : 1)

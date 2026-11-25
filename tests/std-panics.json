@@ -4,10 +4,10 @@
     "More fails and names the sites of that module and kind; a module not listed here fails on its first site; fewer fails until this file is rewritten to the new count with node tests/run.js std-panics --update-std-panics, so the count only moves down.",
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix."
   ],
-  "total": 1477,
+  "total": 1263,
   "explicit": {
-    "kept": 363,
-    "toFix": 9
+    "kept": 364,
+    "toFix": 8
   },
   "modules": {
     "std/base64.ts": {
@@ -58,7 +58,7 @@
       "overflow": 8
     },
     "std/crypto/chacha20poly1305.ts": {
-      "array-length": 2,
+      "array-length": 4,
       "index": 16,
       "overflow": 19
     },
@@ -66,9 +66,11 @@
       "panic": 14
     },
     "std/crypto/hmac.ts": {
+      "array-length": 1,
       "panic": 10
     },
     "std/crypto/jwt.ts": {
+      "array-length": 3,
       "panic": 1
     },
     "std/crypto/p256.ts": {
@@ -89,9 +91,18 @@
     "std/crypto/x509-random.ts": {
       "io-exit": 2
     },
+    "std/crypto/x509.ts": {
+      "slice": 1
+    },
+    "std/host/text.ts": {
+      "slice": 1
+    },
     "std/json-equal.ts": {
       "index": 4,
       "pop": 2
+    },
+    "std/json-number.ts": {
+      "slice": 1
     },
     "std/json-tokenizer.ts": {
       "slice": 1
@@ -100,7 +111,8 @@
       "slice": 3
     },
     "std/json-value.ts": {
-      "array-length": 1
+      "array-length": 1,
+      "slice": 2
     },
     "std/math.ts": {
       "index": 6,
@@ -122,7 +134,7 @@
     "std/net/dns.ts": {
       "io-exit": 1,
       "panic": 4,
-      "slice": 3
+      "slice": 4
     },
     "std/net/fetch.ts": {
       "io-exit": 3,
@@ -186,15 +198,15 @@
     "std/net/postgres-async.ts": {
       "io-exit": 1,
       "panic": 10,
-      "slice": 10
+      "slice": 14
     },
     "std/net/postgres-carrier.ts": {
       "io-exit": 4,
       "panic": 12,
-      "slice": 5
+      "slice": 6
     },
     "std/net/postgres.ts": {
-      "array-length": 23,
+      "array-length": 27,
       "index": 16,
       "panic": 44,
       "slice": 12
@@ -219,12 +231,13 @@
       "panic": 6
     },
     "std/net/serve.ts": {
+      "array-length": 3,
       "panic": 3,
       "slice": 8
     },
     "std/net/static.ts": {
       "panic": 1,
-      "slice": 3
+      "slice": 4
     },
     "std/net/tls-tcp.ts": {
       "io-exit": 3,
@@ -242,12 +255,12 @@
     },
     "std/net/upstream.ts": {
       "panic": 4,
-      "slice": 1
+      "slice": 3
     },
     "std/net/url.ts": {
-      "array-length": 2,
+      "array-length": 3,
       "panic": 2,
-      "slice": 6
+      "slice": 7
     },
     "std/net/websocket.ts": {
       "panic": 2
@@ -287,14 +300,11 @@
       "array-length": 1
     },
     "std/temporal.ts": {
-      "divide": 3,
-      "index": 9,
-      "overflow": 240,
       "panic": 1,
-      "slice": 7
+      "slice": 1
     },
     "std/term-io.ts": {
-      "slice": 2
+      "slice": 3
     },
     "std/term-pixels.ts": {
       "array-length": 6,
@@ -312,9 +322,10 @@
     },
     "std/text.ts": {
       "panic": 1,
-      "slice": 1
+      "slice": 2
     },
     "std/threads.ts": {
+      "array-length": 2,
       "index": 32,
       "overflow": 4,
       "panic": 4
@@ -327,10 +338,11 @@
       "overflow": 12
     },
     "std/yaml-write.ts": {
-      "overflow": 13
+      "overflow": 13,
+      "slice": 1
     },
     "std/yaml.ts": {
-      "array-length": 3,
+      "array-length": 13,
       "index": 12,
       "overflow": 275,
       "panic": 1,
@@ -1552,6 +1564,11 @@
       "module": "std/sync/ring.ts",
       "function": "SpscRing.tryPush",
       "reason": "no open reservation, and the record length must fit the ring capacity; both are caller-controlled preconditions in the doc"
+    },
+    {
+      "module": "std/temporal.ts",
+      "function": "temporalRangeError",
+      "reason": "a documented RangeError as JS Temporal throws for out-of-range fields or arithmetic; the …OrNull parsers and try… variants return the failure instead"
     },
     {
       "module": "std/term-pixels.ts",

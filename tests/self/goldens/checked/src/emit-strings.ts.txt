@@ -42,6 +42,7 @@ import T_I32 from "./types" -> const T_I32
 import T_I64 from "./types" -> const T_I64
 import T_STRING from "./types" -> const T_STRING
 import T_U64 from "./types" -> const T_U64
+import T_U8 from "./types" -> const T_U8
 import TypeTable from "./types" -> struct TypeTable
 function addStringConstant(module: IRModule, index: i32, text: string): string -> @addStringConstant [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -645,39 +646,41 @@ function emitForeignString(emitter: Emitter, arg: Node, value: string, callee: F
 function emitForeignBuffers(emitter: Emitter, call: Node, callee: FunctionSig, operands: string[], values: string[]): void -> @emitForeignBuffers [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: Emitter.stringConstant IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitHostString emitHostWindow emitPanicTail foreignBufferCount foreignBufferCountProven foreignCountConversion foreignCountValue hostFunction isForeignBuffer lentBuffer loadData loadLength nish_panic_index nish_str_concat nish_str_from_i32
+  calls: Emitter.stringConstant IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.refOf emitHostString emitHostWindow emitPanicTail foreignBufferCount foreignBufferCountProven foreignCountConversion foreignCountValue hostFunction isForeignBuffer lentBuffer loadData loadLength nish_panic_index nish_str_concat nish_str_from_i32
   pointer emitter: size=424 writesThrough=true captured=false passedTo=emitHostString#0 emitHostWindow#0 foreignCountValue#0 loadLength#0 emitPanicTail#0 Emitter.stringConstant#0 loadData#0
   pointer call: size=40 writesThrough=false captured=false passedTo=emitHostWindow#1 foreignBufferCountProven#2
   pointer callee: size=224 writesThrough=false captured=false passedTo=hostFunction#0 hostFunction#0 lentBuffer#1 emitHostWindow#2 foreignBufferCount#1 foreignCountConversion#0
   pointer operands: size=0 writesThrough=true captured=false passedTo=emitHostString#2 emitHostWindow#4
   pointer values: size=0 writesThrough=true captured=false passedTo=emitHostString#3 emitHostWindow#5
   stackSites=0 stackLocals=0
-  local -33:9 fn: IRFunction (const)
-  local -32:7 i: i32 (let)
-  callee -30:9 hostFunction -> @hostFunction
-  callee -29:7 emitHostString -> @emitHostString
-  callee -28:16 hostFunction -> @hostFunction
-  callee -28:40 lentBuffer -> @lentBuffer
-  callee -27:7 emitHostWindow -> @emitHostWindow
-  callee -26:16 isForeignBuffer -> @isForeignBuffer
-  local -25:13 buffer: string (const)
-  local -24:13 count: i32 (const)
-  callee -24:21 foreignBufferCount -> @foreignBufferCount
-  local -20:15 conversion: string (const)
-  callee -20:28 foreignCountConversion -> @foreignCountConversion
-  callee -18:12 foreignBufferCountProven -> @foreignBufferCountProven
-  local -16:17 counted: string (const)
-  callee -16:27 foreignCountValue -> @foreignCountValue
-  local -15:17 len: string (const)
-  callee -15:23 loadLength -> @loadLength
-  local -14:17 fits: string (const)
-  callee -14:24 IRFunction.emitValue -> @IRFunction.emitValue
-  local -13:17 okBlock: IRBlock (const)
-  callee -13:27 IRFunction.newBlock -> @IRFunction.newBlock
-  local -12:17 failBlock: IRBlock (const)
-  callee -12:29 IRFunction.newBlock -> @IRFunction.newBlock
-  callee -11:11 IRFunction.emit -> @IRFunction.emit
-  callee -10:11 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local -35:9 fn: IRFunction (const)
+  local -34:7 i: i32 (let)
+  callee -32:9 hostFunction -> @hostFunction
+  callee -31:7 emitHostString -> @emitHostString
+  callee -30:16 hostFunction -> @hostFunction
+  callee -30:40 lentBuffer -> @lentBuffer
+  callee -29:7 emitHostWindow -> @emitHostWindow
+  callee -28:16 isForeignBuffer -> @isForeignBuffer
+  local -27:13 buffer: string (const)
+  local -26:13 count: i32 (const)
+  callee -26:21 foreignBufferCount -> @foreignBufferCount
+  local -22:15 conversion: string (const)
+  callee -22:28 foreignCountConversion -> @foreignCountConversion
+  callee -20:12 foreignBufferCountProven -> @foreignBufferCountProven
+  local -18:17 counted: string (const)
+  callee -18:27 foreignCountValue -> @foreignCountValue
+  local -17:17 len: string (const)
+  callee -17:23 loadLength -> @loadLength
+  local -16:17 fits: string (const)
+  callee -16:24 IRFunction.emitValue -> @IRFunction.emitValue
+  local -15:17 okBlock: IRBlock (const)
+  callee -15:27 IRFunction.newBlock -> @IRFunction.newBlock
+  local -14:17 failBlock: IRBlock (const)
+  callee -14:29 IRFunction.newBlock -> @IRFunction.newBlock
+  callee -13:11 IRFunction.emit -> @IRFunction.emit
+  callee -12:11 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local -10:17 unit: string (const)
+  callee -10:24 TypeTable.refOf -> @TypeTable.refOf
   local -9:17 message: string (const)
   callee -6:11 emitPanicTail -> @emitPanicTail
   callee -6:34 Emitter.stringConstant -> @Emitter.stringConstant

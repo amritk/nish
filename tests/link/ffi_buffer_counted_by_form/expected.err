@@ -1,1 +1,1 @@
-`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal
+`CountedBy` takes a buffer of `u8`, `u16`, `u32`, `i32` or `f32`, readonly or not, and the name of its count parameter as a string literal

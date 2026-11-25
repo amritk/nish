@@ -1,0 +1,1 @@
+Module storage `SAMPLES` is a place, not a value: index it (`SAMPLES[i]`) or read `SAMPLES.length`, lend it only to a parameter declared `u8[]`, `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` or to a host function's buffer window, and never alias, return or store the array itself

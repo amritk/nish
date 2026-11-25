@@ -711,6 +711,20 @@ const STD_COUNTED = [
     name: "std-synth",
     what: "synthSilence and synthTone buffers through gameWriteSamples, the sound ring and host text",
   },
+  {
+    name: "std-temporal-arith",
+    what: "PlainDate, PlainDateTime, Duration and Instant add, until and since over 256 values",
+  },
+  { name: "std-temporal-format", what: "toString of 256 dates, times, date-times, durations and instants" },
+  {
+    name: "std-temporal-parse",
+    what: "the five *FromOrNull readers over 256 strings each, one in eight refused",
+  },
+  { name: "std-base64-encode", what: "base64Encode of 4 KiB whole, and base64EncodeInto in pieces" },
+  {
+    name: "std-math-kernel",
+    what: "sin, cos, tan, atan2, hypot, exp, log, pow and fmod, and the exact decimal readers",
+  },
 ]
 
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */

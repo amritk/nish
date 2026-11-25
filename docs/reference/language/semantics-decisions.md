@@ -1542,7 +1542,7 @@ or the pointer of a
   `tests/cases/panics_ffi_read_cstring_null`)
 
 **`ffi-length`**: a call to a
-[`declare function`](declarations.md#a-u8-parameter-a-buffer-and-its-count) whose count is
+[`declare function`](declarations.md#a-typed-array-parameter-a-buffer-and-its-count) whose count is
 larger than a `u8[]` buffer of its run:
 `` `name`: argument N (count) counts more bytes than argument M (buf) holds ``,
 compared unsigned, so a count that wrapped below zero fails too

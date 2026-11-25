@@ -1,9 +1,9 @@
 // Opt-out (`--allow-panics`): this file keeps no panic site of its own, and
 // nothing in `std/bytes` is reached. The one site its calls still reach is the
 // `String.fromBytes` slice in `std/json-typed` (`JsonDecoder.text`'s no-escape
-// path, std/json-typed.ts:899), which the compiler records as unproven even
-// under its range guard. Once that slice is proven, build this file without
-// `--allow-panics`.
+// path, std/json-typed.ts:899:14), whose bounds are fields, not locals, so
+// even #2279 (for #2208) leaves it unproven. Once that slice is proven, build
+// this file without `--allow-panics`.
 // smoke: args --allow-panics
 //
 // A JSON Merge Patch (RFC 7396) applied to a typed record, with typed JSON's

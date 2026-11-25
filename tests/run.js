@@ -36365,16 +36365,16 @@ server.on("exit", (code, sig) => {
       } else {
         const line = (why) => {
           const m = new RegExp(
-            `^uring-stats ${why} port=\\d+ sends=(\\d+) pool_new=(\\d+) pool_held=(\\d+) pool_cached=(\\d+) live=(\\d+) slots=(\\d+)$`,
+            `^uring-stats ${why} port=\\d+ sends=(\\d+) pool_new=(\\d+) pool_held=(\\d+) pool_cached=(\\d+) live=(\\d+) slots=(\\d+) enters=(\\d+) windows=(\\d+) window_waits=(\\d+)$`,
             "m"
           ).exec(on?.err ?? "")
           return m === null ? null : m.slice(1).map(Number)
         }
         const sig = line("signal")
         const end = line("close")
-        // [sends, pool_new, pool_held, pool_cached, live, slots]
+        // [sends, pool_new, pool_held, pool_cached, live, slots, enters, windows, window_waits]
         check(
-          "net_ring: NISH_URING_STATS=1 prints a ring set's sends, pool buffers, live slots and slots on SIGUSR1 and at the listener's close",
+          "net_ring: NISH_URING_STATS=1 prints a ring set's sends, pool buffers, live slots, slots, enters and batch windows on SIGUSR1 and at the listener's close",
           on !== null &&
             on.why === "exit 0" &&
             sig !== null &&
@@ -36388,7 +36388,11 @@ server.on("exit", (code, sig) => {
             end[3] >= 1 &&
             end[3] <= end[1] &&
             end[4] === 0 &&
-            end[5] === sig[5],
+            end[5] === sig[5] &&
+            sig[6] >= 1 &&
+            end[6] >= sig[6] &&
+            end[7] >= sig[7] &&
+            end[8] >= sig[8],
           on === null ? `does not compile and link\n${shown(b.c)}` : `${on.why}\nstdout: ${on.out}\nstderr: ${on.err}`
         )
         const off = drive("")
@@ -36642,6 +36646,61 @@ server.on("exit", (code, sig) => {
           r === null ? `does not build\n${shown(bb.c)}` : `signal ${r.signal}\n${shown(r)}`
         )
       }
+    }
+    // `batch.ts trickle`: 16 bytes arrive 10 ms apart into one wait for 16
+    // with a maxWaitMs of 400. Its two `signal` stats lines, before and after
+    // the wait, bound what the window did: it sleeps in at most eight slices
+    // and pumps once after each, so it waits and pumps at most 8 times, and
+    // the stretch from before the first byte to after the reads enters the
+    // ring fewer than 50 times: 4 waits and 39 enters in each of 10 runs. The
+    // window it replaced, which slept on the ring for the rest of `min`, woke
+    // once per byte: 16 waits and 62 enters in each of 10 runs.
+    const tk = bb.exe === null ? null : spawnSync(bb.exe, ["trickle"], { encoding: "utf8", timeout: 60000, env: { ...process.env, NISH_URING_STATS: "1" } })
+    const tkName = "net_ring: a pollWaitBatch window that bytes trickle into waits and pumps at most 8 times and enters the ring fewer than 50 times"
+    if (tk !== null && tk.status === 2) {
+      skip(`${tkName}: the kernel refused rings`)
+    } else {
+      const lines = [...(tk?.stderr ?? "").matchAll(/^uring-stats signal port=\d+ .* enters=(\d+) windows=(\d+) window_waits=(\d+)$/gm)].map((m) =>
+        m.slice(1).map(Number)
+      )
+      const [a, b] = lines.length === 2 ? lines : [null, null]
+      check(
+        tkName,
+        tk !== null &&
+          tk.status === 0 &&
+          tk.stdout.includes("trickle: one wait for 16 took 16 bytes") &&
+          a !== null &&
+          b[1] - a[1] === 1 &&
+          b[2] - a[2] >= 1 &&
+          b[2] - a[2] <= 8 &&
+          b[0] - a[0] < 50,
+        tk === null ? `does not build\n${shown(bb.c)}` : `signal ${tk.signal}\n${shown(tk)}`
+      )
+    }
+    // `batch.ts unfilled`: one byte into a wait for 16 with a maxWaitMs of
+    // 400, so the window is never filled and sleeps its 400 ms out in slices
+    // of 50: it must wait 6 to 8 times. A window of one 400 ms sleep waits
+    // once and one of 16 slices waits 16 times; both fail.
+    const uf = bb.exe === null ? null : spawnSync(bb.exe, ["unfilled"], { encoding: "utf8", timeout: 60000, env: { ...process.env, NISH_URING_STATS: "1" } })
+    const ufName = "net_ring: a pollWaitBatch window that is never filled sleeps its maxWaitMs out in 6 to 8 slices"
+    if (uf !== null && uf.status === 2) {
+      skip(`${ufName}: the kernel refused rings`)
+    } else {
+      const lines = [...(uf?.stderr ?? "").matchAll(/^uring-stats signal port=\d+ .* windows=(\d+) window_waits=(\d+)$/gm)].map((m) =>
+        m.slice(1).map(Number)
+      )
+      const [a, b] = lines.length === 2 ? lines : [null, null]
+      check(
+        ufName,
+        uf !== null &&
+          uf.status === 0 &&
+          uf.stdout.includes("unfilled: one wait for 16 took 1 byte and slept out its 400 ms") &&
+          a !== null &&
+          b[0] - a[0] === 1 &&
+          b[1] - a[1] >= 6 &&
+          b[1] - a[1] <= 8,
+        uf === null ? `does not build\n${shown(bb.c)}` : `signal ${uf.signal}\n${shown(uf)}`
+      )
     }
   }
 }
