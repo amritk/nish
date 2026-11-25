@@ -116,9 +116,7 @@ start() {
     if grep -q '^listening' "$out/server.log"; then break; fi
     sleep 0.05
   done
-  local want=0
-  if [ "$ring" = 1 ]; then want=1; fi
-  if ! grep -q "^listening $port rings $want\$" "$out/server.log"; then
+  if ! grep -q "^listening $port rings $ring\$" "$out/server.log"; then
     echo "run.sh: $1 did not start as asked: $(cat "$out/server.log")" >&2
     exit 1
   fi
