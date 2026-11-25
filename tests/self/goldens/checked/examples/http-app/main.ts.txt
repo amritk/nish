@@ -40789,8 +40789,8 @@ function HttpServer.drain(this: HttpServer): void -> @nish.HttpServer.drain [exp
   callee +4:5 HttpServer.unlisten -> @nish.HttpServer.unlisten
   local +5:16 s: HttpServerH1Slot (const)
   local +6:13 conn: Http1Connection | null (const)
-  callee +6:44 HttpServer.h1Conn -> @nish.HttpServer.h1Conn
-  callee +7:38 HttpServer.h1Holds -> @nish.HttpServer.h1Holds
+  callee +6:53 HttpServer.h1Conn -> @nish.HttpServer.h1Conn
+  callee +7:28 HttpServer.h1Holds -> @nish.HttpServer.h1Holds
   callee +8:36 HttpServer.h1Resting -> @nish.HttpServer.h1Resting
   callee +8:58 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
   callee +9:11 HttpServer.h1Close -> @nish.HttpServer.h1Close
