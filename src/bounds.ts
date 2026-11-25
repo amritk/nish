@@ -3223,9 +3223,10 @@ const provesWithin = (walk: BoundsWalk, state: State, bound: Node, w: Local): bo
 
 /**
  * `from <= to`, for a range of `w`: `to` is `w`'s length and `from` is within
- * it, the two are one local or `ordered`, `to` is `from + c` or `from` is
- * `to - c`, or what bounds them apart says so: the most `from` can be is no
- * more than the least `to` can be.
+ * it, the two are one local or `ordered`, `to` is `from + c`, or what bounds
+ * them apart says so: the most `from` can be is no more than the least `to`
+ * can be. (`from` as `to - c` never reaches here: `provesRange` first asks
+ * `impliesNonNegative(from)`, which refuses a subtraction.)
  */
 const provesOrdered = (walk: BoundsWalk, state: State, from: Node, to: Node, w: Local): boolean => {
   const ctx = walk.ctx
@@ -3239,10 +3240,6 @@ const provesOrdered = (walk: BoundsWalk, state: State, from: Node, to: Node, w: 
   }
   const sum = offsetIndex(ctx, to)
   if (a !== null && sum !== null && sum.v === a) {
-    return true
-  }
-  const minus = minusLiteral(ctx, from)
-  if (b !== null && minus !== null && isLocal(indexLocal(ctx, minus.base), b)) {
     return true
   }
   const ceiling = boundCeiling(walk, state, from)

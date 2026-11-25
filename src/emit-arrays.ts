@@ -1340,6 +1340,11 @@ export const newArrayLengthChecked = (
  * it is exact up to there. A block of more than 2^62 bytes is refused too,
  * so `n * size` cannot wrap and the allocator's rounding cannot overflow:
  * anything that size goes to `nish_arena_grow`, which fails it.
+ *
+ * `src/bounds.ts` skips this check for a length it proves a non-negative
+ * `i32`, which assumes 2^31 - 1 elements always fit under the limit: true
+ * while an element is at most 2^31 bytes (2^62 / 2^31 = 2^31), as every
+ * element type is.
  */
 const newArrayLimit = (emitter: Emitter, size: i32): i64 => {
   const most: i64 = emitter.opts.numberMode === NUMBER_MODE_I32 ? toI64(I32_MAX) : toI64(1) << toI64(53)

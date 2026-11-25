@@ -811,15 +811,6 @@ export class StructInstantiation {
 }
 
 /**
- * One (template, type-argument tuple): the specialised function it names, and
- * the side tables its body is checked into.
- *
- * The tables are a full copy rather than a window on the template's node-id
- * span (`docs/wp18-generics.md` §3d's fallback): it costs memory on a program
- * that instantiates something and nothing at all on one that does not, and it
- * needs no invariant about how the parser hands out ids.
- */
-/**
  * Whether `sig` is an instance of `std/array.ts`'s `slice` or `sliceFrom`,
  * what `xs.slice(a, b)` and `xs.slice(a)` compile to. Its range check is its
  * one panic, in `sliceOutOfRange`, and `src/bounds.ts` judges that range at
@@ -841,6 +832,15 @@ export const isArraySliceInstance = (sig: FunctionSig): boolean => {
   return isArrayModule(home.packageName, home.source.path)
 }
 
+/**
+ * One (template, type-argument tuple): the specialised function it names, and
+ * the side tables its body is checked into.
+ *
+ * The tables are a full copy rather than a window on the template's node-id
+ * span (`docs/wp18-generics.md` §3d's fallback): it costs memory on a program
+ * that instantiates something and nothing at all on one that does not, and it
+ * needs no invariant about how the parser hands out ids.
+ */
 export class Instantiation {
   /**
    * The generic function or generic method this specialises (a *request*), or
