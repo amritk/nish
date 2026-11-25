@@ -2456,8 +2456,8 @@ function walkOperands(walk: BoundsWalk, state: State, expr: Node): void -> @walk
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via walkExpression
   calls: SliceStart.constructor addFacts applyAssignment applyCallEffects applyDecrement callsNothing cloneState conditionFacts copyInto forgetCallEffects forgetPathsThrough intersect isArrayPop isAtomicElementCall isCharCodeAt isParallelMapInto isSliceCall isSlotSpawn isSubstringCall judge judgeArrayLength judgeClampBound judgeOverflow judgeParallelLength judgePop judgeRangeCheck judgeSliceBound judgeVectorAccess lazyResultMethod lengthHolder localOf nish_panic_index nish_panic_overflow nish_str_eq noteCallSite unwrapBoundsParens vectorAccessLanes walkArgument walkBinary walkExpression writesLocal
-  pointer walk: size=200 writesThrough=true captured=false passedTo=walkExpression#0 walkExpression#0 judge#0 walkExpression#0 walkExpression#0 walkExpression#0 forgetCallEffects#0 walkArgument#0 judgeSliceBound#0 judgeClampBound#0 judge#0 judge#0 judge#0 judgeParallelLength#0 judgeVectorAccess#0 judgePop#0 judgeRangeCheck#0 noteCallSite#0 applyCallEffects#0 walkArgument#0 judgeArrayLength#0 applyCallEffects#0 walkBinary#0 walkExpression#0 conditionFacts#0 walkExpression#0 walkExpression#0 walkExpression#0 judgeOverflow#0 forgetPathsThrough#0 applyAssignment#0 applyDecrement#0 walkExpression#0
-  pointer state: size=136 writesThrough=true captured=false passedTo=walkExpression#1 walkExpression#1 judge#1 walkExpression#1 walkExpression#1 cloneState#0 copyInto#0 intersect#0 forgetCallEffects#1 walkArgument#1 judgeSliceBound#1 judgeClampBound#1 judge#1 judge#1 judge#1 judgeParallelLength#1 judgeVectorAccess#1 judgePop#1 judgeRangeCheck#1 noteCallSite#1 applyCallEffects#1 walkArgument#1 judgeArrayLength#1 applyCallEffects#1 walkBinary#1 walkExpression#1 conditionFacts#1 cloneState#0 cloneState#0 copyInto#0 walkExpression#1 judgeOverflow#1 forgetPathsThrough#1 applyAssignment#1 applyDecrement#1 walkExpression#1
+  pointer walk: size=200 writesThrough=true captured=false passedTo=walkExpression#0 walkExpression#0 judge#0 walkExpression#0 walkExpression#0 walkExpression#0 forgetCallEffects#0 walkArgument#0 judge#0 judgeSliceBound#0 judgeClampBound#0 judge#0 judge#0 judgeParallelLength#0 judgeVectorAccess#0 judgePop#0 judgeRangeCheck#0 noteCallSite#0 applyCallEffects#0 walkArgument#0 judgeArrayLength#0 applyCallEffects#0 walkBinary#0 walkExpression#0 conditionFacts#0 walkExpression#0 walkExpression#0 walkExpression#0 judgeOverflow#0 forgetPathsThrough#0 applyAssignment#0 applyDecrement#0 walkExpression#0
+  pointer state: size=136 writesThrough=true captured=false passedTo=walkExpression#1 walkExpression#1 judge#1 walkExpression#1 walkExpression#1 cloneState#0 copyInto#0 intersect#0 forgetCallEffects#1 walkArgument#1 judge#1 judgeSliceBound#1 judgeClampBound#1 judge#1 judge#1 judgeParallelLength#1 judgeVectorAccess#1 judgePop#1 judgeRangeCheck#1 noteCallSite#1 applyCallEffects#1 walkArgument#1 judgeArrayLength#1 applyCallEffects#1 walkBinary#1 walkExpression#1 conditionFacts#1 cloneState#0 cloneState#0 copyInto#0 walkExpression#1 judgeOverflow#1 forgetPathsThrough#1 applyAssignment#1 applyDecrement#1 walkExpression#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=1 stackLocals=0
   local +0:9 ctx: CheckContext (const)
@@ -2487,61 +2487,62 @@ function walkOperands(walk: BoundsWalk, state: State, expr: Node): void -> @walk
   callee +46:46 new SliceStart -> @SliceStart.constructor
   callee +48:16 lengthHolder -> @lengthHolder
   local +50:11 target: FunctionSig | null (const)
-  local +51:9 at: i32 (let)
-  local +52:16 arg: Node (const)
-  callee +53:7 walkArgument -> @walkArgument
-  callee +56:32 writesLocal -> @writesLocal
-  callee +60:11 judgeSliceBound -> @judgeSliceBound
-  callee +62:11 judgeClampBound -> @judgeClampBound
-  callee +66:9 isCharCodeAt -> @isCharCodeAt
-  callee +67:7 judge -> @judge
-  callee +69:9 isSlotSpawn -> @isSlotSpawn
-  callee +70:7 judge -> @judge
-  callee +72:9 isAtomicElementCall -> @isAtomicElementCall
-  callee +73:7 judge -> @judge
-  callee +75:9 isParallelMapInto -> @isParallelMapInto
-  callee +76:7 judgeParallelLength -> @judgeParallelLength
-  local +78:11 lanes: i32 (const)
-  callee +78:19 vectorAccessLanes -> @vectorAccessLanes
-  callee +80:7 judgeVectorAccess -> @judgeVectorAccess
-  callee +82:9 isArrayPop -> @isArrayPop
-  callee +83:7 judgePop -> @judgePop
-  callee +85:5 judgeRangeCheck -> @judgeRangeCheck
-  callee +86:9 callsNothing -> @callsNothing
-  callee +92:7 noteCallSite -> @noteCallSite
-  callee +97:5 applyCallEffects -> @applyCallEffects
-  local +102:11 target: FunctionSig | null (const)
-  local +103:9 at: i32 (let)
-  local +104:16 arg: Node (const)
-  callee +105:7 walkArgument -> @walkArgument
-  callee +108:5 judgeArrayLength -> @judgeArrayLength
-  callee +109:5 applyCallEffects -> @applyCallEffects
-  callee +114:5 walkBinary -> @walkBinary
-  callee +119:5 walkExpression -> @walkExpression
-  local +120:11 facts: ConditionFacts (const)
-  callee +120:19 conditionFacts -> @conditionFacts
-  local +121:11 whenTrue: State (const)
-  callee +121:22 cloneState -> @cloneState
-  callee +122:5 addFacts -> @addFacts
+  local +54:11 atomic: boolean (const)
+  callee +54:20 isAtomicElementCall -> @isAtomicElementCall
+  local +55:9 at: i32 (let)
+  local +56:16 arg: Node (const)
+  callee +57:7 walkArgument -> @walkArgument
+  callee +59:9 judge -> @judge
+  callee +63:32 writesLocal -> @writesLocal
+  callee +67:11 judgeSliceBound -> @judgeSliceBound
+  callee +69:11 judgeClampBound -> @judgeClampBound
+  callee +73:9 isCharCodeAt -> @isCharCodeAt
+  callee +74:7 judge -> @judge
+  callee +76:9 isSlotSpawn -> @isSlotSpawn
+  callee +77:7 judge -> @judge
+  callee +79:9 isParallelMapInto -> @isParallelMapInto
+  callee +80:7 judgeParallelLength -> @judgeParallelLength
+  local +82:11 lanes: i32 (const)
+  callee +82:19 vectorAccessLanes -> @vectorAccessLanes
+  callee +84:7 judgeVectorAccess -> @judgeVectorAccess
+  callee +86:9 isArrayPop -> @isArrayPop
+  callee +87:7 judgePop -> @judgePop
+  callee +89:5 judgeRangeCheck -> @judgeRangeCheck
+  callee +90:9 callsNothing -> @callsNothing
+  callee +96:7 noteCallSite -> @noteCallSite
+  callee +101:5 applyCallEffects -> @applyCallEffects
+  local +106:11 target: FunctionSig | null (const)
+  local +107:9 at: i32 (let)
+  local +108:16 arg: Node (const)
+  callee +109:7 walkArgument -> @walkArgument
+  callee +112:5 judgeArrayLength -> @judgeArrayLength
+  callee +113:5 applyCallEffects -> @applyCallEffects
+  callee +118:5 walkBinary -> @walkBinary
   callee +123:5 walkExpression -> @walkExpression
-  local +124:11 whenFalse: State (const)
-  callee +124:23 cloneState -> @cloneState
-  callee +125:5 addFacts -> @addFacts
-  callee +126:5 walkExpression -> @walkExpression
-  callee +127:5 copyInto -> @copyInto
-  callee +127:21 intersect -> @intersect
-  local +132:11 operand: Node (const)
-  callee +133:5 walkExpression -> @walkExpression
-  callee +135:5 judgeOverflow -> @judgeOverflow
-  local +139:11 field: Node (const)
-  callee +139:19 unwrapBoundsParens -> @unwrapBoundsParens
-  callee +141:7 forgetPathsThrough -> @forgetPathsThrough
-  local +144:11 v: Local | null (const)
-  callee +144:15 localOf -> @localOf
-  callee +149:7 applyAssignment -> @applyAssignment
-  callee +151:7 applyDecrement -> @applyDecrement
-  local +160:14 child: Node (const)
-  callee +161:5 walkExpression -> @walkExpression
+  local +124:11 facts: ConditionFacts (const)
+  callee +124:19 conditionFacts -> @conditionFacts
+  local +125:11 whenTrue: State (const)
+  callee +125:22 cloneState -> @cloneState
+  callee +126:5 addFacts -> @addFacts
+  callee +127:5 walkExpression -> @walkExpression
+  local +128:11 whenFalse: State (const)
+  callee +128:23 cloneState -> @cloneState
+  callee +129:5 addFacts -> @addFacts
+  callee +130:5 walkExpression -> @walkExpression
+  callee +131:5 copyInto -> @copyInto
+  callee +131:21 intersect -> @intersect
+  local +136:11 operand: Node (const)
+  callee +137:5 walkExpression -> @walkExpression
+  callee +139:5 judgeOverflow -> @judgeOverflow
+  local +143:11 field: Node (const)
+  callee +143:19 unwrapBoundsParens -> @unwrapBoundsParens
+  callee +145:7 forgetPathsThrough -> @forgetPathsThrough
+  local +148:11 v: Local | null (const)
+  callee +148:15 localOf -> @localOf
+  callee +153:7 applyAssignment -> @applyAssignment
+  callee +155:7 applyDecrement -> @applyDecrement
+  local +164:14 child: Node (const)
+  callee +165:5 walkExpression -> @walkExpression
 function storesBackRange(ctx: CheckContext, node: Node): boolean -> @storesBackRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged isBoundsAssignment nish_panic_index nish_str_eq

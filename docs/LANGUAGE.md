@@ -6079,10 +6079,13 @@ export const main = (): i32 => {
   the lower bound, only the upper bound, or the upper bound against another
   array's `length` stays unproven and is refused (`atomic_index_no_lower`,
   `atomic_index_no_upper`, `atomic_index_other_length`, and
-  `atomic_index_unproven` with no guard at all). The method itself still
-  lists its own `index` site, at its declaration, since its body is the
-  check; a caller does not inherit it (`callerProven`), so the call is
-  refused or accepted on its own proof, not as a `call` into the method.
+  `atomic_index_unproven` with no guard at all). The index is judged as it
+  stands once it is evaluated, before the later arguments run, so a later
+  argument that rebinds it proves nothing (`atomic_index_later_arg`). The
+  method itself still lists its own `index` site, at its declaration, since
+  its body is the check; a caller does not inherit it (`callerProven`), so
+  the call is refused or accepted on its own proof, not as a `call` into the
+  method.
 - **Natively each method is the bounds check and then one instruction** on a
   `getelementptr` into the buffer: a `load atomic` or `store atomic ...
   seq_cst`, an `atomicrmw add`, `sub`, `min`, `max` or `xchg ... seq_cst`, or a

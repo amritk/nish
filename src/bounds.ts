@@ -4265,9 +4265,16 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
       holder = lengthHolder(ctx, callee.children[0])
     }
     const target = ctx.program.nodeCallees[e.id]
+    // An atomic element method checks its index, argument 0, before the later
+    // arguments run, so it is judged there: a later `(i = k)` must not stand
+    // in for the value the method was passed, nor be recorded as checked.
+    const atomic = isAtomicElementCall(ctx, e)
     let at = 0
     for (const arg of e.children[1].children) {
       walkArgument(walk, state, arg, target, at)
+      if (atomic && at === 0) {
+        judge(walk, state, e, callee.children[0], arg, true)
+      }
       at = at + 1
       if (clamped) {
         if (holder !== null && writesLocal(ctx.program, arg, holder)) {
@@ -4285,9 +4292,6 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     }
     if (isSlotSpawn(ctx, e)) {
       judge(walk, state, e, e.children[1].children[2], e.children[1].children[3], true)
-    }
-    if (isAtomicElementCall(ctx, e)) {
-      judge(walk, state, e, callee.children[0], e.children[1].children[0], true)
     }
     if (isParallelMapInto(ctx, e)) {
       judgeParallelLength(walk, state, e)
