@@ -11976,6 +11976,12 @@ const DECLARED = [
     changelog: RANGE_PROOFS,
     why: "the case is new and builds under --deny-panics on the proofs it pins, which the release does not make, so the release refuses it",
   },
+  {
+    program: "tests/cases/deny_panics_ranges_shapes.ts",
+    file: "exit",
+    changelog: RANGE_PROOFS,
+    why: "the case is new and builds under --deny-panics on the range shapes it pins, which the release does not prove, so the release refuses it",
+  },
   // Batched ring waits: `HandlerLimits` gains `minEvents` and `maxWaitMs`, and
   // `HttpHandler` keeps both, so every program that reaches
   // std/net/handler.ts lays both structs out again.
