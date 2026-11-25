@@ -697,3 +697,24 @@ only the totals, not which pages of the heap are whose.
 This is decided, as NURING-41's cap is: about 25 bytes a connection at 96,000,
 for one SEND a response (NURING-40) and no allocation on a steady
 connection (NURING-41).
+
+**The send pool's PSS at 90,000.** The owner read a `ring` server's
+PSS rise from 55 to 75 MB at 90,000 connections on 0.46.0. This branch
+did not reproduce it. The run is `docs/BENCHMARKS.md`'s "A sliced batch
+window against a 1 ms nap" (`BENCH_URING_STATS=1`, SQLite, `--think 4.5
+--warmup 5`, five rounds at 57ec27e9), whose `run.sh` copies each
+server's `/proc/PID/smaps` halfway through the window, when it sends
+`SIGUSR1`. At 90,000 connections the median total PSS was 29.0 MB for
+`ring@1`, 29.2 MB for `ring@64` and 27.5 MB for `ring-nap`; the malloc
+heap's medians were 5.8, 6.0 and 6.1 MB, and the anonymous mappings
+outside it 20.7, 20.7 and 18.4 MB. The stats line's median `pool_cached`
+was 75, 116 and 96, 1.2, 1.8 and 1.5 MiB of 16 KiB buffers. The first
+round of `ring@64` and of `ring-nap` read 18.1 and 18.0 MB: the copy was
+taken with 89,991 and 89,803 connections held and `pool_new=0`, so those
+rounds are below the others; the medians include them. At 18,000 connections
+every design read 12.5 to 12.9 MB, the heap 4.0 to 4.5 MB. The summary's
+`PSS MB` column is read by `bench/fd-limit/loadgen.c` from
+`smaps_rollup` after the window ends, so it is a few MB above these
+mid-window copies. 96,000 connections was not run. This stage's change is to
+`nr_batch`'s wait, not to the pool, `mlist` or the slot table. This is a measurement, not a
+finding: it is recorded open until a run reproduces the 0.46.0 figure.
