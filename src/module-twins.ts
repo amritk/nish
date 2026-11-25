@@ -42,24 +42,52 @@ class TwinExport {
 const isTwinBlank = (code: i32): boolean =>
   code === TWIN_SPACE || code === TWIN_TAB || code === TWIN_NEWLINE || code === TWIN_RETURN
 
-/** `text[start, end)` with every blank run one space and none at either end. */
-const twinCollapsed = (text: string, start: i32, end: i32): string => {
+/**
+ * `prefix`, then `text[start, end)` with every blank run one space and none at
+ * either end, then `suffix`. The affixes are written here, not around the
+ * call, so a caller in a loop keeps the one string this answers.
+ */
+const twinCollapsed = (text: string, start: i32, end: i32, prefix: string, suffix: string): string => {
   const words: string[] = []
+  if (prefix.length > 0) {
+    words.push(prefix)
+  }
+  const stop = end < text.length ? end : text.length
   let from = -1
-  for (let i = start; i < end; i++) {
-    if (isTwinBlank(text.charCodeAt(i))) {
-      if (from >= 0) {
+  for (let i = start < 0 ? 0 : start; i < stop; i++) {
+    if (i >= 0 && i < text.length && isTwinBlank(text.charCodeAt(i))) {
+      if (from >= 0 && from <= i && from < text.length) {
         words.push(text.substring(from, i))
-        from = -1
       }
+      from = -1
     } else if (from < 0) {
       from = i
     }
   }
-  if (from >= 0) {
-    words.push(text.substring(from, end))
+  if (from >= 0 && from <= stop && from < text.length) {
+    words.push(text.substring(from, stop))
   }
-  return words.join(" ")
+  return `${words.join(" ")}${suffix}`
+}
+
+/** Whether one of the blank-separated words of `text[start, end)` is `word`, read in place. */
+const hasTwinWord = (text: string, start: i32, end: i32, word: string): boolean => {
+  const stop = end < text.length ? end : text.length
+  let from = -1
+  for (let i = start < 0 ? 0 : start; i <= stop; i++) {
+    const blank = i === stop || (i >= 0 && i < text.length && isTwinBlank(text.charCodeAt(i)))
+    if (!blank) {
+      if (from < 0) {
+        from = i
+      }
+    } else if (from >= 0) {
+      if (from <= i && i - from === word.length && text.indexOf(word, from) === from) {
+        return true
+      }
+      from = -1
+    }
+  }
+  return false
 }
 
 /** Where a declaration's signature stops: its `at`th child when that child is there, else its end. */
@@ -79,7 +107,7 @@ const isPrivateMember = (text: string, member: Node): boolean => {
   if ((member.kind !== NodeKind.Method && member.kind !== NodeKind.Field) || member.children.length === 0) {
     return false
   }
-  return ` ${twinCollapsed(text, member.start, member.children[0].start)} `.indexOf(" private ") >= 0
+  return hasTwinWord(text, member.start, member.children[0].start, "private")
 }
 
 /**
@@ -89,7 +117,7 @@ const isPrivateMember = (text: string, member: Node): boolean => {
  */
 const classSignature = (text: string, node: Node): string => {
   const members = node.children[3]
-  const parts: string[] = [twinCollapsed(text, node.start, members.start)]
+  const parts: string[] = [twinCollapsed(text, node.start, members.start, "", "")]
   for (const member of members.children) {
     if (isPrivateMember(text, member)) {
       continue
@@ -102,7 +130,7 @@ const classSignature = (text: string, node: Node): string => {
     } else if (member.kind === NodeKind.Field) {
       cut = afterType(member)
     }
-    parts.push(`${twinCollapsed(text, member.start, cut)};`)
+    parts.push(twinCollapsed(text, member.start, cut, "", ";"))
   }
   return parts.join(" ")
 }
@@ -126,11 +154,11 @@ const exportsOf = (path: string, text: string): TwinExport[] | null => {
       const rest: Node | null = decl.children.length > 5 ? decl.children[5] : null
       const end = rest !== null && rest.kind === NodeKind.List ? rest.start : decl.end
       const cut = decl.children.length > 2 && decl.children[2].kind !== NodeKind.Empty ? cutAt(decl, 3) : end
-      out.push(new TwinExport(twinDeclName(decl), twinCollapsed(text, decl.start, cut)))
+      out.push(new TwinExport(twinDeclName(decl), twinCollapsed(text, decl.start, cut, "", "")))
       if (rest !== null && rest.kind === NodeKind.List) {
         for (const one of rest.children) {
           out.push(
-            new TwinExport(twinDeclName(one), `const ${twinCollapsed(text, one.start, afterType(one))}`)
+            new TwinExport(twinDeclName(one), twinCollapsed(text, one.start, afterType(one), "const", ""))
           )
         }
       }
@@ -138,14 +166,16 @@ const exportsOf = (path: string, text: string): TwinExport[] | null => {
       out.push(new TwinExport(twinDeclName(decl), classSignature(text, decl)))
     } else if (decl.kind === NodeKind.ModuleConst) {
       for (const one of decl.children[0].children) {
-        out.push(new TwinExport(twinDeclName(one), `const ${twinCollapsed(text, one.start, afterType(one))}`))
+        out.push(
+          new TwinExport(twinDeclName(one), twinCollapsed(text, one.start, afterType(one), "const", ""))
+        )
       }
     } else if (
       decl.kind === NodeKind.Interface ||
       decl.kind === NodeKind.TypeAlias ||
       decl.kind === NodeKind.Enum
     ) {
-      out.push(new TwinExport(twinDeclName(decl), twinCollapsed(text, decl.start, decl.end)))
+      out.push(new TwinExport(twinDeclName(decl), twinCollapsed(text, decl.start, decl.end, "", "")))
     }
   }
   return out
