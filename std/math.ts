@@ -1097,9 +1097,9 @@ export const powF64 = (x: f64, y: f64): f64 => {
     const v: f64 = one / (ax + bp)
     const ss: f64 = u * v
     const sh: f64 = withLo(ss, toU32(0))
-    // fdlibm's th, the high word of ax halved plus bp's: 0x3ff80000 + (j >> 1)
-    // when ax was halved, and 0x80000 or 0xc0000 more otherwise; the last is
-    // 0.5 more than the second.
+    // fdlibm's th, whose high word is 0x3ff80000 + (j >> 1) when ax was halved;
+    // otherwise thn, of high word 0x40000000 + (j >> 1), when bp is 1, and
+    // thn + 0.5 (high word 0x40040000 + (j >> 1)) when bp is 1.5.
     const half: i32 = j >>> 1
     const thn: f64 = withHi(0.0, half + 0x40000000)
     const thSmall: f64 = k === 0 ? thn : thn + 0.5
