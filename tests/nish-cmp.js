@@ -1221,6 +1221,10 @@ const wp84Deflate = (why, filesByProgram) =>
   )
 /** The changelog words of WP84 S3, which turns deflate's u32-wrapping sums into proven i32 ops or refusals. */
 const WP84_SUMS = "check deflate's sums instead of wrapping them"
+const wp84Sums = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: WP84_SUMS, why }))
+  )
 /** The changelog words of WP83 S4, which clears the panic sites of x509, pki, pki-roots and x509-random. */
 const WP83_PKI = "X.509 and the PKI"
 const wp83Pki = (why, filesByProgram) =>
@@ -12140,33 +12144,37 @@ const DECLARED = [
       "tests/link/std_http1_output_bytes/main.ts": ["gzip.ll"],
     }
   ),
-  ...[
-    { program: "tests/link/net_grpc/main.ts", file: "gzip.ll" },
-    { program: "tests/link/net_grpc/main.ts", file: "http-compress.ll" },
-    { program: "tests/link/net_grpc/main.ts", file: "zlib.ll" },
-    { program: "tests/link/net_grpc_interop/main.ts", file: "gzip.ll" },
-    { program: "tests/link/net_grpc_interop/main.ts", file: "http-compress.ll" },
-    { program: "tests/link/net_grpc_interop/main.ts", file: "zlib.ll" },
-    { program: "tests/link/net_handler_batch_limits/main.ts", file: "gzip.ll" },
-    { program: "tests/link/net_handler_batch_limits/main.ts", file: "http-compress.ll" },
-    { program: "tests/link/net_handler_batch_limits/main.ts", file: "zlib.ll" },
-    { program: "tests/link/net_handler_bomb/main.ts", file: "gzip.ll" },
-    { program: "tests/link/net_handler_bomb/main.ts", file: "http-compress.ll" },
-    { program: "tests/link/net_handler_bomb/main.ts", file: "zlib.ll" },
-    { program: "tests/link/net_handler_open/main.ts", file: "gzip.ll" },
-    { program: "tests/link/net_handler_open/main.ts", file: "http-compress.ll" },
-    { program: "tests/link/net_handler_open/main.ts", file: "zlib.ll" },
-    { program: "tests/link/net_handler_refused/main.ts", file: "gzip.ll" },
-    { program: "tests/link/net_handler_refused/main.ts", file: "http-compress.ll" },
-    { program: "tests/link/net_handler_refused/main.ts", file: "zlib.ll" },
-    { program: "tests/link/net_handler_steps/main.ts", file: "gzip.ll" },
-    { program: "tests/link/net_handler_steps/main.ts", file: "http-compress.ll" },
-    { program: "tests/link/net_handler_steps/main.ts", file: "zlib.ll" },
-  ].map((entry) => ({
-    ...entry,
-    changelog: WP84_SUMS,
-    why: "WP84 S3 replaces std/compress/deflate.ts's u32-cast wrapping sums, masks and loop caps with i32 ops the prover discharges or a DEFLATE_ERR_* refusal, so the deflate and inflate code these handler programs reach through http-compress, gzip and zlib moves",
-  })),
+  ...wp84Sums(
+    "WP84 S3 replaces std/compress/deflate.ts's u32-cast wrapping sums, masks and loop caps with i32 ops the prover discharges or a DEFLATE_ERR_* refusal, so the deflate and inflate code these programs reach through http-compress, gzip and zlib moves, and a main module or header that inlines or names it moves with it",
+    {
+      "tests/link/net_handler_steps_split/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_try_answers/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http1_server_lend_park/main.ts": ["gzip.ll", "http-compress.ll", "main.ll", "zlib.ll"],
+      "tests/link/net_http1_wire_refusals/main.ts": ["gzip.ll", "http-compress.ll", "main.h", "main.ll", "zlib.ll"],
+      "tests/link/net_http_server_caps/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_carriers/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_h2_refused/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_lifecycle/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_matrix/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_steps/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_steps_full/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_steps_split/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_stream/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_timeouts/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_h3/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_short/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_serve_try/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_static/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/std_compress_checked_sums/main.ts": ["main.h"],
+      "tests/link/std_compress_gzip_errors/main.ts": ["gzip.ll", "main.h", "zlib.ll"],
+      "tests/link/std_http1_config_checked/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+    }
+  ),
   // WP83 S4 first: `declaredFor` takes the first match, so no broader entry claims these moves.
   ...wp83Pki(
     "WP83 S4 proves or refuses all but four of the 195 panic sites in std/crypto/x509.ts, pki.ts, pki-roots.ts and x509-random.ts (guards before each read, u32 length sums bounded by the comparison before them, readers that answer null rather than an invented value, linear-time hex writers for the trust-store keys, rewritten host readers), so those modules move wherever they are reached; pkiRootsDirEntry is declared with its new attributes in crypto_pki_roots's main module, the one program that calls it directly",
