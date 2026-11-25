@@ -2039,22 +2039,22 @@ function judgeRangeCheck(walk: BoundsWalk, state: State, call: Node): void -> @j
   local +49:11 w: Local | null (const)
   callee +49:15 holderOf -> @holderOf
   local +50:11 first: i32 (const)
-  callee +51:23 quietFrom -> @quietFrom
-  callee +51:66 provesWindow -> @provesWindow
-  callee +52:7 noteProof -> @noteProof
-  local +56:9 name: string (const)
-  callee +56:16 windowCallName -> @windowCallName
-  local +61:7 windows: i32 (let)
-  local +62:7 at: i32 (let)
-  local +65:11 buffer: Node (const)
-  local +66:11 off: Node (const)
-  local +67:11 len: Node (const)
-  callee +68:9 isNetRangeBuffer -> @isNetRangeBuffer
-  local +69:13 w: Local | null (const)
-  callee +69:17 holderOf -> @holderOf
-  callee +70:26 quietFrom -> @quietFrom
-  callee +70:67 provesWindow -> @provesWindow
-  callee +78:5 noteProof -> @noteProof
+  callee +53:7 quietFrom -> @quietFrom
+  callee +54:7 provesWindow -> @provesWindow
+  callee +56:7 noteProof -> @noteProof
+  local +60:9 name: string (const)
+  callee +60:16 windowCallName -> @windowCallName
+  local +65:7 windows: i32 (let)
+  local +66:7 at: i32 (let)
+  local +69:11 buffer: Node (const)
+  local +70:11 off: Node (const)
+  local +71:11 len: Node (const)
+  callee +72:9 isNetRangeBuffer -> @isNetRangeBuffer
+  local +73:13 w: Local | null (const)
+  callee +73:17 holderOf -> @holderOf
+  callee +74:26 quietFrom -> @quietFrom
+  callee +74:67 provesWindow -> @provesWindow
+  callee +82:5 noteProof -> @noteProof
 function lazyResultMethod(ctx: CheckContext, call: Node): string -> @lazyResultMethod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isResult nish_panic_index nish_str_eq unwrapBoundsParens

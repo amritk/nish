@@ -53,10 +53,10 @@ function isLengthOf(program: CheckedProgram, node: Node, buf: string): boolean -
   pointer program: size=928 writesThrough=true captured=false passedTo=shadowsGuardName#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:39 isName -> @window_contract$.isName
-  callee +0:76 shadowsGuardName -> @shadowsGuardName
-  local +3:9 args: Node[] (const)
-  callee +8:5 isName -> @window_contract$.isName
+  callee +0:6 isName -> @window_contract$.isName
+  callee +1:5 shadowsGuardName -> @shadowsGuardName
+  local +5:9 args: Node[] (const)
+  callee +10:5 isName -> @window_contract$.isName
 function isPanicBlock(program: CheckedProgram, node: Node): boolean -> @isPanicBlock
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via shadowsGuardName
@@ -95,28 +95,28 @@ function noteGuard(program: CheckedProgram, table: TypeTable, sig: FunctionSig):
   pointer table: size=168 writesThrough=false captured=false passedTo=paramAt#0 paramAt#0 paramAt#0
   pointer sig: size=256 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0 takesArgumentsAsWritten#0 FunctionSig.body#0 namesParam#0 paramAt#1 paramAt#1 paramAt#1
   stackSites=0 stackLocals=0
-  callee -62:6 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee -59:6 takesArgumentsAsWritten -> @takesArgumentsAsWritten
-  local -55:9 body: Node | null (const)
-  callee -55:16 FunctionSig.body -> @FunctionSig.body
-  local -50:9 statements: Node[] (const)
-  local -46:9 local: Node (const)
-  local -42:9 decl: Node (const)
-  local -41:9 type: Node (const)
-  local -40:9 init: Node (const)
-  local -30:9 size: string (const)
-  local -29:9 length: Node (const)
-  local -25:9 buf: string (const)
-  local -24:9 test: Node (const)
-  callee -23:81 isPanicBlock -> @isPanicBlock
-  local -20:9 cond: Node (const)
-  local -16:9 last: Node (const)
-  local -15:9 len: Node (const)
-  local -14:9 diff: Node (const)
-  local -10:9 off: Node (const)
-  callee -9:7 namesParam -> @namesParam
-  callee -9:33 isLengthOf -> @isLengthOf
-  callee -9:68 isWindowTest -> @isWindowTest
+  callee -78:6 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee -75:6 takesArgumentsAsWritten -> @takesArgumentsAsWritten
+  local -71:9 body: Node | null (const)
+  callee -71:16 FunctionSig.body -> @FunctionSig.body
+  local -66:9 statements: Node[] (const)
+  local -62:9 local: Node (const)
+  local -54:9 decl: Node (const)
+  local -53:9 type: Node (const)
+  local -52:9 init: Node (const)
+  local -42:9 size: string (const)
+  local -41:9 length: Node (const)
+  local -37:9 buf: string (const)
+  local -36:9 test: Node (const)
+  callee -32:6 isPanicBlock -> @isPanicBlock
+  local -28:9 cond: Node (const)
+  local -24:9 last: Node (const)
+  local -23:9 len: Node (const)
+  local -22:9 diff: Node (const)
+  local -14:9 off: Node (const)
+  callee -12:5 namesParam -> @namesParam
+  callee -11:6 isLengthOf -> @isLengthOf
+  callee -10:6 isWindowTest -> @isWindowTest
   local -6:9 b: i32 (const)
   callee -6:13 paramAt -> @paramAt
   local -5:9 o: i32 (const)

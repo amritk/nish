@@ -1298,9 +1298,9 @@ function FactCollector.noteCall(this: FactCollector, node: Node, callee: Functio
   local +18:13 guard: FunctionSig | null (const)
   local +19:13 forward: Node | null (const)
   local +20:13 forwards: boolean (const)
-  callee +20:102 isWindowGuard -> @isWindowGuard
-  callee +21:7 FactCollector.noteSite -> @FactCollector.noteSite
-  callee +23:5 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +21:87 isWindowGuard -> @isWindowGuard
+  callee +22:7 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +24:5 FactCollector.noteSite -> @FactCollector.noteSite
 function FactCollector.noteCaptures(this: FactCollector, arrow: Node, lifted: FunctionSig): void -> @FactCollector.noteCaptures [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via captureTarget
