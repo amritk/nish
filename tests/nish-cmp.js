@@ -1414,6 +1414,23 @@ const typedBuffers = () =>
     why: "the program passes an f32[], i32[], u16[] or u32[] buffer to a declared C function, which the reference refuses because it lends only u8[]",
   }))
 
+/** The changelog words of WP89 S6, a module file chosen by target. */
+const TARGET_FILES = "a module file chosen by target"
+const targetFiles = () => [
+  ...["package_target_mismatch", "package_target_mismatch_native"].map((name) => ({
+    program: `tests/link/${name}/main.ts`,
+    file: "exit",
+    changelog: TARGET_FILES,
+    why: "the program imports a package whose nish-wasm32 file exports a different signature from its nish file, which the candidate refuses with NL3063 in each build and the reference, which knows no nish-wasm32 condition, compiles",
+  })),
+  {
+    program: "tests/link/package_target_wasm32/main.ts",
+    file: "exit",
+    changelog: TARGET_FILES,
+    why: "the program's package gives wasm32 a nish-wasm32 file that reaches no operating system, which the candidate picks and the reference ignores, refusing the nish file's getenv under wasm32",
+  },
+]
+
 /** The changelog words of the stage that adds `nish proto`. */
 const PROTO_CLASSES = "proto writes message classes from a .proto file"
 const protoClasses = () =>
@@ -13022,6 +13039,7 @@ const DECLARED = [
   ...protobufModule(),
   ...protoClasses(),
   ...typedBuffers(),
+  ...targetFiles(),
   {
     program: "tests/link/net_grpc/main.ts",
     file: "exit",

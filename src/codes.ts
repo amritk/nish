@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 1001
+export const RULE_COUNT: i32 = 1002
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -655,6 +655,8 @@ const diagnosticRules = (): string[] => [
   "NL2773",
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement",
   "NL4011",
+  "` and must export the same names with the same signatures, because a wasm32 build compiles it in its place: ",
+  "NL3063",
   "` is only written inside an `async` function: make the function that holds it `async`, and `await` its calls",
   "NL2641",
   "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",

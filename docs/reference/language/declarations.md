@@ -1414,6 +1414,47 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
     package write `nish` above `nish-f64` and never have its f64 source
     compiled, with nothing said about it — the silent mismatch this spelling
     exists to make loud.
+  - **The target rides in the condition too** (WP89 S6). A wasm32 build
+    (either wasm32 triple, `--target wasm32` or `--target wasm32-unknown-wasi`,
+    or `--profile wasi`) asks for `nish-wasm32` before
+    `nish-<mode>` and `nish`, again in the compiler's order rather than the
+    manifest's; a native build never reads it. `nish-wasm32` outranks the
+    mode because what it replaces cannot link: a native file may reach the
+    operating system and a wasm32 file the host page, and neither has the
+    other to reach, while the number mode only changes how the same source is
+    compiled. Were the mode first, a package declaring `nish-i32` could never
+    have its wasm32 file compiled in i32 mode. It cannot collide with a
+    mode-qualified condition, because the only modes are `i32` and `f64`
+    (`tests/link/package_target_wasm32`, which runs natively from its
+    `nish-i32` file and compiles for wasm32 only from its `nish-wasm32` one).
+    A package that declares `nish-wasm32` alone has no entry point for a native
+    build (`NL3020`). The standard library does the same by file name: under a
+    wasm32 target, `nish/<name>` compiles `std/<name>.wasm32.ts` in place of
+    `std/<name>.ts` when it is there (`tests/link/module_target_std_twin`,
+    which resolves both builds' paths and compares their pairs). A `nish:`
+    builtin module has no such twin: its source is the compiler's own.
+  - **The two files of a target pair export the same names with the same
+    signatures** (`NL3063`). An importer is checked against whichever file
+    its build picked, so a drift between them would break a program on one
+    target at a call site far from the file that changed. Both builds compare
+    the pair at the import, the one that never compiles the other file
+    included: `` `…/wasm.ts` is the wasm32 twin of `…/native.ts` and must export
+    the same names with the same signatures, because a wasm32 build compiles it
+    in its place: `scale` is `export const scale = (x: i32): i32 =>` in
+    `…/native.ts` and `export const scale = (x: f64): i32 =>` in `…/wasm.ts` ``
+    (`tests/link/package_target_mismatch`,
+    `tests/link/package_target_mismatch_native`). A signature is the
+    declaration's text up to its body or initializer, with blank runs
+    collapsed: a function's or method's parameters and return type, a field's
+    or constant's type, a class's heritage and its public members in the
+    order they are written, and an interface, type alias or enum whole.
+    Bodies and initializers may differ, and so may a class's `private`
+    members. A constant with no type annotation has no cut, since its type is
+    whatever its initializer gives: it is compared whole, so annotate it to
+    let the initializers differ
+    (`tests/link/module_target_twin`). The pair is compared once, at the first
+    import that reaches it, and the refusal points there. A file that does not
+    parse is not compared, and the build that compiles it says why.
   - **Presence of the condition is the claim, and every failure to find it
     names its cause** (`docs/wp21-packages.md` §6, §11). Each is refused at
     the import, before a byte of the package is checked, with its own `--json`
@@ -1423,7 +1464,8 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
       `".": "./index.js"` — is `` Package `plainjs` has no Nish entry point:
       its `exports` gave this compiler no file to compile for `.`, because that
       entry declares none of the conditions this compiler compiles source from
-      (`nish`, `nish-i32`, `nish-f64`) `` (`NL3020`,
+      (`nish`, `nish-i32`, `nish-f64`) `` — a wasm32 build adds `` `nish-wasm32` `` to
+      the list — (`NL3020`,
       `tests/link/package_not_nish`, `tests/link/package_no_condition`).
     - A package that offers only the *other* mode's condition is
       `` Package `pkg_f64` supports Nish in f64 mode only: its `exports` offers
