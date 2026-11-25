@@ -129,13 +129,24 @@ const dated = (std, text) =>
 const source = fs.readFileSync(path.join(here, "main.ts"), "utf8")
 const sourceFor = (std) =>
   withSendBody(std)
-    ? dated(std, source)
-    : dated(std, source)
+    ? shimmed(std, dated(std, source))
+    : shimmed(std, dated(std, source))
         .split("\n")
         .filter((line) => !line.includes("// sendBody only"))
         .join("\n")
         .replace("const VIA_SEND_BODY: boolean = true", "const VIA_SEND_BODY: boolean = false")
         .replaceAll(".sendBody(", ".write(")
+// A base before `netWrite2` (v0.34.1) has no such import: its bare-write
+// calibration, which only runs with `sendBody`, never runs, so the import and
+// the call become `netWrite` and the one-buffer call it has.
+const withNetWrite2 = (std) =>
+  fs.readFileSync(path.join(std, "runtime", "nish.d.ts"), "utf8").includes("function netWrite2(")
+const shimmed = (std, text) =>
+  withNetWrite2(std)
+    ? text
+    : text
+        .replace("import { netRead, netWrite2, unixSocketPair }", "import { netRead, netWrite, unixSocketPair }")
+        .replace("netWrite2(pair[0], head, 0, headLen, body, 0, n)", "netWrite(pair[0], head, 0, headLen)")
 const trees = { old: oldPackage, new: root }
 for (const [label, nish] of Object.entries(compilers)) {
   const dir = path.join(out, label)
