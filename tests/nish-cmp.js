@@ -12147,6 +12147,13 @@ const DECLARED = [
   ...wp84Sums(
     "WP84 S3 replaces std/compress/deflate.ts's u32-cast wrapping sums, masks and loop caps with i32 ops the prover discharges or a DEFLATE_ERR_* refusal, so the deflate and inflate code these programs reach through http-compress, gzip and zlib moves, and a main module or header that inlines or names it moves with it",
     {
+      "tests/link/net_grpc/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_grpc_interop/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_batch_limits/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_bomb/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_open/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_refused/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_steps/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
       "tests/link/net_handler_steps_split/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
       "tests/link/net_handler_try_answers/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
       "tests/link/net_http1_server_lend_park/main.ts": ["gzip.ll", "http-compress.ll", "main.ll", "zlib.ll"],
