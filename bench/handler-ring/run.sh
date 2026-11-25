@@ -33,6 +33,12 @@
 # fields, so a --base-compiler whose std predates them builds it, and it
 # prints no `batch` line.
 #
+# ring-nap is ring's build with BENCH_NAP=1 and the plain wait: after a pass
+# that answered fewer than 64 requests it sleeps 1 ms in pollWait on an empty
+# pollCreate() loop (server.ts), the nap a batch window is measured against.
+# It runs once, as ring-nap, in each round's rotation, and the summary prints
+# it against ring@1 (ring without --min-events) as it prints each ring@M.
+#
 # --nodb runs every server with BENCH_NODB=1: /plaintext answers its 129 bytes
 # without a query, so the CPU a request costs is the handler's and the
 # codec's (docs/BENCHMARKS.md, "A minimal GET on Http1Server").
@@ -311,12 +317,14 @@ run() {
   fi
   : >"$out/server.out"
   case "$kind" in
-  ring | ring-copy | ring-base)
+  ring | ring-copy | ring-base | ring-nap)
     n=1
     slots=$((c + 1024))
+    local nap=0
     if [ "$kind" = ring-copy ]; then bin=$out/server-copy; fi
     if [ "$kind" = ring-base ]; then bin=$out/server-base; fi
-    env -u BENCH_CORES BENCH_RING=1 BENCH_MIN_EVENTS="$me" BENCH_MAX_WAIT_MS="$mw" ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
+    if [ "$kind" = ring-nap ]; then nap=1; fi
+    env -u BENCH_CORES BENCH_RING=1 BENCH_NAP="$nap" BENCH_MIN_EVENTS="$me" BENCH_MAX_WAIT_MS="$mw" ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
     # `rings` follows `listening`: wait for the line the check reads.
     wait_for '^rings '
@@ -328,6 +336,10 @@ run() {
     # the plain wait whatever its label says.
     if [ "$kind" != ring-base ] && ! grep -q "^batch $me $mw\$" "$out/server.out"; then
       echo "$design did not take minEvents $me and maxWaitMs $mw: $(cat "$out/server.out")" >&2
+      exit 1
+    fi
+    if [ "$kind" = ring-nap ] && ! grep -q '^nap 64 1$' "$out/server.out"; then
+      echo "$design did not take BENCH_NAP: $(cat "$out/server.out")" >&2
       exit 1
     fi
     pids=$server
@@ -543,7 +555,7 @@ awk -v limit="$limit" '
     printf "%-8s %-12s %5s %8s %6s %18s %7s %7s %8s %8s %8s %8s %8s %8s %7s %20s %8s %6s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "user", "sys", "out/rsp", "in/rsp", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms", "lost"
     for (ci = 1; ci <= nc; ci++) {
       c = order[ci]
-      nbase = split("ring ring-copy ring-base epoll epoll-copy epoll1 h1 h1-copy h1-ring h1-ring-copy h1-ring-base", base, " ")
+      nbase = split("ring ring-copy ring-base ring-nap epoll epoll-copy epoll1 h1 h1-copy h1-ring h1-ring-copy h1-ring-base", base, " ")
       # Each design, then its --min-events runs (ring@M) in the order they ran.
       nds = 0
       for (bi = 1; bi <= nbase; bi++) {
@@ -570,15 +582,17 @@ awk -v limit="$limit" '
       # Each batched ring@M against ring@1 at this C: the latency the batch
       # adds at p50 and p99, its CPU per request, and the noise band between
       # ring@1 and its byte-identical copy.
-      one = c SUBSEP "ring@1"; onec = c SUBSEP "ring-copy@1"
+      # ring-nap is printed the same way; without --min-events ring is its ring@1.
+      at1 = ((c SUBSEP "ring@1") in m) ? "@1" : ""
+      one = c SUBSEP "ring" at1; onec = c SUBSEP "ring-copy" at1
       for (li = 1; li <= nl; li++) {
-        if (lorder[li] !~ /^ring@/ || lorder[li] == "ring@1") continue
+        if ((lorder[li] !~ /^ring@/ && lorder[li] != "ring-nap") || lorder[li] == "ring@1") continue
         x = c SUBSEP lorder[li]
         if (!((x in m) && (one in m)) || m[one] <= 0) continue
         d = (m[one] - m[x]) / m[one] * 100
-        printf "         %s against ring@1: %.1f%% %s CPU per request", lorder[li], (d < 0 ? -d : d), (d >= 0 ? "less" : "more")
+        printf "         %s against ring%s: %.1f%% %s CPU per request", lorder[li], at1, (d < 0 ? -d : d), (d >= 0 ? "less" : "more")
         if (mp50[x] != "" && mp50[one] != "") printf "; p50 %+.2f ms, p99 %+.2f ms", mp50[x] - mp50[one], mp99[x] - mp99[one]
-        if (onec in m) { band = (m[onec] - m[one]) / m[one] * 100; printf "; noise band (ring@1 vs ring-copy@1) %.1f%%", (band < 0 ? -band : band) }
+        if (onec in m) { band = (m[onec] - m[one]) / m[one] * 100; printf "; noise band (ring%s vs ring-copy%s) %.1f%%", at1, at1, (band < 0 ? -band : band) }
         printf "\n"
       }
       # Each design against its --base-compiler build, beside the band

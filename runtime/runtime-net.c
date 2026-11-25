@@ -76,6 +76,7 @@ typedef int nish_net_unused;
 #if defined(__linux__)
 #include <linux/filter.h>
 #include <netinet/udp.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <sys/epoll.h>
@@ -303,11 +304,11 @@ int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t 
 int32_t nish_uring_full(const struct nish_uring_set *s);
 int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on);
 void nish_uring_destroy(struct nish_uring_set *s);
-/* runtime-uring.c's counters; the dump below prints six of them. */
+/* runtime-uring.c's counters; the dump below prints seven of them. */
 struct nish_uring_stats {
   int64_t rings, live, accepting, slots, taskrun_reentries, overflow_drains, nobufs_rearms, send_requeues;
   int64_t accept_errors, accept_pauses, bound_violations, max_accepting_rings, direct_waits, sends;
-  int64_t pool_new, pool_held, pool_cached;
+  int64_t pool_new, pool_held, pool_cached, enters;
 };
 void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st);
 
@@ -360,6 +361,7 @@ struct nr_set {
   uint32_t fhead, flen, fcap;
   uint32_t *pend; /* wblocked or lingering slots, checked after each pump */
   uint32_t npend, pcap;
+  int64_t windows, window_waits; /* batch windows, and the ring waits inside them, for the stats line */
 };
 
 static struct nr_set *nr_sets[NR_SETS];
@@ -635,9 +637,11 @@ static void nr_stats_print(const struct nr_set *S, const char *why) {
   struct nish_uring_stats st;
   nish_uring_stats(S->u, &st);
   dprintf(2,
-          "uring-stats %s port=%d sends=%lld pool_new=%lld pool_held=%lld pool_cached=%lld live=%lld slots=%lld\n",
+          "uring-stats %s port=%d sends=%lld pool_new=%lld pool_held=%lld pool_cached=%lld live=%lld slots=%lld "
+          "enters=%lld windows=%lld window_waits=%lld\n",
           why, (int)S->port, (long long)st.sends, (long long)st.pool_new, (long long)st.pool_held,
-          (long long)st.pool_cached, (long long)st.live, (long long)st.slots);
+          (long long)st.pool_cached, (long long)st.live, (long long)st.slots, (long long)st.enters,
+          (long long)S->windows, (long long)S->window_waits);
 }
 
 static void nr_pump_all(void) {
@@ -1115,12 +1119,19 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
 #endif
 
 #if defined(__linux__)
-/* A batch's second wait: `n` pairs are in `out`, and it waits on the one live
-   set's ring, up to `max_wait_ms`, until `min` are ready or `max` fill it. It
-   reads no epoll set, so an ordinary descriptor that becomes ready meanwhile
-   waits for the next call, at most `max_wait_ms`; on a direct loop the
-   ring's poll on `signalFd()` ends the batch as soon as it answers, and the
-   next call reports it. */
+/* A batch's second wait: `n` pairs are in `out`, and it sleeps on the one
+   live set, up to `max_wait_ms`, until `min` are ready or `max` fill it. It
+   sleeps in at most eight slices, each an eighth of `max_wait_ms` rounded
+   up, without entering the ring, and after each slice pumps the set once and
+   collects once, so a window costs at most eight pumps however its
+   completions trickle in: a wait on the ring itself would wake, run its
+   deferred task work and pump once per completion, sends' included. Its
+   `min` is checked at the end of a slice, so a window can outlast the moment
+   `min` became ready by up to one slice. It reads no epoll set, so an
+   ordinary descriptor that becomes ready meanwhile waits for the next call,
+   at most `max_wait_ms`; on a direct loop the slice's poll(2) on
+   `signalFd()` ends the batch as soon as it answers, and the next call
+   reports it. */
 static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int32_t max_wait_ms) {
   struct nr_set *S = NULL;
   for (int32_t i = 0; i < nr_nsets; i++) {
@@ -1138,21 +1149,18 @@ static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int
   int32_t watch = -1;
   int direct = nr_direct(loop, &watch) == S;
   int64_t end = nr_now_ms() + max_wait_ms;
+  int64_t slice = (max_wait_ms + 7) / 8;
+  S->windows++;
   while (n < min && n < max) {
     int64_t left = end - nr_now_ms();
     if (left <= 0) break;
-    int rc = direct ? nish_uring_wait_direct(S->u, watch, min - n, (int32_t)left) : -EOPNOTSUPP;
-    if (rc == -EOPNOTSUPP) {
-      struct nish_uring_event ev[NR_EVENTS];
-      int k = nish_uring_wait(S->u, (int32_t)left, ev, NR_EVENTS);
-      if (k < 0) break;
-      for (int i = 0; i < k; i++) nr_dispatch(S, &ev[i]);
-    } else if (rc < 0) {
-      break;
-    }
+    S->window_waits++;
+    /* poll(2) ignores a negative descriptor, so with no watch this sleeps. */
+    struct pollfd p = {direct ? watch : -1, POLLIN, 0};
+    int woke = poll(&p, 1, (int)(left < slice ? left : slice)) > 0;
     nr_pump(S);
     n += nr_collect_from(loop, out + 2 * n, max - n, 1);
-    if (direct && watch >= 0 && nish_uring_poll_events(S->u, 0)) break;
+    if (woke) break;
   }
   return n;
 }

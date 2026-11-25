@@ -3889,6 +3889,64 @@ The noise band is the widest spread between two identical builds in the same run
 The cost is latency. A batch adds 1.8 to 2.2 ms to the median at both Cs, more than the 1 ms of `maxWaitMs`; the run does not measure where the rest goes. At 18,000 the p99 medians add 4.0 to 4.9 ms, but not round by round: four of `ring@1`'s five rounds read 1.27 ms or less and every round of `ring@64` and `ring@256` read 3.36 ms or more, while `ring@1`'s fifth round read 21.25 ms. At 96,000 the p99 column is too noisy to read a difference from: `ring@1` alone read 0.89 to 10.88 ms across its rounds.
 
 An earlier run of this bench, with its code at commit `0f851051` and no base side, read the batch at 33.4% and 34.5% less CPU a request at 18,000, and 4.1% and 5.0% less at 96,000. Its widest identical-build spreads were 1.6% at 18,000 and 3.3% at 96,000 (`ring@256` 18.43 against `ring-copy@256` 19.03), so its 96,000 saving was barely outside its own noise, and run A, which reads none, does not confirm it. Profile shares (the share of time in the wait, the handler and the kernel) are not measured: the box has no `perf`.
+### A sliced batch window against a 1 ms nap
+
+**Why the window was rebuilt.** With 0.46.0 the owner measured `pollWaitBatch(loop, ready, 1000, 64, 1)` at 90,000 connections and about 20,000 req/s on one core. It cost more CPU a request than plain `pollWait`, 29.1 µs against about 27.9, and more than a 1 ms nap after a short pass, 25.7. In that release the batch's second wait went back into the ring for each completion that trickled in. One round of this bench at 18,000 connections, built before the change, counted 69,998 ring enters for `ring@64` against 87,397 for `ring@1`, with 8,589 window waits in 6,804 windows. The window now sleeps out its `maxWaitMs` in `poll(2)` slices of an eighth of it, at most 8 (one at `maxWaitMs` 1). It runs the send pump and collects once after each slice, and it ends early only when the batch fills or a signal arrives (`docs/security/net-uring.md`, NURING-46).
+
+`ring-nap` is the nap the batch is measured against (`bench/handler-ring/server.ts`, `BENCH_NAP=1`). It is `ring@1`'s plain `pollWait` turn and, after a pass that answered fewer than 64 requests, a 1 ms `pollWait` on an empty loop. The run is closed-loop: each connection waits 4.5 s after its answer before it sends again. Each request is a SQLite lookup, and the server runs on CPU 0 with the load on CPUs 1 to 3. The box is an Intel Xeon @ 2.30GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000. The bench code is that of this section's commit, the squash commit of the pull request that added it:
+
+`BENCH_URING_STATS=1 bash bench/handler-ring/run.sh --conns "18000 90000" --think 4.5 --warmup 5 --designs "ring ring-copy ring-nap" --min-events "1 64" --max-wait-ms 1`
+
+The run used a 5 s warm-up and a 10 s window over 5 rounds. `run.sh` refuses a warm-up shorter than the think time, so a 4 s warm-up is not possible. Server µs a request, per round:
+
+| C | round | ring@64 | ring-copy@64 | ring-nap | ring@1 | ring-copy@1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 18,000 | 1 | 23.75 | 24.51 | 28.76 | 22.75 | 31.26 |
+| 18,000 | 2 | 25.51 | 26.00 | 30.26 | 31.75 | 26.50 |
+| 18,000 | 3 | 30.26 | 21.75 | 23.51 | 34.25 | 34.76 |
+| 18,000 | 4 | 26.00 | 21.76 | 32.76 | 27.25 | 28.75 |
+| 18,000 | 5 | 22.26 | 23.51 | 32.76 | 23.00 | 29.01 |
+| 90,000 | 1 | 17.31 | 20.76 | 22.66 | 22.65 | 21.05 |
+| 90,000 | 2 | 16.45 | 22.56 | 22.16 | 22.15 | 18.90 |
+| 90,000 | 3 | 18.51 | 21.81 | 21.35 | 22.55 | 21.55 |
+| 90,000 | 4 | 22.37 | 20.31 | 21.01 | 22.10 | 23.70 |
+| 90,000 | 5 | 20.21 | 21.56 | 21.15 | 17.70 | 18.90 |
+
+| C | design | held | fds | server µs/req | user | sys | box µs/req | req/s | PSS MB | box MB | p50 ms | p99 ms | p99.9 ms |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 18,000 | ring@64 | 18,000 | 13 | 25.51 (22.26–30.26) | 7.75 | 17.00 | 38.76 | 3,999 | 13.0 | 762 | 1.26 | 1.62 (1.52–1.68) | 2.85 |
+| 18,000 | ring-copy@64 | 18,000 | 13 | 23.51 (21.75–26.00) | 6.75 | 17.00 | 36.76 | 3,999 | 12.9 | 770 | 1.26 | 1.68 (1.52–1.71) | 3.49 |
+| 18,000 | ring-nap | 18,000 | 14 | 30.26 (23.51–32.76) | 9.00 | 20.00 | 49.01 | 3,999 | 12.9 | 767 | 1.17 | 1.65 (1.58–1.65) | 2.98 |
+| 18,000 | ring@1 | 18,000 | 13 | 27.25 (22.75–34.25) | 8.50 | 18.75 | 46.01 | 3,999 | 12.7 | 780 | 0.15 | 0.42 (0.35–0.50) | 1.26 |
+| 18,000 | ring-copy@1 | 18,000 | 13 | 29.01 (26.50–34.76) | 9.00 | 21.75 | 48.01 | 3,999 | 13.1 | 776 | 0.16 | 0.48 (0.42–2.08) | 1.26 |
+| 90,000 | ring@64 | 90,000 | 21 | 18.51 (16.45–22.37) | 4.30 | 14.21 | 26.91 | 19,990 | 34.2 | 1,294 | 1.62 | 3.42 (2.66–4.00) | 4.80 |
+| 90,000 | ring-copy@64 | 90,000 | 21 | 21.56 (20.31–22.56) | 4.70 | 16.86 | 30.86 | 19,991 | 34.2 | 1,285 | 1.81 | 3.87 (3.23–5.06) | 5.31 |
+| 90,000 | ring-nap | 90,000 | 22 | 21.35 (21.01–22.66) | 4.70 | 16.70 | 30.66 | 19,995 | 34.5 | 1,277 | 0.95 | 2.85 (2.53–4.29) | 9.09 |
+| 90,000 | ring@1 | 90,000 | 21 | 22.15 (17.70–22.65) | 5.10 | 16.35 | 31.71 | 19,996 | 34.4 | 1,291 | 0.14 | 0.66 (0.42–0.90) | 3.10 |
+| 90,000 | ring-copy@1 | 90,000 | 21 | 21.05 (18.90–23.70) | 5.00 | 15.55 | 31.65 | 19,997 | 34.4 | 1,284 | 0.14 | 0.86 (0.57–11.65) | 3.68 |
+
+The server µs and the p99 are medians of 5, with the min to max in brackets; the other figures are medians of 5 too. `PSS MB` and `box MB` come from each design's last round. Every round held every connection and lost no timed request. The nap's server has one more descriptor: its empty loop. Each response sent a median of about 3.00 segments out (`outsegs_rsp`).
+
+`run.sh`'s band is `ring@1` against `ring-copy@1`: 6.5% at 18,000 and 5.0% at 90,000. The widest spread between two identical builds is wider, in the `@64` pair: 7.8% at 18,000 (25.51 against 23.51) and 16.5% at 90,000 (18.51 against 21.56). `run.sh`'s comparison lines:
+
+| C | side | against `ring@1` | p50 added | p99 added | band |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 18,000 | `minEvents` 64 | 6.4% less CPU | +1.11 ms | +1.20 ms | 6.5% |
+| 18,000 | `ring-nap` | 11.0% more CPU | +1.01 ms | +1.23 ms | 6.5% |
+| 90,000 | `minEvents` 64 | 16.4% less CPU | +1.47 ms | +2.76 ms | 5.0% |
+| 90,000 | `ring-nap` | 3.6% less CPU | +0.81 ms | +2.18 ms | 5.0% |
+
+**The batch against the nap.** At 18,000 both `@64` builds cost less than the nap a request: 25.51 and 23.51 µs against 30.26, which is 15.7% and 22.3% less. At 90,000 `ring@64` costs 13.3% less than the nap, 18.51 against 21.35 µs, and `ring-copy@64` costs 1.0% more, 21.56. That spread is the 16.5% between the two identical builds, so at 90,000 the batch is level with the nap within noise, not cheaper than it. The per-round ranges overlap at both Cs. Against `ring@1` the batch reads 6.4% less CPU at 18,000, inside the 7.8% identical-build spread. At 90,000 it reads 16.4% less, inside the 16.5% spread too, since `ring-copy@64` is 2.7% under `ring@1`. The cost is latency: the batch adds 1.1 to 1.5 ms to the median, and the nap adds 0.8 to 1.0 ms.
+
+**What the window now does.** Each server's `NISH_URING_STATS=1` line is printed on the `SIGUSR1` that `run.sh` sends halfway through the window, and counts from the server's start to then, warm-up included. At 18,000, `ring@64` entered the ring 34,199 to 42,761 times across its rounds, against 80,920 to 92,623 for `ring@1` and 32,476 to 61,928 for the nap. It counted one window wait per window (6,631 to 7,472 windows): each window sleeps its one 1 ms slice and pumps once. At 90,000 the figures are 57,866 to 92,410 enters for `ring@64`, 104,061 to 194,938 for `ring@1` and 42,393 to 54,134 for the nap, with window waits again equal to windows (6,210 to 6,781). The window enters the ring about as often as the nap does, which is where the CPU went in 0.46.0.
+
+**Memory.** The `PSS MB` column is read by `bench/fd-limit/loadgen.c` from `smaps_rollup` after the window ends. At 18,000 every design's PSS reads 12.7 to 13.1 MB. At 90,000 it reads 34.2 to 34.5 MB in the last rounds, and the batch carries no PSS the nap does not. What the batch does change is the send pool: `ring@64` made up to 2,690 pool buffers at 90,000 (`pool_new`) against at most 182 for `ring@1`, and kept at most 160 of them cached (16 KiB each, 2.5 MiB). The nap made up to 2,516 (`docs/security/net-uring.md`, "The send pool's PSS at 90,000").
+
+**No regression at a slower think.** `bash bench/handler-ring/run.sh --conns 18000 --think 30 --warmup 31 --designs "ring ring-copy ring-nap" --min-events "1 64" --max-wait-ms 1`, 600 requests a second: `ring@64` cost 63.34 µs a request against 61.66 for `ring@1`, 2.7% more inside a 2.7% band, with p50 +1.11 ms and p99 +1.15 ms. The nap cost 80.00, 29.7% more than `ring@1`.
+
+**Near saturation.** `bash bench/handler-ring/run.sh --conns 4000 --rate 120000 --rounds 7 --designs "ring ring-copy ring-nap" --min-events "1 64" --max-wait-ms 1`, seven rounds, the offered 120,000 a second above what one core answers. The medians were 76,313 requests a second for `ring@64`, 72,242 for `ring@1`, 76,164 for `ring-copy@1`, 75,243 for `ring-copy@64` and 75,729 for the nap. CPU a request was 12.99, 13.73, 13.00, 13.16 and 13.10 µs: `ring@64` 5.4% below `ring@1` against a 5.3% band, p50 -4.10 ms, p99 -1.02 ms. At saturation the window fills before its millisecond is out, and the batch answers as many requests as plain `pollWait` within noise.
+
+**`ring@1` against main.** `bash bench/handler-ring/run.sh --conns 18000 --think 4.5 --warmup 5 --rounds 9 --base-compiler <main build> --designs "ring ring-copy ring-base" --min-events 1`, main at e274b99e, this branch's merge base, built in a worktree. The medians of nine rounds were 24.00 µs for `ring@1` (18.75 to 30.25), 24.50 for `ring-copy@1` (17.75 to 29.00) and 22.25 for `ring-base@1` (20.25 to 33.00): `ring@1` 7.9% above main, outside the 2.1% band its copy gives, inside main's own range. An earlier five-round run gave 27.00, 24.00 and 23.75, with the two copies of one build 11.1% apart. A `minEvents` of 1 never reaches `nr_batch`; what this branch adds on that path is one counter increment per `io_uring_enter`, for the stats line's `enters`. The difference is recorded as measured and not explained: neither run separates it from the round-to-round spread.
 <!-- handler-ring:end -->
 
 <!-- handler-wins:begin -->

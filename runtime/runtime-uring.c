@@ -139,6 +139,7 @@ struct nish_uring_stats {
   int64_t pool_new;    /* send buffers the pools ever allocated */
   int64_t pool_held;   /* pool buffers that queued bytes hold now */
   int64_t pool_cached; /* pool buffers on the rings' free lists now */
+  int64_t enters;      /* io_uring_enter calls on the set's rings, direct waits included */
 };
 
 struct nish_uring_set;
@@ -377,6 +378,7 @@ struct ur_ring {
   void *ring_map;
   size_t ring_len, sqes_len;
   uint32_t sq_entries, sq_local_tail, to_submit;
+  int64_t enters; /* io_uring_enter calls, for the stats' `enters` */
   struct ur_buf *br;
   uint8_t *bufs;
   size_t br_len, bufs_len;
@@ -448,6 +450,7 @@ static int ur_errno(long rc) { return rc < 0 ? -errno : (int)rc; }
 static int ur_setup(uint32_t entries, struct ur_params *p) { return ur_errno(UR_SYS_SETUP(entries, p)); }
 
 static int ur_enter(struct ur_ring *r, uint32_t submit, uint32_t wait, uint32_t flags) {
+  r->enters++;
   return ur_errno(syscall(__NR_io_uring_enter, r->fd, submit, wait, flags, NULL, 0));
 }
 
@@ -1578,6 +1581,7 @@ int32_t nish_uring_wait_direct(struct nish_uring_set *s, int32_t watch_fd, int32
   uint32_t want = min_complete < 1 ? 1 : (uint32_t)min_complete;
   if (want > s->cq_entries) want = s->cq_entries;
   s->stats.direct_waits++;
+  r->enters++;
   int rc = ur_errno(syscall(__NR_io_uring_enter, r->fd, r->to_submit, want, UR_ENTER_GETEVENTS | UR_ENTER_EXT_ARG,
                             &arg, sizeof arg));
   if (rc > 0) r->to_submit -= (uint32_t)rc > r->to_submit ? r->to_submit : (uint32_t)rc;
@@ -1803,7 +1807,11 @@ int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, in
   return 0;
 }
 
-void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st) { *st = s->stats; }
+void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st) {
+  *st = s->stats;
+  st->enters = 0;
+  for (int i = 0; i < s->nrings; i++) st->enters += s->rings[i]->enters;
+}
 
 /* Close every ring, which ends whatever the kernel still held, and free the
  * sends it held them for. The caller's listener stays open: it is theirs. */

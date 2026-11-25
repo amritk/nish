@@ -12479,20 +12479,24 @@ batches. It writes and answers as `pollWait` does.
   once the first event is in, and an idle call answers `0` at `timeoutMs`.
 - `ready`'s length caps the batch: a call never waits for more pairs than
   `ready.length / 2`, or than 64, holds.
-- The second wait is on the ring alone. A descriptor in the loop that becomes
-  ready meanwhile, a UDP socket, a timer's pipe or `signalFd()`, is reported
-  **at most `maxWaitMs` late**, by this call or the next. A loop whose only
-  descriptor is `signalFd()` hears the signal as soon as it arrives while
-  that loop sleeps on its ring (below); where it does not (a kernel before
-  5.11, a ring `--sandbox` restricts, a second ring, or a `signalFd()`
-  already closed), the signal too waits up to `maxWaitMs`.
+- The second wait takes the ring's completions only. A descriptor in the
+  loop that becomes ready meanwhile, a UDP socket, a timer's pipe or
+  `signalFd()`, is reported **at most `maxWaitMs` late**, by this call or the
+  next. A loop whose only descriptor is `signalFd()` hears the signal as
+  soon as it arrives (below); where it does not (another descriptor in the
+  loop, or a `signalFd()` already closed), the signal too waits up to `maxWaitMs`.
+- The second wait checks `minEvents` once per slice of `maxWaitMs / 8`,
+  rounded up, so a batch may end **up to one slice after** `minEvents`
+  became ready, and within about a millisecond of `maxWaitMs`.
 - A `minEvents` of 1 or less, a `maxWaitMs` of 0 or less, a loop with no
   live ring listener or with two of them, and Darwin, answer exactly as
   `pollWait` does. A `ready` shorter than 2 answers `-22`.
 - *Lowering:* `nish_poll_wait_batch`; not `willreturn`. The second wait is
-  `io_uring_enter` with `IORING_ENTER_EXT_ARG`'s timeout, or the ring's own
-  wait on a kernel before 5.11. Each enter sleeps at most 10 ms while slots
-  are live, so a long `maxWaitMs` is many enters.
+  at most eight `poll(2)` sleeps, one per slice, plus one for each signal
+  handler that interrupts a slice, on `signalFd()` when the
+  loop waits directly and on nothing otherwise, each followed by one pump of
+  the ring and one collect, so a window costs at most eight pumps (plus
+  one per interrupting signal) however its completions trickle in.
 - *Tests:* `net_poll_batch`, `link/net_ring_batch`;
   `reject_net_poll_batch_readonly`, `reject_net_poll_batch_arity`,
   `reject_net_poll_batch_wasm`, `reject_net_poll_batch_wasi`.
