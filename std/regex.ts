@@ -101,7 +101,6 @@
  *  `Regex` is used by one thread at a time.
  */
 
-import { uncheckedGet } from "nish:unsafe"
 
 // Derived from the Unicode Character Database 16.0.0 (https://www.unicode.org/Public/16.0.0/ucd/), the files scripts/gen-regex-unicode.mjs names. Copyright © 1991-2026 Unicode, Inc. Used under the Unicode License v3, whose text follows.
 //
@@ -4902,9 +4901,19 @@ export class Regex {
     const cls: i32[] = this.dCls
     while (true) {
       // The hot loop: an ASCII byte and a transition already computed.
+      // `dCls` has an entry for every byte and a state's row one for every
+      // class, so the slot is in the table; were either not, giving up hands
+      // the search to the NFA.
       while (p >= 0 && p < len) {
         const b: i32 = toI32(text.charCodeAt(p))
-        const e: i32 = uncheckedGet(trans, off | uncheckedGet(cls, b))
+        if (b >= toI32(cls.length)) {
+          return DFA_GAVE_UP
+        }
+        const slot: i32 = off | cls[b]
+        if (slot < 0 || slot >= toI32(trans.length)) {
+          return DFA_GAVE_UP
+        }
+        const e: i32 = trans[slot]
         if (e > 0) {
           off = e
           p += 1
@@ -4928,13 +4937,14 @@ export class Regex {
       let w: i32 = 1
       if (p >= 0 && p < len) {
         const b: i32 = toI32(text.charCodeAt(p))
-        if (b < 128) {
-          // `dCls` has an entry for every byte.
-          c = uncheckedGet(cls, b)
-        } else {
+        if (b >= 128) {
           const packed: i32 = regexDecodeAt(text, p)
           c = this.dWideClass(packed >> 3)
           w = packed & 7
+        } else if (b < toI32(cls.length)) {
+          c = cls[b]
+        } else {
+          return DFA_GAVE_UP
         }
       }
       // States and classes are both non-negative, and a state's row holds
@@ -5030,7 +5040,15 @@ export class Regex {
       let q: i32 = toI32(toU32(p) - 1)
       while (q >= from && q >= 0 && q < len) {
         const b: i32 = toI32(text.charCodeAt(q))
-        const t: i32 = uncheckedGet(trans, off | uncheckedGet(cls, b))
+        // A byte or a slot outside its table gives up, as in `dfaForward`.
+        if (b >= toI32(cls.length)) {
+          return DFA_GAVE_UP
+        }
+        const slot: i32 = off | cls[b]
+        if (slot < 0 || slot >= toI32(trans.length)) {
+          return DFA_GAVE_UP
+        }
+        const t: i32 = trans[slot]
         if (t > 0) {
           off = t
           q -= 1
@@ -5056,9 +5074,10 @@ export class Regex {
       let w: i32 = 1
       if (q >= 0 && q < len) {
         const b: i32 = toI32(text.charCodeAt(q))
-        if (b < 128) {
-          // `dCls` has an entry for every byte.
-          c = uncheckedGet(cls, b)
+        if (b < 128 && b < toI32(cls.length)) {
+          c = cls[b]
+        } else if (b < 128) {
+          return DFA_GAVE_UP
         } else {
           const lim: i32 = p > from ? from : 0
           let cp: i32 = REGEX_INVALID + b
