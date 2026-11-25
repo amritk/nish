@@ -23457,6 +23457,25 @@ const DECLARED = [
       "tests/link/std_http1_config_checked/main.ts": ["main.h"],
     }
   ),
+  // WP39: HttpHandler.drive holds a pipelined request behind a stream that
+  // finishes on its length until that stream ends; the probe is new to the
+  // corpus.
+  ...[
+    "chacha20poly1305.ll",
+    "gzip.ll",
+    "handler.ll",
+    "hmac.ll",
+    "http-compress.ll",
+    "main.h",
+    "main.ll",
+    "testing.ll",
+    "zlib.ll",
+  ].map((file) => ({
+    program: "tests/link/net_handler_pipelined_stream/main.ts",
+    file,
+    changelog: "HttpHandler holds a length-finished stream's pipelined request until its end",
+    why: "the case is new to the corpus and the seed's std predates HttpHandler.drive's `unended` gate (#1556) and the HTTP stack this branch links, so every module it writes differs from the seed's",
+  })),
 ]
 
 /**
