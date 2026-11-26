@@ -673,13 +673,18 @@ export const stringConstructCallees = (name: string, proven: boolean): string[] 
  * call (`judgeForeignStrings` in `src/bounds.ts`, #2298). Everything else may
  * hold a NUL that C would read as the end. The attribute pass asks this to
  * record the `ffi-nul` site that the emitter makes.
+ *
+ * `nodeProvenIndex` is shared: the prover also marks an in-range element
+ * access, a non-empty `pop()` and the like, and that proof says nothing about
+ * the string they answer. Only a bare local is read from it, the one node kind
+ * `judgeForeignStrings` marks and no other judge does.
  */
 export const foreignStringIsNulFree = (program: CheckedProgram, arg: Node): boolean => {
   const inner = unwrapBoundsParens(arg)
   return (
     inner.kind === NodeKind.Null ||
     (inner.kind === NodeKind.String && inner.text.indexOf(String.fromCharCode(0)) < 0) ||
-    program.nodeProvenIndex[inner.id]
+    (inner.kind === NodeKind.Ident && program.nodeProvenIndex[inner.id])
   )
 }
 
