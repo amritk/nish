@@ -14544,6 +14544,61 @@ if (dealtHere("cryptoChecks")) {
     }
   }
 
+  // The wipes of RSA signing (`std/crypto/rsa-sign.ts`) survive `-O2`, counted
+  // in each function's own optimised body as a volatile `llvm.memset` (`i1
+  // true`): `rsaSignPrivateOp` wipes the window table, the accumulator, the
+  // selected entry, the product scratch, the two powers and the exponent's limbs
+  // (seven); `RsaSignScratch.saltInto` its hasher's state, block and schedule
+  // (three); `rsaSignPssSha256` the exponent copy the salt derivation took, which
+  // `opt` inlines from `rsaSignSaltInto` (one); and `rsaParsePrivateKey` a key
+  // that fails its soundness check (one). The count is exact, as in
+  // `tests/wipes/`: deleting a wipe, or one `opt` removes, lowers it. The `rsa`,
+  // `crypto`, `wipe` and `crypto_rsa_sign` filters all run it.
+  {
+    const name =
+      "crypto: the wipes survive opt -O2 (rsaSignPrivateOp seven, RsaSignScratch.saltInto three, rsaSignPssSha256 one, rsaParsePrivateKey one)"
+    if (!only || [name, "crypto_rsa_sign"].some((selector) => selector.includes(only))) {
+      if (!has("opt")) {
+        skip("crypto: no opt to show RSA signing's wipes survive -O2")
+      } else {
+        const dir = path.join(buildDir, "wipes-o2", "rsa-sign")
+        fs.rmSync(dir, { recursive: true, force: true })
+        fs.mkdirSync(dir, { recursive: true })
+        const c = spawnNish([path.join(root, "tests/link/crypto_rsa_sign/main.ts"), "-o", `${dir}/`], {
+          cwd: root,
+          encoding: "utf8",
+        })
+        const o =
+          c.status === 0
+            ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "rsa-sign.ll")], {
+                encoding: "utf8",
+                maxBuffer: 64 * 1024 * 1024,
+              })
+            : c
+        const want = [
+          ["rsaSignPrivateOp", 7],
+          ["RsaSignScratch.saltInto", 3],
+          ["rsaSignPssSha256", 1],
+          ["rsaParsePrivateKey", 1],
+        ]
+        const got = want.map(([symbol]) => {
+          const body =
+            o.status === 0
+              ? o.stdout.match(new RegExp(`^define [^\\n]*@"?nish\\.${symbol.replace(".", "\\.")}"?\\([\\s\\S]*?\\n\\}`, "m"))
+              : null
+          return body === null ? null : (body[0].match(/call void @llvm\.memset[^\n]*i1 true\)/g) ?? []).length
+        })
+        check(
+          name,
+          o.status === 0 && want.every(([, count], i) => got[i] === count),
+          o.status === 0
+            ? want.map(([symbol, count], i) => `${symbol}: ${got[i] ?? "not in rsa-sign.ll"}, want ${count}`).join("\n")
+            : o.stderr
+        )
+      }
+    }
+  }
+
   // The message-length guard of `ed25519Sign` and `ed25519Verify` (#788): a
   // message longer than 2^31 - 1 bytes does not survive `toI32` under
   // `--number-mode f64`, so both would hash a prefix and a signature would verify
@@ -15219,6 +15274,24 @@ if (dealtHere("cryptoChecks")) {
         "ct_asm: ct_asm_aes's loop copies match std/crypto/aes.ts",
         aesDrifted.length === 0,
         `differs from the module: ${aesDrifted.join(", ")}`
+      )
+
+      // ct_asm_rsa's copies keep the module's names and text, so only `export`
+      // differs. `rsaSignWindowStep` puts its parameters on lines of their own,
+      // so a copy runs to the first blank line, which no function here holds.
+      const rsaBody = (source, name) => source.match(new RegExp(`\\nconst ${name} = [\\s\\S]*?\\n(?=\\n)`))?.[0]
+      const rsaSource = fs.readFileSync(path.join(root, "std", "crypto", "rsa-sign.ts"), "utf8")
+      const rsaFixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_rsa.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+      const rsaDrifted = ["rsaSignReduce", "rsaSignMontMul", "rsaSignWindowStep"].filter((name) => {
+        const copy = rsaBody(rsaFixture, name)
+        return copy === undefined || copy !== rsaBody(rsaSource, name)
+      })
+      check(
+        "ct_asm: ct_asm_rsa's copies match std/crypto/rsa-sign.ts",
+        rsaDrifted.length === 0,
+        `differs from the module: ${rsaDrifted.join(", ")}`
       )
 
       // ct_asm_x25519's copies are std/crypto/x25519.ts put through the rewrites

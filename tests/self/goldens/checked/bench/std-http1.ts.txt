@@ -4116,6 +4116,43 @@ function exposeWith<u8[], P256SignScratch, u32[] | null, p256SignSExposed>(s: Se
   pointer arg: size=144 writesThrough=false captured=false passedTo=nish.p256SignSExposed#1
   stackSites=0 stackLocals=0
   callee +0:93 p256SignSExposed -> @nish.p256SignSExposed
+function expose<u8[], boolean, rsaSignKeySound>(s: Secret<u8[]>, f: void): boolean -> @nish.expose$arr.u8$bool$fn.20.nish.rsaSignKeySound [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignKeySound
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:70 rsaSignKeySound -> @nish.rsaSignKeySound
+function expose<u8[], i32, rsaSignKeyBits>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.19.nish.rsaSignKeyBits [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignKeyBits
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:70 rsaSignKeyBits -> @nish.rsaSignKeyBits
+function expose<u8[], u8[], rsaSignKeyModulus>(s: Secret<u8[]>, f: void): u8[] -> @nish.expose$arr.u8$arr.u8$fn.22.nish.rsaSignKeyModulus [exported instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignKeyModulus
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:70 rsaSignKeyModulus -> @nish.rsaSignKeyModulus
+function expose<u8[], u8[], rsaSignKeyExponent>(s: Secret<u8[]>, f: void): u8[] -> @nish.expose$arr.u8$arr.u8$fn.23.nish.rsaSignKeyExponent [exported instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignKeyExponent
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:70 rsaSignKeyExponent -> @nish.rsaSignKeyExponent
+function exposeWith<u8[], u8[], u8[] | null, rsaSignPrivateOp>(s: Secret<u8[]>, arg: u8[], f: void): u8[] | null -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignPrivateOp
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=0 writesThrough=false captured=false passedTo=nish.rsaSignPrivateOp#1
+  stackSites=0 stackLocals=0
+  callee +0:93 rsaSignPrivateOp -> @nish.rsaSignPrivateOp
+function expose<u8[], u8[], rsaSignExponentCopy>(s: Secret<u8[]>, f: void): u8[] -> @nish.expose$arr.u8$arr.u8$fn.24.nish.rsaSignExponentCopy [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignExponentCopy
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:70 rsaSignExponentCopy -> @nish.rsaSignExponentCopy
 function wipe<i64[]>(_target: i64[]): void -> @nish.wipe$arr.i64 [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via llvm.memset.p0i8.i64
@@ -8950,6 +8987,9 @@ import p256Ecdh from "nish/crypto/p256" -> function @nish.p256Ecdh
 import p256PublicKey from "nish/crypto/p256" -> function @nish.p256PublicKey
 import p256SignSha256 from "nish/crypto/p256" -> function @nish.p256SignSha256
 import p256SignSha256Into from "nish/crypto/p256" -> function @nish.p256SignSha256Into
+import RsaSignScratch from "nish/crypto/rsa-sign" -> struct RsaSignScratch
+import rsaPrivateKeyBits from "nish/crypto/rsa-sign" -> function @nish.rsaPrivateKeyBits
+import rsaSignPssSha256Into from "nish/crypto/rsa-sign" -> function @nish.rsaSignPssSha256Into
 import timingSafeEqual from "nish/crypto/ct" -> function @nish.timingSafeEqual
 import timingSafeEqualAt from "nish/crypto/ct" -> function @nish.timingSafeEqualAt
 import X25519_SIZE from "nish/crypto/x25519" -> const X25519_SIZE
@@ -8971,6 +9011,8 @@ import TLS_HANDSHAKE_FINISHED from "nish/net/tls/codec" -> const TLS_HANDSHAKE_F
 import TLS_EXT_RECORD_SIZE_LIMIT from "nish/net/tls/codec" -> const TLS_EXT_RECORD_SIZE_LIMIT
 import TLS_RANDOM_SIZE from "nish/net/tls/codec" -> const TLS_RANDOM_SIZE
 import TLS_RECORD_SIZE_LIMIT_MAX from "nish/net/tls/codec" -> const TLS_RECORD_SIZE_LIMIT_MAX
+import TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 from "nish/net/tls/codec" -> const TLS_SIGNATURE_ECDSA_SECP256R1_SHA256
+import TLS_SIGNATURE_RSA_PSS_RSAE_SHA256 from "nish/net/tls/codec" -> const TLS_SIGNATURE_RSA_PSS_RSAE_SHA256
 import TLS_VERSION_13 from "nish/net/tls/codec" -> const TLS_VERSION_13
 import TLS_P256_SHARE_SIZE from "nish/net/tls/codec" -> const TLS_P256_SHARE_SIZE
 import TLS_X25519_SHARE_SIZE from "nish/net/tls/codec" -> const TLS_X25519_SHARE_SIZE
@@ -9060,6 +9102,16 @@ struct TlsP256Signer (class) size=24 align=8 exported
   field ders: u8[][] index=2 offset=16
   constructor -> @nish.TlsP256Signer.constructor
   method sign -> @nish.TlsP256Signer.sign
+struct TlsRsaSigner (class) size=16 align=8 exported
+  field scratch: RsaSignScratch index=0 offset=0
+  field out: u8[] index=1 offset=8
+  constructor -> @nish.TlsRsaSigner.constructor
+  method sign -> @nish.TlsRsaSigner.sign
+struct TlsKeySigner (class) size=16 align=8 exported
+  field p256: TlsP256Signer | null index=0 offset=0
+  field rsa: TlsRsaSigner | null index=1 offset=8
+  constructor -> @nish.TlsKeySigner.constructor
+  method sign -> @nish.TlsKeySigner.sign
 struct TlsExchangeWords (class) size=280 align=8
   field key0: u64 index=0 offset=0 initialized
   field key1: u64 index=1 offset=8 initialized
@@ -9307,6 +9359,44 @@ function TlsP256Signer.sign(this: TlsP256Signer, priv: Secret<u8[]>, content: u8
   callee +4:27 tlsEcdsaDerLength -> @nish.tlsEcdsaDerLength
   local +8:11 der: u8[] (const)
   callee +9:5 tlsEcdsaDerInto -> @nish.tlsEcdsaDerInto
+function TlsRsaSigner.constructor(this: TlsRsaSigner): void -> @nish.TlsRsaSigner.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.RsaSignScratch.constructor nish_alloc_struct
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:20 new RsaSignScratch -> @nish.RsaSignScratch.constructor
+function TlsRsaSigner.sign(this: TlsRsaSigner, priv: Secret<u8[]>, content: u8[]): u8[] | null -> @nish.TlsRsaSigner.sign [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.rsaPrivateKeyBits nish.rsaSignPssSha256Into
+  pointer this: size=16 writesThrough=true captured=false
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.rsaPrivateKeyBits#0 nish.rsaSignPssSha256Into#1
+  pointer content: size=0 writesThrough=false captured=false passedTo=nish.rsaSignPssSha256Into#2
+  stackSites=0 stackLocals=0
+  local -9:11 bits: i32 (const)
+  callee -9:23 rsaPrivateKeyBits -> @nish.rsaPrivateKeyBits
+  local -5:11 k: i32 (const)
+  callee +3:8 rsaSignPssSha256Into -> @nish.rsaSignPssSha256Into
+function TlsKeySigner.constructor(this: TlsKeySigner, scheme: i32): void -> @nish.TlsKeySigner.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: via nish.TlsP256Signer.constructor
+  calls: nish.TlsP256Signer.constructor nish.TlsRsaSigner.constructor nish_alloc_struct
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:67 new TlsP256Signer -> @nish.TlsP256Signer.constructor
+  callee +1:63 new TlsRsaSigner -> @nish.TlsRsaSigner.constructor
+function TlsKeySigner.sign(this: TlsKeySigner, priv: Secret<u8[]>, content: u8[]): u8[] | null -> @nish.TlsKeySigner.sign [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.TlsP256Signer.sign
+  calls: nish.TlsP256Signer.sign nish.TlsRsaSigner.sign
+  pointer this: size=16 writesThrough=false captured=false
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.TlsP256Signer.sign#1 nish.TlsRsaSigner.sign#1
+  pointer content: size=0 writesThrough=true captured=false passedTo=nish.TlsP256Signer.sign#2 nish.TlsRsaSigner.sign#2
+  stackSites=0 stackLocals=0
+  local +0:11 p256: TlsP256Signer | null (const)
+  callee +2:14 TlsP256Signer.sign -> @nish.TlsP256Signer.sign
+  local +4:11 rsa: TlsRsaSigner | null (const)
+  callee +6:14 TlsRsaSigner.sign -> @nish.TlsRsaSigner.sign
 function tlsIsZeroSecret(shared: u8[]): boolean -> @nish.tlsIsZeroSecret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish.timingSafeEqual nish_arena_mark nish_arena_release
@@ -16623,6 +16713,532 @@ function p256SignSha256Into(sc: P256SignScratch, priv: Secret<u8[]>, msg: u8[], 
   callee +66:9 p256SignMac -> @nish.p256SignMac
   callee +67:9 p256SignMac -> @nish.p256SignMac
   callee +70:3 p256WipeSignScratch -> @nish.p256WipeSignScratch
+module std/crypto/rsa-sign.ts [package nish]
+import Secret from "nish:secret" -> generic class Secret
+import expose from "nish:secret" -> generic function expose
+import exposeWith from "nish:secret" -> generic function exposeWith
+import secret from "nish:secret" -> generic function secret
+import wipe from "nish:secret" -> generic function wipe
+import hmacCopySha256 from "nish/crypto/hmac" -> function @nish.hmacCopySha256
+import Sha256 from "nish/crypto/sha256" -> struct Sha256
+const RSA_SIGN_MIN_BITS: i32 = 2048 [exported]
+const RSA_SIGN_MAX_BITS: i32 = 4096 [exported]
+const RSA_PSS_SHA256_SALT_SIZE: i32 = 32 [exported]
+struct RsaSignSpan (class) size=8 align=4
+  field start: i32 index=0 offset=0
+  field end: i32 index=1 offset=4
+  constructor -> @nish.RsaSignSpan.constructor
+struct RsaSignScratch (class) size=16 align=8 exported
+  field fresh: Sha256 index=0 offset=0
+  field work: Sha256 index=1 offset=8
+  constructor -> @nish.RsaSignScratch.constructor
+  method hashInto -> @nish.RsaSignScratch.hashInto
+  method saltInto -> @nish.RsaSignScratch.saltInto
+function RsaSignSpan.constructor(this: RsaSignSpan, start: i32, end: i32): void -> @nish.RsaSignSpan.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: end start
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function rsaSignDer(der: u8[], at: i32, end: i32, tag: i32): RsaSignSpan | null -> @nish.rsaSignDer
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish.RsaSignSpan.constructor nish_alloc_struct
+  pointer der: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 total: i32 (const)
+  local +4:9 first: i32 (const)
+  local +5:7 start: i32 (let)
+  local +6:7 length: i32 (let)
+  callee +31:10 new RsaSignSpan -> @nish.RsaSignSpan.constructor
+function rsaSignInteger(der: u8[], at: i32, end: i32): RsaSignSpan | null -> @nish.rsaSignInteger
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: at end
+  calls: nish.RsaSignSpan.constructor nish.rsaSignDer nish_alloc_struct
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.rsaSignDer#0
+  stackSites=0 stackLocals=0
+  local +0:9 e: RsaSignSpan | null (const)
+  callee +0:33 rsaSignDer -> @nish.rsaSignDer
+  local +4:9 start: i32 (const)
+  local +5:9 stop: i32 (const)
+  local +12:9 from: i32 (const)
+  callee +16:10 new RsaSignSpan -> @nish.RsaSignSpan.constructor
+function rsaSignBits(der: u8[], start: i32, end: i32): i32 -> @nish.rsaSignBits
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: start
+  pointer der: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 top: i32 (const)
+  local +1:7 topBits: i32 (let)
+  local +2:12 b: i32 (let)
+  local +7:9 bytes: i32 (const)
+function rsaSignOdd(der: u8[], end: i32): boolean -> @nish.rsaSignOdd
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer der: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 last: i32 (const)
+function rsaSignKeyBytes(der: u8[], k: i32, n: RsaSignSpan, d: RsaSignSpan, e: RsaSignSpan): u8[] -> @nish.rsaSignKeyBytes
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: nish.rsaSignPlace
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.rsaSignPlace#3 nish.rsaSignPlace#3 nish.rsaSignPlace#3
+  pointer n: size=8 writesThrough=false captured=false passedTo=nish.rsaSignPlace#4
+  pointer d: size=8 writesThrough=false captured=false passedTo=nish.rsaSignPlace#4
+  pointer e: size=8 writesThrough=false captured=false passedTo=nish.rsaSignPlace#4
+  stackSites=0 stackLocals=0
+  local +0:9 total: i32 (const)
+  local +1:9 out: u8[] (const)
+  callee +2:3 rsaSignPlace -> @nish.rsaSignPlace
+  callee +3:3 rsaSignPlace -> @nish.rsaSignPlace
+  callee +4:3 rsaSignPlace -> @nish.rsaSignPlace
+function rsaSignPlace(out: u8[], at: i32, width: i32, der: u8[], span: RsaSignSpan): void -> @nish.rsaSignPlace
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  pointer out: size=0 writesThrough=true captured=false
+  pointer der: size=0 writesThrough=false captured=false
+  pointer span: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -25:9 start: i32 (const)
+  local -24:9 stop: i32 (const)
+  local -10:9 length: i32 (const)
+  local -6:9 pad: i32 (const)
+  local -5:9 to: i32 (const)
+  local -4:12 i: i32 (let)
+  local -3:11 o: i32 (const)
+  local -2:11 s: i32 (const)
+function rsaParsePrivateKey(der: u8[], start: i32, end: i32): Secret<u8[]> | null -> @nish.rsaParsePrivateKey [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.wipe$$Secret$arr.u8
+  escaping: end start
+  calls: nish.expose$arr.u8$bool$fn.20.nish.rsaSignKeySound nish.rsaSignBits nish.rsaSignDer nish.rsaSignInteger nish.rsaSignKeyBytes nish.rsaSignOdd nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_arena_release
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.rsaSignDer#0 nish.rsaSignDer#0 nish.rsaSignInteger#0 nish.rsaSignInteger#0 nish.rsaSignInteger#0 nish.rsaSignInteger#0 nish.rsaSignBits#0 nish.rsaSignBits#0 nish.rsaSignOdd#0 nish.rsaSignOdd#0 nish.rsaSignKeyBytes#0
+  stackSites=0 stackLocals=0
+  local +0:9 seq: RsaSignSpan | null (const)
+  callee +0:35 rsaSignDer -> @nish.rsaSignDer
+  local +4:9 version: RsaSignSpan | null (const)
+  callee +4:39 rsaSignDer -> @nish.rsaSignDer
+  local +8:9 vs: i32 (const)
+  local +12:9 n: RsaSignSpan | null (const)
+  callee +12:33 rsaSignInteger -> @nish.rsaSignInteger
+  local +16:9 e: RsaSignSpan | null (const)
+  callee +16:33 rsaSignInteger -> @nish.rsaSignInteger
+  local +20:9 d: RsaSignSpan | null (const)
+  callee +20:33 rsaSignInteger -> @nish.rsaSignInteger
+  local +25:7 at: i32 (let)
+  local +26:12 i: i32 (let)
+  local +27:11 v: RsaSignSpan | null (const)
+  callee +27:35 rsaSignInteger -> @nish.rsaSignInteger
+  local +36:9 total: i32 (const)
+  local +37:9 ns: i32 (const)
+  local +38:9 ne: i32 (const)
+  local +39:9 es: i32 (const)
+  local +40:9 ee: i32 (const)
+  local +41:9 ds: i32 (const)
+  local +42:9 de: i32 (const)
+  local +56:9 bits: i32 (const)
+  callee +56:21 rsaSignBits -> @nish.rsaSignBits
+  local +57:9 eBits: i32 (const)
+  callee +57:22 rsaSignBits -> @nish.rsaSignBits
+  callee +61:6 rsaSignOdd -> @nish.rsaSignOdd
+  callee +64:6 rsaSignOdd -> @nish.rsaSignOdd
+  local +69:9 key: Secret<u8[]> (const)
+  callee +69:29 secret<u8[]> -> @nish.secret$arr.u8
+  callee +69:36 rsaSignKeyBytes -> @nish.rsaSignKeyBytes
+  callee +70:8 expose<u8[], boolean, rsaSignKeySound> -> @nish.expose$arr.u8$bool$fn.20.nish.rsaSignKeySound
+  callee +71:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+function rsaPrivateKeyBits(priv: Secret<u8[]>): i32 -> @nish.rsaPrivateKeyBits [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.expose$arr.u8$i32$fn.19.nish.rsaSignKeyBits
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$i32$fn.19.nish.rsaSignKeyBits#0
+  stackSites=0 stackLocals=0
+  callee +0:63 expose<u8[], i32, rsaSignKeyBits> -> @nish.expose$arr.u8$i32$fn.19.nish.rsaSignKeyBits
+function rsaPrivateKeyModulus(priv: Secret<u8[]>): u8[] -> @nish.rsaPrivateKeyModulus [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.expose$arr.u8$arr.u8$fn.22.nish.rsaSignKeyModulus
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$arr.u8$fn.22.nish.rsaSignKeyModulus#0
+  stackSites=0 stackLocals=0
+  callee +0:67 expose<u8[], u8[], rsaSignKeyModulus> -> @nish.expose$arr.u8$arr.u8$fn.22.nish.rsaSignKeyModulus
+function rsaPrivateKeyExponent(priv: Secret<u8[]>): u8[] -> @nish.rsaPrivateKeyExponent [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.expose$arr.u8$arr.u8$fn.23.nish.rsaSignKeyExponent
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$arr.u8$fn.23.nish.rsaSignKeyExponent#0
+  stackSites=0 stackLocals=0
+  callee +0:68 expose<u8[], u8[], rsaSignKeyExponent> -> @nish.expose$arr.u8$arr.u8$fn.23.nish.rsaSignKeyExponent
+function rsaSignRaw(priv: Secret<u8[]>, m: u8[]): u8[] | null -> @nish.rsaSignRaw [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp#0
+  pointer m: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp#1
+  stackSites=0 stackLocals=0
+  callee +0:73 exposeWith<u8[], u8[], u8[] | null, rsaSignPrivateOp> -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp
+function RsaSignScratch.constructor(this: RsaSignScratch): void -> @nish.RsaSignScratch.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.Sha256.constructor nish_alloc_struct
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:18 new Sha256 -> @nish.Sha256.constructor
+  callee +1:17 new Sha256 -> @nish.Sha256.constructor
+function RsaSignScratch.hashInto(this: RsaSignScratch, data: u8[], off: i32, len: i32, counter: i32, out: u8[], at: i32): boolean -> @nish.RsaSignScratch.hashInto [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.hmacCopySha256
+  escaping: at len off
+  calls: nish.Sha256.digestInto nish.Sha256.update nish.hmacCopySha256
+  pointer this: size=16 writesThrough=false captured=false
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.Sha256.digestInto#1
+  stackSites=1 stackLocals=1
+  callee +0:5 hmacCopySha256 -> @nish.hmacCopySha256
+  callee +1:5 Sha256.update -> @nish.Sha256.update
+  local +3:13 c: u8[] (const)
+  callee +4:7 Sha256.update -> @nish.Sha256.update
+  callee +6:12 Sha256.digestInto -> @nish.Sha256.digestInto
+function RsaSignScratch.saltInto(this: RsaSignScratch, d: u8[], mHash: u8[], salt: u8[]): boolean -> @nish.RsaSignScratch.saltInto [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.Sha256.digestInto nish.Sha256.update nish.hmacCopySha256 nish.wipe$arr.u32 nish.wipe$arr.u8
+  pointer this: size=16 writesThrough=false captured=false
+  pointer d: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
+  pointer mHash: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
+  pointer salt: size=0 writesThrough=true captured=false passedTo=nish.Sha256.digestInto#1
+  stackSites=1 stackLocals=1
+  local -12:11 label: u8[] (const)
+  callee -8:5 hmacCopySha256 -> @nish.hmacCopySha256
+  callee -7:5 Sha256.update -> @nish.Sha256.update
+  callee -6:5 Sha256.update -> @nish.Sha256.update
+  callee -5:5 Sha256.update -> @nish.Sha256.update
+  local -4:11 ok: boolean (const)
+  callee -4:25 Sha256.digestInto -> @nish.Sha256.digestInto
+  callee -3:5 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee -2:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee -1:5 wipe<u32[]> -> @nish.wipe$arr.u32
+function rsaSignPssSha256Salted(priv: Secret<u8[]>, msg: u8[], salt: u8[]): u8[] | null -> @nish.rsaSignPssSha256Salted [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.rsaSignPssEncode
+  calls: nish.RsaSignScratch.constructor nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp nish.rsaPrivateKeyBits nish.rsaSignPssEncode
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.rsaPrivateKeyBits#0 nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp#0
+  pointer msg: size=0 writesThrough=false captured=false passedTo=nish.rsaSignPssEncode#1
+  pointer salt: size=0 writesThrough=false captured=false passedTo=nish.rsaSignPssEncode#4
+  stackSites=1 stackLocals=0
+  local +0:9 em: u8[] | null (const)
+  callee +0:27 rsaSignPssEncode -> @nish.rsaSignPssEncode
+  callee +1:5 new RsaSignScratch -> @nish.RsaSignScratch.constructor
+  callee +6:5 rsaPrivateKeyBits -> @nish.rsaPrivateKeyBits
+  callee +11:10 exposeWith<u8[], u8[], u8[] | null, rsaSignPrivateOp> -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp
+function rsaSignPssSha256SaltedInto(sc: RsaSignScratch, priv: Secret<u8[]>, msg: u8[], off: i32, len: i32, salt: u8[], out: u8[], at: i32): boolean -> @nish.rsaSignPssSha256SaltedInto [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: len off
+  calls: nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp nish.rsaPrivateKeyBits nish.rsaSignPssEncode nish_arena_mark nish_arena_release
+  pointer sc: size=16 writesThrough=false captured=false passedTo=nish.rsaSignPssEncode#0
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.rsaPrivateKeyBits#0 nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp#0
+  pointer msg: size=0 writesThrough=false captured=false passedTo=nish.rsaSignPssEncode#1
+  pointer salt: size=0 writesThrough=false captured=false passedTo=nish.rsaSignPssEncode#4
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -21:9 bits: i32 (const)
+  callee -21:21 rsaPrivateKeyBits -> @nish.rsaPrivateKeyBits
+  local -17:9 k: i32 (const)
+  local -13:9 _scope: i64 (const)
+  local -12:9 em: u8[] | null (const)
+  callee -12:27 rsaSignPssEncode -> @nish.rsaSignPssEncode
+  local -8:9 signature: u8[] | null (const)
+  callee -8:34 exposeWith<u8[], u8[], u8[] | null, rsaSignPrivateOp> -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.21.nish.rsaSignPrivateOp
+  local -4:9 sig: u8[] (const)
+  local -3:12 i: i32 (let)
+  local -2:11 o: i32 (const)
+function rsaSignPssSha256(priv: Secret<u8[]>, msg: u8[]): u8[] | null -> @nish.rsaSignPssSha256 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.RsaSignScratch.hashInto
+  calls: nish.RsaSignScratch.constructor nish.RsaSignScratch.hashInto nish.rsaSignPssSha256Salted nish.rsaSignSaltInto
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.rsaSignSaltInto#1 nish.rsaSignPssSha256Salted#0
+  pointer msg: size=0 writesThrough=false captured=false passedTo=nish.RsaSignScratch.hashInto#1 nish.rsaSignPssSha256Salted#1
+  stackSites=3 stackLocals=3
+  local +0:9 sc: RsaSignScratch (const)
+  callee +0:30 new RsaSignScratch -> @nish.RsaSignScratch.constructor
+  local +1:9 mHash: u8[] (const)
+  callee +2:8 RsaSignScratch.hashInto -> @nish.RsaSignScratch.hashInto
+  local +5:9 salt: u8[] (const)
+  callee +6:8 rsaSignSaltInto -> @nish.rsaSignSaltInto
+  callee +9:10 rsaSignPssSha256Salted -> @nish.rsaSignPssSha256Salted
+function rsaSignPssSha256Into(sc: RsaSignScratch, priv: Secret<u8[]>, msg: u8[], off: i32, len: i32, out: u8[], at: i32): boolean -> @nish.rsaSignPssSha256Into [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_arena_release
+  escaping: at len off
+  calls: nish.RsaSignScratch.hashInto nish.rsaSignPssSha256SaltedInto nish.rsaSignSaltInto nish_arena_release
+  pointer sc: size=16 writesThrough=false captured=false passedTo=nish.RsaSignScratch.hashInto#0 nish.rsaSignSaltInto#0 nish.rsaSignPssSha256SaltedInto#0
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.rsaSignSaltInto#1 nish.rsaSignPssSha256SaltedInto#1
+  pointer msg: size=0 writesThrough=false captured=false passedTo=nish.RsaSignScratch.hashInto#1 nish.rsaSignPssSha256SaltedInto#2
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.rsaSignPssSha256SaltedInto#6
+  stackSites=2 stackLocals=2
+  local +0:9 _scope: i64 (const)
+  local +1:9 mHash: u8[] (const)
+  callee +2:8 RsaSignScratch.hashInto -> @nish.RsaSignScratch.hashInto
+  local +5:9 salt: u8[] (const)
+  callee +6:8 rsaSignSaltInto -> @nish.rsaSignSaltInto
+  callee +9:10 rsaSignPssSha256SaltedInto -> @nish.rsaSignPssSha256SaltedInto
+function rsaSignSaltInto(sc: RsaSignScratch, priv: Secret<u8[]>, mHash: u8[], salt: u8[]): boolean -> @nish.rsaSignSaltInto
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.RsaSignScratch.saltInto
+  calls: nish.RsaSignScratch.saltInto nish.expose$arr.u8$arr.u8$fn.24.nish.rsaSignExponentCopy nish.wipe$arr.u8 nish_arena_mark nish_arena_release
+  pointer sc: size=16 writesThrough=false captured=false passedTo=nish.RsaSignScratch.saltInto#0
+  pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$arr.u8$fn.24.nish.rsaSignExponentCopy#0
+  pointer mHash: size=0 writesThrough=false captured=false passedTo=nish.RsaSignScratch.saltInto#2
+  pointer salt: size=0 writesThrough=true captured=false passedTo=nish.RsaSignScratch.saltInto#3
+  stackSites=0 stackLocals=0
+  local +0:9 d: u8[] (const)
+  callee +0:19 expose<u8[], u8[], rsaSignExponentCopy> -> @nish.expose$arr.u8$arr.u8$fn.24.nish.rsaSignExponentCopy
+  local +4:9 ok: boolean (const)
+  callee +4:23 RsaSignScratch.saltInto -> @nish.RsaSignScratch.saltInto
+  callee +5:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function rsaSignExponentCopy(key: u8[]): u8[] -> @nish.rsaSignExponentCopy
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignKeySize
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignKeySize#0
+  stackSites=0 stackLocals=0
+  local +0:9 k: i32 (const)
+  callee +0:18 rsaSignKeySize -> @nish.rsaSignKeySize
+  local +4:9 d: u8[] (const)
+  local +5:12 i: i32 (let)
+  local +6:11 j: i32 (const)
+function rsaSignPssEncode(sc: RsaSignScratch, msg: u8[], off: i32, len: i32, salt: u8[], bits: i32): u8[] | null -> @nish.rsaSignPssEncode
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.RsaSignScratch.hashInto
+  escaping: len off
+  calls: nish.RsaSignScratch.hashInto
+  pointer sc: size=16 writesThrough=false captured=false passedTo=nish.RsaSignScratch.hashInto#0 nish.RsaSignScratch.hashInto#0 nish.RsaSignScratch.hashInto#0
+  pointer msg: size=0 writesThrough=false captured=false passedTo=nish.RsaSignScratch.hashInto#1
+  pointer salt: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 k: i32 (const)
+  local +1:9 emBits: i32 (const)
+  local +2:9 emLen: i32 (const)
+  local +3:9 sLen: i32 (const)
+  local +8:9 prime: u8[] (const)
+  callee +9:8 RsaSignScratch.hashInto -> @nish.RsaSignScratch.hashInto
+  local +12:12 i: i32 (let)
+  local +13:11 p: i32 (const)
+  local +18:9 out: u8[] (const)
+  local +19:9 from: i32 (const)
+  local +20:9 dbLen: i32 (const)
+  local +21:9 hAt: i32 (const)
+  callee +22:32 RsaSignScratch.hashInto -> @nish.RsaSignScratch.hashInto
+  local +27:9 block: u8[] (const)
+  local +28:12 done: i32 (let)
+  callee +29:10 RsaSignScratch.hashInto -> @nish.RsaSignScratch.hashInto
+  local +32:14 i: i32 (let)
+  local +33:13 o: i32 (const)
+  local +39:9 one: i32 (const)
+  local +43:12 i: i32 (let)
+  local +44:11 o: i32 (const)
+function rsaSignKeySize(key: u8[]): i32 -> @nish.rsaSignKeySize
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer key: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 total: i32 (const)
+  local +1:9 k: i32 (const)
+function rsaSignKeyBits(key: u8[]): i32 -> @nish.rsaSignKeyBits
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignBits nish.rsaSignKeySize nish_panic_index
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignKeySize#0 nish.rsaSignBits#0
+  stackSites=0 stackLocals=0
+  local +0:9 k: i32 (const)
+  callee +0:18 rsaSignKeySize -> @nish.rsaSignKeySize
+  local +4:9 bits: i32 (const)
+  callee +4:21 rsaSignBits -> @nish.rsaSignBits
+function rsaSignKeyPart(key: u8[], part: i32): u8[] -> @nish.rsaSignKeyPart
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignKeySize
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignKeySize#0
+  stackSites=0 stackLocals=0
+  local +0:9 k: i32 (const)
+  callee +0:18 rsaSignKeySize -> @nish.rsaSignKeySize
+  local +4:9 out: u8[] (const)
+  local +5:12 i: i32 (let)
+  local +6:11 s: i32 (const)
+function rsaSignKeyModulus(key: u8[]): u8[] -> @nish.rsaSignKeyModulus
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignKeyPart
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignKeyPart#0
+  stackSites=0 stackLocals=0
+  callee +0:48 rsaSignKeyPart -> @nish.rsaSignKeyPart
+function rsaSignKeyExponent(key: u8[]): u8[] -> @nish.rsaSignKeyExponent
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignKeyPart
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignKeyPart#0
+  stackSites=0 stackLocals=0
+  callee +0:49 rsaSignKeyPart -> @nish.rsaSignKeyPart
+function rsaSignKeySound(key: u8[]): boolean -> @nish.rsaSignKeySound
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish.rsaSignKeyBits nish.rsaSignKeySize nish.rsaSignPrivateOp nish_arena_mark nish_arena_release
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignKeySize#0 nish.rsaSignKeyBits#0 nish.rsaSignPrivateOp#0
+  stackSites=0 stackLocals=0
+  local +0:9 k: i32 (const)
+  callee +0:18 rsaSignKeySize -> @nish.rsaSignKeySize
+  callee +1:29 rsaSignKeyBits -> @nish.rsaSignKeyBits
+  local +5:7 borrow: i32 (let)
+  local +6:12 i: i32 (let)
+  local +7:11 di: i32 (const)
+  local +9:13 diff: i32 (const)
+  local +13:9 two: u8[] (const)
+  local +14:9 last: i32 (const)
+  local +18:9 s: u8[] | null (const)
+  callee +18:26 rsaSignPrivateOp -> @nish.rsaSignPrivateOp
+function rsaSignLimbs(out: u32[], src: u8[], off: i32, len: i32, count: i32): void -> @nish.rsaSignLimbs
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  pointer out: size=0 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -10:12 limb: i32 (let)
+  local -9:9 v: u32 (let)
+  local -8:14 b: i32 (let)
+  local -7:13 j: i32 (const)
+  local -6:13 s: i32 (const)
+function rsaSignBytes(a: u32[], k: i32): u8[] -> @nish.rsaSignBytes
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  pointer a: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 out: u8[] (const)
+  local +1:12 j: i32 (let)
+  local +2:11 o: i32 (const)
+function rsaSignMontInverse(n0: u32): u32 -> @nish.rsaSignMontInverse
+  facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n0
+  stackSites=0 stackLocals=0
+  local +0:7 x: u32 (let)
+  local +1:12 i: i32 (let)
+  local +2:11 nx: u32 (const)
+function rsaSignReduce(out: u32[], t: u32[], top: u32, n: u32[], count: i32): void -> @nish.rsaSignReduce
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer out: size=0 writesThrough=true captured=false
+  pointer t: size=0 writesThrough=false captured=false
+  pointer n: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -3:7 borrow: u64 (let)
+  local -2:12 i: i32 (let)
+  local -1:11 d: u64 (const)
+  local +4:9 keep: u32 (const)
+  local +5:9 take: u32 (const)
+  local +6:12 i: i32 (let)
+function rsaSignMontMul(out: u32[], a: u32[], b: u32[], n: u32[], n0inv: u32, t: u32[], count: i32): void -> @nish.rsaSignMontMul
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: count
+  calls: nish.rsaSignReduce
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.rsaSignReduce#0
+  pointer a: size=0 writesThrough=false captured=false
+  pointer b: size=0 writesThrough=false captured=false
+  pointer n: size=0 writesThrough=false captured=false passedTo=nish.rsaSignReduce#3
+  pointer t: size=0 writesThrough=true captured=false passedTo=nish.rsaSignReduce#1
+  stackSites=0 stackLocals=0
+  local -8:12 i: i32 (let)
+  local -5:11 live: u64 (const)
+  local -4:11 bi: u64 (const)
+  local -3:9 carry: u64 (let)
+  local -2:14 j: i32 (let)
+  local -1:13 s: u64 (const)
+  local +3:11 top: u64 (const)
+  local +6:11 m: u64 (const)
+  local +7:9 c: u64 (let)
+  local +8:14 j: i32 (let)
+  local +9:13 s: u64 (const)
+  local +13:11 last: u64 (const)
+  callee +17:3 rsaSignReduce -> @nish.rsaSignReduce
+function rsaSignWindowStep(acc: u32[], table: u32[], sel: u32[], nibble: u32, n: u32[], n0inv: u32, t: u32[], count: i32): void -> @nish.rsaSignWindowStep
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: count n0inv
+  calls: nish.rsaSignMontMul
+  pointer acc: size=0 writesThrough=true captured=false passedTo=nish.rsaSignMontMul#0 nish.rsaSignMontMul#1 nish.rsaSignMontMul#2 nish.rsaSignMontMul#0 nish.rsaSignMontMul#1
+  pointer table: size=0 writesThrough=false captured=false
+  pointer sel: size=0 writesThrough=true captured=false passedTo=nish.rsaSignMontMul#2
+  pointer n: size=0 writesThrough=false captured=false passedTo=nish.rsaSignMontMul#3 nish.rsaSignMontMul#3
+  pointer t: size=0 writesThrough=true captured=false passedTo=nish.rsaSignMontMul#5 nish.rsaSignMontMul#5
+  stackSites=0 stackLocals=0
+  local -4:12 s: i32 (let)
+  callee -3:5 rsaSignMontMul -> @nish.rsaSignMontMul
+  local -1:12 l: i32 (let)
+  local +2:12 j: i32 (let)
+  local +3:11 mask: u32 (const)
+  local +4:14 l: i32 (let)
+  callee +8:3 rsaSignMontMul -> @nish.rsaSignMontMul
+function rsaSignR2(r: u32[], n: u32[], t: u32[], count: i32): void -> @nish.rsaSignR2
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: count
+  calls: nish.rsaSignReduce
+  pointer r: size=0 writesThrough=true captured=false passedTo=nish.rsaSignReduce#0
+  pointer n: size=0 writesThrough=false captured=false passedTo=nish.rsaSignReduce#3
+  pointer t: size=0 writesThrough=true captured=false passedTo=nish.rsaSignReduce#1
+  stackSites=0 stackLocals=0
+  local -1:12 i: i32 (let)
+  local +3:12 k: i32 (let)
+  local +4:9 carry: u32 (let)
+  local +5:14 i: i32 (let)
+  local +6:13 v: u32 (const)
+  callee +10:5 rsaSignReduce -> @nish.rsaSignReduce
+function rsaSignPrivateOp(key: u8[], m: u8[]): u8[] | null -> @nish.rsaSignPrivateOp
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignBytes nish.rsaSignKeySize nish.rsaSignLimbs nish.rsaSignMontInverse nish.rsaSignMontMul nish.rsaSignR2 nish.rsaSignWindowStep nish.wipe$arr.u32
+  pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignKeySize#0 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1
+  pointer m: size=0 writesThrough=false captured=false passedTo=nish.rsaSignLimbs#1
+  stackSites=11 stackLocals=11
+  local +0:9 k: i32 (const)
+  callee +0:18 rsaSignKeySize -> @nish.rsaSignKeySize
+  local +4:9 count: i32 (const)
+  local +5:9 n: u32[] (const)
+  callee +6:3 rsaSignLimbs -> @nish.rsaSignLimbs
+  local +7:9 ml: u32[] (const)
+  callee +8:3 rsaSignLimbs -> @nish.rsaSignLimbs
+  local +10:7 below: i32 (let)
+  local +11:12 i: i32 (let)
+  local +19:9 n0inv: u32 (const)
+  callee +19:22 rsaSignMontInverse -> @nish.rsaSignMontInverse
+  local +20:9 t: u32[] (const)
+  local +21:9 r2: u32[] (const)
+  callee +22:3 rsaSignR2 -> @nish.rsaSignR2
+  local +23:9 one: u32[] (const)
+  local +26:9 table: u32[] (const)
+  local +27:9 entry: u32[] (const)
+  local +28:9 mm: u32[] (const)
+  callee +29:3 rsaSignMontMul -> @nish.rsaSignMontMul
+  callee +30:3 rsaSignMontMul -> @nish.rsaSignMontMul
+  local +31:12 j: i32 (let)
+  local +32:14 l: i32 (let)
+  callee +35:5 rsaSignMontMul -> @nish.rsaSignMontMul
+  local +37:9 acc: u32[] (const)
+  local +38:12 l: i32 (let)
+  local +41:9 dl: u32[] (const)
+  callee +42:3 rsaSignLimbs -> @nish.rsaSignLimbs
+  local +43:9 sel: u32[] (const)
+  local +45:12 nib: i32 (let)
+  local +46:11 limb: i32 (const)
+  local +47:11 nibble: u32 (const)
+  callee +48:5 rsaSignWindowStep -> @nish.rsaSignWindowStep
+  callee +50:3 rsaSignMontMul -> @nish.rsaSignMontMul
+  local +51:9 signature: u8[] (const)
+  callee +51:27 rsaSignBytes -> @nish.rsaSignBytes
+  local +54:9 el: u32[] (const)
+  callee +55:3 rsaSignLimbs -> @nish.rsaSignLimbs
+  callee +56:3 rsaSignMontMul -> @nish.rsaSignMontMul
+  local +57:12 l: i32 (let)
+  local +60:7 started: boolean (let)
+  local +61:12 bit: i32 (let)
+  local +62:11 limb: i32 (const)
+  local +63:11 set: u32 (const)
+  callee +65:7 rsaSignMontMul -> @nish.rsaSignMontMul
+  callee +67:9 rsaSignMontMul -> @nish.rsaSignMontMul
+  callee +73:3 rsaSignMontMul -> @nish.rsaSignMontMul
+  local +74:7 differ: u32 (let)
+  local +75:12 l: i32 (let)
+  callee +78:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +79:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +80:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +81:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +82:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +83:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +84:3 wipe<u32[]> -> @nish.wipe$arr.u32
 module std/crypto/x25519.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import exposeWith from "nish:secret" -> generic function exposeWith
@@ -22264,7 +22880,7 @@ import tcpAccept from "nish:net" -> builtin tcpAccept
 import tcpConnect from "nish:net" -> builtin tcpConnect
 import monotonicNanos from "nish:process" -> builtin monotonicNanos
 import wallClockNanos from "nish:process" -> builtin wallClockNanos
-import TlsP256Signer from "nish/net/tls" -> struct TlsP256Signer
+import TlsKeySigner from "nish/net/tls" -> struct TlsKeySigner
 import TlsServer from "nish/net/tls" -> struct TlsServer
 import TlsServerConfig from "nish/net/tls" -> struct TlsServerConfig
 import TlsClient from "nish/net/tls/client" -> struct TlsClient
@@ -22314,7 +22930,7 @@ struct TlsTcpServer (class) size=112 align=8 exported
   field free: i32[] index=5 offset=40
   field scratch: u8[] index=6 offset=48
   field peer: u8[] index=7 offset=56
-  field signer: TlsP256Signer index=8 offset=64
+  field signer: TlsKeySigner index=8 offset=64
   field randoms: u8[][] index=9 offset=72
   field slots: i32 index=10 offset=80 initialized
   field tickets: boolean index=11 offset=84 initialized
@@ -22347,6 +22963,7 @@ struct TlsTcpServer (class) size=112 align=8 exported
   method interest -> @nish.TlsTcpServer.interest
   method signatureInput -> @nish.TlsTcpServer.signatureInput
   method sign -> @nish.TlsTcpServer.sign
+  method signKey -> @nish.TlsTcpServer.signKey
   method signP256 -> @nish.TlsTcpServer.signP256
   method enableTickets -> @nish.TlsTcpServer.enableTickets
   method resume -> @nish.TlsTcpServer.resume
@@ -22387,14 +23004,14 @@ struct TlsTcpClient (class) size=40 align=8 exported
   method close -> @nish.TlsTcpClient.close
 function TlsTcpServer.constructor(this: TlsTcpServer, config: TlsServerConfig, listener: i32, size: i32): void -> @nish.TlsTcpServer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via nish.TlsP256Signer.constructor
+  sharedWrite: via nish.TlsKeySigner.constructor
   escaping: config listener size
-  calls: nish.TlsP256Signer.constructor nish.TlsRecordPools.constructor nish_alloc_struct
+  calls: nish.TlsKeySigner.constructor nish.TlsRecordPools.constructor nish_alloc_struct
   pointer this: size=112 writesThrough=true captured=false
   pointer config: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:18 new TlsRecordPools -> @nish.TlsRecordPools.constructor
-  callee +3:19 new TlsP256Signer -> @nish.TlsP256Signer.constructor
+  callee +3:19 new TlsKeySigner -> @nish.TlsKeySigner.constructor
 function TlsTcpServer.build(this: TlsTcpServer): TlsRecordServer -> @nish.TlsTcpServer.build [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=200
   sharedWrite: +0:5
@@ -22644,24 +23261,33 @@ function TlsTcpServer.sign(this: TlsTcpServer, slot: i32, signature: u8[]): i32 
   callee +0:42 TlsTcpServer.live -> @nish.TlsTcpServer.live
   callee +4:5 TlsRecordServer.sign -> @nish.TlsRecordServer.sign
   callee +5:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
-function TlsTcpServer.signP256(this: TlsTcpServer, slot: i32, key: Secret<u8[]>): i32 -> @nish.TlsTcpServer.signP256 [exported method]
+function TlsTcpServer.signKey(this: TlsTcpServer, slot: i32, key: Secret<u8[]>): i32 -> @nish.TlsTcpServer.signKey [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.TlsP256Signer.sign
+  sharedWrite: via nish.TlsKeySigner.sign
   escaping: slot
-  calls: nish.TlsP256Signer.sign nish.TlsRecordServer.fail nish.TlsTcpServer.flush nish.TlsTcpServer.interest nish.TlsTcpServer.live nish.TlsTcpServer.sign nish.TlsTcpServer.signatureInput
+  calls: nish.TlsKeySigner.sign nish.TlsRecordServer.fail nish.TlsTcpServer.flush nish.TlsTcpServer.interest nish.TlsTcpServer.live nish.TlsTcpServer.sign nish.TlsTcpServer.signatureInput
   pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.signatureInput#0 nish.TlsTcpServer.interest#0 nish.TlsTcpServer.live#0 nish.TlsTcpServer.flush#0 nish.TlsTcpServer.sign#0
-  pointer key: size=8 writesThrough=false captured=false passedTo=nish.TlsP256Signer.sign#1
+  pointer key: size=8 writesThrough=false captured=false passedTo=nish.TlsKeySigner.sign#1
   stackSites=0 stackLocals=0
   local +0:11 input: u8[] | null (const)
   callee +0:32 TlsTcpServer.signatureInput -> @nish.TlsTcpServer.signatureInput
   callee +2:14 TlsTcpServer.interest -> @nish.TlsTcpServer.interest
   local +4:11 signature: u8[] | null (const)
-  callee +4:36 TlsP256Signer.sign -> @nish.TlsP256Signer.sign
+  callee +4:36 TlsKeySigner.sign -> @nish.TlsKeySigner.sign
   local +5:11 conn: TlsRecordServer | null (const)
   callee +5:42 TlsTcpServer.live -> @nish.TlsTcpServer.live
   callee +10:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
   callee +11:14 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
   callee +13:12 TlsTcpServer.sign -> @nish.TlsTcpServer.sign
+function TlsTcpServer.signP256(this: TlsTcpServer, slot: i32, key: Secret<u8[]>): i32 -> @nish.TlsTcpServer.signP256 [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.TlsTcpServer.signKey
+  escaping: slot
+  calls: nish.TlsTcpServer.signKey
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.signKey#0
+  pointer key: size=8 writesThrough=false captured=false passedTo=nish.TlsTcpServer.signKey#2
+  stackSites=0 stackLocals=0
+  callee +0:12 TlsTcpServer.signKey -> @nish.TlsTcpServer.signKey
 function TlsTcpServer.enableTickets(this: TlsTcpServer): void -> @nish.TlsTcpServer.enableTickets [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -33845,6 +34471,7 @@ import base64StdPadEncode from "nish/crypto/base64url" -> function @nish.base64S
 import p256PublicKey from "nish/crypto/p256" -> function @nish.p256PublicKey
 import p256SignSha256 from "nish/crypto/p256" -> function @nish.p256SignSha256
 import p256VerifySha256 from "nish/crypto/p256" -> function @nish.p256VerifySha256
+import rsaParsePrivateKey from "nish/crypto/rsa-sign" -> function @nish.rsaParsePrivateKey
 import sha256 from "nish/crypto/sha256" -> function @nish.sha256
 const X509_MAX_DAYS: i32 = 14 [exported]
 const X509_MAX_SERIAL: i32 = 20 [exported]
@@ -34637,6 +35264,48 @@ function x509ParseP256PrivateKey(pem: string): Secret<u8[]> | null -> @nish.x509
   callee +7:24 x509FirstBlock -> @nish.x509FirstBlock
   callee +10:3 x509WipeBlocks -> @nish.x509WipeBlocks
   callee +11:3 x509WipeBlocks -> @nish.x509WipeBlocks
+function x509Pkcs8RsaKey(der: u8[]): Secret<u8[]> | null -> @nish.x509Pkcs8RsaKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.rsaParsePrivateKey
+  calls: nish.rsaParsePrivateKey nish.x509DerExpect nish.x509DerIsAlgorithmNull nish.x509DerPeek nish.x509DerRead nish.x509DerSmallInteger nish.x509OidPkcs1
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerRead#0 nish.x509DerSmallInteger#0 nish.x509DerRead#0 nish.x509DerIsAlgorithmNull#0 nish.x509DerExpect#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.rsaParsePrivateKey#0
+  stackSites=0 stackLocals=0
+  local +0:9 total: i32 (const)
+  local +1:9 seq: X509DerElement | null (const)
+  callee +1:38 x509DerExpect -> @nish.x509DerExpect
+  local +5:9 version: X509DerElement | null (const)
+  callee +5:42 x509DerRead -> @nish.x509DerRead
+  local +9:9 v: i32 (const)
+  callee +9:18 x509DerSmallInteger -> @nish.x509DerSmallInteger
+  local +13:9 alg: X509DerElement | null (const)
+  callee +13:38 x509DerRead -> @nish.x509DerRead
+  callee +14:24 x509DerIsAlgorithmNull -> @nish.x509DerIsAlgorithmNull
+  callee +14:57 x509OidPkcs1 -> @nish.x509OidPkcs1
+  local +17:9 key: X509DerElement | null (const)
+  callee +17:38 x509DerExpect -> @nish.x509DerExpect
+  local +21:7 at: i32 (let)
+  callee +22:7 x509DerPeek -> @nish.x509DerPeek
+  local +23:11 attributes: X509DerElement | null (const)
+  callee +23:47 x509DerRead -> @nish.x509DerRead
+  callee +32:10 rsaParsePrivateKey -> @nish.rsaParsePrivateKey
+function x509ParseRsaPrivateKey(pem: string): Secret<u8[]> | null -> @nish.x509ParseRsaPrivateKey [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.pemToDer
+  escaping: pem
+  calls: nish.pemToDer nish.rsaParsePrivateKey nish.x509FirstBlock nish.x509Pkcs8RsaKey nish.x509WipeBlocks
+  stackSites=0 stackLocals=0
+  local +0:9 pkcs1: u8[][] | null (const)
+  callee +0:32 pemToDer -> @nish.pemToDer
+  local +1:9 pkcs8: u8[][] | null (const)
+  callee +1:32 pemToDer -> @nish.pemToDer
+  local +2:7 key: Secret<u8[]> | null (let)
+  local +4:11 der: u8[] (const)
+  callee +4:23 x509FirstBlock -> @nish.x509FirstBlock
+  callee +5:11 rsaParsePrivateKey -> @nish.rsaParsePrivateKey
+  callee +7:11 x509Pkcs8RsaKey -> @nish.x509Pkcs8RsaKey
+  callee +7:27 x509FirstBlock -> @nish.x509FirstBlock
+  callee +9:3 x509WipeBlocks -> @nish.x509WipeBlocks
+  callee +10:3 x509WipeBlocks -> @nish.x509WipeBlocks
 function x509DerNameSound(der: u8[], e: X509DerElement): boolean -> @nish.x509DerNameSound
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish.x509DerExpect nish.x509DerOidSound nish.x509DerRead nish_arena_mark nish_arena_release

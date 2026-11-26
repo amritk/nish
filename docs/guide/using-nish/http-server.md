@@ -114,7 +114,8 @@ for (;;) {
 - `quic` is a `QuicServerConfig` (`nish/net/quic`), and `entropy` the random
   bytes the QUIC listener keys its own secrets with
   (`QUIC_LISTENER_ENTROPY_SIZE` of them).
-- `key` is the certificate's P-256 private key, a
+- `key` is the certificate's private key, P-256 or RSA as the configuration's
+  `signatureScheme` says ([TLS certificates](tls-certificates.md#on-the-server-side)), a
   [`Secret`](standard-library.md#nishsecret). `waitSigned` borrows it for the
   call; it stays yours to wipe. A server with only HTTP/1.1 and h2c
   listeners calls `wait`, which takes no key; `wait` panics once a TLS or

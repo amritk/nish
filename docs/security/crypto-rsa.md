@@ -1,4 +1,4 @@
-# Security record: RSA signature verification
+# Security record: RSA signature verification and RSA-PSS signing
 
 The record of the review of `nish/crypto/rsa`, added by the stage "RSA
 signature verification, PKCS#1 v1.5 and PSS" of the certificate-chain work
@@ -16,6 +16,12 @@ accepted, so none is counted in the README's Areas table.
 Anchors here are by function name in `std/crypto/rsa.ts` as this change adds
 it on base `2cdef4f`. No `file:line` anchor is used.
 
+**Signing** came later, with `nish/crypto/rsa-sign` in the stage "RSA-PSS
+CertificateVerify under an RSA certificate on the TLS and QUIC servers"
+(#2334, #481). It is reviewed in its own section, "RSA-PSS signing", below,
+with its findings RSA-S1 to RSA-S6. Anchors there are by function name in
+`std/crypto/rsa-sign.ts`.
+
 ## Scope
 
 | File | Functions |
@@ -30,14 +36,23 @@ record](crypto-pki.md)), `std/net/tls/verify.ts` (`TLS_VERIFY_MIN_RSA_BITS`, the
 CertificateVerify's key) and `std/crypto/jwt.ts` (an RS key under 2048 bits
 answers `null`).
 
+| File | Functions (signing) |
+| --- | --- |
+| `std/crypto/rsa-sign.ts` | the whole module: `rsaParsePrivateKey` and its DER readers (`rsaSignDer`, `rsaSignInteger`, `rsaSignBits`, `rsaSignOdd`, `rsaSignKeyBytes`, `rsaSignPlace`) and its soundness trial (`rsaSignKeySound`); the accessors `rsaPrivateKeyBits`, `rsaPrivateKeyModulus` and `rsaPrivateKeyExponent` and their helpers (`rsaSignKeySize`, `rsaSignKeyBits`, `rsaSignKeyPart`, `rsaSignKeyModulus`, `rsaSignKeyExponent`); `rsaSignRaw`, `rsaSignPssSha256`, `rsaSignPssSha256Into`, `rsaSignPssSha256Salted` and `rsaSignPssSha256SaltedInto`; `RsaSignScratch` and the salt derivation (`rsaSignSaltInto`, `rsaSignExponentCopy`); EMSA-PSS-ENCODE (`rsaSignPssEncode`); the private operation `rsaSignPrivateOp` and its arithmetic (`rsaSignLimbs`, `rsaSignBytes`, `rsaSignMontInverse`, `rsaSignReduce`, `rsaSignMontMul`, `rsaSignWindowStep`, `rsaSignR2`); the class `RsaSignSpan` |
+| `std/crypto/x509.ts` | `x509ParseRsaPrivateKey` and `x509Pkcs8RsaKey` only, the PEM and PKCS#8 front of `rsaParsePrivateKey`. The rest of the file is [crypto-x509.md](crypto-x509.md)'s |
+
+The TLS signer that calls it, `TlsRsaSigner` in `std/net/tls.ts`, is
+[tls.md](tls.md)'s.
+
 ## Threat model
 
 Every input is the attacker's: the key's DER (any length, any bytes), the
 signature (any length, any value, including 0, n, n + 1 and values longer than
 the modulus), the message, and the hash id and salt length a caller passes
-through from a certificate. Nothing is secret. The module verifies and never
-signs, so it holds no private key, and a timing measurement can learn only
-what the attacker already sent.
+through from a certificate. Nothing is secret. `std/crypto/rsa.ts` verifies
+and never signs, so it holds no private key, and a timing measurement can
+learn only what the attacker already sent. Signing, in
+`std/crypto/rsa-sign.ts`, has its own threat model under "RSA-PSS signing".
 
 A win for the attacker is any of these:
 
@@ -50,7 +65,7 @@ A win for the attacker is any of these:
   past what a legitimate key needs (denial of service).
 
 **Why no `Secret`.** The project's rule is that secret material in `std/crypto`
-is a `Secret` and is wiped. This module has none: a public key, a signature and a
+is a `Secret` and is wiped. `std/crypto/rsa.ts` has none: a public key, a signature and a
 message are all public, and so is everything computed from them, including the
 opened block `s^e mod n`. So it does not import `nish:secret` and does not
 wipe. For the same reason it is variable time and does not use
@@ -348,3 +363,110 @@ length Wycheproof has.
 - "link/crypto_wycheproof_rsa: exits with 0 and stdout matches
   expected.out", the same template with `name` = `crypto_wycheproof_rsa`.
   All 21 files above.
+
+## RSA-PSS signing
+
+`std/crypto/rsa-sign.ts` holds an RSA private key and signs with it:
+RSASSA-PSS with SHA-256, MGF1-SHA-256 and a 32-byte salt (RFC 8017 §8.1.1),
+which is TLS 1.3's `rsa_pss_rsae_sha256`. The TLS and QUIC servers call it
+from `TlsRsaSigner` to sign CertificateVerify under an RSA certificate
+([tls.md](tls.md)). The key is read from PKCS#1 `RSAPrivateKey` DER, or from
+PEM, PKCS#1 or PKCS#8, through `x509ParseRsaPrivateKey`. It must be 2048 to
+4096 bits.
+
+### Threat model (signing)
+
+Here the private exponent d is secret, and so is the key's DER. The modulus,
+the public exponent, the message and the signature are public. A network
+attacker chooses the message's input, since the transcript hash a server
+signs covers the attacker's ClientHello. The attacker can also time the
+server's answers. Three properties matter:
+
+- **Timing.** The time a signature takes, and the memory addresses it
+  reads, must not depend on d.
+- **Faults.** No signature may leak d, even when the arithmetic goes
+  wrong.
+- **Wipes.** No copy of d may outlive the call that used it.
+
+Out of scope:
+
+- PKCS#1 v1.5 signing, `rsa_pss_pss_*` keys and client certificates.
+- Power and electromagnetic side channels.
+- An attacker who can read the process's memory.
+
+### Method (signing)
+
+- **Known answers.** `tests/link/crypto_rsa_sign` takes six Wycheproof keys,
+  2048 to 4096 bits, from the PKCS#8 files that `crypto_wycheproof_rsa`
+  vendors.
+  - Each key must load, with its bit length and its public modulus.
+  - The private operation must open each of 12 Wycheproof PKCS#1 v1.5
+    ciphertexts to its block. That is a raw RSA known answer, since signing
+    and decryption are the same exponentiation.
+  - `rsaSignPssSha256` must give 12 PSS signatures byte for byte. Each must
+    also verify under `nish/crypto/rsa`'s `rsaVerifyPss`.
+  - `tests/link/crypto_rsa_sign_f64` runs the same checks in f64 number mode.
+- **Interop.** `tests/link/net_tls_rsa_server`, and the `tests/run.js` checks
+  around it, sign real handshakes under a 2048-bit certificate. Each is
+  checked by a verifier somebody else wrote, OpenSSL's `s_client` and curl,
+  and by `rsaVerifyPss`.
+- **Constant time.** `tests/cases/ct_asm_rsa.ts` copies the module's inner
+  functions word for word, and the check "ct_asm: ct_asm_rsa's copies match
+  std/crypto/rsa-sign.ts" fails when they drift. `tests/ct-asm.js` then reads
+  the machine code for x86-64, aarch64 and x86-64-v3. A control case, a
+  table read at a secret index, must be refused.
+- **Wipes.** The check "crypto: the wipes survive opt -O2 (rsaSignPrivateOp
+  seven, RsaSignScratch.saltInto three, rsaSignPssSha256 one,
+  rsaParsePrivateKey one)" counts the volatile stores left after `opt -O2`.
+
+### Findings (signing)
+
+| Id | Severity | Where | Description | Disposition |
+| --- | --- | --- | --- | --- |
+| RSA-S1 | None (a property) | `rsaSignPrivateOp` | No CRT. The signature is one exponentiation by d modulo n, about four times the work of the CRT form. A 4096-bit signature is the costliest. | **Accepted, not counted.** No secret prime is ever a modulus, so the Bellcore fault, where one faulty half-exponentiation factors n, has nothing to strike. Each signature is still raised to e and compared with its input before it is returned. The cost is a handshake's, once per connection. |
+| RSA-S2 | None (a property) | `rsaSignPrivateOp`, `rsaSignWindowStep`, `rsaSignMontMul`, `rsaSignReduce` | No blinding. The exponent is not blinded, and neither is the message. | **Accepted, not counted.** The defence against timing is the fixed window. Every nibble of d's limbs, leading zeros included, gets four squarings, a read of the whole 16-entry table that keeps one entry under a mask, and one multiplication. The multiplication's final subtraction is kept or dropped by `ctSelect`. Pinned by "ct_asm: ct_asm_rsa rsaSignReduce on x86-64: loops on public bounds only; no secret branch, call, secret-indexed access or secret-dependent latency". The same check runs for `rsaSignMontMulAt` and `rsaSignWindowStepAt`, on x86-64, aarch64 and x86-64-v3. The control is "ct_asm: ct_asm_rsa rsaSignTableLoad on x86-64: refused for a load or store at a secret address". **Untested**: the outer loop of `rsaSignPrivateOp` itself is not in the fixture, and nothing reads wasm32's code. |
+| RSA-S3 | None (a property) | `rsaSignPssSha256`, `RsaSignScratch.saltInto` | The salt is derived, not drawn: it is the SHA-256 of a fixed label, d's k bytes and the message hash. So the same message under the same key gives the same signature. | **Accepted, not counted.** PSS's security does not rest on the salt being random (RFC 8017 §8.1, note 4), and a verifier cannot tell the difference. The salt is unpredictable without d, and the module needs no random source. Pinned by "rsaSignPssSha256 gives each of the 12 known answers byte for byte", "each of those signatures verifies under rsaVerifyPss with SHA-256 and a 32-byte salt" and "under each of the 6 keys, rsaSignPssSha256Salted signs under an empty and a 32-byte salt, each verifying at its own length only, the same twice, and unlike the derived salt". |
+| RSA-S4 | Low | `rsaParsePrivateKey`, `x509ParseRsaPrivateKey` | Key bounds and strict DER. A key is refused when it is under 2048 or over 4096 bits, uses a non-shortest length, has a non-minimal or negative INTEGER or a version other than 0, has an even modulus or public exponent, has e under 3 or at 2^32 or more, has d zero or not below n, or carries bytes after the key. A key that fails a trial signature is also refused. | **Fixed by design.** Pinned by "rsaParsePrivateKey refuses each of 9 changes to a key: empty, a byte short, a byte after, version 1, an even modulus, a negative modulus, an even public exponent, a private exponent one bit off, an outer length one long" (`crypto_rsa_sign`). Also pinned, in `net_tls_rsa_server`: "a 1024-bit key is refused, without a panic", "a certificate is not a key", and the PKCS#1 and PKCS#8 loads of the same key. **Untested**: no test offers a key over 4096 bits, a d not below n, or an e of 2^32 or more. Those refusals are read from the code only. |
+| RSA-S5 | Low | `rsaSignPrivateOp`, `RsaSignScratch`, `rsaParsePrivateKey`, `x509ParseRsaPrivateKey` | What a wipe cannot reach. The key's DER is the caller's, and so is the PEM string, which the language cannot zero ([crypto-x509.md](crypto-x509.md), X509-7). A signature that fails the check after signing is dropped to the collector unwiped, though it is a function of d. | **Recorded.** The `Secret` holds n, d and e. The seven arrays of the exponentiation, the three of the salt hasher, the exponent copy, and a key that fails its trial are wiped. Each is pinned by the opt -O2 wipe check above. `x509ParseRsaPrivateKey` wipes the blocks it decoded. A faulty signature is only produced by a fault the module does not expect, and it is never returned. |
+| RSA-S6 | None (a test gap) | `rsaSignPrivateOp` | The check after signing has no test. Every signature is raised to e and compared, but no test injects a fault. A known-answer test would still pass if the check were removed. | **Recorded, untested.** The check is read from the code only. |
+
+None of these is counted in the README's Areas table: RSA-S4 is fixed by
+design, and the others are properties or a recorded gap.
+
+### Properties verified (signing)
+
+- **Signatures verify elsewhere.** Pinned by these `tests/run.js` checks:
+  - "net_tls_rsa_server: openssl s_client -tls1_3 completes under the RSA
+    certificate: TLSv1.3, an AEAD suite, peer signature RSA-PSS";
+  - "net_tls_rsa_server: curl --tlsv1.3 GETs the page over HTTP/1.1 under the
+    RSA certificate";
+  - "net_tls_rsa_server: curl --http2 --tlsv1.3 GETs the page over HTTP/2
+    under the RSA certificate".
+
+  `net_tls_rsa_server` itself verifies each CertificateVerify under the
+  certificate's key, over TCP and over QUIC: "the signature verifies under the
+  certificate's key, salt 32" and "HTTP/3: the handshake, its RSA-PSS
+  signature verified". A flipped bit fails: "a signature with one bit flipped
+  does not".
+- **Byte-for-byte known answers** under six keys, 2048 to 4096 bits: see
+  RSA-S3.
+- **The key is the right one.** A signature under one key fails under
+  another: "a signature under one 2048-bit key fails under the other". A
+  private exponent one bit off is refused at load: see RSA-S4.
+- **Constant time** on x86-64, aarch64 and x86-64-v3, for the functions the
+  fixture holds: see RSA-S2.
+- **Wipes** survive `opt -O2`: see RSA-S5.
+
+### Tests (signing)
+
+- "link/crypto_rsa_sign: exits with 0 and stdout matches expected.out", with
+  8 checks, and "link/crypto_rsa_sign_f64: exits with 0 and stdout matches
+  expected.out", with the same 8 in f64 mode.
+- "link/net_tls_rsa_server: exits with 0 and stdout matches expected.out",
+  with 26 checks.
+- The seven `net_tls_rsa_server:` checks in `tests/run.js`.
+- The `ct_asm: ct_asm_rsa` checks, "ct_asm: ct_asm_rsa's copies match
+  std/crypto/rsa-sign.ts" and "ct_asm_rsa: IR matches golden".
+- "crypto: the wipes survive opt -O2 (rsaSignPrivateOp seven,
+  RsaSignScratch.saltInto three, rsaSignPssSha256 one, rsaParsePrivateKey
+  one)".

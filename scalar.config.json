@@ -2743,6 +2743,21 @@
                           ]
                         }
                       },
+                      "/rsa-sign": {
+                        "type": "page",
+                        "title": "rsa-sign",
+                        "filepath": "docs/reference/crypto/rsa-sign.md",
+                        "head": {
+                          "title": "rsa-sign · Nish",
+                          "meta": [{ "property": "og:title", "content": "rsa-sign" }],
+                          "links": [
+                            {
+                              "rel": "canonical",
+                              "href": "https://nishlang.com/reference/library/crypto/rsa-sign"
+                            }
+                          ]
+                        }
+                      },
                       "/scram": {
                         "type": "page",
                         "title": "scram",

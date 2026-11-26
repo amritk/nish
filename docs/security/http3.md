@@ -473,7 +473,12 @@ as a `Secret` on each `receive` and keeps nothing of it; its per-connection
 entropy is wiped by `QuicConnection` as soon as it is copied. The
 connection-ID index keeps eight bytes of the listener's entropy as its salt
 for the server's life, and `Http3Server.stop` wipes it with the listener's
-seed and the configuration's static keys (QUIC-5). What
+seed and the configuration's static keys (QUIC-5). The carrier signs
+through one `TlsKeySigner`, which signs with P-256 or RSA-PSS as the
+configuration's `signatureScheme` says ([tls.md](tls.md),
+[crypto-rsa.md](crypto-rsa.md)); H3-1's figures of 0 bytes a handshake
+were measured under P-256, and an RSA-PSS handshake's arena use is not
+measured. What
 the connection holds is application data — request field sections in
 `section`, the decoder's buffer and the field copies, bodies in `data` — which
 may carry credentials (`cookie`, `authorization`).

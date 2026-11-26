@@ -233,6 +233,24 @@ changed, as the licence's section 4 asks of a modified file.
 Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof.
 ```
 
+### `tests/link/crypto_rsa_sign/LICENSE-wycheproof`
+
+RSA private keys and decryption cases from [Project
+Wycheproof](https://github.com/C2SP/wycheproof), under the same Apache
+License, Version 2.0, with its own copy of the licence text beside them.
+[`tests/link/crypto_rsa_sign/vectors.ts`](tests/link/crypto_rsa_sign/vectors.ts)
+is written by `generate.mjs` beside it from the first two groups of
+`rsa_pkcs1_2048_test.json`, `_3072_test.json` and `_4096_test.json`: each
+group's PKCS#8 private key kept verbatim, its public key re-encoded as PKCS#1,
+some of its valid ciphertexts with their messages, and RSA-PSS signatures the
+generator computes under those keys and has OpenSSL verify. The file names the
+upstream files and commit and says what was added, as the licence's section 4
+asks of a modified file.
+
+```notice
+Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_rsa_sign/LICENSE-wycheproof.
+```
+
 ### `tests/link/crypto_pki_limbo/LICENSE-x509-limbo`
 
 [x509-limbo](https://github.com/C2SP/x509-limbo)'s certificate path
@@ -566,6 +584,7 @@ Copied from vector (https://github.com/amritk/vector), specs/rfc5869-hkdf-sha256
 | `tests/link/crypto_wycheproof_rsa/pkcs1v15_4096.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all the cases of `rsa_signature_4096_sha256_test.json`, `_sha384_test.json` and `_sha512_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof_rsa/pkcs1v15_8192.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all the cases of `rsa_signature_8192_sha256_test.json`, `_sha384_test.json` and `_sha512_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof_rsa/pss.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all the cases of the eight `rsa_pss_<bits>_<hash>_mgf1_<salt>_test.json` files and 18 of the 150 of `rsa_pss_misc_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof` |
+| `tests/link/crypto_rsa_sign/vectors.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: the keys and some valid cases of the first two groups of `rsa_pkcs1_2048_test.json`, `_3072_test.json` and `_4096_test.json`, as Nish source, with RSA-PSS signatures computed under those keys | Apache-2.0 | `tests/link/crypto_rsa_sign/LICENSE-wycheproof` |
 | `tests/link/crypto_pki_limbo/cases.ts` | x509-limbo `limbo.json` at `1080e565`: the 670 server-authentication cases `generate.mjs` keeps, without their descriptions, keys and metadata, as Nish source | Apache-2.0 | `tests/link/crypto_pki_limbo/LICENSE-x509-limbo` |
 | `tests/link/crypto_pki_limbo/certs.ts` | x509-limbo `limbo.json` at `1080e565`: every certificate those cases name, once each, as base64 DER | Apache-2.0 | `tests/link/crypto_pki_limbo/LICENSE-x509-limbo` |
 | `tests/json-suite/test-parsing.txt` | JSONTestSuite `test_parsing/` at `1ef36fa`: all 318 files (95 `y_`, 188 `n_`, 35 `i_`), packed one per line by `tests/json-suite/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/json-suite/LICENSE-jsontestsuite` |

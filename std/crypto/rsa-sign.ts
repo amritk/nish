@@ -196,7 +196,7 @@ const rsaSignOdd = (der: u8[], end: i32): boolean => {
     return false
   }
   const last: i32 = end - 1
-  return last < der.length && (toI32(der[last]) & 1) === 1
+  return last < toI32(der.length) && (toI32(der[last]) & 1) === 1
 }
 
 /**
@@ -244,7 +244,7 @@ const rsaSignPlace = (out: u8[], at: i32, width: i32, der: u8[], span: RsaSignSp
   for (let i: i32 = 0; i < length; i++) {
     const o: i32 = to + i
     const s: i32 = start + i
-    if (o >= 0 && o < out.length && s >= 0 && s < der.length) {
+    if (o >= 0 && o < toI32(out.length) && s >= 0 && s < toI32(der.length)) {
       out[o] = der[s]
     }
   }
@@ -423,7 +423,7 @@ export class RsaSignScratch {
     this.work.update(data, off, len)
     if (counter >= 0) {
       const c: u8[] = [toU8(counter >> 24), toU8(counter >> 16), toU8(counter >> 8), toU8(counter)]
-      this.work.update(c, 0, 4)
+      this.work.update(c, toI32(0), toI32(4))
     }
     return this.work.digestInto(out, at)
   }
@@ -448,10 +448,10 @@ export class RsaSignScratch {
       116,
     ]
     hmacCopySha256(this.fresh, this.work)
-    this.work.update(label, 0, 24)
-    this.work.update(d, 0, toI32(d.length))
-    this.work.update(mHash, 0, 32)
-    const ok: boolean = this.work.digestInto(salt, 0)
+    this.work.update(label, toI32(0), toI32(24))
+    this.work.update(d, toI32(0), toI32(d.length))
+    this.work.update(mHash, toI32(0), toI32(32))
+    const ok: boolean = this.work.digestInto(salt, toI32(0))
     wipe(this.work.state)
     wipe(this.work.block)
     wipe(this.work.schedule)
@@ -537,9 +537,9 @@ export const rsaSignPssSha256SaltedInto = (
     return false
   }
   const sig: u8[] = signature
-  for (let i: i32 = 0; i < sig.length; i++) {
+  for (let i: i32 = 0; i < toI32(sig.length); i++) {
     const o: i32 = toI32(toI64(at) + toI64(i))
-    if (o >= 0 && o < out.length) {
+    if (o >= 0 && o < toI32(out.length)) {
       out[o] = sig[i]
     }
   }
@@ -560,7 +560,7 @@ export const rsaSignPssSha256SaltedInto = (
 export const rsaSignPssSha256 = (priv: Secret<u8[]>, msg: u8[]): u8[] | null => {
   const sc: RsaSignScratch = new RsaSignScratch()
   const mHash: u8[] = new Array<u8>(32)
-  if (!sc.hashInto(msg, 0, toI32(msg.length), -1, mHash, 0)) {
+  if (!sc.hashInto(msg, toI32(0), toI32(msg.length), toI32(-1), mHash, toI32(0))) {
     return null
   }
   const salt: u8[] = new Array<u8>(32)
@@ -601,7 +601,7 @@ export const rsaSignPssSha256Into = (
   }
   using _scope = arena()
   const mHash: u8[] = new Array<u8>(32)
-  if (!sc.hashInto(msg, off, len, -1, mHash, 0)) {
+  if (!sc.hashInto(msg, off, len, toI32(-1), mHash, toI32(0))) {
     return false
   }
   const salt: u8[] = new Array<u8>(32)
@@ -676,12 +676,12 @@ const rsaSignPssEncode = (
   }
   // M' = 00 x 8 || mHash || salt, and H = Hash(M').
   const prime: u8[] = new Array<u8>(40 + sLen)
-  if (!sc.hashInto(msg, off, len, -1, prime, 8)) {
+  if (!sc.hashInto(msg, off, len, toI32(-1), prime, toI32(8))) {
     return null
   }
   for (let i: i32 = 0; i < sLen; i++) {
     const p: i32 = 40 + i
-    if (p < prime.length) {
+    if (p < toI32(prime.length)) {
       prime[p] = salt[i]
     }
   }
@@ -689,36 +689,36 @@ const rsaSignPssEncode = (
   const from: i32 = k - emLen
   const dbLen: i32 = emLen - 33
   const hAt: i32 = from + dbLen
-  if (from < 0 || from > 1 || !sc.hashInto(prime, 0, toI32(prime.length), -1, out, hAt)) {
+  if (from < 0 || from > 1 || !sc.hashInto(prime, toI32(0), toI32(prime.length), toI32(-1), out, hAt)) {
     return null
   }
   // DB = PS || 01 || salt, masked by MGF1(H): the mask is written into `out`
   // first, a block at a time, and DB XORed in after it.
   const block: u8[] = new Array<u8>(32)
   for (let done: i32 = 0; done < dbLen; done = done + 32) {
-    if (!sc.hashInto(out, hAt, 32, toI32(done / 32), block, 0)) {
+    if (!sc.hashInto(out, hAt, toI32(32), toI32(done / 32), block, toI32(0))) {
       return null
     }
     for (let i: i32 = 0; i < 32; i++) {
       const o: i32 = from + done + i
-      if (done + i < dbLen && o < out.length && i < block.length) {
+      if (done + i < dbLen && o < toI32(out.length) && i < toI32(block.length)) {
         out[o] = block[i]
       }
     }
   }
   const one: i32 = toI32(toI64(hAt) - toI64(sLen) - 1)
-  if (one >= 0 && one < out.length) {
+  if (one >= 0 && one < toI32(out.length)) {
     out[one] = out[one] ^ 1
   }
   for (let i: i32 = 0; i < sLen; i++) {
     const o: i32 = toI32(toI64(one) + 1 + toI64(i))
-    if (o >= 0 && o < out.length) {
+    if (o >= 0 && o < toI32(out.length)) {
       out[o] = out[o] ^ salt[i]
     }
   }
   // Clear the leftmost 8 emLen - emBits bits.
-  if (from < out.length && k >= 1 && k <= out.length) {
-    out[from] = toU8(toI32(out[from]) & (0xff >> (8 * emLen - emBits)))
+  if (from < toI32(out.length) && k >= 1 && k <= toI32(out.length)) {
+    out[from] = toU8(toI32(out[from]) & (toI32(0xff) >> (8 * emLen - emBits)))
     out[k - 1] = 0xbc
   }
   return out
@@ -741,7 +741,7 @@ const rsaSignKeySize = (key: u8[]): i32 => {
 /** The modulus bits of the key value, or 0 for one of the wrong shape or a leading zero byte. */
 const rsaSignKeyBits = (key: u8[]): i32 => {
   const k: i32 = rsaSignKeySize(key)
-  if (k === 0 || key.length === 0 || toI32(key[0]) === 0) {
+  if (k === 0 || toI32(key.length) === 0 || toI32(key[0]) === 0) {
     return 0
   }
   const bits: i32 = rsaSignBits(key, 0, k)
@@ -760,7 +760,7 @@ const rsaSignKeyPart = (key: u8[], part: i32): u8[] => {
   const out: u8[] = new Array<u8>(k)
   for (let i: i32 = 0; i < k; i++) {
     const s: i32 = part * k + i
-    if (s >= 0 && s < key.length && i < out.length) {
+    if (s >= 0 && s < toI32(key.length) && i < toI32(out.length)) {
       out[i] = key[s]
     }
   }
@@ -787,14 +787,14 @@ const rsaSignKeySound = (key: u8[]): boolean => {
   let borrow: i32 = 0
   for (let i: i32 = k - 1; i >= 0; i--) {
     const di: i32 = k + i
-    if (di < key.length && i < key.length) {
+    if (di < toI32(key.length) && i < toI32(key.length)) {
       const diff: i32 = toI32(key[di]) - toI32(key[i]) - borrow
       borrow = (diff >> 8) & 1
     }
   }
   const two: u8[] = new Array<u8>(k)
   const last: i32 = k - 1
-  if (last >= 0 && last < two.length) {
+  if (last >= 0 && last < toI32(two.length)) {
     two[last] = 2
   }
   const s: u8[] | null = rsaSignPrivateOp(key, two)
@@ -823,11 +823,11 @@ const rsaSignLimbs = (out: u32[], src: u8[], off: i32, len: i32, count: i32): vo
     for (let b: i32 = 0; b < 4; b++) {
       const j: i32 = len - 1 - (limb * 4 + b)
       const s: i32 = off + j
-      if (j >= 0 && s >= 0 && s < src.length) {
+      if (j >= 0 && s >= 0 && s < toI32(src.length)) {
         v = v | (toU32(src[s]) << toU32(b * 8))
       }
     }
-    if (limb < out.length) {
+    if (limb < toI32(out.length)) {
       out[limb] = v
     }
   }
@@ -835,13 +835,13 @@ const rsaSignLimbs = (out: u32[], src: u8[], off: i32, len: i32, count: i32): vo
 
 /** The low `k` bytes of the limbs `a`, big-endian; empty for a `k` out of range. */
 const rsaSignBytes = (a: u32[], k: i32): u8[] => {
-  if (k < 0 || k > 512 || a.length < 128) {
+  if (k < 0 || k > 512 || toI32(a.length) < 128) {
     return []
   }
   const out: u8[] = new Array<u8>(k)
   for (let j: i32 = 0; j < k; j++) {
     const o: i32 = k - 1 - j
-    if (o >= 0 && o < out.length) {
+    if (o >= 0 && o < toI32(out.length)) {
       out[o] = toU8(a[toI32(j / 4)] >> toU32((j & 3) << 3))
     }
   }
@@ -858,17 +858,13 @@ const rsaSignMontInverse = (n0: u32): u32 => {
   return toU32(0 - toU64(x))
 }
 
-/** Whether every limb array is as long as `128`, `t` two more, and `count` fits. */
-const rsaSignShaped = (out: u32[], a: u32[], n: u32[], t: u32[], count: i32): boolean =>
-  count >= 1 && count <= 128 && out.length >= 128 && a.length >= 128 && n.length >= 128 && t.length >= 130
-
 /**
  * `out = t - n` when the `count + 1`-limb value `t` (its top limb `top`, 0 or
  * 1) is at least `n`, else `out = t`, for `t` below 2n: the subtraction is
  * always done and the answer chosen by mask. `out` is not `t`.
  */
 const rsaSignReduce = (out: u32[], t: u32[], top: u32, n: u32[], count: i32): void => {
-  if (count < 1 || count > 128 || out.length < 128 || t.length < 128 || n.length < 128) {
+  if (count < 1 || count > 128 || toI32(out.length) < 128 || toI32(t.length) < 128 || toI32(n.length) < 128) {
     return
   }
   let borrow: u64 = 0
@@ -892,28 +888,28 @@ const rsaSignReduce = (out: u32[], t: u32[], top: u32, n: u32[], count: i32): vo
  */
 const rsaSignMontMul = (out: u32[], a: u32[], b: u32[], n: u32[], n0inv: u32, t: u32[], count: i32): void => {
   if (
-    !rsaSignShaped(out, a, n, t, count) ||
-    b.length < 128 ||
+    toI32(out.length) < 128 ||
+    toI32(b.length) < 128 ||
     count > 128 ||
     count < 1 ||
-    t.length < 130 ||
-    a.length < 128 ||
-    n.length < 128
+    toI32(t.length) < 130 ||
+    toI32(a.length) < 128 ||
+    toI32(n.length) < 128
   ) {
     return
   }
-  for (let i: i32 = 0; i < 130; i++) {
-    t[i] = 0
-  }
   for (let i: i32 = 0; i < count; i++) {
+    // The first row reads `t` as zero, so no loop clears it first (one that
+    // the compiler would make a `memset` call).
+    const live: u64 = i === 0 ? 0 : 0xffffffff
     const bi: u64 = toU64(b[i])
     let carry: u64 = 0
     for (let j: i32 = 0; j < count; j++) {
-      const s: u64 = toU64(t[j]) + toU64(a[j]) * bi + carry
+      const s: u64 = (toU64(t[j]) & live) + toU64(a[j]) * bi + carry
       t[j] = toU32(s)
       carry = s >> 32
     }
-    const top: u64 = toU64(t[count]) + carry
+    const top: u64 = (toU64(t[count]) & live) + carry
     t[count] = toU32(top)
     t[count + 1] = toU32(top >> 32)
     const m: u64 = toU64(toU32(toU64(t[0]) * toU64(n0inv)))
@@ -931,11 +927,45 @@ const rsaSignMontMul = (out: u32[], a: u32[], b: u32[], n: u32[], n0inv: u32, t:
 }
 
 /**
+ * One step of the fixed window: `acc = acc^16 table[nibble] R^-1 mod n`. Four
+ * squarings, then every entry of the 16-entry `table` (entry `j` at `j count`)
+ * read in full and the one at `nibble` kept by a `ctEq` mask into `sel`, then
+ * one multiplication: the same work and the same addresses for every nibble.
+ */
+const rsaSignWindowStep = (
+  acc: u32[],
+  table: u32[],
+  sel: u32[],
+  nibble: u32,
+  n: u32[],
+  n0inv: u32,
+  t: u32[],
+  count: i32
+): void => {
+  if (count < 1 || count > 128 || toI32(table.length) < 16 * count || toI32(sel.length) < 128) {
+    return
+  }
+  for (let s: i32 = 0; s < 4; s++) {
+    rsaSignMontMul(acc, acc, acc, n, n0inv, t, count)
+  }
+  for (let l: i32 = 0; l < count; l++) {
+    sel[l] = 0
+  }
+  for (let j: i32 = 0; j < 16; j++) {
+    const mask: u32 = ctEq(toU32(j), nibble)
+    for (let l: i32 = 0; l < count; l++) {
+      sel[l] = sel[l] | (table[j * count + l] & mask)
+    }
+  }
+  rsaSignMontMul(acc, acc, sel, n, n0inv, t, count)
+}
+
+/**
  * R^2 mod n into `r`, by doubling 1 modulo `n` 64 count times; `t` is
  * scratch. Public: it reads `n` only.
  */
 const rsaSignR2 = (r: u32[], n: u32[], t: u32[], count: i32): void => {
-  if (!rsaSignShaped(r, r, n, t, count) || count > 128 || count < 1 || r.length < 128 || t.length < 128) {
+  if (toI32(n.length) < 128 || count > 128 || count < 1 || toI32(r.length) < 128 || toI32(t.length) < 130) {
     return
   }
   for (let i: i32 = 0; i < 128; i++) {
@@ -962,7 +992,7 @@ const rsaSignR2 = (r: u32[], n: u32[], t: u32[], count: i32): void => {
  */
 const rsaSignPrivateOp = (key: u8[], m: u8[]): u8[] | null => {
   const k: i32 = rsaSignKeySize(key)
-  if (k < 256 || k > 512 || toI32(m.length) !== k || key.length < k || (toI32(key[k - 1]) & 1) === 0) {
+  if (k < 256 || k > 512 || toI32(m.length) !== k || toI32(key.length) < k || (toI32(key[k - 1]) & 1) === 0) {
     return null
   }
   const count: i32 = toI32((k + 3) / 4)
@@ -1009,19 +1039,7 @@ const rsaSignPrivateOp = (key: u8[], m: u8[]): u8[] | null => {
   for (let nib: i32 = 8 * count - 1; nib >= 0; nib--) {
     const limb: i32 = toI32(nib / 8)
     const nibble: u32 = (dl[limb] >> toU32((nib & 7) * 4)) & 15
-    for (let s: i32 = 0; s < 4; s++) {
-      rsaSignMontMul(acc, acc, acc, n, n0inv, t, count)
-    }
-    for (let l: i32 = 0; l < count; l++) {
-      sel[l] = 0
-    }
-    for (let j: i32 = 0; j < 16; j++) {
-      const mask: u32 = ctEq(toU32(j), nibble)
-      for (let l: i32 = 0; l < count; l++) {
-        sel[l] = sel[l] | (table[j * count + l] & mask)
-      }
-    }
-    rsaSignMontMul(acc, acc, sel, n, n0inv, t, count)
+    rsaSignWindowStep(acc, table, sel, nibble, n, n0inv, t, count)
   }
   rsaSignMontMul(acc, acc, one, n, n0inv, t, count)
   const signature: u8[] = rsaSignBytes(acc, k)
