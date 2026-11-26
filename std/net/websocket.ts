@@ -252,6 +252,16 @@ const websocketUtf8Run = (state: WsUtf8, buf: u8[], off: i32, len: i32): boolean
 }
 
 /**
+ * Whether `buf[off .. off + len)` is well-formed UTF-8, no character cut short
+ * at the end. The window is the caller's, already checked against `buf`, as
+ * for `websocketUtf8Run`: what `websocketIsUtf8` checks before it calls this.
+ */
+const websocketUtf8Whole = (buf: u8[], off: i32, len: i32): boolean => {
+  const state: WsUtf8 = new WsUtf8()
+  return websocketUtf8Run(state, buf, off, len) && state.need === 0
+}
+
+/**
  * Whether `buf[off .. off + len)` is well-formed UTF-8: what a whole text
  * message's payload, or a close frame's reason, must be (§8.1). A window
  * outside `buf` panics.
@@ -266,8 +276,7 @@ export const websocketIsUtf8 = (buf: u8[], off: i32, len: i32): boolean => {
   if (off < 0 || len < 0 || off > size || len > size - off) {
     panic("websocketIsUtf8: the window is outside the buffer")
   }
-  const state: WsUtf8 = new WsUtf8()
-  return websocketUtf8Run(state, buf, off, len) && state.need === 0
+  return websocketUtf8Whole(buf, off, len)
 }
 
 /**
@@ -536,8 +545,10 @@ const websocketReadClose = (d: WsDecoder, len: i32): i32 => {
   if (len === 1) {
     return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a close frame with a one-byte payload")
   }
-  // `control` holds 125 bytes and the frame's payload was copied into it.
-  if (len < 2 || toI32(payload.length) < 2) {
+  // `control` holds 125 bytes and the frame's payload was copied into it. The
+  // test against 2 proves the code's two bytes; the one against `len`, the
+  // reason's window.
+  if (len < 2 || toI32(payload.length) < 2 || toI32(payload.length) < len) {
     return websocketFail(d, WS_CLOSE_INTERNAL_ERROR, "a close frame payload that was not kept")
   }
   const code: i32 = (toI32(payload[0]) << 8) | toI32(payload[1])
@@ -545,7 +556,7 @@ const websocketReadClose = (d: WsDecoder, len: i32): i32 => {
     return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a close status code that may not be sent")
   }
   const reasonStart: i32 = 2
-  if (!websocketIsUtf8(payload, reasonStart, len - 2)) {
+  if (!websocketUtf8Whole(payload, reasonStart, len - 2)) {
     return websocketFail(d, WS_CLOSE_INVALID_DATA, "a close reason that is not UTF-8")
   }
   const parts: string[] = []
@@ -960,7 +971,7 @@ export const websocketClosePayload = (code: i32, reason: string): u8[] | null =>
     out.push(toU8(reason.charCodeAt(k)))
   }
   const reasonStart: i32 = 2
-  if (!websocketIsUtf8(out, reasonStart, n)) {
+  if (!websocketUtf8Whole(out, reasonStart, n)) {
     return null
   }
   return out
