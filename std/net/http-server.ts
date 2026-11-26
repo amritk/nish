@@ -1933,15 +1933,19 @@ export class HttpServer {
    */
   private h1Decided(s: HttpServerH1Slot, h1: Http1Server): boolean {
     s.sniff = false
-    if (s.got <= 0) {
+    const head: u8[] = s.head
+    const got: i32 = s.got
+    // `0 < got <= head.length`, spelled so the prover reads the window: the
+    // sniff stops at the preface's 24 bytes, so a longer count never reaches it.
+    if (got <= 0 || got > toI32(head.length)) {
       return true
     }
     const conn: Http1Connection = h1.connection(s.carrier)
     // A fresh connection has room for a head, past the 24 bytes this hands it.
-    const taken: i32 = conn.feed(s.head, toI32(0), s.got)
+    const taken: i32 = conn.feed(head, toI32(0), got)
     conn.lastActive = this.turnAt
     conn.headArrived(this.turnAt)
-    if (taken !== s.got) {
+    if (taken !== got) {
       this.h1Close(s)
       return false
     }
