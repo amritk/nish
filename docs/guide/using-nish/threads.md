@@ -1016,6 +1016,12 @@ route 3: 1 hits, 64 bytes
   `compareExchange(i, expected, desired)`, each doing to element `i` what
   `AtomicI32`'s does to its counter. `length` says how many elements there
   are; it is fixed when the array is made.
+- **A length read from input**: `new AtomicI32Array(n)` stops the program on
+  a negative `n`, as `new Array` does. When `n` comes from input, call
+  `atomicI32ArrayChecked(n)` (or `atomicI64ArrayChecked(n)`) instead: it
+  returns the array as an `Ok`, or an `Err` saying the length is out of
+  range, so no panic is left to allow (`examples/histogram-atomic.ts` makes
+  its bins this way).
 - **An index out of range is never used**, as for any array: by default the
   compiler refuses an index it cannot prove in range, and under
   `--allow-panics` the index is checked while the program runs and one out

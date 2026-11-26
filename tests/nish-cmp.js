@@ -11745,6 +11745,8 @@ const cursorReadRow = (why, filesByProgram) =>
 const JSON_PUT_STRING = "jsonPutString"
 /** The release-note words of `Http1Server.tick` (std/net/http1-server.ts). */
 const HTTP1_TICK = "Http1Server.tick"
+/** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
+const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
 
 const DECLARED = [
   // #2297: the bounds walk proves `end - start` of two index locals with
@@ -23609,6 +23611,26 @@ const DECLARED = [
     changelog: HANDLER_PIPELINED_STREAM_END,
     why: "the case is new to the corpus and the seed's std predates HttpHandler.drive's `unended` gate (#1556) and the HTTP stack this branch links, so every module it writes differs from the seed's",
   })),
+  ...byFinding(WP80_EXAMPLES_FREED)(
+    "std/json-typed.ts tests the window of its string-field slice where the prover reads it, so json-typed.ll moves in every program that decodes a typed string field",
+    {
+      "docs/cookbook/json-union.ts": ["json-typed.ll"],
+      "tests/link/json_enum_string/main.ts": ["json-typed.ll"],
+      "tests/link/json_tagged_union/main.ts": ["json-typed.ll"],
+    }
+  ),
+  {
+    program: "tests/link/atomic_index_proven/main.ts",
+    file: "threads.ll",
+    changelog: WP80_EXAMPLES_FREED,
+    why: "AtomicI32Array's and AtomicI64Array's constructors forward their length to the shared `atomicArrayCheckLength` guard, and std/threads.ts gains their checked twins, so threads.ll moves",
+  },
+  {
+    program: "tests/link/atomic_array_checked/main.ts",
+    file: "exit",
+    changelog: WP80_EXAMPLES_FREED,
+    why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
+  },
 ]
 
 /**

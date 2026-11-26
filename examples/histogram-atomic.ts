@@ -1,16 +1,3 @@
-// Opt-out (`--allow-panics`), for one kept panic that is not a site of this
-// file's. Every `AtomicI32Array` index here is proven at its call, by the
-// guard or loop test around it (docs/LANGUAGE.md, "Atomic arrays"; #2206):
-// the `load` under `b < bins.length`, the `add` in `binShard`'s loop that
-// tests `s.bins.length` too, and the `add` in `binPerValue` under
-// `bin < s.bins.length`. And
-// `new AtomicI32Array(BINS)`'s `array-length` site (std/threads.ts:826:21) is
-// proven by the length's type (#2279). What is left is the constructor's call
-// to `negativeAtomicLength` (790:3), a kept contract panic for a negative
-// length that `BINS` never is, which a caller's proof cannot discharge
-// (`callerProven`, src/attributes.ts): so this file keeps `--allow-panics`.
-// smoke: args --allow-panics
-//
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The
 // bins are one `AtomicI32Array`, 256 atomic counters in one buffer. A task
 // counts its own values into a local `u32[]` that no other core touches, then adds each local count to its bin with one `add`, a
@@ -23,7 +10,7 @@
 // compiler's: an update that does not commute (a `store`, an `exchange`) would
 // leave an answer that depends on the schedule.
 //
-//   nish --allow-panics examples/histogram-atomic.ts --link build/histogram-atomic
+//   nish examples/histogram-atomic.ts --link build/histogram-atomic
 //   ./build/histogram-atomic              four tasks, local counts, one add per bin
 //   ./build/histogram-atomic --per-value  four tasks, one atomic add per value
 //   ./build/histogram-atomic --lock       four tasks, one Mutex taken per value
@@ -33,7 +20,7 @@
 // `--js-explicit-resource-management` before Node 24):
 //   node --js-explicit-resource-management --experimental-strip-types \
 //     --import ./runtime/nish.mjs -e 'import("./examples/histogram-atomic.ts").then((m) => m.main())'
-import { AtomicI32Array, Mutex, scope } from "nish/threads"
+import { AtomicI32Array, Mutex, atomicI32ArrayChecked, scope } from "nish/threads"
 
 const BINS: i32 = 256
 const TASKS: i32 = 4
@@ -158,12 +145,13 @@ const binPlain = (seed: i32, n: i32, bins: u32[]): i32 => {
 }
 
 /**
- * One round's bins, read into plain numbers whichever mode filled them. Task
+ * One round's bins, read into plain numbers whichever mode filled them, or
+ * why the atomic bins could not be made. Task
  * `t` is seeded with `high | (first + t)`: `first + t` stays below 64, in the
  * six low bits `high` (the shift moved left by six) leaves clear, so the `|`
  * adds it and cannot overflow.
  */
-const round = (mode: string, high: i32, first: u32): u32[] => {
+const round = (mode: string, high: i32, first: u32): Result<u32[], string> => {
   const out: u32[] = []
   if (mode === "--single") {
     for (let b: i32 = 0; b < BINS; b++) {
@@ -192,7 +180,13 @@ const round = (mode: string, high: i32, first: u32): u32[] => {
       out.push(g.value.bins[b])
     }
   } else {
-    const bins = new AtomicI32Array(BINS)
+    // The checked twin of `new AtomicI32Array(BINS)`: a negative length is
+    // refused as a value rather than a panic, so no contract panic is left.
+    const made = atomicI32ArrayChecked(BINS)
+    if (made.isErr()) {
+      return Err(made.error)
+    }
+    const bins: AtomicI32Array = made.value
     const binned: i32[] = [0, 0, 0, 0]
     const perValue = mode === "--per-value"
     {
@@ -213,14 +207,14 @@ const round = (mode: string, high: i32, first: u32): u32[] => {
       out.push(toU32(bins.load(b)))
     }
   }
-  return out
+  return Ok(out)
 }
 
 export const main = (): i32 => {
   const args = process.argv
   let mode = ""
   let shift: i32 = 0
-  for (let i = 1; i < args.length; i++) {
+  for (let i: i32 = 1; i < toI32(args.length); i++) {
     const arg = args[i]
     if (arg === "--lock" || arg === "--single" || arg === "--per-value") {
       mode = arg
@@ -236,8 +230,13 @@ export const main = (): i32 => {
   // so no round repeats another's work and none of it can be skipped.
   for (let r: u32 = 0; r < toU32(ROUNDS); r++) {
     // `shift << 6` is `shift * 64` that wraps as Node's seed did, never panicking.
-    const bins = round(mode, shift << 6, r * toU32(TASKS) + 1)
-    for (let b = 0; b < bins.length; b++) {
+    const made = round(mode, shift << 6, r * toU32(TASKS) + 1)
+    if (made.isErr()) {
+      console.error(`the bins: ${made.error}`)
+      return 1
+    }
+    const bins: u32[] = made.value
+    for (let b: i32 = 0; b < toI32(bins.length); b++) {
       total = total + bins[b]
       checksum = (checksum * 31 + bins[b]) % 1000003
     }

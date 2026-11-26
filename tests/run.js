@@ -139,6 +139,8 @@ const spawnNish = (args, options) => spawnSync(NISH, withAllowPanics(NISH, args)
  * opt-out, its header says why), else `[]`: a check that walks examples
  * builds each as that line does. `file` is relative to the root.
  */
+/** The codes a build out of no-panic scope is refused with: a site of its own (NL2457), or one a call reaches (NL2458). */
+const NO_PANIC_CODES = ["NL2457", "NL2458"]
 const optOutArgs = (file) => corpusArgs(path.join(root, file)).filter((arg) => arg === ALLOW_PANICS)
 const casesDir = path.join(root, "tests", "cases")
 const buildDir = path.join(root, "build", "test")
@@ -6579,17 +6581,30 @@ if (dealtHere("performance")) {
   const optOuts = gateSources.filter((source) => source.startsWith("examples/") && optOutArgs(source).length > 0)
   const strictResults = await pool(optOuts, defaultJobs(), (source) => {
     const args = corpusArgs(path.join(root, source)).filter((arg) => arg !== ALLOW_PANICS)
+    const out = path.join(buildDir, "perf_gate", "strict", source.replace(/[/.]/g, "_"))
+    // Both ways a user builds it: `-o` alone is an open world, and `--link`
+    // (as smoke builds it) a closed one, whose call-site ranges prove some
+    // sites the open world cannot and leave others unproven that it proves.
+    // The opt-out is needed while either refuses.
     // strict: proves the example's opt-out is still needed
-    return spawnAsync(NISH, [source, ...args, "-o", `${path.join(buildDir, "perf_gate", "strict", source.replace(/[/.]/g, "_"))}/`], {
+    const open = spawnAsync(NISH, [source, ...args, "--json", "-o", `${out}/`], { cwd: root, encoding: "utf8" })
+    // strict: proves the example's opt-out is still needed
+    const linked = spawnAsync(NISH, [source, ...args, "--json", "-o", `${out}_link/`, "--link", path.join(out, "bin")], {
       cwd: root,
       encoding: "utf8",
     })
+    return Promise.all([open, linked])
   })
   for (const [at, source] of optOuts.entries()) {
+    const builds = strictResults[at]
+    const refused = builds.filter((r) => r.status !== 0)
+    const forPanic = refused.some((r) => diagnosticsOf(r.stdout).some((d) => NO_PANIC_CODES.includes(d.code)))
     check(
       `performance gate: ${source}'s --allow-panics opt-out is still needed`,
-      strictResults[at].status !== 0,
-      "it builds without the flag: drop --allow-panics from its `// smoke: args` line and its header's words about it"
+      forPanic,
+      refused.length === 0
+        ? "it builds without the flag, with -o and with --link: drop --allow-panics from its `// smoke: args` line and its header's words about it"
+        : `refused, but not for a panic site:\n${refused.map((r) => r.stdout + r.stderr).join("\n")}`
     )
   }
 
@@ -8152,7 +8167,8 @@ if (dealtHere("fix")) {
 //                  module with a golden is compared, so there is no missing one to write;
 //                  `--update-link-goldens` rewrites each golden that differs from what
 //                  this run's compiler emitted, prints `WROTE link/<name>/<module>.ll`,
-//                  and compares again. Narrow it with a filter
+//                  and compares again; it rewrites a differing `expected.panics` and
+//                  `expected.caps.json` the same way. Narrow it with a filter
 //                  (`node tests/run.js <name> --update-link-goldens`) and read the diff
 //                  before committing it, as for any regenerated golden.
 // Every positive test is also assembled (llvm-as), verified (opt -passes=verify),
@@ -8605,8 +8621,13 @@ const runLinkProgram = async (name) => {
           : `no listed function names ${side("main.ts")} as its module`
       )
       if (fs.existsSync(side("expected.panics"))) {
-        const want = read("expected.panics").trim()
+        let want = read("expected.panics").trim()
         const got = listText.split(`${root}/`).join("").trim()
+        if (UPDATE_LINK_GOLDENS && got !== want) {
+          fs.writeFileSync(side("expected.panics"), got + "\n")
+          steps.push({ kind: "log", text: `WROTE link/${name}/expected.panics` })
+          want = got
+        }
         expect(
           `link/${name}: --emit-panics matches expected.panics`,
           got === want,
@@ -8616,8 +8637,13 @@ const runLinkProgram = async (name) => {
     }
 
     if (capsArgs.length > 0) {
-      const want = read("expected.caps.json")
+      let want = read("expected.caps.json")
       const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
+      if (UPDATE_LINK_GOLDENS && got.length > 0 && got !== want) {
+        fs.writeFileSync(side("expected.caps.json"), got)
+        steps.push({ kind: "log", text: `WROTE link/${name}/expected.caps.json` })
+        want = got
+      }
       expect(
         `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
         got === want,
@@ -30220,11 +30246,18 @@ if (dealtHere("releaseChecks")) {
           // strict, so its marker, its `allow-panics:` line and the page's
           // sentence about the flag come out.
           if (run.status === 0 && s.args.includes(ALLOW_PANICS)) {
-            const strictEntry = { ...s, args: s.args.filter((arg) => arg !== ALLOW_PANICS) }
-            const bare = compileProgram({ ...program, entry: strictEntry }, `${prefix}_${s.line}_strict`)
+            // Built with `-o` alone, an open world, and linked, a closed one:
+            // each proves sites the other leaves, so the opt-out is needed
+            // while either refuses for a panic site.
+            const strictArgs = s.args.filter((arg) => arg !== ALLOW_PANICS)
+            const exe = path.join(snippetDir, `${prefix}_${s.line}_strict_bin`)
+            const bare = [
+              compileProgram({ ...program, entry: { ...s, args: strictArgs } }, `${prefix}_${s.line}_strict`),
+              compileProgram({ ...program, entry: { ...s, args: [...strictArgs, "--link", exe] } }, `${prefix}_${s.line}_strict_link`),
+            ]
             check(
               `${rel}:${s.line}: its --allow-panics opt-out is still needed`,
-              bare.run.status !== 0,
+              bare.some((b) => b.run.status !== 0 && b.errors.some((e) => NO_PANIC_CODES.includes(e.code))),
               "it builds without the flag: drop --allow-panics from its marker, the `<!-- allow-panics: -->` line above, and the page's words about it"
             )
           }
@@ -46952,7 +46985,7 @@ if (!only || "std_term".includes(only) || "term-frame-loop".includes(only)) {
 // natively and under Node, which runs each task at its `spawn`.
 if (!only || "histogram-atomic".includes(only)) {
   const exe = path.join(buildDir, "histogram-atomic")
-  const linked = spawnNish(["examples/histogram-atomic.ts", ALLOW_PANICS, "--link", exe], {
+  const linked = spawnNish(["examples/histogram-atomic.ts", "--link", exe], {
     cwd: root,
     encoding: "utf8",
   })
