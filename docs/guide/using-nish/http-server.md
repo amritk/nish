@@ -1,7 +1,7 @@
 # One server for HTTP/1.1, 2 and 3
 
-`nish/net/http-server` answers HTTP/1.1, HTTP/2 (over TLS or cleartext) and
-HTTP/3 from one loop and one routing switch. You configure a listener for
+`nish/net/http-server` answers HTTP/1.1 and HTTP/2 (each over TLS or
+cleartext) and HTTP/3 from one loop and one routing switch. You configure a listener for
 each version you serve; every request, whichever version carried it, comes out of the same
 `take` with the same fields, and one route body answers all three. Once an
 HTTP/3 listener is configured, every HTTP/1.1 and HTTP/2 response carries an
@@ -141,13 +141,37 @@ and after the preface `idleTimeout` applies as on HTTP/2 over TLS.
 Nothing on an h2c connection is encrypted or authenticated. Serve it only
 behind a proxy that ends TLS for you, or on a network you trust.
 
+### HTTP/1.1 over TLS
+
+`server.listenHttp1Tls(fd, tls, new Http1Config(), slots)` serves HTTP/1.1
+over TLS on a TCP listener of its own, for clients that do not speak HTTP/2:
+
+```ts
+server.listenHttp1Tls(httpsFd, tls1, new Http1Config(), 256);
+server.listenHttp2Tls(h2Fd, tls, new Http2Config(), 64);
+```
+
+- `tls1` is a `TlsServerConfig` with ALPN `["http/1.1"]`. A client that
+  offers no ALPN is served too.
+- One port serves one protocol. A client that offers only `h2` is never
+  handed to the HTTP/2 listener: it gets a fatal `no_application_protocol`
+  alert when `tls1` offers `http/1.1` alone, and a `close_notify` right
+  after the handshake when `tls1` offers `h2` too. To offer both, give each
+  its own port; there is no ALPN fallback on one port.
+- Its requests say `r.version` 1 and `r.secure` true, and its responses
+  carry `Alt-Svc` as HTTP/2 over TLS ones do.
+- It panics as `listenHttp1` does, on a second call, or when its `slots`,
+  with `listenHttp1`'s if there is one, pass 1048576: a server holds at most
+  1048576 HTTP/1.1 connections over both listeners. Serve it with
+  `waitSigned`.
+
 ## Reading a request
 
 A request holds the same fields on every version. `r.head` holds its method,
 target and fields, copied once out of the connection; `r.body` holds
 `r.bodyLength` bytes of body. Both stay valid until you answer it.
 `r.version` is 1, 2 or 3, and `r.secure` says whether it came over TLS or
-QUIC: false on HTTP/1.1 and h2c.
+QUIC: false on cleartext HTTP/1.1 and h2c.
 
 | You want | Call |
 | --- | --- |

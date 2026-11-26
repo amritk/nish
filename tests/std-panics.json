@@ -5,9 +5,9 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1053,
+  "total": 1040,
   "explicit": {
-    "kept": 361,
+    "kept": 366,
     "toFix": 7
   },
   "modules": {
@@ -115,9 +115,7 @@
       "panic": 9
     },
     "std/net/handler.ts": {
-      "fault": 1,
-      "panic": 8,
-      "window": 2
+      "panic": 9
     },
     "std/net/hpack.ts": {
       "panic": 8
@@ -127,10 +125,9 @@
     },
     "std/net/http-server.ts": {
       "array-length": 3,
-      "io-exit": 2,
-      "panic": 43,
-      "slice": 1,
-      "window": 2
+      "io-exit": 4,
+      "panic": 45,
+      "slice": 1
     },
     "std/net/http1-client-codec.ts": {
       "panic": 1
@@ -139,9 +136,8 @@
       "panic": 3
     },
     "std/net/http1-server.ts": {
-      "fault": 3,
-      "slice": 1,
-      "window": 10
+      "panic": 2,
+      "slice": 1
     },
     "std/net/http2-cleartext.ts": {
       "panic": 2,
@@ -204,8 +200,7 @@
     },
     "std/net/serve.ts": {
       "panic": 3,
-      "slice": 8,
-      "window": 2
+      "slice": 8
     },
     "std/net/static.ts": {
       "panic": 1,
@@ -899,6 +894,11 @@
     },
     {
       "module": "std/net/http-server.ts",
+      "function": "HttpServer.checkHttp1",
+      "reason": "config caps within limits.maxHead/maxFields, slots at least 1 and at most 1048576 over both HTTP/1.1 listeners; static listener configuration contract"
+    },
+    {
+      "module": "std/net/http-server.ts",
       "function": "HttpServer.checkHttp2",
       "reason": "maxHeaderListSize within limits.maxHead, no extended CONNECT, slots at least 1; static listener configuration contract"
     },
@@ -921,6 +921,11 @@
       "module": "std/net/http-server.ts",
       "function": "HttpServer.listenHttp1",
       "reason": "one HTTP/1.1 listener only, config caps within limits.maxHead/maxFields, slots at least 1; all static setup contract"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.listenHttp1Tls",
+      "reason": "an HTTP/1.1 over TLS listener may be configured only once; the caller controls its setup sequence"
     },
     {
       "module": "std/net/http-server.ts",
@@ -1011,6 +1016,16 @@
       "module": "std/net/http1-codec.ts",
       "function": "http1WriteChunk",
       "reason": "the window must lie inside data; the caller controls off and len"
+    },
+    {
+      "module": "std/net/http1-server.ts",
+      "function": "http1ServerCheckCap",
+      "reason": "Http1Config caps must lie within the documented low..high; a static caller configuration"
+    },
+    {
+      "module": "std/net/http1-server.ts",
+      "function": "http1ServerCheckWindow",
+      "reason": "the window must lie inside its buffer; the caller controls off and len"
     },
     {
       "module": "std/net/http2-cleartext.ts",
