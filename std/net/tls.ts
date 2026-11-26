@@ -550,7 +550,9 @@ export class TlsRsaSigner {
     if (toI32(this.out.length) !== k) {
       this.out = new Array<u8>(k)
     }
-    if (!rsaSignPssSha256Into(this.scratch, priv, content, TLS_FROM, toI32(content.length), this.out, TLS_FROM)) {
+    if (
+      !rsaSignPssSha256Into(this.scratch, priv, content, TLS_FROM, toI32(content.length), this.out, TLS_FROM)
+    ) {
       return null
     }
     return this.out

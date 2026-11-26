@@ -89,7 +89,6 @@ export const RSA_SIGN_MAX_BITS: i32 = 4096
 /** The salt length, in bytes, that `rsa_pss_rsae_sha256` requires: SHA-256's output. */
 export const RSA_PSS_SHA256_SALT_SIZE: i32 = 32
 
-
 /** The bytes of a DER element's contents: `der[start .. end)`. */
 class RsaSignSpan {
   /** The first byte of the contents. */
@@ -223,7 +222,17 @@ const rsaSignKeyBytes = (der: u8[], k: i32, n: RsaSignSpan, d: RsaSignSpan, e: R
 const rsaSignPlace = (out: u8[], at: i32, width: i32, der: u8[], span: RsaSignSpan): void => {
   const start: i32 = span.start
   const stop: i32 = span.end
-  if (start < 0 || start > 4096 || stop < 0 || stop < start || stop > 4096 || at < 0 || at > 1024 || width < 0 || width > 512) {
+  if (
+    start < 0 ||
+    start > 4096 ||
+    stop < 0 ||
+    stop < start ||
+    stop > 4096 ||
+    at < 0 ||
+    at > 1024 ||
+    width < 0 ||
+    width > 512
+  ) {
     return
   }
   const length: i32 = stop - start
@@ -301,7 +310,17 @@ export const rsaParsePrivateKey = (der: u8[], start: i32, end: i32): Secret<u8[]
   const ee: i32 = e.end
   const ds: i32 = d.start
   const de: i32 = d.end
-  if (ns < 0 || ne <= ns || ne > total || es < 0 || ee <= es || ee > total || ds < 0 || de < ds || de > total) {
+  if (
+    ns < 0 ||
+    ne <= ns ||
+    ne > total ||
+    es < 0 ||
+    ee <= es ||
+    ee > total ||
+    ds < 0 ||
+    de < ds ||
+    de > total
+  ) {
     return null
   }
   const bits: i32 = rsaSignBits(der, ns, ne)
@@ -425,7 +444,8 @@ export class RsaSignScratch {
       return false
     }
     const label: u8[] = [
-      110, 105, 115, 104, 32, 114, 115, 97, 45, 112, 115, 115, 45, 115, 104, 97, 50, 53, 54, 32, 115, 97, 108, 116,
+      110, 105, 115, 104, 32, 114, 115, 97, 45, 112, 115, 115, 45, 115, 104, 97, 50, 53, 54, 32, 115, 97, 108,
+      116,
     ]
     hmacCopySha256(this.fresh, this.work)
     this.work.update(label, 0, 24)
@@ -456,7 +476,14 @@ export class RsaSignScratch {
  * @returns The `k`-byte signature, or `null`.
  */
 export const rsaSignPssSha256Salted = (priv: Secret<u8[]>, msg: u8[], salt: u8[]): u8[] | null => {
-  const em: u8[] | null = rsaSignPssEncode(new RsaSignScratch(), msg, 0, toI32(msg.length), salt, rsaPrivateKeyBits(priv))
+  const em: u8[] | null = rsaSignPssEncode(
+    new RsaSignScratch(),
+    msg,
+    0,
+    toI32(msg.length),
+    salt,
+    rsaPrivateKeyBits(priv)
+  )
   if (em === null) {
     return null
   }
@@ -714,7 +741,7 @@ const rsaSignKeySize = (key: u8[]): i32 => {
 /** The modulus bits of the key value, or 0 for one of the wrong shape or a leading zero byte. */
 const rsaSignKeyBits = (key: u8[]): i32 => {
   const k: i32 = rsaSignKeySize(key)
-  if (k === 0 || key.length < 1 || toI32(key[0]) === 0) {
+  if (k === 0 || key.length === 0 || toI32(key[0]) === 0) {
     return 0
   }
   const bits: i32 = rsaSignBits(key, 0, k)
@@ -833,12 +860,7 @@ const rsaSignMontInverse = (n0: u32): u32 => {
 
 /** Whether every limb array is as long as `128`, `t` two more, and `count` fits. */
 const rsaSignShaped = (out: u32[], a: u32[], n: u32[], t: u32[], count: i32): boolean =>
-  count >= 1 &&
-  count <= 128 &&
-  out.length >= 128 &&
-  a.length >= 128 &&
-  n.length >= 128 &&
-  t.length >= 130
+  count >= 1 && count <= 128 && out.length >= 128 && a.length >= 128 && n.length >= 128 && t.length >= 130
 
 /**
  * `out = t - n` when the `count + 1`-limb value `t` (its top limb `top`, 0 or
@@ -869,7 +891,15 @@ const rsaSignReduce = (out: u32[], t: u32[], top: u32, n: u32[], count: i32): vo
  * `b`. Every sum is at most (2^32 - 1) + (2^32 - 1)^2 + (2^32 - 1) = 2^64 - 1.
  */
 const rsaSignMontMul = (out: u32[], a: u32[], b: u32[], n: u32[], n0inv: u32, t: u32[], count: i32): void => {
-  if (!rsaSignShaped(out, a, n, t, count) || b.length < 128 || count > 128 || count < 1 || t.length < 130 || a.length < 128 || n.length < 128) {
+  if (
+    !rsaSignShaped(out, a, n, t, count) ||
+    b.length < 128 ||
+    count > 128 ||
+    count < 1 ||
+    t.length < 130 ||
+    a.length < 128 ||
+    n.length < 128
+  ) {
     return
   }
   for (let i: i32 = 0; i < 130; i++) {

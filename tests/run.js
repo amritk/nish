@@ -1755,6 +1755,7 @@ const DEALT_SECTIONS = {
   netTlsTcp: { name: "the net_tls_tcp section", selected: selects("net_tls_tcp") },
   http2: { name: "the net_http2_cleartext section", selected: selects("net_http2_cleartext") },
   tlsClient: { name: "the net_tls_client_tcp section", selected: selects("net_tls_client_tcp") },
+  tlsRsa: { name: "the net_tls_rsa_server section", selected: selects("net_tls_rsa_server") },
   diagnostics: { name: "the diagnostics section", selected: selects("diagnostics") },
   performance: { name: "the performance section", selected: selects("performance") },
   memAwfy: { name: "the mem_awfy section", selected: selects("mem_awfy") },
@@ -4657,6 +4658,136 @@ if (dealtHere("http2")) {
       `net_http2_cleartext: the server closes all ${connections} connections, each with no error, and exits 0`,
       ended.code === 0 && lines.length === connections && lines.every((line) => /^closed: streams \d+ error 0$/.test(line)),
       `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(served)}\nstderr: ${serverErr}`
+    )
+  }
+}
+
+// ---- An RSA certificate on the TLS servers, against openssl and curl (TLS RSA S1) ----
+//
+// `tests/link/net_tls_rsa_server` checks its own handshakes under the RSA-2048
+// leaf, HTTP/3 over QUIC among them; this asks TLS 1.3 stacks somebody else
+// wrote. The program run as `serve h1 2` serves HTTP/1.1 over TLS for two
+// connections: openssl s_client -tls1_3, which must print the certificate,
+// TLSv1.3, an AEAD suite and an RSA-PSS peer signature, then curl --tlsv1.3,
+// which must GET the page. Run as `serve h2 1` it serves HTTP/2 over TLS: an
+// s_client that offers only ecdsa_secp256r1_sha256 must be refused with
+// handshake_failure (alert 40), since the server signs with rsa_pss_rsae_sha256
+// alone, and curl --http2 --tlsv1.3 must then GET the page over HTTP/2.
+// openssl and curl are on CI's runners, so a missing one is a failure here.
+if (dealtHere("tlsRsa")) {
+  const rsaDir = path.join(buildDir, "net-tls-rsa")
+  fs.rmSync(rsaDir, { recursive: true, force: true })
+  fs.mkdirSync(rsaDir, { recursive: true })
+  const exe = path.join(rsaDir, "app")
+  const built = spawnNish(
+    [
+      path.join(root, "tests", "link", "net_tls_rsa_server", "main.ts"),
+      "-o",
+      rsaDir + path.sep,
+      "--link",
+      exe,
+      ...linkProfile("net_tls_rsa_server"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  const run = (tool, args, input) =>
+    new Promise((resolve) => {
+      const child = spawn(tool, args, { stdio: ["pipe", "pipe", "pipe"] })
+      let out = ""
+      const timer = setTimeout(() => child.kill("SIGKILL"), 30000)
+      child.stdout.on("data", (chunk) => {
+        out += chunk
+      })
+      child.stderr.on("data", (chunk) => {
+        out += chunk
+      })
+      child.on("error", (error) => {
+        out += String(error)
+      })
+      child.on("close", (code, signal) => {
+        clearTimeout(timer)
+        resolve({ code, signal, out })
+      })
+      child.stdin.end(input)
+    })
+  /** Starts `serve <carrier> <count>`, runs `clients(port)`, and answers what the server printed after its port, and how it ended. */
+  const serve = async (carrier, count, clients) => {
+    const server = spawn(exe, ["serve", carrier, String(count)], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let served = ""
+    let serverErr = ""
+    const serverTimer = setTimeout(() => server.kill("SIGKILL"), 60000)
+    const serverDone = new Promise((resolve) =>
+      server.on("close", (code, signal) => {
+        clearTimeout(serverTimer)
+        resolve({ code, signal })
+      })
+    )
+    server.stderr.on("data", (chunk) => {
+      serverErr += chunk
+    })
+    const port = await new Promise((resolve) => {
+      server.stdout.on("data", (chunk) => {
+        served += chunk
+        const m = /^port (\d+)\n/.exec(served)
+        if (m !== null) {
+          resolve(Number(m[1]))
+        }
+      })
+      server.on("close", () => resolve(0))
+    })
+    if (port > 0) {
+      await clients(port)
+    } else {
+      server.kill("SIGKILL")
+    }
+    const ended = await serverDone
+    const lines = served.replace(/^port \d+\n/, "").split("\n").filter((line) => line !== "")
+    return { ended, lines, detail: `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(served)}\nstderr: ${serverErr}` }
+  }
+  if (check("net_tls_rsa_server: the server links", built.status === 0, String(built.stderr))) {
+    const h1 = await serve("h1", 2, async (port) => {
+      const s = await run("openssl", ["s_client", "-connect", `127.0.0.1:${port}`, "-tls1_3", "-alpn", "http/1.1"], "Q\n")
+      check(
+        "net_tls_rsa_server: openssl s_client -tls1_3 completes under the RSA certificate: TLSv1.3, an AEAD suite, peer signature RSA-PSS",
+        /subject=CN ?= ?localhost/.test(s.out) &&
+          /New, TLSv1\.3, Cipher is TLS_(AES_128_GCM_SHA256|AES_256_GCM_SHA384|CHACHA20_POLY1305_SHA256)/.test(s.out) &&
+          /Peer signature type: RSA-PSS/.test(s.out),
+        `exit ${s.code} signal ${s.signal}\n${s.out.slice(-2500)}`
+      )
+      const c = await run("curl", ["-sS", "-k", "--max-time", "10", "--tlsv1.3", "--http1.1", `https://127.0.0.1:${port}/hello`, "-w", "%{http_version} %{http_code}\n"], "")
+      check(
+        "net_tls_rsa_server: curl --tlsv1.3 GETs the page over HTTP/1.1 under the RSA certificate",
+        c.code === 0 && c.out === "hello\n1.1 200\n",
+        `exit ${c.code} signal ${c.signal}\n${c.out.slice(-1500)}`
+      )
+    })
+    check(
+      "net_tls_rsa_server: the HTTP/1.1 server closes both connections and exits 0",
+      h1.ended.code === 0 && h1.lines.length === 2 && h1.lines.every((line) => line === "closed: alpn http/1.1"),
+      h1.detail
+    )
+    const h2 = await serve("h2", 1, async (port) => {
+      const s = await run(
+        "openssl",
+        ["s_client", "-connect", `127.0.0.1:${port}`, "-tls1_3", "-alpn", "h2", "-sigalgs", "ecdsa_secp256r1_sha256"],
+        "Q\n"
+      )
+      check(
+        "net_tls_rsa_server: an s_client offering only ecdsa_secp256r1_sha256 is refused with handshake_failure",
+        s.code !== 0 && /alert handshake failure/.test(s.out) && /Cipher is \(NONE\)/.test(s.out),
+        `exit ${s.code} signal ${s.signal}\n${s.out.slice(-2500)}`
+      )
+      const c = await run("curl", ["-sS", "-k", "--max-time", "10", "--tlsv1.3", "--http2", `https://127.0.0.1:${port}/hello`, "-w", "%{http_version} %{http_code}\n"], "")
+      check(
+        "net_tls_rsa_server: curl --http2 --tlsv1.3 GETs the page over HTTP/2 under the RSA certificate",
+        c.code === 0 && c.out === "hello\n2 200\n",
+        `exit ${c.code} signal ${c.signal}\n${c.out.slice(-1500)}`
+      )
+    })
+    check(
+      "net_tls_rsa_server: the HTTP/2 server answers the one request and exits 0",
+      h2.ended.code === 0 && h2.lines.length === 1 && h2.lines[0] === "answered 1",
+      h2.detail
     )
   }
 }
