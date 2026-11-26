@@ -6067,7 +6067,9 @@ export const main = (): i32 => {
   element `i` held before it; and `compareExchange(i, expected, desired)`.
   `length` is a `readonly` field, fixed by `new AtomicI32Array(n)`, which
   makes `n` elements, each `0`; a negative `n` stops the program as
-  `new Array` of one does. `AtomicI64Array` is the same over `i64`, its index
+  `new Array` of one does, and `atomicI32ArrayChecked(n)` (with
+  `atomicI64ArrayChecked(n)`) returns the array as a `Result` instead, an
+  `Err` for a negative `n`. `AtomicI64Array` is the same over `i64`, its index
   still an `i32`.
 - **An index is checked as an array index is**: one out of range stops the
   program with `index out of range: 16 >= 16` and exit status 1, and never
