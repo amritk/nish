@@ -65,6 +65,14 @@
  *    IORING_FEAT_EXT_ARG (a kernel before 5.11, forced by the setup hook)
  *    answers -EOPNOTSUPP, and its set still accepts through `nish_uring_wait`
  *    (NURING-45).
+ *  - `direct_rings`: a set of several rings (2 slots a ring) takes the
+ *    direct wait only while busy. With no events yet it answers
+ *    -EOPNOTSUPP, sending the caller to `nish_uring_fd`; after waits that
+ *    handed out events it sleeps in its first ring for at most
+ *    UR_DIRECT_BUSY_MS, not UR_SLEEP_MAX_MS; a sleep followed by no events
+ *    sends the next call back to the descriptor; and a byte that arrives on
+ *    a client of the second ring alone, while the first ring is the one slept
+ *    in, is still taken by the wait that follows (NURING-55).
  *  - `fallback`: io_uring refused or incomplete. A seccomp filter answers
  *    io_uring_setup with EPERM, ENOSYS or EINVAL, or io_uring_register with
  *    EPERM or EINVAL; the UR_SYS_SETUP and UR_SYS_REGISTER hooks answer
@@ -1095,6 +1103,122 @@ static int direct_until(struct nish_uring_set *s, int watch, int kind) {
   return -1;
 }
 
+/* Take events through the set's descriptor, as a caller does when a direct
+ * wait answers -EOPNOTSUPP, until `want` of `kind` arrive within 2 seconds.
+ * Their rings and slots go to `ring` and `slot` when given. Answers how
+ * many arrived. */
+static int via_fd(struct nish_uring_set *s, int kind, int want, int *ring, int *slot) {
+  struct nish_uring_event ev[EVENTS_MAX];
+  int got = 0;
+  long long deadline = now_ms() + 2000;
+  while (got < want && now_ms() < deadline) {
+    struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
+    if (poll(&q, 1, nish_uring_sleep_ms(s, 100)) < 0) return got;
+    int n = nish_uring_wait(s, 0, ev, EVENTS_MAX);
+    for (int i = 0; i < n && got < want; i++) {
+      if (ev[i].kind != kind) continue;
+      if (ring) ring[got] = ev[i].ring;
+      if (slot) slot[got] = ev[i].slot;
+      got++;
+    }
+  }
+  return got;
+}
+
+static int direct_rings(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(30);
+  socklen_t al = sizeof(struct sockaddr_in);
+  struct sockaddr_in a;
+  int l = socket(AF_INET, SOCK_STREAM, 0);
+  memset(&a, 0, sizeof a);
+  a.sin_family = AF_INET;
+  a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  if (l < 0 || bind(l, (struct sockaddr *)&a, sizeof a) != 0 || listen(l, 64) != 0 ||
+      getsockname(l, (struct sockaddr *)&a, &al) != 0)
+    return fail("listener");
+  struct nish_uring_set *s;
+  struct nish_uring_opts o = {2, 4, 0, 0, 0, 0, 0};
+  int rc = nish_uring_open(&s, l, &o);
+  if (rc < 0) {
+    fprintf(stderr, "uring-test: open answered %d\n", rc);
+    return 1;
+  }
+  if (!s->rings[0]->ext_arg) {
+    printf("skip: this kernel has no IORING_FEAT_EXT_ARG (before 5.11)\n");
+    return SKIP;
+  }
+
+  /* Three clients fill the first ring's 2 slots and spill into a second. */
+  int c[3], ring[3], slot[3];
+  for (int i = 0; i < 3; i++) {
+    c[i] = socket(AF_INET, SOCK_STREAM, 0);
+    if (c[i] < 0 || connect(c[i], (const struct sockaddr *)&a, sizeof a) != 0) return fail("client connect");
+    if (via_fd(s, NISH_URING_ACCEPTED, 1, &ring[i], &slot[i]) != 1) return fail("a client was not accepted");
+  }
+  int second = -1;
+  for (int i = 0; i < 3; i++)
+    if (ring[i] > 0) second = i;
+  if (s->nrings < 2 || second < 0) return fail("three clients at 2 slots a ring did not make a second ring");
+  struct nish_uring_event ev[EVENTS_MAX];
+  while (nish_uring_wait(s, 0, ev, EVENTS_MAX) > 0) {
+  }
+
+  /* Busy: the accepts were events, so the set sleeps in its first ring, for
+     the busy bound rather than UR_SLEEP_MAX_MS. An attempt the scheduler
+     stretches is tried again, up to 5 times, each after events. */
+  struct nish_uring_stats st;
+  int quick = 0;
+  for (int attempt = 0; attempt < 5 && !quick; attempt++) {
+    if (attempt > 0) {
+      if (write(c[0], "w", 1) != 1) return fail("client write");
+      if (via_fd(s, NISH_URING_DATA, 1, NULL, NULL) != 1) return fail("a byte on the first ring did not arrive");
+    }
+    nish_uring_stats(s, &st);
+    int64_t before = st.direct_waits;
+    long long t0 = now_ms();
+    if (nish_uring_wait_direct(s, -1, 1, 1000) != 0) return fail("a busy set of rings was refused the direct wait");
+    long long took = now_ms() - t0;
+    nish_uring_stats(s, &st);
+    if (st.direct_waits != before + 1) return fail("a busy set of rings did not sleep in its first ring");
+    quick = took < UR_SLEEP_MAX_MS - 1;
+  }
+  if (!quick) return fail("a busy set of rings slept the whole idle bound in its first ring 5 times");
+
+  /* That sleep handed out nothing, so the next call sends the caller back to
+     the set's descriptor, whose eventfds wake it for any ring. */
+  if (nish_uring_wait(s, 0, ev, EVENTS_MAX) != 0) return fail("events with no client writing");
+  if (nish_uring_wait_direct(s, -1, 1, 1000) != -EOPNOTSUPP)
+    return fail("an idle set of rings took the direct wait, which the other rings' completions cannot end");
+
+  /* Busy again, through the descriptor, on a byte to the first ring; then a
+     byte to a client of the second ring alone is taken by the wait after a
+     sleep in the first ring, which it did not wake. */
+  if (write(c[0], "v", 1) != 1) return fail("client write");
+  if (via_fd(s, NISH_URING_DATA, 1, NULL, NULL) != 1) return fail("a byte on the first ring did not arrive");
+  if (write(c[second], "s", 1) != 1) return fail("client write");
+  struct timespec d = {0, 20 * 1000 * 1000};
+  nanosleep(&d, NULL);
+  if (nish_uring_wait_direct(s, -1, 1, 1000) != 0) return fail("a busy set of rings was refused the direct wait");
+  int seen = 0;
+  long long deadline = now_ms() + 2000;
+  while (!seen && now_ms() < deadline) {
+    int n = nish_uring_wait(s, 0, ev, EVENTS_MAX);
+    for (int i = 0; i < n; i++) seen |= ev[i].kind == NISH_URING_DATA && ev[i].ring == ring[second];
+    if (!seen && n == 0) {
+      struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
+      (void)poll(&q, 1, nish_uring_sleep_ms(s, 100));
+    }
+  }
+  if (!seen) return fail("a byte to the second ring was not taken after a sleep in the first");
+  nish_uring_destroy(s);
+  for (int i = 0; i < 3; i++) close(c[i]);
+  close(l);
+  return 0;
+}
+
 static int direct(void) {
   int p = nish_uring_probe();
   if (probe_skips(p)) return SKIP;
@@ -1882,6 +2006,7 @@ int main(int argc, char **argv) {
   if (strcmp(argv[1], "nomem") == 0) return nomem();
   if (strcmp(argv[1], "shutclose") == 0) return shutclose();
   if (strcmp(argv[1], "direct") == 0) return direct();
+  if (strcmp(argv[1], "direct_rings") == 0) return direct_rings();
   if (strcmp(argv[1], "coalesce") == 0) return coalesce();
   if (strcmp(argv[1], "inflight") == 0) return inflight();
   if (strcmp(argv[1], "pool") == 0) return pool();

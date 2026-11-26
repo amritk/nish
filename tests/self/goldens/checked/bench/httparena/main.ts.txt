@@ -63074,5 +63074,5 @@ function (worker, port, h2cPort) => ...(worker: i32, port: i32, h2cPort: i32): v
   stackSites=0 stackLocals=0
 function (worker, server) => ...(worker: i32, server: ArenaServer): void -> @nish_main$arrow1
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer server: size=112 writesThrough=false captured=false
+  pointer server: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0

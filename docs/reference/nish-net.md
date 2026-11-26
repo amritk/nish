@@ -7,6 +7,7 @@ Non-blocking sockets for a program that owns its loop: TCP, UDP, Unix-domain soc
 ```ts
 import {
   NET_LISTEN_RING,
+  NET_LISTEN_RING_WIDE,
   NET_SO_KEEPALIVE,
   NET_SO_RCVBUF,
   NET_SO_SNDBUF,
@@ -1244,6 +1245,9 @@ answers the errno. A listener whose rings fail for want of descriptors or
 memory serves descriptors itself, and a later listener asks again. Off
 Linux the flag is accepted and does nothing.
 
+Flag 16, `NET_LISTEN_RING_WIDE`, with flag 8, makes each ring hold as
+many slots as `RLIMIT_NOFILE` allows, up to 65,536 rather than 16,384.
+
 ```ts
 const tcpListenFlags: (
   host: string,
@@ -1274,14 +1278,15 @@ The length of the accept queue.
 <scalar-field name="flags" type="i32" required>
 
 The sum of the flags: `3` is both, `5` and `7` steer, `8`
-  accepts into rings, and `0` is `tcpListen` exactly.
+  accepts into rings, `24` into wide ones, and `0` is `tcpListen` exactly.
 
 </scalar-field>
 
 <scalar-field name="returns" type="i32">
 
 The listener's descriptor or the failure: `-22` for any other
-  bit, a negative `flags`, or flag 4 without 1, before a socket is made;
+  bit, a negative `flags`, flag 4 without 1, or flag 16 without 8, before
+  a socket is made;
   `-95` for flag 4 off Linux; `-23` once the process has opened 31 ring
   listeners, closed or not.
 
@@ -1645,6 +1650,14 @@ The array the two descriptors are written into, as `fds[0]`
 `NET_LISTEN_RING: i32`
 
 `tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors.
+
+</scalar-card>
+
+<scalar-card title="NET_​LISTEN_​RING_​WIDE" icon="phosphor/regular/hash">
+
+`NET_LISTEN_RING_WIDE: i32`
+
+`tcpListenFlags` flag 16, with flag 8: rings of up to 65,536 slots rather than 16,384.
 
 </scalar-card>
 
