@@ -115,10 +115,11 @@ notice and is listed in `THIRD_PARTY_NOTICES.md`.
 before its code ([`contracts/README.md`](contracts/README.md)), and a change to
 a module with a spec reruns vector's `check` and `mutate` on its contract.
 `node scripts/rfc-specs.mjs` (in `npm run lint`) fails on an RFC a `std/` file
-cites that no contract of that module covers and no line of
-`scripts/rfc-unspecified.txt` lists. Its lines from before the rule only
-shrink; a `cites:` line there, with its reason, is for an RFC the file cites
-and does not implement.
+cites that no spec of that module covers (its contract, and the test emitted
+from it) and no line of `scripts/rfc-unspecified.txt` lists. That list's lines
+from before the rule are pinned by `PRE_RULE_SHA256` and only go, with
+`--update-baseline`; a `cites:` line there, with its reason, is for an RFC the
+file cites and does not implement.
 
 **Attacker-facing code ships with its security record.** A new `std/net` or
 `std/crypto` module, `runtime/*.c` file, or builtin or `nish:` module that reads

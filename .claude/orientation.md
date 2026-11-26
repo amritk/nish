@@ -103,9 +103,9 @@ that passed no clause fails. The rest are run by hand: `build-spec`,
 `.vector-version` pins (`bash scripts/fetch-vector.sh`); `contracts/README.md`
 has the commands and the `vector-spec` skill is the walkthrough. Which modules
 must land this way is `node scripts/rfc-specs.mjs`'s, in `npm run lint`: an RFC
-a `std/` file cites needs a contract of that module or a line in
-`scripts/rfc-unspecified.txt`, which only shrinks. Knip takes
-`test/spec/*.ts` as entries, because the module it imports does not exist until
+a `std/` file cites needs a spec of that module (its contract and emitted test)
+or a line in `scripts/rfc-unspecified.txt`, whose lines from before the rule
+only shrink. Knip takes `test/spec/*.ts` as entries, because the module it imports does not exist until
 the second PR.
 
 ## Commands

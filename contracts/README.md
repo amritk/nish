@@ -10,21 +10,30 @@ Which gates CI runs and which stay by hand: the spec-first paragraph of
 ## Which modules need one
 
 A `std/` module that implements an RFC lands spec-first, and
-`node scripts/rfc-specs.mjs` (in `npm run lint`) holds the tree to it. Each
-`RFC <n>` a `std/**/*.ts` file cites, comments included, needs one of:
+`node scripts/rfc-specs.mjs` (in `npm run lint`) holds the tree to it. It reads
+a `std/**/*.ts` file as text, comments and identifiers included, and takes
+`RFC` or `RFCs` and a number in either case as a citation: `RFC 7748`,
+`RFC-7748`, `rfc822Name`, `rfc-editor.org/rfc/rfc9000`, and each number of
+`RFCs 8446 and 9001` or `RFC 5208/5958`. Each pair of file and RFC needs one of:
 
 - a contract here whose `target.module` is that file's module and whose
-  `sources` include RFC `<n>`. vector writes both fields from the spec, so
+  `sources` include the RFC, with its spec `specs/<name>.md` and the test
+  `test/spec/<name>.ts` vector emitted from it, which pins the contract's
+  SHA-256. A contract with no such test covers nothing and fails the check.
   `contracts/rfc7748-x25519.json` covers `std/crypto/x25519.ts`'s citations
   of RFC 7748 and nothing else.
 - a line `std/<file>.ts RFC<n>` in
   [`scripts/rfc-unspecified.txt`](../scripts/rfc-unspecified.txt), for a pair
-  that predates the rule. These lines only shrink. A spec that covers one, or
-  an edit that drops the citation, fails the check until the line goes, and
-  `node scripts/rfc-specs.mjs --update-baseline` deletes them.
+  that predates the rule. These lines only shrink: `PRE_RULE_SHA256` in the
+  script pins their set, so a line added, swapped or deleted by hand fails. A
+  spec that covers one, or an edit that drops the citation, fails the check
+  until `node scripts/rfc-specs.mjs --update-baseline` deletes the line and
+  re-pins the set. That command runs only on the pinned set, refuses to add a
+  line, and rewrites the file, dropping any comment but its header.
 - a line `std/<file>.ts RFC<n> cites: <reason>` there, for an RFC the file
-  names without implementing it (out of scope, or only a pointer to another
-  module's RFC). The reason is what a reviewer weighs.
+  names without implementing it (out of scope, a field named after it, or a
+  pointer to another module's RFC). These may be added. The reason is what a
+  reviewer weighs, and the check asks only that there is one.
 
 The check covers whole RFCs, not sections. A spec that profiles one section
 of RFC 8446 covers the module's every citation of RFC 8446. How much of the

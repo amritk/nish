@@ -6,11 +6,14 @@
 # (contracts/README.md): its spec's contract covers the pair, and its line goes.
 #
 #   std/<file>.ts RFC<n>                    predates the rule. These only shrink:
-#                                           --update-baseline drops them and refuses
-#                                           to add one; --grow-baseline adds them,
-#                                           only for a change to the rule itself
+#                                           PRE_RULE_SHA256 in scripts/rfc-specs.mjs
+#                                           pins their set, so never add, swap or
+#                                           delete one by hand; --update-baseline
+#                                           drops stale ones and re-pins it
 #   std/<file>.ts RFC<n> cites: <reason>    the file cites the RFC and does not
 #                                           implement it; the reason says why
+#
+# --update-baseline rewrites this file: comments other than this header go.
 
 std/base64.ts RFC4648
 std/bytes.ts RFC3629
@@ -243,3 +246,5 @@ std/temporal.ts RFC3339
 std/temporal.ts RFC9557
 std/term-pixels.ts RFC4648
 std/yaml-json.ts RFC8259
+
+std/crypto/x509.ts RFC822 cites: rfc822Name, a subjectAltName form RFC 5280 names after RFC 822; the module checks only that it is an IA5String and parses no address from it
