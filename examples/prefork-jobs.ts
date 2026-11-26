@@ -1,16 +1,3 @@
-// Opt-out (`--allow-panics`): this file keeps no panic site of its own, and
-// nothing in `std/bytes`, `std/sync/ring` or `preforkSupervise`'s config
-// contract stops it: the byte accessors are the checked `tryGetI32LE` kin,
-// and `tryPreforkWith` answers a bad config as `Err`. What is left:
-// `createRegion`, `openRegion` and `unlinkRegion` reach the `ffi-nul` check
-// of the region's name (std/sync/shm.ts:217:33, :241:31, :260:33), proven only
-// for a literal (`foreignStringIsNulFree`) though `std/sync/shm` refuses a name
-// with a NUL before the call, a `src/` gap (#1846, prover-gaps); and
-// `tryPreforkWith` reaches the `netRead` window of `preforkDiscard`
-// (std/net/prefork.ts:1169:10), which #2279 (for #2208) proves. Once both are
-// gone, build this file without `--allow-panics`.
-// smoke: args --allow-panics
-//
 // Work handed across cores without a socket: `nish/net/prefork` starts five
 // worker processes, worker 0 owns a table of counters, and workers 1 to 4
 // send it jobs ("add this to counter k") through one shared `MpscRing` and get
@@ -19,7 +6,7 @@
 // it starts the workers, which open it by name; when they have all exited the
 // supervisor reads the totals out of the region and unlinks it.
 //
-//     build/nish --allow-panics examples/prefork-jobs.ts --link build/prefork-jobs
+//     build/nish examples/prefork-jobs.ts --link build/prefork-jobs
 //     build/prefork-jobs           # 4 workers sent 40000 jobs, ...
 //     build/prefork-jobs my-name   # the region is /dev/shm/my-name
 //

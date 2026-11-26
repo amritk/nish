@@ -205,12 +205,16 @@ Releases ride a train; nothing is published from a developer machine.
    pushes.
 
 3. **`release.yml`** runs on the tag:
-   - `ci` calls `ci.yml` through `workflow_call`;
+   - `verdict` (`scripts/ci-verdict.mjs`) looks for a green `ci.yml` run that
+     release-pr.yml dispatched at `release/next` on a commit with the tag's
+     tree, and `ci` calls `ci.yml` through `workflow_call` only when it finds
+     none ([wp10](wp10-ci.md#the-release-reuses-the-release-prs-run));
    - `targets` refuses anything but a tag equal to `package.json#version`, then
      asks `.github/seed-due.sh` which assets this version is due to carry;
    - `binaries` is a matrix over that answer, one job per target on a runner
      of its own architecture, with nothing cross-compiled: it checks the
-     runner's `uname` against the row's `host`, fetches the previous release
+     runner's `uname` against the row's `host` (it needs only `targets`, so it
+     builds while `ci` runs), fetches the previous release
      for that platform as the seed, runs `scripts/bootstrap.sh --verify`,
      stages and tars the result, smoke-tests the unpacked tarball, and packs
      the platform package;

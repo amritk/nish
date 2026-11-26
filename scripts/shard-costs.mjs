@@ -213,6 +213,7 @@ const RECOGNIZERS = {
   // Not thread_mutex_counter's line, which is `threadWasi`'s.
   wasiLinks: /^(skipped: )?link\/(?!thread_mutex_counter:)\w+: (the `--profile wasi` build|no WASI sysroot)/,
   wasmHost: /^(wasm-host: |wasm-ld not installed)/,
+  stdPanics: /^std-panics: /,
   persist: /^persist: /,
   wasmPages: /^page-frame: /,
   sizeBudgets: /^wasm-size: /,

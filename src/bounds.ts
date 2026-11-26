@@ -2091,7 +2091,10 @@ const conditionFacts = (walk: BoundsWalk, state: State, cond: Node): ConditionFa
   // `a < b` is false exactly when `b <= a`, and so on around the four
   // relations: each one proves something on both sides of the branch.
   if (op === "<") {
-    return factsFrom(orderFacts(walk, state, left, right, true), orderFacts(walk, state, right, left, false))
+    return factsFrom(
+      concatFacts(orderFacts(walk, state, left, right, true), nulFreeFacts(walk, left, right)),
+      orderFacts(walk, state, right, left, false)
+    )
   }
   if (op === "<=") {
     return factsFrom(orderFacts(walk, state, left, right, false), orderFacts(walk, state, right, left, true))
@@ -2100,9 +2103,27 @@ const conditionFacts = (walk: BoundsWalk, state: State, cond: Node): ConditionFa
     return factsFrom(orderFacts(walk, state, right, left, true), orderFacts(walk, state, left, right, false))
   }
   if (op === ">=") {
-    return factsFrom(orderFacts(walk, state, right, left, false), orderFacts(walk, state, left, right, true))
+    return factsFrom(
+      orderFacts(walk, state, right, left, false),
+      concatFacts(orderFacts(walk, state, left, right, true), nulFreeFacts(walk, left, right))
+    )
   }
   return new ConditionFacts()
+}
+
+/**
+ * `s.indexOf("\u0000") < 0` with `s` a string local: `s` holds no NUL code
+ * unit, recorded as `FACT_EXCLUDES` of 0 on the string (#2298), which no
+ * integer reader of that family can meet. An assignment to `s` forgets it like
+ * any fact; a string's bytes never change under it. `search` is the left
+ * operand and `bound` the right one; anything else proves nothing.
+ */
+const nulFreeFacts = (walk: BoundsWalk, search: Node, bound: Node): Fact[] => {
+  const s = nulSearchOf(walk.ctx, search)
+  if (s === null || literalValue(bound) !== 0) {
+    return []
+  }
+  return [new Fact(FACT_EXCLUDES, s, null, 0)]
 }
 
 /**
@@ -3042,6 +3063,53 @@ const isCharCodeAt = (ctx: CheckContext, call: Node): boolean => {
     return false
   }
   return ctx.program.nodeTypes[callee.children[0].id] === T_STRING
+}
+
+/**
+ * The local `s` of `s.indexOf("\u0000")`, the search for a NUL code unit, or
+ * null: its answer is below 0 exactly when a string `s` holds no NUL, so C
+ * reads all of it (`nulFreeFacts`). The receiver must type as `string` at
+ * the search itself, so a class's own `indexOf` on a `string | C` local that
+ * is later narrowed to `string` proves nothing.
+ */
+const nulSearchOf = (ctx: CheckContext, expr: Node): Local | null => {
+  const call = unwrapBoundsParens(expr)
+  if (call.kind !== NodeKind.Call || call.children[1].children.length !== 1) {
+    return null
+  }
+  const callee = unwrapBoundsParens(call.children[0])
+  const needle = unwrapBoundsParens(call.children[1].children[0])
+  if (
+    callee.kind !== NodeKind.Member ||
+    callee.text !== "indexOf" ||
+    needle.kind !== NodeKind.String ||
+    needle.text !== String.fromCharCode(0)
+  ) {
+    return null
+  }
+  const receiver = unwrapBoundsParens(callee.children[0])
+  return ctx.program.nodeTypes[receiver.id] === T_STRING ? localOf(ctx.program, receiver) : null
+}
+
+/**
+ * A `string` argument of a call to a `declare function` that names a local a
+ * guard proved NUL-free (`nulFreeFacts`), in the state the callee starts in:
+ * `emitForeignString` hands it to C without the search, and the attribute
+ * pass records no `ffi-nul` site for it (`foreignStringIsNulFree`, #2298).
+ */
+const judgeForeignStrings = (walk: BoundsWalk, state: State, call: Node): void => {
+  const ctx = walk.ctx
+  const target = ctx.program.nodeCallees[call.id]
+  if (target === null || !target.foreign()) {
+    return
+  }
+  for (const arg of call.children[1].children) {
+    const inner = unwrapBoundsParens(arg)
+    const v = localOf(ctx.program, inner)
+    if (v !== null && ctx.program.nodeTypes[inner.id] === T_STRING && knownExcludes(state, v, 0)) {
+      noteProof(walk, inner)
+    }
+  }
 }
 
 /**
@@ -4358,6 +4426,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
       judgePop(walk, state, e)
     }
     judgeRangeCheck(walk, state, e)
+    judgeForeignStrings(walk, state, e)
     if (callsNothing(ctx, e)) {
       return
     }
@@ -5560,11 +5629,12 @@ export const analyzeBounds = (ctx: CheckContext, body: Node): BoundsWalk => {
 
 /**
  * Whether `node` holds anything `judge`, `judgeClampBound`, `judgeRange`,
- * `judgeDivision`, `judgePop`, `judgeRangeCheck` or `judgeArrayLength` is ever
+ * `judgeDivision`, `judgePop`, `judgeRangeCheck`, `judgeArrayLength` or
+ * `judgeForeignStrings` is ever
  * called on: an element access, a call spelled `.charCodeAt(...)`,
  * `.substring(...)`, `.pop()`, `.spawn(...)`, `.slice(...)`, `.set(...)` or
  * `.fromBytes(...)` whatever its receiver, an atomic array's element method,
- * a buffer call, a call into a window guard or forward, a `new`, a
+ * a buffer call, a call into a window guard or forward, a foreign call, a `new`, a
  * division, or a value entering a range. Read
  * off the syntax and the entries the checker recorded, so it answers `true`
  * for more than the walk judges, never less.
@@ -5596,6 +5666,10 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
       target !== null &&
       (isArraySliceInstance(target) || isAtomicArrayMethod(target) || target.window.length === 3)
     ) {
+      return true
+    }
+    // A foreign call, whose string arguments `judgeForeignStrings` proves NUL-free.
+    if (target !== null && target.foreign()) {
       return true
     }
   }

@@ -5,7 +5,7 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1057,
+  "total": 1054,
   "explicit": {
     "kept": 363,
     "toFix": 7
@@ -257,9 +257,6 @@
     },
     "std/sync/ring.ts": {
       "panic": 16
-    },
-    "std/sync/shm.ts": {
-      "ffi-nul": 3
     },
     "std/temporal.ts": {
       "panic": 1,

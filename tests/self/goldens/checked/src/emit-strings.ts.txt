@@ -581,9 +581,10 @@ function stringConstructCallees(name: string, proven: boolean): string[] -> @str
   calls: nish_array_grow nish_str_eq
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
-function foreignStringIsNulFree(arg: Node): boolean -> @foreignStringIsNulFree [exported]
+function foreignStringIsNulFree(program: CheckedProgram, arg: Node): boolean -> @foreignStringIsNulFree [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: nish_arena_mark nish_arena_release nish_str_index_of nish_str_index_of_from nish_str_new unwrapBoundsParens
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_str_index_of nish_str_index_of_from nish_str_new unwrapBoundsParens
+  pointer program: size=928 writesThrough=false captured=false
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
   local +0:9 inner: Node (const)
@@ -601,7 +602,7 @@ function emitForeignString(emitter: Emitter, arg: Node, value: string, callee: F
   escaping: index
   calls: Emitter.stringConstant Emitter.typeOf Emitter.useRuntime IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable emitPanicTail foreignStringIsNulFree nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_new unwrapBoundsParens
   pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.typeOf#0 Emitter.stringConstant#0 Emitter.useRuntime#0 emitPanicTail#0 Emitter.stringConstant#0
-  pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0 foreignStringIsNulFree#0 Emitter.typeOf#1
+  pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0 foreignStringIsNulFree#1 Emitter.typeOf#1
   pointer callee: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)

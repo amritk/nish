@@ -18,7 +18,8 @@
     "json-comp",
     "baseline-h2c",
     "json-h2c",
-    "async-db"
+    "async-db",
+    "connections-1m"
   ],
   "maintainers": [
     "amritk"

@@ -27,12 +27,12 @@ unchanged.
 `unlinkRegion(name)` removes the name. Each answers a `Result`, which the
 examples on this page unwrap with `expect`. They build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): `expect` stops the
-program on an error, and `nish/sync/shm` and `nish/sync/ring` keep panic sites
-no proof removes yet. Test `r.isErr()` before reading `r.value`, and put a
-guard such as `i < xs.length` before an index, and the rest builds under the
-default once the standard library is made panic-free:
+program on an error, and `nish/sync/ring` keeps panic sites no proof removes
+yet. `nish/sync/shm` keeps none: test `r.isErr()` before reading `r.value`,
+and put a guard such as `i < xs.length` before an index, and a program that
+uses only it builds under the default:
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: unwraps a `Result` with `expect` -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { ACQUIRE, createRegion, openRegion, RELEASE, unlinkRegion } from "nish/sync/shm";
@@ -74,7 +74,7 @@ A region is read and written through **slots** at byte offsets: `loadI32`,
 five for `I64`. Each is one atomic access, with the ordering you name:
 `RELAXED`, `ACQUIRE`, `RELEASE`, `ACQ_REL` or `SEQ_CST`.
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: unwraps a `Result` with `expect` -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { ACQ_REL, createRegion, SEQ_CST, unlinkRegion } from "nish/sync/shm";
@@ -94,9 +94,9 @@ export const main = (): i32 => {
 
 - **Offsets are checked, as array indexes are.** A slot must lie inside the
   region and at a multiple of its width (4 for `I32`, 8 for `I64`). The
-  module keeps this check at run time, which is why a call to it needs
-  `--allow-panics` for now, and anything else stops the program there with a
-  message naming the offset, such as
+  runtime makes this check inside the call, so it needs no `--allow-panics`,
+  and an offset that fails it stops the program there with a message naming
+  the offset, such as
   `nish/sync/shm: slot offset 4 is not a multiple of 8, the slot's width`.
   Lay a region out with constants, a 64-bit slot at a multiple of 8.
 - **Bytes go through `read` and `write`**, which copy a window between the
@@ -115,7 +115,7 @@ consumer, in slots of a fixed size. The process that makes the region writes
 the ring's header with `initSpscRing` or `initMpscRing`; every other process
 finds it with `attachSpscRing` or `attachMpscRing`:
 
-<!-- allow-panics: unwraps a `Result` with `expect`; indexes an array without a guard the checker reads; calls `std/sync/ring.ts`, `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: unwraps a `Result` with `expect`; indexes an array without a guard the checker reads; calls `std/sync/ring.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { createRegion, unlinkRegion } from "nish/sync/shm";
@@ -177,7 +177,7 @@ record's bytes where they lie in the ring, as `lend` does a region's.
 and `commit(len)` publishes its first `len`; `peek()` answers the next record
 as a `readonly u8[]`, and `release()` frees it:
 
-<!-- allow-panics: unwraps a `Result` with `expect`; indexes an array without a guard the checker reads; calls `std/sync/ring.ts`, `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: unwraps a `Result` with `expect`; indexes an array without a guard the checker reads; calls `std/sync/ring.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { createRegion, unlinkRegion } from "nish/sync/shm";
@@ -252,7 +252,7 @@ a push rings the doorbell only when the consumer is asleep, so a busy ring
 makes no system call at all. On Linux, that is. Elsewhere `popWait` answers
 `SHM_UNSUPPORTED`, so a portable consumer falls back to polling:
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sync/ring.ts`, `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sync/ring.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { createRegion, SHM_UNSUPPORTED, unlinkRegion } from "nish/sync/shm";

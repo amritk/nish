@@ -76,7 +76,8 @@ export const PANIC_OVERFLOW: i32 = 13
 /**
  * A string handed to a `declare function` (WP27 S3.1) holds a NUL byte, which
  * C would read as its end. Proven, with no check emitted, for a literal that
- * holds none (`foreignStringIsNulFree` in `src/emit-strings.ts`).
+ * holds none and for a local a `s.indexOf("\u0000") < 0` guard proved free of
+ * one (`foreignStringIsNulFree` in `src/emit-strings.ts`).
  */
 export const PANIC_FFI_NUL: i32 = 14
 /**
@@ -1020,7 +1021,8 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
     case PANIC_FFI_NUL:
       return (
         "a C function reads a string to its first NUL byte, so a string that holds one panics before the call: " +
-        "pass a literal with no NUL in it, which needs no check"
+        "pass a literal with no NUL in it, or turn the string away first with " +
+        '`if (s.indexOf("\\u0000") >= 0) return`, and the check is proven'
       )
     case PANIC_FFI_NULL: {
       const reader = calledName(program, node)
