@@ -453,13 +453,14 @@ const arenaArg = (args: string[], k: i32, fallback: string): string =>
  * [workers] [dataset]`, defaulting to 8080, 8082, 0.0.0.0, 0, 0 (one worker
  * a core; `NISH_WORKERS` overrides any but 1) and `/data/dataset.json`.
  * `slots` above 0 is each listener's connections a worker; 0 sizes the
- * HTTP/1.1 slots for the fleet (`arenaSlots`) and gives h2c `MIN_SLOTS`. With more than one worker, `nish/net/prefork` binds
- * one steered `SO_REUSEPORT` listener a worker on the main port and pins
- * worker `k` to CPU `k`; the h2c port is a plain `SO_REUSEPORT` listener each
- * worker binds itself. Each serving process calls `listening(worker, port,
- * h2cPort)` once it is ready and `stopped(worker, server)` on SIGINT or
- * SIGTERM, then answers 0; the supervisor answers 0 once its workers are
- * gone, and 1 when it or a listener could not start.
+ * HTTP/1.1 slots for the fleet (`arenaSlots`) and gives h2c `MIN_SLOTS`.
+ * With more than one worker, `nish/net/prefork` binds one steered
+ * `SO_REUSEPORT` listener a worker on the main port and pins worker `k` to CPU
+ * `k`; the h2c port is a plain `SO_REUSEPORT` listener each worker binds
+ * itself. Each serving process calls `listening(worker, port, h2cPort)` once it
+ * is ready and `stopped(worker, server)` on SIGINT or SIGTERM, then answers 0;
+ * the supervisor answers 0 once its workers are gone, and 1 when it or a
+ * listener could not start.
  */
 export const arenaMain = (
   args: string[],

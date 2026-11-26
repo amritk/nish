@@ -1,9 +1,9 @@
 // The HttpArena entry (bench/httparena) against the rules HttpArena's
 // validate.sh applies to the profiles it serves, over loopback. The test runs
 // itself as `serve`, `arenaMain` with one worker on ports the kernel picks on
-// 0.0.0.0, as HttpArena runs it, and the eight-item dataset beside this file, and as `pg`, the stand-in
-// PostgreSQL of pg.ts that `DATABASE_URL` names; the driver is a plain client
-// of the server:
+// 0.0.0.0, as HttpArena runs it, and the eight-item dataset beside this file,
+// and as `pg`, the stand-in PostgreSQL of pg.ts that `DATABASE_URL` names; the
+// driver is a plain client of the server:
 //
 //   1. GET /baseline11 with a random `a` and `b` answers their sum,
 //      `text/plain`; a POST adds its body's number, sent with
@@ -42,9 +42,10 @@
 //  11. SIGTERM stops the server and it exits 0.
 //
 // Every wait is bounded: five seconds without a wake is a failure, never a
-// hang; section 10's 6 s idle is a pause, not a wait. The driver kills and reaps both children whatever its checks found;
-// a driver that died leaves the stand-in to exit once idle for 20 seconds,
-// and the server to answer until it is stopped.
+// hang; section 10's 6 s idle is a pause, not a wait. The driver kills and
+// reaps both children whatever its checks found; a driver that died leaves the
+// stand-in to exit once idle for 20 seconds, and the server to answer until it
+// is stopped.
 import {
   connectResult,
   netAddress,
