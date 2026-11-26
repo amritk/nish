@@ -16,6 +16,28 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-11-26
+
+### Added
+
+- Hold HttpArena's connections-1m fleet in bench/httparena (WP71 S2g) ([#2336](https://github.com/amritk/nish/pull/2336))
+- checker: Prove a checked string NUL-free at an ffi call ([#2340](https://github.com/amritk/nish/pull/2340))
+- interop: WP39 G7 — take an h2c peer by its preface on an opted-in HTTP/1.1 listener ([#2337](https://github.com/amritk/nish/pull/2337))
+
+### Performance
+
+- sqlite: A commit after a B-tree split truncates the page cache past the database's end, not its whole hash table ([#2347](https://github.com/amritk/nish/pull/2347))
+
+### Documentation
+
+- Plan WP90, a web-frameworks benchmark entry and the multipart reader it needs ([#2348](https://github.com/amritk/nish/pull/2348))
+- Set visited links further from the link colour and link the Roadmap issue from the README ([#2349](https://github.com/amritk/nish/pull/2349))
+
+### CI
+
+- Reuse the Release PR's green run for the release, and scope and split slow jobs ([#2342](https://github.com/amritk/nish/pull/2342))
+
+
 ## [0.48.0] - 2026-11-26
 
 ### Added
@@ -2393,3 +2415,4 @@ file per release, and each release's notes and downloads are on the
 [0.46.0]: https://github.com/amritk/nish/releases/tag/v0.46.0
 [0.47.0]: https://github.com/amritk/nish/releases/tag/v0.47.0
 [0.48.0]: https://github.com/amritk/nish/releases/tag/v0.48.0
+[0.49.0]: https://github.com/amritk/nish/releases/tag/v0.49.0

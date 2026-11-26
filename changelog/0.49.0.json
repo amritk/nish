@@ -1,0 +1,135 @@
+{
+  "version": "0.49.0",
+  "date": "2026-11-26",
+  "tag": "v0.49.0",
+  "range": {
+    "from": "v0.48.0",
+    "to": "c50beef33"
+  },
+  "entries": [
+    {
+      "id": "hold-httparena-s-connections-1m-fleet-in-bench",
+      "type": "feat",
+      "breaking": false,
+      "title": "hold HttpArena's connections-1m fleet in bench/httparena (WP71 S2g)",
+      "body": "The HttpArena entry now subscribes to connections-1m and is sized to hold its million keep-alive connections on 8080. It listens on 0.0.0.0, sets no connection cap below the fleet, and closes no idle connection before nish/net/http-server's 60 s idle timeout.\n\nWith slots 0, which the CMD now passes, arenaSlots gives each worker's HTTP/1.1 listener 4 times its even share of 1,000,000, at least 16,384 and at most 1,048,576: 62,500 a worker on HttpArena's 64-CPU server cpuset. The headroom absorbs prefork's uneven CPU steering under HttpArena's cpusets. The h2c listener keeps 16,384 slots, because its stream tables are allocated up front. A slots value above 0 keeps its old meaning.\n\nMemory per held connection is measured in bench/httparena/README.md: 235-237 bytes at 78,000 held on 4 workers (band 2 bytes), RSS only. A million was not held, and the figure is not extrapolated to one.\n\ntests/link/httparena_entry grows from 46 to 64 checks: serving on 0.0.0.0, /baseline11 on 127.0.0.2, .32 and .160, 200 connections held idle for 6 s and answered again, arenaSlots's edges, and the slots the CMD's slots 0 gave each listener.\n\nTests: tests/link/httparena_entry\nFixes #2313\nPart of #2323\nVerified: pr-adversary 1 round, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "37d7e92"
+      ],
+      "pr": 2336,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-26"
+    },
+    {
+      "id": "reuse-the-release-pr-s-green-run-for",
+      "type": "ci",
+      "breaking": false,
+      "title": "reuse the Release PR's green run for the release, and scope and split slow jobs",
+      "body": "A release no longer runs the whole of ci.yml a second time at the tag:\nrelease.yml's new `verdict` job (scripts/ci-verdict.mjs) finds the green\nci.yml run the Release PR dispatched on the tag's tree, and `ci` runs only\nwhen there is none or anything errors. `binaries` now builds beside `ci`.\n\nThe gfx jobs are scoped to the changes that reach them. The QUIC interop\nrunner is split into parallel rows per client, and its crosstraffic\nmeasurement runs only on a release's tag, so a PR's or main's interop run\nends about 10 minutes in instead of about 22. The interop build skips the\nRelease PR's merge push, and the shard cost table is refitted from main's\nruns.",
+      "metrics": [],
+      "refs": [
+        "docs/wp10-ci.md"
+      ],
+      "tests": [],
+      "commits": [
+        "6aae704"
+      ],
+      "pr": 2342,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-26"
+    },
+    {
+      "id": "prove-a-checked-string-nul-free-at-an",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "prove a checked string NUL-free at an ffi call",
+      "body": "The bounds prover now proves that a string argument at a foreign call is NUL-free when the code turned a NUL away first: `if (s.indexOf(\"\\u0000\") >= 0) return`, or its `< 0` mirror, on a local that is not reassigned before the call. The emitter then drops the `memchr` check and its `ffi-nul` panic. The proof is read only for a bare local, never for an element access or a `pop()` the prover proved in range.\n\n`nish/sync/shm`'s `createRegion`, `openRegion` and `unlinkRegion` now check for a NUL first, which clears their three `ffi-nul` sites. `examples/prefork-jobs.ts` builds without `--allow-panics`.\n\nFixes #2298",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/ffi_nul_guarded",
+        "tests/link/ffi_nul_element",
+        "tests/link/ffi_nul_pop",
+        "tests/link/ffi_nul_loop"
+      ],
+      "commits": [
+        "b6c4804"
+      ],
+      "pr": 2340,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-26"
+    },
+    {
+      "id": "plan-wp90-a-web-frameworks-benchmark-entry-and",
+      "type": "docs",
+      "breaking": false,
+      "title": "plan WP90, a web-frameworks benchmark entry and the multipart reader it needs",
+      "body": "Adds .claude/plans/wp90-web-frameworks.plan.md: entering nish in the-benchmarker/web-frameworks under scenario v2. S1 adds a multipart/form-data reader in nish/net/multipart with its security record, S2 the bench/web-frameworks entry, S3 the upstream PR kit. Filed as amritk/nish#2343, first under the Roadmap.",
+      "metrics": [],
+      "refs": [
+        ".claude/plans/wp90-web-frameworks.plan.md"
+      ],
+      "tests": [],
+      "commits": [
+        "af2dfc7"
+      ],
+      "pr": 2348,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-26"
+    },
+    {
+      "id": "set-visited-links-further-from-the-link-colour",
+      "type": "docs",
+      "breaking": false,
+      "title": "set visited links further from the link colour and link the Roadmap issue from the README",
+      "body": "The docs site's visited link was halfway between the link violet and the\nsecondary text grey, which in dark mode (#b69adb beside #b47cf0) could not be\ntold from an unvisited one. It is now a quarter violet (#b6a8d0 dark, #564b7e\nlight), still a link but visibly read. The README's project status now links\nthe Roadmap issue, where the open work is ordered one plan per sub-issue with\neach plan's stages under it.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "49eedc2"
+      ],
+      "pr": 2349,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-26"
+    },
+    {
+      "id": "wp39-g7-take-an-h2c-peer-by-its",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "WP39 G7 — take an h2c peer by its preface on an opted-in HTTP/1.1 listener",
+      "body": "HttpServer.listenHttp1 takes an optional fourth argument, h2c: Http2Config | null. With it set, the listener reads each new connection's first bytes against the 24-byte HTTP/2 connection preface: the first differing byte or an early close hands the connection to Http1Server with the bytes already read as its input; all 24 matching hands the socket to Http2CleartextServer with the preface already fed; a partial preface followed by silence is closed after prefaceTimeout. A PRI * HTTP/1.1 request matches for 11 bytes and is served as HTTP/1.1. There is no Upgrade: h2c. Without the argument nothing is read ahead and behaviour is unchanged.\n\nCarriers gain Http1Server.release(slot) and Http2CleartextServer.adopt(fd, preface). Security records: HTTPSRV-24 (Holds), HTTPSRV-25 (Low, open, untested), with adopt and release rows in the h2c and http1-codec records.\n\nTests: tests/link/net_http_server_h2c_preface and ten sibling cases\nFixes #2012",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "471394b"
+      ],
+      "pr": 2337,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-26"
+    },
+    {
+      "id": "a-commit-after-a-b-tree-split-truncates",
+      "type": "perf",
+      "scope": "sqlite",
+      "breaking": false,
+      "title": "a commit after a B-tree split truncates the page cache past the database's end, not its whole hash table",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c50beef"
+      ],
+      "pr": 2347,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-26"
+    }
+  ]
+}
