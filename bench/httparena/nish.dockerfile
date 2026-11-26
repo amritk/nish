@@ -33,6 +33,6 @@ RUN nish --allow-panics main.ts --link entry --profile speed
 
 EXPOSE 8080 8082
 
-# HTTP/1.1 on 8080, h2c on 8082, every interface, 16384 slots a worker, one
-# worker a core, the mounted dataset.
-CMD ["./entry", "8080", "8082", "0.0.0.0", "16384", "0", "/data/dataset.json"]
+# HTTP/1.1 on 8080, h2c on 8082, every interface, HTTP/1.1 slots sized for
+# connections-1m's million (slots 0), one worker a core, the mounted dataset.
+CMD ["./entry", "8080", "8082", "0.0.0.0", "0", "0", "/data/dataset.json"]
