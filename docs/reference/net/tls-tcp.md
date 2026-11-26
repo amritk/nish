@@ -114,8 +114,12 @@ handshake fails, or when the slot is closed.
 
 **Signing is the caller's**, as `TlsServer`'s is: `signKey` signs the
 CertificateVerify with the key the caller holds as a `Secret` and borrows
-for the call (P-256 or RSA, as the configuration's `signatureScheme` says), and `signatureInput` / `sign` hand the input out and take any
-signature back.
+for the call (P-256 or RSA, as the configuration's `signatureScheme`
+says), and `signatureInput` / `sign` hand the input out and take any
+signature back. Nothing checks that the key, the leaf certificate and
+`signatureScheme` agree: the signer refuses only a key not of its
+scheme's shape, and a key of the right shape that is not the leaf's signs,
+so the client's check of the CertificateVerify is what fails.
 
 </scalar-detail>
 

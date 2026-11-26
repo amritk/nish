@@ -4673,7 +4673,13 @@ if (dealtHere("http2")) {
 // s_client that offers only ecdsa_secp256r1_sha256 must be refused with
 // handshake_failure (alert 40), since the server signs with rsa_pss_rsae_sha256
 // alone, and curl --http2 --tlsv1.3 must then GET the page over HTTP/2.
-// openssl and curl are on CI's runners, so a missing one is a failure here.
+// Run as `serve h3 1` it is the HTTP/3 listener, for `openssl s_client -quic
+// -alpn h3`, which must complete the QUIC handshake and print the same
+// certificate, suite and signature. `-quic` came with OpenSSL 3.2; an older
+// openssl skips that half and says so. The QUIC client only shakes hands: it
+// sends no HTTP/3 request, so the GET over HTTP/3 stays the program's own
+// client's. openssl and curl are on CI's runners, so a missing one is a
+// failure here.
 if (dealtHere("tlsRsa")) {
   const rsaDir = path.join(buildDir, "net-tls-rsa")
   fs.rmSync(rsaDir, { recursive: true, force: true })
@@ -4751,7 +4757,9 @@ if (dealtHere("tlsRsa")) {
         "net_tls_rsa_server: openssl s_client -tls1_3 completes under the RSA certificate: TLSv1.3, an AEAD suite, peer signature RSA-PSS",
         /subject=CN ?= ?localhost/.test(s.out) &&
           /New, TLSv1\.3, Cipher is TLS_(AES_128_GCM_SHA256|AES_256_GCM_SHA384|CHACHA20_POLY1305_SHA256)/.test(s.out) &&
-          /Peer signature type: RSA-PSS/.test(s.out),
+          // OpenSSL 3.0 names the scheme `RSA-PSS`; 3.5 prints its IANA name.
+          /Peer signature type: (RSA-PSS|rsa_pss_rsae_sha256)\n/.test(s.out) &&
+          /Server public key is 2048 bit/.test(s.out),
         `exit ${s.code} signal ${s.signal}\n${s.out.slice(-2500)}`
       )
       const c = await run("curl", ["-sS", "-k", "--max-time", "10", "--tlsv1.3", "--http1.1", `https://127.0.0.1:${port}/hello`, "-w", "%{http_version} %{http_code}\n"], "")
@@ -4789,6 +4797,29 @@ if (dealtHere("tlsRsa")) {
       h2.ended.code === 0 && h2.lines.length === 1 && h2.lines[0] === "answered 1",
       h2.detail
     )
+    const quicHelp = spawnSync("openssl", ["s_client", "-help"], { encoding: "utf8" })
+    if (!/^ *-quic\b/m.test(`${quicHelp.stdout ?? ""}${quicHelp.stderr ?? ""}`)) {
+      const version = spawnSync("openssl", ["version"], { encoding: "utf8" })
+      skip(`net_tls_rsa_server: ${String(version.stdout).trim()}: s_client has no -quic, so the HTTP/3 listener met no third-party QUIC client`)
+    } else {
+      const h3 = await serve("h3", 1, async (port) => {
+        const s = await run("openssl", ["s_client", "-quic", "-alpn", "h3", "-connect", `127.0.0.1:${port}`, "-servername", "localhost"], "Q\n")
+        check(
+          "net_tls_rsa_server: openssl s_client -quic -alpn h3 completes the QUIC handshake under the RSA certificate: an AEAD suite, peer signature RSA-PSS",
+          /subject=CN ?= ?localhost/.test(s.out) &&
+            /New, (TLSv1\.3|QUICv1), Cipher is TLS_(AES_128_GCM_SHA256|AES_256_GCM_SHA384|CHACHA20_POLY1305_SHA256)/.test(s.out) &&
+            /Peer signature type: (RSA-PSS|rsa_pss_rsae_sha256)\n/.test(s.out) &&
+            /Server public key is 2048 bit/.test(s.out) &&
+            /ALPN protocol: h3/.test(s.out),
+          `exit ${s.code} signal ${s.signal}\n${s.out.slice(-2500)}`
+        )
+      })
+      check(
+        "net_tls_rsa_server: the HTTP/3 listener opens the s_client -quic connection, closes it and exits 0",
+        h3.ended.code === 0 && h3.lines.length === 1 && h3.lines[0] === "open 1",
+        h3.detail
+      )
+    }
   }
 }
 
@@ -14544,44 +14575,56 @@ if (dealtHere("cryptoChecks")) {
     }
   }
 
-  // The wipes of RSA signing (`std/crypto/rsa-sign.ts`) survive `-O2`, counted
-  // in each function's own optimised body as a volatile `llvm.memset` (`i1
-  // true`): `rsaSignPrivateOp` wipes the window table, the accumulator, the
-  // selected entry, the product scratch, the two powers and the exponent's limbs
-  // (seven); `RsaSignScratch.saltInto` its hasher's state, block and schedule
-  // (three); `rsaSignPssSha256` the exponent copy the salt derivation took, which
-  // `opt` inlines from `rsaSignSaltInto` (one); and `rsaParsePrivateKey` a key
-  // that fails its soundness check (one). The count is exact, as in
-  // `tests/wipes/`: deleting a wipe, or one `opt` removes, lowers it. The `rsa`,
-  // `crypto`, `wipe` and `crypto_rsa_sign` filters all run it.
+  // The wipes of RSA signing (`std/crypto/rsa-sign.ts`) and of RSA key loading
+  // (`std/crypto/x509.ts`) survive `-O2`, counted in each function's own
+  // optimised body as a volatile `llvm.memset` (`i1 true`): `rsaSignPrivateOp`
+  // wipes the window table, the accumulator, the selected entry, the product
+  // scratch, the two powers and the exponent's limbs (seven);
+  // `RsaSignScratch.saltInto` its hasher's state, block and schedule (three);
+  // `rsaSignPssSha256` and `rsaSignPssSha256Into`, the one the TLS and QUIC
+  // servers' `TlsRsaSigner` calls, each the exponent copy the salt derivation
+  // took, which `opt` inlines from `rsaSignSaltInto` (one each);
+  // `rsaParsePrivateKey` a key that fails its soundness check (one); and
+  // `x509ParseRsaPrivateKey` the decoded PKCS#1 and PKCS#8 blocks, the two
+  // `x509WipeBlocks` loops `opt` inlines (two). `TlsKeySigner.sign` and
+  // `TlsRsaSigner.sign` borrow the key and copy none of it, so the exponent
+  // copy is the signing path's only one. The program is the RSA server's,
+  // which reaches every root. The count is exact, as in `tests/wipes/`:
+  // deleting a wipe, or one `opt` removes, lowers it. The `rsa`, `crypto`,
+  // `wipe`, `x509`, `crypto_rsa_sign` and `net_tls_rsa_server` filters all run it.
   {
     const name =
-      "crypto: the wipes survive opt -O2 (rsaSignPrivateOp seven, RsaSignScratch.saltInto three, rsaSignPssSha256 one, rsaParsePrivateKey one)"
-    if (!only || [name, "crypto_rsa_sign"].some((selector) => selector.includes(only))) {
+      "crypto: the wipes survive opt -O2 (rsaSignPrivateOp seven, RsaSignScratch.saltInto three, rsaSignPssSha256 one, rsaSignPssSha256Into one, rsaParsePrivateKey one, x509ParseRsaPrivateKey two)"
+    if (!only || [name, "crypto_rsa_sign", "net_tls_rsa_server"].some((selector) => selector.includes(only))) {
       if (!has("opt")) {
-        skip("crypto: no opt to show RSA signing's wipes survive -O2")
+        skip("crypto: no opt to show RSA signing's and RSA key loading's wipes survive -O2")
       } else {
         const dir = path.join(buildDir, "wipes-o2", "rsa-sign")
         fs.rmSync(dir, { recursive: true, force: true })
         fs.mkdirSync(dir, { recursive: true })
-        const c = spawnNish([path.join(root, "tests/link/crypto_rsa_sign/main.ts"), "-o", `${dir}/`], {
-          cwd: root,
-          encoding: "utf8",
-        })
-        const o =
+        const c = spawnNish(
+          [path.join(root, "tests/link/net_tls_rsa_server/main.ts"), "--allow-panics", "-o", `${dir}/`],
+          { cwd: root, encoding: "utf8" }
+        )
+        const optimise = (module) =>
           c.status === 0
-            ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "rsa-sign.ll")], {
+            ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, `${module}.ll`)], {
                 encoding: "utf8",
                 maxBuffer: 64 * 1024 * 1024,
               })
             : c
+        const modules = { "rsa-sign": optimise("rsa-sign"), x509: optimise("x509") }
         const want = [
-          ["rsaSignPrivateOp", 7],
-          ["RsaSignScratch.saltInto", 3],
-          ["rsaSignPssSha256", 1],
-          ["rsaParsePrivateKey", 1],
+          ["rsa-sign", "rsaSignPrivateOp", 7],
+          ["rsa-sign", "RsaSignScratch.saltInto", 3],
+          ["rsa-sign", "rsaSignPssSha256", 1],
+          ["rsa-sign", "rsaSignPssSha256Into", 1],
+          ["rsa-sign", "rsaParsePrivateKey", 1],
+          ["x509", "x509ParseRsaPrivateKey", 2],
         ]
-        const got = want.map(([symbol]) => {
+        const failed = Object.values(modules).find((o) => o.status !== 0)
+        const got = want.map(([module, symbol]) => {
+          const o = modules[module]
           const body =
             o.status === 0
               ? o.stdout.match(new RegExp(`^define [^\\n]*@"?nish\\.${symbol.replace(".", "\\.")}"?\\([\\s\\S]*?\\n\\}`, "m"))
@@ -14590,10 +14633,10 @@ if (dealtHere("cryptoChecks")) {
         })
         check(
           name,
-          o.status === 0 && want.every(([, count], i) => got[i] === count),
-          o.status === 0
-            ? want.map(([symbol, count], i) => `${symbol}: ${got[i] ?? "not in rsa-sign.ll"}, want ${count}`).join("\n")
-            : o.stderr
+          failed === undefined && want.every(([, , count], i) => got[i] === count),
+          failed === undefined
+            ? want.map(([module, symbol, count], i) => `${symbol}: ${got[i] ?? `not in ${module}.ll`}, want ${count}`).join("\n")
+            : failed.stderr
         )
       }
     }
@@ -15278,8 +15321,13 @@ if (dealtHere("cryptoChecks")) {
 
       // ct_asm_rsa's copies keep the module's names and text, so only `export`
       // differs. `rsaSignWindowStep` puts its parameters on lines of their own,
-      // so a copy runs to the first blank line, which no function here holds.
-      const rsaBody = (source, name) => source.match(new RegExp(`\\nconst ${name} = [\\s\\S]*?\\n(?=\\n)`))?.[0]
+      // so a copy runs to the first `}` at the start of a line, the function's
+      // own close, as `bodyOf` does for its block form; a blank line inside a
+      // body is compared, not a stop. The fixture's `rsaSignMontMulAt` and
+      // `rsaSignWindowStepAt` are its own stand-ins (a fixed odd `n0inv`, 64
+      // limbs) and are not compared with `rsaSignPrivateOp`'s call sites, which
+      // pass the key's `n0inv` and `count`: the check covers the copied bodies.
+      const rsaBody = (source, name) => source.match(new RegExp(`\\nconst ${name} = [\\s\\S]*?\\n\\}\\n`))?.[0]
       const rsaSource = fs.readFileSync(path.join(root, "std", "crypto", "rsa-sign.ts"), "utf8")
       const rsaFixture = fs
         .readFileSync(path.join(casesDir, "ct_asm_rsa.ts"), "utf8")

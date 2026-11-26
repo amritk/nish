@@ -61,8 +61,12 @@
  *
  *  **Signing is the caller's**, as `TlsServer`'s is: `signKey` signs the
  *  CertificateVerify with the key the caller holds as a `Secret` and borrows
- *  for the call (P-256 or RSA, as the configuration's `signatureScheme` says), and `signatureInput` / `sign` hand the input out and take any
- *  signature back.
+ *  for the call (P-256 or RSA, as the configuration's `signatureScheme`
+ *  says), and `signatureInput` / `sign` hand the input out and take any
+ *  signature back. Nothing checks that the key, the leaf certificate and
+ *  `signatureScheme` agree: the signer refuses only a key not of its
+ *  scheme's shape, and a key of the right shape that is not the leaf's signs,
+ *  so the client's check of the CertificateVerify is what fails.
  *
  * **Resumption is opt-in, and its keys are the caller's.** After
  * `enableTickets`, a slot whose interest says `TLS_RECORD_TICKET` waits on
@@ -224,7 +228,10 @@ export class TlsTcpServer {
   private scratch: u8[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
   peer: u8[]
-  /** Signs every slot's CertificateVerify in `signKey`, in the configuration's scheme, one for the pool, keeping nothing per signature. */
+  /**
+   * Signs every slot's CertificateVerify in `signKey`, in the configuration's
+   * scheme: one for the pool, keeping nothing per signature.
+   */
   private signer: TlsKeySigner
   /**
    * Each slot's own copy of its connection's server random: `TlsServer`

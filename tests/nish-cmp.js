@@ -11708,6 +11708,9 @@ const RSA_PSS_SERVER_DECLARED = [
     ["examples/relay/main.ts", "rsa-sign.ll"],
     ["bench/http-app-carrier.ts", "rsa-sign.ll"],
     ["bench/http1-request/main.ts", "rsa-sign.ll"],
+    ["bench/httparena/main.ts", "rsa-sign.ll"],
+    ["tests/link/httparena_entry/main.ts", "rsa-sign.ll"],
+    ["tests/link/net_handler_pipelined_stream/main.ts", "rsa-sign.ll"],
     ["bench/http1-server.ts", "rsa-sign.ll"],
     ["bench/pg-carrier.ts", "rsa-sign.ll"],
     ["bench/quic-goodput.ts", "rsa-sign.ll"],
@@ -12003,6 +12006,9 @@ const RSA_PSS_SERVER_DECLARED = [
   // where they held a TlsP256Signer, so every module laying one out moves.
   ...[
     ["examples/http-app/main.ts", "http2-tls.ll"],
+    ["bench/httparena/main.ts", "http2-tls.ll tls.ll"],
+    ["tests/link/httparena_entry/main.ts", "http2-tls.ll tls.ll"],
+    ["tests/link/net_handler_pipelined_stream/main.ts", "tls.ll"],
     ["tests/link/net_grpc/main.ts", "http2-tls.ll tls.ll"],
     ["tests/link/net_grpc_interop/main.ts", "http2-tls.ll tls.ll"],
     ["tests/link/net_handler_batch_limits/main.ts", "tls.ll"],
@@ -12036,6 +12042,14 @@ const RSA_PSS_SERVER_DECLARED = [
       why: "TlsTcpServer and Http3Server hold a TlsKeySigner, which picks TlsP256Signer or TlsRsaSigner by the configuration's signatureScheme, where they held a TlsP256Signer, so every module laying one of them out has new struct types and renumbers what follows",
     }))
   ),
+  // httparena_entry's pg module numbers its private constants after the TLS
+  // stack's, which now has one more.
+  {
+    program: "tests/link/httparena_entry/main.ts",
+    file: "pg.ll",
+    changelog: RSA_PSS_SERVER,
+    why: "the TLS stack the program links now has one more private constant, so pg.ll's constant numbered 77 is numbered 78; its bytes are unchanged",
+  },
   // The wasm32 loader names storage globals by index; rsa-sign adds one.
   ...[
     "tests/link/net_http_server_caps/main.ts",

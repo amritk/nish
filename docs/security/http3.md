@@ -478,7 +478,11 @@ through one `TlsKeySigner`, which signs with P-256 or RSA-PSS as the
 configuration's `signatureScheme` says ([tls.md](tls.md),
 [crypto-rsa.md](crypto-rsa.md)); H3-1's figures of 0 bytes a handshake
 were measured under P-256, and an RSA-PSS handshake's arena use is not
-measured. What
+measured. Under the RSA certificate, a third-party QUIC client, OpenSSL's
+`s_client -quic` (3.2 or later), shakes hands with the listener; it sends no
+HTTP/3 request, so the requests the RSA listener answers in a test are the
+in-repo client's ([tls.md](tls.md), "A production handshake also signs with
+RSA-PSS", lists the checks and what skips). What
 the connection holds is application data — request field sections in
 `section`, the decoder's buffer and the field copies, bodies in `data` — which
 may carry credentials (`cookie`, `authorization`).

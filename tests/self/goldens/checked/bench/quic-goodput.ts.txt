@@ -1500,13 +1500,13 @@ function exposeWith<u8[], P256SignScratch, u32[] | null, p256SignSExposed>(s: Se
   stackSites=0 stackLocals=0
   callee +0:93 p256SignSExposed -> @nish.p256SignSExposed
 function expose<u8[], boolean, rsaSignKeySound>(s: Secret<u8[]>, f: void): boolean -> @nish.expose$arr.u8$bool$fn.20.nish.rsaSignKeySound [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.rsaSignKeySound
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:70 rsaSignKeySound -> @nish.rsaSignKeySound
 function expose<u8[], i32, rsaSignKeyBits>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.19.nish.rsaSignKeyBits [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.rsaSignKeyBits
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -17424,7 +17424,7 @@ function rsaSignPlace(out: u8[], at: i32, width: i32, der: u8[], span: RsaSignSp
   local -3:11 o: i32 (const)
   local -2:11 s: i32 (const)
 function rsaParsePrivateKey(der: u8[], start: i32, end: i32): Secret<u8[]> | null -> @nish.rsaParsePrivateKey [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$$Secret$arr.u8
   escaping: end start
   calls: nish.expose$arr.u8$bool$fn.20.nish.rsaSignKeySound nish.rsaSignBits nish.rsaSignDer nish.rsaSignInteger nish.rsaSignKeyBytes nish.rsaSignOdd nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_arena_release
@@ -17464,7 +17464,7 @@ function rsaParsePrivateKey(der: u8[], start: i32, end: i32): Secret<u8[]> | nul
   callee +70:8 expose<u8[], boolean, rsaSignKeySound> -> @nish.expose$arr.u8$bool$fn.20.nish.rsaSignKeySound
   callee +71:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
 function rsaPrivateKeyBits(priv: Secret<u8[]>): i32 -> @nish.rsaPrivateKeyBits [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.expose$arr.u8$i32$fn.19.nish.rsaSignKeyBits
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$i32$fn.19.nish.rsaSignKeyBits#0
   stackSites=0 stackLocals=0
@@ -17654,14 +17654,14 @@ function rsaSignKeySize(key: u8[]): i32 -> @nish.rsaSignKeySize
   local +0:9 total: i32 (const)
   local +1:9 k: i32 (const)
 function rsaSignKeyBits(key: u8[]): i32 -> @nish.rsaSignKeyBits
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.rsaSignBits nish.rsaSignKeySize nish_panic_index
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignBits nish.rsaSignKeySize
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignKeySize#0 nish.rsaSignBits#0
   stackSites=0 stackLocals=0
   local +0:9 k: i32 (const)
   callee +0:18 rsaSignKeySize -> @nish.rsaSignKeySize
-  local +4:9 bits: i32 (const)
-  callee +4:21 rsaSignBits -> @nish.rsaSignBits
+  local +8:9 bits: i32 (const)
+  callee +8:21 rsaSignBits -> @nish.rsaSignBits
 function rsaSignKeyPart(key: u8[], part: i32): u8[] -> @nish.rsaSignKeyPart
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.rsaSignKeySize
@@ -17685,7 +17685,7 @@ function rsaSignKeyExponent(key: u8[]): u8[] -> @nish.rsaSignKeyExponent
   stackSites=0 stackLocals=0
   callee +0:49 rsaSignKeyPart -> @nish.rsaSignKeyPart
 function rsaSignKeySound(key: u8[]): boolean -> @nish.rsaSignKeySound
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish.rsaSignKeyBits nish.rsaSignKeySize nish.rsaSignPrivateOp nish_arena_mark nish_arena_release
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignKeySize#0 nish.rsaSignKeyBits#0 nish.rsaSignPrivateOp#0
   stackSites=0 stackLocals=0
@@ -21858,7 +21858,7 @@ function x509ParseP256PrivateKey(pem: string): Secret<u8[]> | null -> @nish.x509
   callee +10:3 x509WipeBlocks -> @nish.x509WipeBlocks
   callee +11:3 x509WipeBlocks -> @nish.x509WipeBlocks
 function x509Pkcs8RsaKey(der: u8[]): Secret<u8[]> | null -> @nish.x509Pkcs8RsaKey
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rsaParsePrivateKey
   calls: nish.rsaParsePrivateKey nish.x509DerExpect nish.x509DerIsAlgorithmNull nish.x509DerPeek nish.x509DerRead nish.x509DerSmallInteger nish.x509OidPkcs1
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerRead#0 nish.x509DerSmallInteger#0 nish.x509DerRead#0 nish.x509DerIsAlgorithmNull#0 nish.x509DerExpect#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.rsaParsePrivateKey#0

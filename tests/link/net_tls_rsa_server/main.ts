@@ -7,7 +7,10 @@
 // With `serve h1 <n>` or `serve h2 <n>` it is the server alone for `openssl
 // s_client` and `curl`: it prints `port <p>`, serves `n` HTTP/1.1 connections
 // or HTTP/2 requests over TLS, answering every request 200 "hello\n", and
-// exits 0.
+// exits 0. With `serve h3 <n>` it is the HTTP/3 listener alone, for `openssl
+// s_client -quic`: it prints `port <p>` (a UDP port), prints `open <k>` as the
+// k-th QUIC connection opens, and exits 0 once `n` have opened and every one
+// has closed, or 1 after about 45 seconds.
 import { Secret, wipe } from "nish:secret";
 import {
   netLocalPort,
@@ -300,14 +303,46 @@ const serveH2 = (key: Secret<u8[]>, count: i32): i32 => {
   return answered < count ? 1 : 0;
 };
 
+/** Serves the HTTP/3 listener until `count` QUIC connections have opened and closed, then exits. */
+const serveH3 = (key: Secret<u8[]>, count: i32): i32 => {
+  const router = new Router(new RouterLimits());
+  router.add("GET", "/hello");
+  const h = new HttpServer(new HttpServerLimits(), router);
+  const udp: i32 = udpBind("127.0.0.1", n32(0), n32(0));
+  const quic = h3QuicConfig(new H3Limits());
+  quic.certificateChain = [rsaCertificate()];
+  quic.signatureScheme = TLS_SIGNATURE_RSA_PSS_RSAE_SHA256;
+  h.listenHttp3(udp, quic, h3Config(), n32(4), new Array<u8>(QUIC_LISTENER_ENTROPY_SIZE));
+  console.log(`port ${netLocalPort(udp)}`);
+  let opened: i32 = 0;
+  let open: i32 = 0;
+  // 9000 turns of up to 5 ms each, about 45 seconds: past the 30-second idle
+  // timeout that closes a connection whose client left without a word.
+  for (let turn: i32 = 0; turn < 9000; turn++) {
+    turnServer(h, key);
+    const now: i32 = h.connections();
+    if (now > open) {
+      opened = opened + (now - open);
+      console.log(`open ${opened}`);
+    }
+    open = now;
+    if (opened >= count && open === 0) {
+      return 0;
+    }
+  }
+  return 1;
+};
+
 export const main = (): i32 => {
   const key: Secret<u8[]> = loadKey();
   let code: i32 = 0;
   if (process.argv.length === 4 && process.argv[1] === "serve") {
     const count: i32 = decimal(process.argv[3]);
     const carrier: string = process.argv[2];
-    if (count <= 0 || (carrier !== "h1" && carrier !== "h2")) {
+    if (count <= 0 || (carrier !== "h1" && carrier !== "h2" && carrier !== "h3")) {
       code = 2;
+    } else if (carrier === "h3") {
+      code = serveH3(key, count);
     } else {
       code = carrier === "h1" ? serveH1(key, count) : serveH2(key, count);
     }

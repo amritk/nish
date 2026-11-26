@@ -266,7 +266,21 @@ completes under the RSA certificate: TLSv1.3, an AEAD suite, peer signature
 RSA-PSS", the two curl checks ("... GETs the page over HTTP/1.1 under the RSA
 certificate" and "... over HTTP/2 under the RSA certificate"), and
 "net_tls_rsa_server: an s_client offering only ecdsa_secp256r1_sha256 is
-refused with handshake_failure".
+refused with handshake_failure". OpenSSL 3.0 prints the peer's scheme as
+`RSA-PSS` and 3.5 as `rsa_pss_rsae_sha256`; the checks accept either. Over
+QUIC, "net_tls_rsa_server: openssl s_client -quic -alpn h3 completes the QUIC
+handshake under the RSA certificate: an AEAD suite, peer signature RSA-PSS"
+and "net_tls_rsa_server: the HTTP/3 listener opens the s_client -quic
+connection, closes it and exits 0" meet a third-party QUIC client.
+**Untested** there:
+
+- `s_client -quic` came with OpenSSL 3.2, so on an older host both checks
+  skip with the version they found. CI's runner has 3.5.5. The container this
+  was written in has 3.0.13, so the two checks were first run on CI.
+- `s_client` only shakes hands over QUIC. No third-party client sends an
+  HTTP/3 request to the RSA server: the GET over HTTP/3 is the in-repo
+  client's ("HTTP/3: the handshake, its RSA-PSS signature verified"), and
+  curl's HTTP/3 build is not on the runner.
 
 **Every refusal is an alert** (`net_tls_ext_refusals`, and every case again
 under `f64` in `net_tls_ext_f64`):

@@ -25,11 +25,17 @@
  * INTEGER positive and minimal, nothing after the last. The modulus is odd and
  * `RSA_SIGN_MIN_BITS` to `RSA_SIGN_MAX_BITS` bits, the public exponent odd, at
  * least 3 and below 2^32, and the private exponent nonzero and below the
- * modulus. The key is then tried: 2 is signed and the signature raised to the
- * public exponent must give 2 back, so a private exponent that does not belong
- * to the modulus is refused at load, not at the first handshake. The CRT
- * values (`p`, `q`, `dP`, `dQ`, `qInv`) are parsed for their form and not
- * kept: signing does not use them (below). The `Secret` holds the modulus,
+ * modulus. One value is then signed: 2 raised to the private exponent, and
+ * that raised to the public exponent, must give 2 back, so a private exponent
+ * that does not undo the public one is refused at load, not at the first
+ * handshake. Only that one value is checked: the CRT values (`p`, `q`, `dP`,
+ * `dQ`, `qInv`) are read only for their DER form, never compared with the
+ * modulus or the exponents, and not kept: signing does not use them (below).
+ * The key's bytes lie in the first 4096 of the array it is read from: the
+ * reader bounds absolute indexes, not the key's length, so a key past index
+ * 4096 of a larger buffer is refused (a 4096-bit PKCS#1 key is about 2350
+ * bytes, and `nish/crypto/x509` hands it the PEM block's own DER, where a
+ * PKCS#8 wrapper puts the key a few dozen bytes in). The `Secret` holds the modulus,
  * the private exponent and the public exponent, each as many big-endian bytes
  * as the modulus has (`k`), in that order: `3 k` bytes.
  *
@@ -259,7 +265,8 @@ const rsaSignPlace = (out: u8[], at: i32, width: i32, der: u8[], span: RsaSignSp
  * even, below 3 or not below 2^32; for a private exponent of zero or not below
  * the modulus; and for a private exponent that does not undo the public one
  * (2 signed and opened again is not 2). `der` is not changed and not kept: the
- * caller wipes it.
+ * caller wipes it. A key whose `end` is past 4096 is refused, whatever its
+ * length: the limit is on the index, not on `end - start`.
  *
  * @param der The array holding the key's DER.
  * @param start The index of the key's SEQUENCE tag.
@@ -572,11 +579,13 @@ export const rsaSignPssSha256 = (priv: Secret<u8[]>, msg: u8[]): u8[] | null => 
 
 /**
  * `rsaSignPssSha256` over `msg[off .. off + len)`, writing the `k`-byte
- * signature at `out[at]`, hashing in `sc` and releasing every allocation of
- * its own before it returns: `rsaSignPssSha256SaltedInto` with the derived
- * salt. Answers `false`, leaving `out` as it was, when either window is
- * outside its array, for a `Secret` that is not a key and a signature that
- * fails the check against `e`.
+ * signature at `out[at]` and hashing in `sc`: `rsaSignPssSha256SaltedInto`
+ * with the derived salt. The hash and the salt it allocates are released when
+ * its `arena()` scope closes on return; that release covers only what is
+ * allocated inside the scope, so it holds while no caller keeps a reference
+ * to them, and `sc` and `out` are the caller's. Answers `false`, leaving `out`
+ * as it was, when either window is outside its array, for a `Secret` that is
+ * not a key, and for a signature that fails the check against `e`.
  *
  * @param sc The hashers, made once by the caller.
  * @param priv The key, borrowed.
@@ -741,7 +750,11 @@ const rsaSignKeySize = (key: u8[]): i32 => {
 /** The modulus bits of the key value, or 0 for one of the wrong shape or a leading zero byte. */
 const rsaSignKeyBits = (key: u8[]): i32 => {
   const k: i32 = rsaSignKeySize(key)
-  if (k === 0 || toI32(key.length) === 0 || toI32(key[0]) === 0) {
+  // biome-ignore lint/style/useExplicitLengthCheck: the panic prover reads `length < 1` as a bound for the key[0] after it and does not read `=== 0`
+  if (k === 0 || key.length < 1) {
+    return 0
+  }
+  if (key[0] === 0) {
     return 0
   }
   const bits: i32 = rsaSignBits(key, 0, k)
