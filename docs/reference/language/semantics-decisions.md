@@ -1603,8 +1603,13 @@ holds a NUL byte, which C would read as the end of the string:
 `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string ``
 
 - *What proves it away:* a literal with no NUL in it, which is not checked and
-  not a site; every other string is checked, and `string | null` checks only
-  the string (`tests/cases/panics_ffi_nul`)
+  not a site; a local searched with `indexOf("\u0000")` against `0` on the
+  branch where it found none, and not assigned since
+  (`tests/link/ffi_nul_guarded`; the search for another string, against
+  another bound, on the other branch or before an assignment proves nothing:
+  `ffi_nul_wrong_needle`, `_wrong_bound`, `_wrong_direction`, `_reassigned`);
+  every other string is checked, and `string | null` checks only the string
+  (`tests/cases/panics_ffi_nul`)
 
 **`ffi-null`**: a `string` result of a [`declare function`](declarations.md#calling-c) that
 is `NULL`:
