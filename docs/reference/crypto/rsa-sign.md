@@ -88,7 +88,7 @@ RSASSA-PSS-SIGN (RFC 8017 §8.1.1) with SHA-256, MGF1-SHA-256 and the salt given
 
 <scalar-card title="rsa​Sign​Pss​Sha256​Salted​Into" icon="phosphor/regular/function" href="#rsasignpsssha256saltedinto">
 
-`rsaSignPssSha256Salted` over `msg[off .. off + len)`, writing the `k`-byte signature at `out[at]`, hashing in `sc` and releasing every allocation of its own before it returns: for a server whose memory may not grow per handshake (`rsaSignPssSha256Into` derives the salt).
+`rsaSignPssSha256Salted` over `msg[off .. off + len)`, writing the `k`-byte signature at `out[at]` and hashing in `sc`, for a server whose memory may not grow per handshake; `rsaSignPssSha256Into` derives the salt.
 
 </scalar-card>
 
@@ -454,11 +454,11 @@ The `k`-byte signature, or `null`.
 ### rsaSignPssSha256SaltedInto
 
 `rsaSignPssSha256Salted` over `msg[off .. off + len)`, writing the `k`-byte
-signature at `out[at]`, hashing in `sc` and releasing every allocation of
-its own before it returns: for a server whose memory may not grow per
-handshake (`rsaSignPssSha256Into` derives the salt). Answers `false`, leaving `out` as it was, when either window is
-outside its array (`k` is `rsaPrivateKeyBits(priv)` rounded up to bytes),
-for a salt too long for the key, a `Secret` that is not a key and a
+signature at `out[at]` and hashing in `sc`, for a server whose memory may not
+grow per handshake; `rsaSignPssSha256Into` derives the salt. Its arena scope
+frees what it allocates. Answers `false`, leaving `out` as it was, when either
+window is outside its array (`k` is `rsaPrivateKeyBits(priv)` rounded up to
+bytes), for a salt too long for the key, a `Secret` that is not a key and a
 signature that fails the check against `e`.
 
 ```ts

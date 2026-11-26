@@ -499,11 +499,11 @@ export const rsaSignPssSha256Salted = (priv: Secret<u8[]>, msg: u8[], salt: u8[]
 
 /**
  * `rsaSignPssSha256Salted` over `msg[off .. off + len)`, writing the `k`-byte
- * signature at `out[at]`, hashing in `sc` and releasing every allocation of
- * its own before it returns: for a server whose memory may not grow per
- * handshake (`rsaSignPssSha256Into` derives the salt). Answers `false`, leaving `out` as it was, when either window is
- * outside its array (`k` is `rsaPrivateKeyBits(priv)` rounded up to bytes),
- * for a salt too long for the key, a `Secret` that is not a key and a
+ * signature at `out[at]` and hashing in `sc`, for a server whose memory may not
+ * grow per handshake; `rsaSignPssSha256Into` derives the salt. Its arena scope
+ * frees what it allocates. Answers `false`, leaving `out` as it was, when either
+ * window is outside its array (`k` is `rsaPrivateKeyBits(priv)` rounded up to
+ * bytes), for a salt too long for the key, a `Secret` that is not a key and a
  * signature that fails the check against `e`.
  *
  * @param sc The hashers, made once by the caller.
