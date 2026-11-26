@@ -6991,8 +6991,12 @@ declare i8* @strdup(i8*)
   `` `strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of
   the string `` (`tests/cases/panics_ffi_nul`). That is the
   [`ffi-nul` panic site](#panic-sites). A literal with no NUL in it is proved
-  at compile time, so `puts("hello")` has no check and no site; every other
-  string is checked with one scan of the bytes C is about to read anyway.
+  at compile time, so `puts("hello")` has no check and no site. So is a local
+  the code has searched for NUL and not assigned since: `s.indexOf("\u0000")
+  < 0` proves it in the branch it holds, and `s.indexOf("\u0000") >= 0` in
+  the branch it fails, so `if (s.indexOf("\u0000") >= 0) { return … }` before
+  the call leaves no check (`tests/link/ffi_nul_guarded`). Every other string
+  is checked with one scan of the bytes C is about to read anyway.
 - **`string | null` passes `NULL` for `null`**, and checks only a string.
 - **The declaration carries no attribute** for a string parameter: `nocapture`
   and `readonly` would restate the borrow as an LLVM fact the C body need not
@@ -16879,8 +16883,13 @@ holds a NUL byte, which C would read as the end of the string:
 `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string ``
 
 - *What proves it away:* a literal with no NUL in it, which is not checked and
-  not a site; every other string is checked, and `string | null` checks only
-  the string (`tests/cases/panics_ffi_nul`)
+  not a site; a local searched with `indexOf("\u0000")` against `0` on the
+  branch where it found none, and not assigned since
+  (`tests/link/ffi_nul_guarded`; the search for another string, against
+  another bound, on the other branch or before an assignment proves nothing:
+  `ffi_nul_wrong_needle`, `_wrong_bound`, `_wrong_direction`, `_reassigned`);
+  every other string is checked, and `string | null` checks only the string
+  (`tests/cases/panics_ffi_nul`)
 
 **`ffi-null`**: a `string` result of a [`declare function`](#calling-c) that
 is `NULL`:
