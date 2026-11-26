@@ -192,6 +192,20 @@ export const LANES = [
     ],
     inert: [...INERT, "tests/**", "examples/**", "bench/**", "CHANGELOG.md", "changelog/**"],
   },
+  {
+    name: "gfx",
+    jobs: ["gfx", "gfx-macos"],
+    names: ["gfx (ubuntu-latest, lavapipe)", "gfx (macos-latest, Metal)"],
+    // Not on run 44273081341, which predates the jobs: run 45857452100's two
+    // rows, 3.2 and 4.5 minutes.
+    minutes: 7.7,
+    // .github/actions/compiler-cache, scripts/fetch-gfx.sh and tests/run.js
+    // gfx (tests/gfx.js: scripts/build.sh, runtime/gfx/, tests/gfx/triangle.c).
+    // tests/run.js imports bench/*.mjs before any section runs.
+    reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
+    unread: RUN_JS_UNREAD,
+    inert: [...INERT, "CHANGELOG.md", "changelog/**"],
+  },
 ]
 
 /** A changed path matching one of these turns every lane on. */
