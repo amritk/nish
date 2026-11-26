@@ -74,7 +74,7 @@
     "test:nish": "bash scripts/nish-harness.sh tests/nish/run.ts build/nish-runner",
     "test:cli": "bash scripts/nish-harness.sh tests/nish/cli.ts build/nish-cli",
     "test:node": "node tests/differential/unmodified.js",
-    "lint": "node scripts/check-filenames.mjs && node scripts/check-install-scripts.mjs && biome check .",
+    "lint": "node scripts/check-filenames.mjs && node scripts/check-install-scripts.mjs && node scripts/rfc-specs.mjs && biome check .",
     "lint:fix": "biome check --write .",
     "lint:dead": "knip --no-progress",
     "format": "biome format --write .",

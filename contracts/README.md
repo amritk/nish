@@ -7,6 +7,30 @@ three are generated: change `specs/<name>.md` and regenerate, never edit them.
 Which gates CI runs and which stay by hand: the spec-first paragraph of
 [`.claude/orientation.md`](../.claude/orientation.md).
 
+## Which modules need one
+
+A `std/` module that implements an RFC lands spec-first, and
+`node scripts/rfc-specs.mjs` (in `npm run lint`) holds the tree to it. Each
+`RFC <n>` a `std/**/*.ts` file cites, comments included, needs one of:
+
+- a contract here whose `target.module` is that file's module and whose
+  `sources` include RFC `<n>`. vector writes both fields from the spec, so
+  `contracts/rfc7748-x25519.json` covers `std/crypto/x25519.ts`'s citations
+  of RFC 7748 and nothing else.
+- a line `std/<file>.ts RFC<n>` in
+  [`scripts/rfc-unspecified.txt`](../scripts/rfc-unspecified.txt), for a pair
+  that predates the rule. These lines only shrink. A spec that covers one, or
+  an edit that drops the citation, fails the check until the line goes, and
+  `node scripts/rfc-specs.mjs --update-baseline` deletes them.
+- a line `std/<file>.ts RFC<n> cites: <reason>` there, for an RFC the file
+  names without implementing it (out of scope, or only a pointer to another
+  module's RFC). The reason is what a reviewer weighs.
+
+The check covers whole RFCs, not sections. A spec that profiles one section
+of RFC 8446 covers the module's every citation of RFC 8446. How much of the
+RFC a spec profiles is the spec's to say and its review's to weigh: vector
+holds every BCP 14 sentence in the spec to a test or a stated exclusion.
+
 ## The tools
 
 ```bash

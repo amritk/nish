@@ -42617,6 +42617,156 @@ if (!only || "spec".includes(only)) {
     // `--slow`, does not fail the run; each is a SKIP here so the summary counts it.
     for (const l of lines) if (l.startsWith("SKIP  ")) skip(`spec: ${rel}: ${l.slice("SKIP  ".length)}`)
   }
+
+  // Every RFC a std/ module cites is covered by a contract of that module or
+  // listed in scripts/rfc-unspecified.txt (CLAUDE.md, "Definition of done").
+  // `npm run lint` runs the live check too; the rows below are what it refuses.
+  const rfcScript = path.join(root, "scripts", "rfc-specs.mjs")
+  const rfcLive = spawnSync(process.execPath, [rfcScript], { cwd: root, encoding: "utf8" })
+  check(
+    "spec: rfc-specs: every RFC std/ cites is covered by a vector spec of its module or listed in scripts/rfc-unspecified.txt",
+    rfcLive.status === 0,
+    rfcLive.stdout + rfcLive.stderr
+  )
+  const rfcContract = (mod, ...rfcs) =>
+    JSON.stringify({ target: { module: mod }, sources: rfcs.map((rfc) => ({ id: `rfc${rfc}`, rfc })) })
+  const rfcRun = (files, flags = []) => {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), "nish-rfc-specs-"))
+    for (const [rel, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true })
+      fs.writeFileSync(path.join(tree, rel), text)
+    }
+    const r = spawnSync(process.execPath, [rfcScript, "--root", tree, ...flags], { encoding: "utf8" })
+    const listPath = path.join(tree, "scripts", "rfc-unspecified.txt")
+    const list = fs.existsSync(listPath) ? fs.readFileSync(listPath, "utf8") : ""
+    fs.rmSync(tree, { recursive: true, force: true })
+    return { ...r, list }
+  }
+  const listRel = "scripts/rfc-unspecified.txt"
+  const rfcRows = [
+    {
+      name: "refuses an RFC a module cites with no contract and no line, naming the file and line",
+      files: { "std/net/new.ts": "// one\n// Framing per RFC 9999 section 4.\n" },
+      exit: 1,
+      has: ["std/net/new.ts:2: cites RFC9999, which no vector spec"],
+    },
+    {
+      name: "reads RFC9999, RFC-9999 and a no-break space as citations",
+      files: { "std/a.ts": "// RFC9999\n", "std/b.ts": "// RFC-9998\n", "std/c.ts": "// RFC 9997\n" },
+      exit: 1,
+      has: ["std/a.ts:1: cites RFC9999", "std/b.ts:1: cites RFC9998", "std/c.ts:1: cites RFC9997"],
+    },
+    {
+      name: "does not read a lowercase rfc822Name or a three-digit-less number as a citation",
+      files: { "std/x509.ts": "// rfc822Name and RFC 12\n" },
+      exit: 0,
+      has: ["0 RFC citations"],
+    },
+    {
+      name: "accepts a citation a contract of that module covers",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", "contracts/new.json": rfcContract("nish/crypto/new", 9999) },
+      exit: 0,
+      has: ["1 covered by a spec"],
+    },
+    {
+      name: "refuses a citation a contract of another module covers",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", "contracts/other.json": rfcContract("nish/crypto/other", 9999) },
+      exit: 1,
+      has: ["std/crypto/new.ts:1: cites RFC9999"],
+    },
+    {
+      name: "refuses a citation a contract of that module covers for another RFC",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", "contracts/new.json": rfcContract("nish/crypto/new", 9998) },
+      exit: 1,
+      has: ["std/crypto/new.ts:1: cites RFC9999"],
+    },
+    {
+      name: "accepts a citation the list has from before the rule",
+      files: { "std/net/old.ts": "// RFC 9999\n", [listRel]: "std/net/old.ts RFC9999\n" },
+      exit: 0,
+      has: ["1 listed from before the rule"],
+    },
+    {
+      name: "accepts a `cites:` line with its reason",
+      files: { "std/net/old.ts": "// RFC 9999 is out of scope\n", [listRel]: "std/net/old.ts RFC9999 cites: out of scope\n" },
+      exit: 0,
+      has: ["1 cited and not implemented"],
+    },
+    {
+      name: "refuses a `cites:` line with no reason",
+      files: { "std/net/old.ts": "// RFC 9999\n", [listRel]: "std/net/old.ts RFC9999 cites: \n" },
+      exit: 1,
+      has: ["a `cites:` line gives its reason"],
+    },
+    {
+      name: "refuses a listed line a contract now covers",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        "contracts/new.json": rfcContract("nish/crypto/new", 9999),
+        [listRel]: "std/crypto/new.ts RFC9999\n",
+      },
+      exit: 1,
+      has: ["std/crypto/new.ts RFC9999: a contract covers it now"],
+    },
+    {
+      name: "refuses a listed line the file no longer cites",
+      files: { "std/net/old.ts": "// nothing\n", [listRel]: "std/net/old.ts RFC9999 cites: gone\n" },
+      exit: 1,
+      has: ["std/net/old.ts RFC9999: no longer cited"],
+    },
+    {
+      name: "refuses a malformed line and a line listed twice",
+      files: {
+        "std/net/old.ts": "// RFC 9999\n",
+        [listRel]: "std/net/old.ts 9999\nstd/net/old.ts RFC9999\nstd/net/old.ts RFC9999 cites: twice\n",
+      },
+      exit: 1,
+      has: [`${listRel}:1: not`, `${listRel}:3: std/net/old.ts RFC9999 is listed twice`],
+    },
+    {
+      name: "refuses a contract whose target is not a nish/ module",
+      files: { "contracts/bad.json": rfcContract("std/crypto/bad", 9999) },
+      exit: 1,
+      has: ["contracts/bad.json: target.module is"],
+    },
+    {
+      name: "--update-baseline drops a covered and a gone line and keeps the rest",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        "std/net/old.ts": "// RFC 9998\n",
+        "contracts/new.json": rfcContract("nish/crypto/new", 9999),
+        [listRel]: "std/crypto/new.ts RFC9999\nstd/net/gone.ts RFC9997\nstd/net/old.ts RFC9998\n",
+      },
+      flags: ["--update-baseline"],
+      exit: 0,
+      list: (l) => l.includes("std/net/old.ts RFC9998\n") && !l.includes("RFC9999") && !l.includes("RFC9997"),
+    },
+    {
+      name: "--update-baseline refuses to add a line",
+      files: { "std/net/new.ts": "// RFC 9999\n" },
+      flags: ["--update-baseline"],
+      exit: 1,
+      has: ["std/net/new.ts:1: cites RFC9999"],
+      list: (l) => l === "",
+    },
+    {
+      name: "--grow-baseline adds the line and names it",
+      files: { "std/net/new.ts": "// RFC 9999\n" },
+      flags: ["--grow-baseline"],
+      exit: 0,
+      has: [`grows ${listRel}: std/net/new.ts RFC9999`],
+      list: (l) => l.includes("\nstd/net/new.ts RFC9999\n"),
+    },
+  ]
+  for (const row of rfcRows) {
+    const r = rfcRun(row.files, row.flags)
+    const out = r.stdout + r.stderr
+    check(
+      `spec: rfc-specs: ${row.name}`,
+      r.status === row.exit && (row.has ?? []).every((h) => out.includes(h)) && (!row.list || row.list(r.list)),
+      `exit ${r.status}\n${out}${row.list ? `\n${listRel}:\n${r.list}` : ""}`
+    )
+  }
 }
 
 // ---- The release train's version: the implied bump and the `Release-As:` trailer -----
