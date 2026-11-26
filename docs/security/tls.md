@@ -281,6 +281,9 @@ connection, closes it and exits 0" meet a third-party QUIC client.
   HTTP/3 request to the RSA server: the GET over HTTP/3 is the in-repo
   client's ("HTTP/3: the handshake, its RSA-PSS signature verified"), and
   curl's HTTP/3 build is not on the runner.
+- The refusal is checked only over TCP. No check offers only
+  `ecdsa_secp256r1_sha256` over `s_client -quic` and expects the RSA
+  listener to refuse it.
 
 **Every refusal is an alert** (`net_tls_ext_refusals`, and every case again
 under `f64` in `net_tls_ext_f64`):

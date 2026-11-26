@@ -482,7 +482,10 @@ measured. Under the RSA certificate, a third-party QUIC client, OpenSSL's
 `s_client -quic` (3.2 or later), shakes hands with the listener; it sends no
 HTTP/3 request, so the requests the RSA listener answers in a test are the
 in-repo client's ([tls.md](tls.md), "A production handshake also signs with
-RSA-PSS", lists the checks and what skips). What
+RSA-PSS", lists the checks and what skips). No QUIC check offers that
+listener only `ecdsa_secp256r1_sha256` and expects a refusal, as the TCP
+half's "an s_client offering only ecdsa_secp256r1_sha256 is refused with
+handshake_failure" does; that gap is untested. What
 the connection holds is application data — request field sections in
 `section`, the decoder's buffer and the field copies, bodies in `data` — which
 may carry credentials (`cookie`, `authorization`).

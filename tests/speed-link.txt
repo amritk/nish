@@ -42,6 +42,7 @@ crypto_jwt  tests/wipes counts its wipes after -O2
 crypto_p256  tests/wipes and the p256ScalarInverse wipes survive opt -O2
 crypto_p256_ecdh  tests/wipes counts its wipes after -O2
 crypto_rsa_sign  the RSA signing wipes survive opt -O2
+crypto_rsa_sign_f64  the f64 twin of crypto_rsa_sign
 net_quic_server_wipes  tests/wipes counts its wipes after -O2
 net_quic_server_wipes_f64  the f64 twin of net_quic_server_wipes
 net_quic_wipes  tests/wipes counts its wipes after -O2
