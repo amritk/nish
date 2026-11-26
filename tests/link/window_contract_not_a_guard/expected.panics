@@ -1,0 +1,6 @@
+{"functions":[
+{"name":"main","symbol":"nish_main","module":"tests/link/window_contract_not_a_guard/main.ts","line":9,"panics":[{"kind":"call","line":12,"column":3,"callee":"Sink.write","via":"panic"},{"kind":"oom","line":13,"column":15,"allowed":true}]},
+{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_contract_not_a_guard/sink.ts","line":1,"panics":[{"kind":"overflow","line":3,"column":49,"proven":true},{"kind":"panic","line":4,"column":5,"proven":false},{"kind":"oom","line":4,"column":11,"allowed":true}]},
+{"name":"Sink.constructor","symbol":"Sink.constructor","module":"tests/link/window_contract_not_a_guard/sink.ts","line":10,"panics":[]},
+{"name":"Sink.write","symbol":"Sink.write","module":"tests/link/window_contract_not_a_guard/sink.ts","line":13,"panics":[{"kind":"call","line":14,"column":5,"callee":"checkWindow","via":"panic"}]}
+]}

@@ -230,6 +230,32 @@ export class FunctionSig {
    */
   restIndex: i32
   /**
+   * #2296: for a window guard (`src/window-contract.ts`), the positions of its
+   * buffer, offset and count parameters; for a method that forwards to one,
+   * the call arguments (`this` left out) its guard checks; else empty.
+   */
+  window: i32[]
+  /** #2296: a window guard's branch, the part that runs when the window is outside its buffer. */
+  windowCheck: Node | null
+  /** #2296: the guard a forwarding method hands its window to, else null (a guard has none). */
+  windowGuard: FunctionSig | null
+  /** #2296: the forwarding method's call into its guard. */
+  windowForward: Node | null
+  /**
+   * #2296: for a fault guard (`src/fault-contract.ts`), the function whose
+   * non-empty answer it panics with; for a constructor or method that
+   * forwards to one, its guard's; else null.
+   */
+  fault: FunctionSig | null
+  /** #2296: the call argument (`this` left out) the fault function is run on, or -1. */
+  faultAt: i32
+  /** #2296: a fault guard's branch, the part that runs on a fault. */
+  faultCheck: Node | null
+  /** #2296: the fault guard a forwarding constructor or method hands its argument to, else null. */
+  faultGuard: FunctionSig | null
+  /** #2296: the forwarding call into the fault guard. */
+  faultForward: Node | null
+  /**
    * WP28 `overloads`: the bodiless signatures written before this
    * implementation under `--compat`, each collected as a signature of its
    * own (`src/overloads.ts`). Empty for every other function. A call is
@@ -377,6 +403,15 @@ export class FunctionSig {
     this.countedBuffers = []
     this.countedNames = []
     this.restIndex = -1
+    this.window = []
+    this.windowCheck = null
+    this.windowGuard = null
+    this.windowForward = null
+    this.fault = null
+    this.faultAt = -1
+    this.faultCheck = null
+    this.faultGuard = null
+    this.faultForward = null
     this.overloads = []
   }
 }

@@ -791,6 +791,30 @@ buffer in `Http1Connection.feed` (`net_http1_server_feed_window`), `write`
 (`net_websocket_utf8_window`), and the parser's and decoder's own `feed`
 (`net_http1_feed_window`, `net_websocket_feed_window`).
 
+**A window the program proves is not a panic it answers for** (#2296).
+`Http1Connection.feed`, `write`, `sendBody` and `sendFrame` each hand their
+window to `http1ServerCheckWindow` first, the one guard shape the checker
+reads ([`window`](../reference/language/semantics-decisions.md#panic-sites)), so each call is a `window`
+site of its caller, proven where the caller has proved `off` and `len` inside
+`buf`, and the guard's own `panic` is reached by no call. The rule is pinned by
+`link/window_contract_proven: --emit-panics matches expected.panics`, and an
+unproven call is refused by `link/window_contract_unproven` (`expected.err`).
+`write` writes a chunk through `http1TryWriteChunk` and answers `H1_INVALID`
+on its `HTTP1_BAD_WINDOW`, a branch the checked window on entry leaves
+unreachable, so it reaches no `http1WriteChunk` panic. Untested here: that
+`examples/file-server.ts` no longer reaches `std/net/http1-server.ts:507:5`
+was read from `--emit-panics` and is pinned by no check. The connection's
+constructor still panics on a cap out of range (`http1-server.ts:499:5`): an
+`Http1Config` is a mutable object the constructor stores as given, so no
+caller makes the check, and every program that serves HTTP/1.1 reaches it.
+The [`fault`](../reference/language/semantics-decisions.md#panic-sites)
+contract that proves `HttpHandler`'s limit check (`handler.md`) is not used
+here: the constructor's callers are the connection pool's `build` and
+`make`, which must answer an `Http1Connection` (the public `connection(slot)`
+among their callers), so checking the config there and refusing it would need
+a nullable answer, a change to a public signature, and panicking there
+instead only moves the panic.
+
 **`websocket.ts` panics only in those two window checks.** Every index,
 overflow, slice and array-length site in the module is proven by a guard, by
 arithmetic worked in `i64`, or by a fixed-size array (`WsAcceptKey`'s

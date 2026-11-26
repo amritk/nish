@@ -141,6 +141,7 @@ import {
 } from "nish/net/http-compress"
 import { netClose, netMss, netRead, netShutdown, netWrite, netWrite2, tcpAccept } from "nish:net"
 import {
+  HTTP1_BAD_WINDOW,
   HTTP1_BODY,
   HTTP1_CHUNKED,
   HTTP1_CLOSED,
@@ -154,7 +155,7 @@ import {
   HTTP1_UPGRADE,
   Http1Parser,
   http1BytesAre,
-  http1WriteChunk,
+  http1TryWriteChunk,
   http1WriteLastChunk,
   http1WriteResponseHead,
 } from "nish/net/http1-codec"
@@ -2090,7 +2091,12 @@ export class Http1Connection {
       return H1_AGAIN
     }
     if (chunked) {
-      this.outputEnd = http1WriteChunk(this.output, this.outputEnd, buf, off, take)
+      // The window was checked on entry, and `take` only shortens it.
+      const end: i32 = http1TryWriteChunk(this.output, this.outputEnd, buf, off, take)
+      if (end === HTTP1_BAD_WINDOW) {
+        return H1_INVALID
+      }
+      this.outputEnd = end
     } else {
       this.outputEnd = http1ServerCopy(this.output, this.outputEnd, buf, off, take)
       if (this.responseFraming >= 0) {

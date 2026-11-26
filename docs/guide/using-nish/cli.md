@@ -840,7 +840,12 @@ leaves the IR unchanged.
   Its count of panic sites only falls, and a `panic` it keeps on purpose
   means the call broke a contract the function's doc states, such as an
   index outside an array the caller sized
-  ([Panics the standard library keeps](../../reference/language/semantics-decisions.md#panics-the-standard-library-keeps)).
+  ([Panics the standard library keeps](../../reference/language/semantics-decisions.md#panics-the-standard-library-keeps)). A
+  function or method that checks a window `(buf, off, len)` with the one
+  guard shape the compiler reads moves that check to each call, so a caller
+  that has proved `off` and `len` inside `buf` calls it under the default
+  ([Panic sites](../../reference/language/semantics-decisions.md#panic-sites),
+  `window`).
 - **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`
   list in your `package.json`'s `"nish"` field names are still held to no
   panic, and with no list, none is. **`--deny-panics`** spells the default

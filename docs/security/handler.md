@@ -106,6 +106,26 @@ none is open. HANDLER-16 holds; HANDLER-17 is accepted.
 | HANDLER-17 | Low | `decode` | A body with a coding the handler does not decode (`br`, `zstd`, `compress`, two codings, or two `Content-Encoding` fields) reaches the program as sent, with `decodedFrom` `HTTP_CODING_IDENTITY`, though its bytes are not identity. | **Accepted.** Refusing every such body with 415 would take a choice from the program that RFC 9110 §15.5.16 leaves to it, and passing it through decodes nothing, so it costs no more than any other body. The `Content-Encoding` field is still set after the handler decodes a body, so it alone does not tell the two apart: a program that reads a body should answer 415 itself when `decodedFrom` is `HTTP_CODING_IDENTITY` and `httpContentEncoding` on a `Content-Encoding` field gives anything but `HTTP_CODING_IDENTITY` (a field of only `identity` names no coding, so its body is plain); `docs/guide/using-nish/compression.md` says so. |
 | HANDLER-18 | Low if it failed | `wait`, `handlerLimitsFault`, `HandlerLimits` | A batched wait (`minEvents` above 1 with `maxWaitMs` above 0, WP63's ring batch) holds a turn open after its first event, so every deadline `wait` enforces, the body deadline (HANDLER-5) and the accept rest (HANDLER-10) among them, is heard that much later, and a turn that must not block must not wait at all. A `maxWaitMs` without a bound would delay them without limit. | **Holds.** `handlerLimitsFault` refuses a `minEvents` under 1 and a `maxWaitMs` over `HANDLER_MAX_WAIT_MS` (1000, the interval `expireBodies` already checks at), and a `maxWaitMs` under 0, which batches nothing and can only be a mistake: `new HttpHandler` panics with the message and `openHttpHandler` answers it as an `Err`. `tests/link/net_handler_batch_limits` opens a handler at each of `minEvents` 0 and -5 and `maxWaitMs` -1 and 1001, and prints the refusal for each; a line of its `expected.out` turns to `opened` and fails without the matching test. `wait` calls `pollWaitBatch` only with both limits set and a `timeout` other than 0, and makes the timeout 0 while a deferred handler holds a queued request; the runtime batches only on a loop a ring source joined, while one ring set is live (`nr_batch` in `runtime/runtime-net.c`). `tests/run.js`'s `net_handler_batch` check ("net_handler: minEvents and maxWaitMs batch a ring wait, and minEvents 1, wait(0), a deferred queue, epoll and two live ring sets do not wait") answers 40 requests at `minEvents` 64, sees a lone pending request held 300 ms or more at `maxWaitMs` 400, and fails if `minEvents` 1 holds it too. At `minEvents` 64 and `maxWaitMs` 400 it then needs every turn under 200 ms while a request arrives, for `wait(0)`, for `wait(3000)` after `deferSends` with a request queued, for a descriptor listener beside a live ring set, and for a ring listener beside a second live set. Each fails at about 400 ms without its guard: `wait(0)` and the deferred queue without `wait`'s `timeout !== 0`, the descriptor listener without `nr_batch`'s check that a ring source joined the loop, and the two sets without its one-set rule. |
 
+**The constructor's limit check is proven where `openHttpHandler` makes the
+handler** (#2296). `new HttpHandler` hands its `limits` to
+`handlerCheckLimits` (`std/net/handler.ts:932:5`), a fault guard over
+`handlerLimitsFault` ([`fault`](../reference/language/semantics-decisions.md#panic-sites)),
+so the guard's `panic` (`std/net/handler.ts:2663:5`) is proven and each
+construction is a `fault` site of its own. `openHttpHandler` runs
+`handlerLimitsFault(limits)` (`std/net/handler.ts:2648:3`) and returns its
+`Err` before `new HttpHandler` (`2656:13`); the failed-`pollCreate` return
+between them is an `if` that only leaves, so that site is proven.
+`tests/link/fault_contract_proven` and `fault_contract_early_exit` are the
+same shapes on a two-module program, each pinned by its `expected.panics`,
+and each `fault_contract_*` negative stays unproven under `--deny-panics`;
+`tests/std-panics.json` counts the guard's panic as gone from
+`std/net/handler.ts` (8 `panic` sites, from 9). A program that calls
+`new HttpHandler` itself (`bench/http1-server.ts`,
+`bench/handler-ring/server.ts`) still holds an unproven `fault` site. The
+constructor keeps other panic sites (a failed `pollCreate` it made itself, the
+body decoder's), so `openHttpHandler` still reaches a panic and a program that
+builds a handler builds with `--allow-panics`.
+
 ## Properties verified
 
 Each property below is pinned by a line of

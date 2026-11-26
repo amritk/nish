@@ -86,6 +86,16 @@ fixed or open in the index.
 `add`'s refusals are the program's, not the attacker's, and are listed under
 the properties below.
 
+**`routerOutside` and `routerNoRoute` still panic for every caller**
+(#2296). Each is a bare `panic` a check in `match` or `paramCount` reaches,
+not the window guard shape the checker reads as a contract a caller proves
+([`window`](../reference/language/semantics-decisions.md#panic-sites)), so a program that calls `match` or
+`paramCount` reaches `std/net/router.ts:1290:3` and `1304:5` and builds with
+`--allow-panics`. A window contract read on a `start`/`end` pair rather than
+`off`/`len` would prove `match`'s `enter` checks where `match`'s callers have
+checked the range; #2296's caller stage does not add it. Untested: these two routes were read from `--emit-panics`
+on `examples/http-app/main.ts` and are pinned by no check.
+
 ## Properties verified
 
 Each property below is pinned by a test that fails if it stops holding. The
