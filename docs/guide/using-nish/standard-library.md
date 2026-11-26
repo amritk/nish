@@ -944,8 +944,7 @@ wider than a `u64` or with more digits than an `f64` comes back byte for byte.
 Read it with `text()`, `isI64()` and `i64()`, `isU64()` and `u64()`, or
 `f64()`, and set it with `setText`.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -2756,8 +2755,7 @@ significant.
 A signed width is the same bytes read as two's complement, and an `f64` is
 its IEEE 754 bits. There is no `f32`.
 
-<!-- allow-panics: calls `std/bytes.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { getU16LE, getU32BE, setU32LE } from "nish/bytes";
 
