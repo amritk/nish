@@ -12462,6 +12462,39 @@ int main(void) {
       )
     }
 
+    // The page cache the adapter installs keeps its largest key at the
+    // database's end across B-tree splits that swap page numbers through the
+    // lock-byte page's key, so a commit's truncate scans only the slots past
+    // the end, not the whole hash table: tests/runtime/sqlite-pcache-test.c
+    // is one unit with the adapter and reads pcache1's own `iMaxKey`.
+    {
+      const exe = path.join(sqDir, "pcache-park")
+      const db = path.join(sqDir, "pcache-park.db")
+      for (const f of [db, `${db}-wal`, `${db}-shm`]) fs.rmSync(f, { force: true })
+      const built = spawnSync(
+        "clang",
+        [
+          "-O1",
+          "-w",
+          `-I${path.join(root, "runtime", "sqlite")}`,
+          "-DSQLITE_OMIT_SHARED_CACHE",
+          "-DSQLITE_THREADSAFE=1",
+          path.join(root, "tests", "runtime", "sqlite-pcache-test.c"),
+          "-o",
+          exe,
+          "-lpthread",
+          "-lm",
+        ],
+        { encoding: "utf8" }
+      )
+      const ran = built.status === 0 ? spawnSync(exe, [db], { encoding: "utf8" }) : null
+      check(
+        "sqlite-link: after every commit of random index keys the page cache's largest key is the database's last page, though splits parked pages past it",
+        ran !== null && ran.status === 0 && Number(ran.stdout) > 0,
+        built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stdout} ${ran.stderr}` : "")
+      )
+    }
+
     // The adapter's own record decoding (row_of, field_value, the index
     // rowid's fast path and cursor_record) against corrupt records, under
     // AddressSanitizer: tests/link/std_sqlite_cursor_record/corrupt-record.c
