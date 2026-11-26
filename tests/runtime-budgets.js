@@ -1055,8 +1055,11 @@ export const SQLITE_BUILD_DEFINES = [
  * `column_value` 299 to 174 and `cursor_free` -29, which no longer build or free Mems.
  * The serial types' integer decode is one function, `serial_int`, inlined into both of
  * its callers at -Oz as at -O2; out of line it would be a call per field read.
+ * Measured **10,873 bytes** on 2026-11-26 (565,112 for the unit), 10,631 on 0.48.0
+ * before it, with the page cache's wrapped fetch, rekey, truncate and destroy and the
+ * constructor that installs them (`nishsqlite_pcache_*`, 242).
  */
-const RUNTIME_SQLITE_TEXT_BUDGET = 10752
+const RUNTIME_SQLITE_TEXT_BUDGET = 11008
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena

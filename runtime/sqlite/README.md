@@ -35,6 +35,23 @@ for the units and the files the cache key fingerprints (`sqliteUnits`,
 `sqliteFingerprint`), so a file added here needs no list updated.
 `tests/run.js` ("sqlite-link") checks the two hashes above against the files.
 
+## The page cache
+
+`nish-sqlite.c` installs SQLite's own page cache, pcache1, through
+`SQLITE_CONFIG_PCACHE2` from a constructor, before anything can start SQLite,
+with its fetch, rekey, truncate and destroy wrapped. pcache1 keeps the largest
+page number it holds, `iMaxKey`, so that the truncate after a commit visits
+only the hash slots past the database's end; once that span is as wide as the
+hash table, the truncate visits every slot. A B-tree split that hands its new
+pages numbers out of order swaps two of them through the lock-byte page's
+number (`balance_nonroot`), and that rekey left `iMaxKey` there: every later
+commit's truncate then walked the whole hash table, which grows with the
+cache. The wrappers record the cache's largest key while a page is parked
+above it and put `iMaxKey` back when the page moves down. Where they cannot
+tell, they leave pcache1's value, which is too large at worst, and too large
+costs only the walk. `tests/runtime/sqlite-pcache-test.c` (the "sqlite-link"
+section) checks it after every commit of random index keys.
+
 ## Updating
 
 1. Download the new `sqlite-amalgamation-<NNNNNNN>.zip` from
