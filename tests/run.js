@@ -6582,22 +6582,29 @@ if (dealtHere("performance")) {
   const strictResults = await pool(optOuts, defaultJobs(), (source) => {
     const args = corpusArgs(path.join(root, source)).filter((arg) => arg !== ALLOW_PANICS)
     const out = path.join(buildDir, "perf_gate", "strict", source.replace(/[/.]/g, "_"))
-    // `--link`, as smoke and a user build it: a linked build is a closed world,
-    // whose call-site ranges can leave a site unproven that `-o` alone proves.
+    // Both ways a user builds it: `-o` alone is an open world, and `--link`
+    // (as smoke builds it) a closed one, whose call-site ranges prove some
+    // sites the open world cannot and leave others unproven that it proves.
+    // The opt-out is needed while either refuses.
     // strict: proves the example's opt-out is still needed
-    return spawnAsync(NISH, [source, ...args, "--json", "-o", `${out}/`, "--link", path.join(out, "bin")], {
+    const open = spawnAsync(NISH, [source, ...args, "--json", "-o", `${out}/`], { cwd: root, encoding: "utf8" })
+    // strict: proves the example's opt-out is still needed
+    const linked = spawnAsync(NISH, [source, ...args, "--json", "-o", `${out}_link/`, "--link", path.join(out, "bin")], {
       cwd: root,
       encoding: "utf8",
     })
+    return Promise.all([open, linked])
   })
   for (const [at, source] of optOuts.entries()) {
-    const refused = diagnosticsOf(strictResults[at].stdout).some((d) => NO_PANIC_CODES.includes(d.code))
+    const builds = strictResults[at]
+    const refused = builds.filter((r) => r.status !== 0)
+    const forPanic = refused.some((r) => diagnosticsOf(r.stdout).some((d) => NO_PANIC_CODES.includes(d.code)))
     check(
       `performance gate: ${source}'s --allow-panics opt-out is still needed`,
-      strictResults[at].status !== 0 && refused,
-      strictResults[at].status === 0
-        ? "it builds without the flag: drop --allow-panics from its `// smoke: args` line and its header's words about it"
-        : `refused, but not for a panic site:\n${strictResults[at].stdout}${strictResults[at].stderr}`
+      forPanic,
+      refused.length === 0
+        ? "it builds without the flag, with -o and with --link: drop --allow-panics from its `// smoke: args` line and its header's words about it"
+        : `refused, but not for a panic site:\n${refused.map((r) => r.stdout + r.stderr).join("\n")}`
     )
   }
 
@@ -30206,14 +30213,18 @@ if (dealtHere("releaseChecks")) {
           // strict, so its marker, its `allow-panics:` line and the page's
           // sentence about the flag come out.
           if (run.status === 0 && s.args.includes(ALLOW_PANICS)) {
-            // Linked, as a user's build is: a closed world can leave a site
-            // unproven that an `-o` build alone proves.
+            // Built with `-o` alone, an open world, and linked, a closed one:
+            // each proves sites the other leaves, so the opt-out is needed
+            // while either refuses for a panic site.
+            const strictArgs = s.args.filter((arg) => arg !== ALLOW_PANICS)
             const exe = path.join(snippetDir, `${prefix}_${s.line}_strict_bin`)
-            const strictEntry = { ...s, args: [...s.args.filter((arg) => arg !== ALLOW_PANICS), "--link", exe] }
-            const bare = compileProgram({ ...program, entry: strictEntry }, `${prefix}_${s.line}_strict`)
+            const bare = [
+              compileProgram({ ...program, entry: { ...s, args: strictArgs } }, `${prefix}_${s.line}_strict`),
+              compileProgram({ ...program, entry: { ...s, args: [...strictArgs, "--link", exe] } }, `${prefix}_${s.line}_strict_link`),
+            ]
             check(
               `${rel}:${s.line}: its --allow-panics opt-out is still needed`,
-              bare.run.status !== 0 && bare.errors.some((e) => NO_PANIC_CODES.includes(e.code)),
+              bare.some((b) => b.run.status !== 0 && b.errors.some((e) => NO_PANIC_CODES.includes(e.code))),
               "it builds without the flag: drop --allow-panics from its marker, the `<!-- allow-panics: -->` line above, and the page's words about it"
             )
           }

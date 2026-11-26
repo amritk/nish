@@ -2755,7 +2755,8 @@ significant.
 A signed width is the same bytes read as two's complement, and an `f64` is
 its IEEE 754 bits. There is no `f32`.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/bytes.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { getU16LE, getU32BE, setU32LE } from "nish/bytes";
 
