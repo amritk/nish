@@ -44111,14 +44111,14 @@ if (selects("ci.yml", "ci-verdict", "release.yml")) {
   const needsOf = (text) => /^ {4}needs: (.*)$/m.exec(text)?.[1] ?? ""
   const releaseIf =
     "${{ !cancelled() && needs.targets.result == 'success' && needs.binaries.result == 'success' && " +
-    "(needs.ci.result == 'success' || (needs.ci.result == 'skipped' && needs.verdict.result == 'success' && needs.verdict.outputs.run != '')) }}"
+    "(needs.ci.result == 'success' || (needs.ci.result == 'skipped' && needs.verdict.result == 'success' && needs.verdict.outputs.tested != '')) }}"
   check(
     "release.yml: `verdict` reads actions only, `ci` runs unless it named a run, and `release` needs a passed `ci` or that run",
     JSON.stringify(permsOf(verdictJob)) === JSON.stringify(["actions: read", "contents: read"]) &&
       /^ {8}run: node scripts\/ci-verdict\.mjs$/m.test(verdictJob) &&
-      /^ {6}run: \$\{\{ steps\.verdict\.outputs\.run \}\}$/m.test(verdictJob) &&
+      /^ {6}tested: \$\{\{ steps\.verdict\.outputs\.tested \}\}$/m.test(verdictJob) &&
       needsOf(job("ci")) === "verdict" &&
-      ifOf(job("ci")) === "${{ !cancelled() && needs.verdict.outputs.run == '' }}" &&
+      ifOf(job("ci")) === "${{ !cancelled() && needs.verdict.outputs.tested == '' }}" &&
       needsOf(job("binaries")) === "[targets]" &&
       needsOf(job("release")) === "[verdict, ci, targets, binaries]" &&
       ifOf(job("release")) === releaseIf &&

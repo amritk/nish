@@ -103,7 +103,7 @@ jobs:
   # that pull request is what cuts the tag; so when the tag commit's tree is
   # that run's tree, running ci.yml again here tests the same bytes a second
   # time, for about 40 minutes of wall clock before anything is published.
-  # `run` is that run's id, or empty, and on empty `ci` runs as it always did:
+  # `tested` is that run's id, or empty, and on empty `ci` runs as it always did:
   # any error, any `main` commit the Release PR did not have, any run that is
   # not a green dispatched one on `release/next` is a full CI here.
   verdict:
@@ -115,7 +115,7 @@ jobs:
       contents: read
       actions: read
     outputs:
-      run: ${{ steps.verdict.outputs.run }}
+      tested: ${{ steps.verdict.outputs.tested }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -136,7 +136,7 @@ jobs:
   ci:
     name: ci
     needs: verdict
-    if: ${{ !cancelled() && needs.verdict.outputs.run == '' }}
+    if: ${{ !cancelled() && needs.verdict.outputs.tested == '' }}
     # What ci.yml asks for, at its top and on its jobs: a called workflow
     # gets no more than this job grants, and a job of it asking for more
     # fails the whole run at startup, before any job runs (0.45.0's first
@@ -533,7 +533,7 @@ jobs:
     # skips this job whatever the expression says.
     if: >-
       ${{ !cancelled() && needs.targets.result == 'success' && needs.binaries.result == 'success' &&
-      (needs.ci.result == 'success' || (needs.ci.result == 'skipped' && needs.verdict.result == 'success' && needs.verdict.outputs.run != '')) }}
+      (needs.ci.result == 'success' || (needs.ci.result == 'skipped' && needs.verdict.result == 'success' && needs.verdict.outputs.tested != '')) }}
     runs-on: ubuntu-latest
     # `contents: write` for `gh release create`; `id-token: write` and
     # `attestations: write` for the provenance step, and for nothing else this

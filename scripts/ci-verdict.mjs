@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Whether a release tag's tree already has a green CI run (docs/wp10-ci.md,
 // "The release reuses the Release PR's run"). release.yml's `verdict` job runs
-// this script and writes `run=<id>` to $GITHUB_OUTPUT when one exists, and
-// `run=` otherwise; its `ci` job runs the whole of ci.yml again only on `run=`.
+// this script and writes `tested=<id>` to $GITHUB_OUTPUT when one exists, and
+// `tested=` otherwise; its `ci` job runs the whole of ci.yml again only on `tested=`.
 //
 // The Release PR's head is the release: release-pr.yml dispatches ci.yml at
 // `release/next`, and merging that pull request is what cuts the tag. A
@@ -16,7 +16,7 @@
 // was up to date with `main`. When `main` moved, the trees differ and CI runs.
 //
 // The rule is fail-closed: any run that is not exactly that kind is passed
-// over, and any error writes `run=`, so the full CI runs.
+// over, and any error writes `tested=`, so the full CI runs.
 //
 //   node scripts/ci-verdict.mjs   # in the `verdict` job (env below)
 //
@@ -131,7 +131,7 @@ const main = async () => {
   }
   const id = found !== null && Number.isSafeInteger(found.id) && found.id > 0 ? String(found.id) : ""
   if (out) {
-    fs.appendFileSync(out, `run=${id}\n`)
+    fs.appendFileSync(out, `tested=${id}\n`)
   }
 }
 
