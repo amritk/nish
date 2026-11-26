@@ -11709,7 +11709,7 @@ const cursorReadRow = (why, filesByProgram) =>
 const JSON_PUT_STRING = "jsonPutString"
 /** The release-note words of `Http1Server.tick` (std/net/http1-server.ts). */
 const HTTP1_TICK = "Http1Server.tick"
-/** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. */
+/** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
 
 const DECLARED = [
