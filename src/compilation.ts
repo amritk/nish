@@ -1753,7 +1753,7 @@ export class Compilation {
     // fixpoint `reportArenaLoops` paid for has its call graph (`src/panics.ts`).
     if (this.opts.recordsPanics()) {
       const facts = this.analyze()
-      resolvePanicSites(this.analysisUnits, facts)
+      resolvePanicSites(this.analysisUnits, facts, this.opts.strictExports)
       this.denyPanicSites(facts)
       if (this.sink.hasErrors()) {
         return false

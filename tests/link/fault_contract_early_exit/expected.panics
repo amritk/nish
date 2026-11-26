@@ -5,6 +5,6 @@
 {"name":"limitsFault","symbol":"limitsFault","module":"tests/link/fault_contract_early_exit/pool.ts","line":8,"panics":[{"kind":"oom","line":10,"column":12,"allowed":true}]},
 {"name":"otherFault","symbol":"otherFault","module":"tests/link/fault_contract_early_exit/pool.ts","line":15,"panics":[{"kind":"oom","line":17,"column":12,"allowed":true}]},
 {"name":"checkLimits","symbol":"checkLimits","module":"tests/link/fault_contract_early_exit/pool.ts","line":22,"panics":[{"kind":"panic","line":25,"column":5,"proven":true}]},
-{"name":"Pool.constructor","symbol":"Pool.constructor","module":"tests/link/fault_contract_early_exit/pool.ts","line":31,"panics":[{"kind":"fault","line":32,"column":5,"proven":true}]},
+{"name":"Pool.constructor","symbol":"Pool.constructor","module":"tests/link/fault_contract_early_exit/pool.ts","line":31,"panics":[{"kind":"fault","line":32,"column":5,"proven":false}]},
 {"name":"shrink","symbol":"shrink","module":"tests/link/fault_contract_early_exit/pool.ts","line":37,"panics":[]}
 ]}

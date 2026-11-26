@@ -2,7 +2,7 @@
 {"name":"send","symbol":"send$","module":"tests/link/window_kept_control/main.ts","line":9,"panics":[{"kind":"window","line":11,"column":12,"proven":true}]},
 {"name":"sendRebound","symbol":"sendRebound","module":"tests/link/window_kept_control/main.ts","line":16,"panics":[{"kind":"window","line":19,"column":12,"proven":true}]},
 {"name":"main","symbol":"nish_main","module":"tests/link/window_kept_control/main.ts","line":25,"panics":[{"kind":"oom","line":27,"column":15,"allowed":true},{"kind":"oom","line":28,"column":15,"allowed":true},{"kind":"oom","line":28,"column":33,"allowed":true}]},
-{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_kept_control/sink.ts","line":1,"panics":[{"kind":"overflow","line":3,"column":49,"proven":true},{"kind":"panic","line":4,"column":5,"proven":true},{"kind":"oom","line":4,"column":11,"allowed":true}]},
+{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_kept_control/sink.ts","line":1,"panics":[{"kind":"overflow","line":3,"column":49,"proven":true},{"kind":"panic","line":4,"column":5,"proven":false},{"kind":"oom","line":4,"column":11,"allowed":true}]},
 {"name":"Sink.constructor","symbol":"Sink.constructor","module":"tests/link/window_kept_control/sink.ts","line":10,"panics":[]},
-{"name":"Sink.write","symbol":"Sink.write","module":"tests/link/window_kept_control/sink.ts","line":13,"panics":[{"kind":"window","line":14,"column":5,"proven":true}]}
+{"name":"Sink.write","symbol":"Sink.write","module":"tests/link/window_kept_control/sink.ts","line":13,"panics":[{"kind":"window","line":14,"column":5,"proven":false}]}
 ]}

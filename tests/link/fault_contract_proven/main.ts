@@ -3,8 +3,11 @@
 // only its parameter, and `Pool`'s constructor hands its own `limits` to the
 // guard first, so `new Pool(limits)` is a `fault` site of its caller. `open`
 // runs the same `limitsFault` on the same `limits` just before and leaves on a
-// fault, so the site is listed as proven, and so is the guard's `panic`
-// (`expected.panics`). The `fault_contract_*` negatives each break one link.
+// fault, so the site is listed as proven, and so is the guard's `panic`, which
+// only the constructor reaches. `Pool` is exported, so a host can call its
+// constructor with limits nothing checked: the constructor's own call into the
+// guard stays unproven (`expected.panics`). The `fault_contract_*` negatives
+// each break one link.
 import { Limits, limitsFault, Pool } from "./pool"
 
 const open = (limits: Limits): i32 => {

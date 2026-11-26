@@ -12,7 +12,7 @@
 
 import { declaresName, shadowsGuardName } from "./checker"
 import { isAssignmentOperator } from "./emit-util"
-import { FLAG_CONST, Node, NodeKind } from "./nodes"
+import { FLAG_ASYNC, FLAG_CONST, FLAG_GENERATOR, Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig, ROLE_CONSTRUCTOR, ROLE_FUNCTION, ROLE_METHOD } from "./program"
 import { T_I32, T_STRING, T_VOID } from "./types"
 
@@ -369,6 +369,9 @@ const noteFaultForward = (program: CheckedProgram, sig: FunctionSig): void => {
   if (
     (!method && !ctor) ||
     sig.instance !== null ||
+    // As in `noteWindowForward`: a task or generator body runs after the call
+    // returns. The checker refuses async and generator methods today.
+    (sig.decl.flags & (FLAG_ASYNC | FLAG_GENERATOR)) !== 0 ||
     !sig.definedIn(program.source) ||
     !defaultsAreLiterals(sig)
   ) {

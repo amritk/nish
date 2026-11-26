@@ -13,12 +13,14 @@ import DiagnosticSink from "./diagnostics" -> struct DiagnosticSink
 import SourceFile from "./diagnostics" -> struct SourceFile
 import intrinsicType from "./emit-util" -> function @intrinsicType
 import StringSet from "./map" -> struct StringSet
+import faultProven from "./fault-contract" -> function @faultProven
 import isFaultGuard from "./fault-contract" -> function @isFaultGuard
 import isNetExport from "./nish-modules" -> function @isNetExport
 import isTermExport from "./nish-modules" -> function @isTermExport
 import netRangeBuffer from "./nish-modules" -> function @netRangeBuffer
 import Node from "./nodes" -> struct Node
 import ALLOW_PANICS_FLAG from "./options" -> const ALLOW_PANICS_FLAG
+import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
 import isSimdAccess from "./simd" -> function @isSimdAccess
@@ -117,10 +119,11 @@ function inEvaluationOrder(sites: PanicSite[]): PanicSite[] -> @inEvaluationOrde
   local +7:11 site: PanicSite (const)
   local +8:9 j: i32 (let)
   local +10:13 prev: i32 (const)
-function resolvePanicSites(units: AnalysisUnit[], facts: FactsTable): void -> @resolvePanicSites [exported]
+function resolvePanicSites(units: AnalysisUnit[], facts: FactsTable, strictExports: boolean): void -> @resolvePanicSites [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: firstPanic inEvaluationOrder keepSites keepWindowGuards listedFacts mayPanicSet nish_array_grow sortByPosition
+  escaping: strictExports
+  calls: firstPanic hostCalls inEvaluationOrder keepSites keepWindowGuards listedFacts mayPanicSet nish_array_grow sortByPosition
   pointer units: size=0 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=keepWindowGuards#1 mayPanicSet#0 firstPanic#0 firstPanic#0 listedFacts#1 keepSites#1
   stackSites=2 stackLocals=2
@@ -146,6 +149,7 @@ function resolvePanicSites(units: AnalysisUnit[], facts: FactsTable): void -> @r
   local +2:13 f: FunctionFacts | null (const)
   callee +2:17 listedFacts -> @listedFacts
   callee +4:9 keepSites -> @keepSites
+  callee +4:50 hostCalls -> @hostCalls
 function mayPanicSet(facts: FactsTable, ordered: PanicSite[][]): boolean[] -> @mayPanicSet
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: callsMayPanic nish_array_grow panicsHere
@@ -188,13 +192,13 @@ function namedBy(sites: PanicSite[], callee: string): boolean -> @panics$.namedB
 function windowMayPanic(facts: FactsTable, may: boolean[], name: string): boolean -> @windowMayPanic
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: windowGuardAt
-  pointer facts: size=24 writesThrough=false captured=false passedTo=windowGuardAt#0
+  calls: forwardGuardAt
+  pointer facts: size=24 writesThrough=false captured=false passedTo=forwardGuardAt#0
   pointer may: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 guard: i32 (const)
-  callee +0:17 windowGuardAt -> @windowGuardAt
-function windowGuardAt(facts: FactsTable, name: string): i32 -> @windowGuardAt
+  callee +0:17 forwardGuardAt -> @forwardGuardAt
+function forwardGuardAt(facts: FactsTable, name: string): i32 -> @forwardGuardAt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: FactsTable.indexOf nish_panic_index
@@ -202,7 +206,7 @@ function windowGuardAt(facts: FactsTable, name: string): i32 -> @windowGuardAt
   stackSites=0 stackLocals=0
   local +0:9 at: i32 (const)
   callee +0:14 FactsTable.indexOf -> @FactsTable.indexOf
-  callee +1:61 FactsTable.indexOf -> @FactsTable.indexOf
+  callee +1:62 FactsTable.indexOf -> @FactsTable.indexOf
 function keepWindowGuards(program: CheckedProgram, facts: FactsTable): void -> @keepWindowGuards
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -225,6 +229,31 @@ function keepWindowGuards(program: CheckedProgram, facts: FactsTable): void -> @
   callee -6:43 isCallSite -> @isCallSite
   callee -5:37 isCallSite -> @isCallSite
   callee -5:75 isAllowed -> @isAllowed
+function hostCalls(program: CheckedProgram, strictExports: boolean, sig: FunctionSig): boolean -> @hostCalls
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FunctionSig.compileTimeOnly FunctionSig.definedIn nish_str_eq
+  pointer program: size=928 writesThrough=false captured=false
+  pointer sig: size=296 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.compileTimeOnly#0
+  stackSites=0 stackLocals=0
+  local +0:9 main: FunctionSig | null (const)
+  callee +7:5 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee +9:6 FunctionSig.compileTimeOnly -> @FunctionSig.compileTimeOnly
+function forwardSite(sig: FunctionSig, site: PanicSite): boolean -> @forwardSite
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer sig: size=296 writesThrough=false captured=false
+  pointer site: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 forward: Node | null (const)
+function hostProof(program: CheckedProgram, sig: FunctionSig, site: PanicSite): boolean -> @hostProof
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via faultProven
+  calls: faultProven nish_panic_index
+  pointer program: size=928 writesThrough=true captured=false passedTo=faultProven#0
+  pointer sig: size=296 writesThrough=false captured=false passedTo=faultProven#1
+  pointer site: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 guard: FunctionSig | null (const)
+  callee +1:28 faultProven -> @faultProven
 function contractCheck(sig: FunctionSig): Node | null -> @contractCheck
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isFaultGuard isWindowGuard
@@ -243,8 +272,8 @@ function mayPanicAt(facts: FactsTable, may: boolean[], name: string): boolean ->
   callee +0:14 FactsTable.indexOf -> @FactsTable.indexOf
 function firstPanic(facts: FactsTable, may: boolean[], reach: PanicSite | null[], sites: PanicSite[], f: FunctionFacts, passOver: boolean): PanicSite | null -> @firstPanic
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: StringSet.at StringSet.size isCallSite mayPanicAt panics$.namedBy panicsHere reachOf windowGuardAt
-  pointer facts: size=24 writesThrough=false captured=false passedTo=mayPanicAt#0 reachOf#0 windowGuardAt#0 mayPanicAt#0 mayPanicAt#0 reachOf#0
+  calls: StringSet.at StringSet.size forwardGuardAt isCallSite mayPanicAt panics$.namedBy panicsHere reachOf
+  pointer facts: size=24 writesThrough=false captured=false passedTo=mayPanicAt#0 reachOf#0 forwardGuardAt#0 mayPanicAt#0 mayPanicAt#0 reachOf#0
   pointer may: size=0 writesThrough=false captured=false passedTo=mayPanicAt#1 mayPanicAt#1 mayPanicAt#1
   pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
   pointer sites: size=0 writesThrough=false captured=false passedTo=panics$.namedBy#0 panics$.namedBy#0
@@ -262,7 +291,7 @@ function firstPanic(facts: FactsTable, may: boolean[], reach: PanicSite | null[]
   callee +16:20 StringSet.at -> @StringSet.at
   local +17:11 guard: i32 (const)
   callee +17:19 namedBy -> @panics$.namedBy
-  callee +17:49 windowGuardAt -> @windowGuardAt
+  callee +17:49 forwardGuardAt -> @forwardGuardAt
   local +18:11 window: boolean (const)
   callee +19:10 namedBy -> @panics$.namedBy
   callee +19:37 mayPanicAt -> @mayPanicAt
@@ -288,23 +317,27 @@ function listedFacts(program: CheckedProgram, facts: FactsTable, sig: FunctionSi
   callee +0:3 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee +0:37 FunctionSig.foreign -> @FunctionSig.foreign
   callee +0:53 FactsTable.get -> @FactsTable.get
-function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite | null[], sig: FunctionSig, f: FunctionFacts): void -> @keepSites
+function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite | null[], sig: FunctionSig, f: FunctionFacts, hostCalled: boolean): void -> @keepSites
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: PanicSite.constructor StringSet.add StringSet.at StringSet.constructor StringSet.has StringSet.size contractCheck isCallSite nish_alloc_struct nish_array_grow reachOf sortByPosition windowGuardAt
-  pointer program: size=928 writesThrough=false captured=false
-  pointer facts: size=24 writesThrough=false captured=false passedTo=reachOf#0 windowGuardAt#0 reachOf#0
+  calls: PanicSite.constructor StringSet.add StringSet.at StringSet.constructor StringSet.has StringSet.size contractCheck forwardGuardAt forwardSite hostProof isCallSite nish_alloc_struct nish_array_grow reachOf sortByPosition
+  pointer program: size=928 writesThrough=true captured=false passedTo=hostProof#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=reachOf#0 forwardGuardAt#0 reachOf#0
   pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
-  pointer sig: size=296 writesThrough=false captured=false passedTo=contractCheck#0
+  pointer sig: size=296 writesThrough=false captured=false passedTo=contractCheck#0 forwardSite#0 hostProof#1
   pointer f: size=464 writesThrough=false captured=false
   stackSites=2 stackLocals=2
-  local -21:9 sites: PanicSite[] (const)
-  local -20:9 named: StringSet (const)
-  callee -20:17 new StringSet -> @StringSet.constructor
-  local -17:9 held: Node | null (const)
-  callee -17:46 contractCheck -> @contractCheck
-  local -16:14 site: PanicSite (const)
-  callee -15:10 isCallSite -> @isCallSite
+  local -32:9 sites: PanicSite[] (const)
+  local -31:9 named: StringSet (const)
+  callee -31:17 new StringSet -> @StringSet.constructor
+  local -26:9 held: Node | null (const)
+  callee -26:61 contractCheck -> @contractCheck
+  local -25:14 site: PanicSite (const)
+  callee -24:10 isCallSite -> @isCallSite
+  callee -20:25 forwardSite -> @forwardSite
+  callee -20:67 hostProof -> @hostProof
+  local -19:15 copy: PanicSite (const)
+  callee -19:22 new PanicSite -> @PanicSite.constructor
   local -13:15 copy: PanicSite (const)
   callee -13:22 new PanicSite -> @PanicSite.constructor
   callee -3:5 StringSet.add -> @StringSet.add
@@ -315,7 +348,7 @@ function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite 
   local +6:11 callee: string (const)
   callee +6:20 StringSet.at -> @StringSet.at
   local +7:11 guard: i32 (const)
-  callee +7:19 windowGuardAt -> @windowGuardAt
+  callee +7:19 forwardGuardAt -> @forwardGuardAt
   local +8:11 direct: PanicSite | null (const)
   callee +8:20 reachOf -> @reachOf
   local +9:11 found: PanicSite | null (const)

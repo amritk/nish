@@ -36,10 +36,11 @@ import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { intrinsicType } from "./emit-util"
 import { StringSet } from "./map"
-import { isFaultGuard } from "./fault-contract"
+import { faultProven, isFaultGuard } from "./fault-contract"
 import { isNetExport, isTermExport, netRangeBuffer } from "./nish-modules"
 import { Node, NodeKind } from "./nodes"
 import { ALLOW_PANICS_FLAG } from "./options"
+import { ROOT_PACKAGE } from "./packages"
 import { CheckedProgram, FunctionSig } from "./program"
 import { isSimdAccess } from "./simd"
 import { addJsonQuoted, StringBuilder } from "./strings"
@@ -349,7 +350,7 @@ const inEvaluationOrder = (sites: PanicSite[]): PanicSite[] => {
  * attribute pass already built and propagates `callsNoReturn` over. It is not
  * `callsNoReturn` itself, which `process.exit` sets too.
  */
-export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): void => {
+export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable, strictExports: boolean): void => {
   const ordered: PanicSite[][] = []
   const reach: (PanicSite | null)[] = []
   for (const f of facts.list) {
@@ -403,7 +404,7 @@ export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): voi
     for (const sig of program.functions) {
       const f = listedFacts(program, facts, sig)
       if (f !== null) {
-        keepSites(program, facts, reach, sig, f)
+        keepSites(program, facts, reach, sig, f, hostCalls(program, strictExports, sig))
       }
     }
   }
@@ -474,14 +475,14 @@ const namedBy = (sites: PanicSite[], callee: string): boolean => {
  * reached as if it were not the callers'.
  */
 const windowMayPanic = (facts: FactsTable, may: boolean[], name: string): boolean => {
-  const guard = windowGuardAt(facts, name)
+  const guard = forwardGuardAt(facts, name)
   return guard >= 0 && guard < may.length && may[guard]
 }
 
-/** The index of the guard `name` forwards its window to, or -1. */
-const windowGuardAt = (facts: FactsTable, name: string): i32 => {
+/** The index of the guard `name` forwards its window or fault value to, or -1. */
+const forwardGuardAt = (facts: FactsTable, name: string): i32 => {
   const at = facts.indexOf(name)
-  return at >= 0 && facts.list[at].windowGuard.length > 0 ? facts.indexOf(facts.list[at].windowGuard) : -1
+  return at >= 0 && facts.list[at].forwardGuard.length > 0 ? facts.indexOf(facts.list[at].forwardGuard) : -1
 }
 
 /**
@@ -516,6 +517,47 @@ const keepWindowGuards = (program: CheckedProgram, facts: FactsTable): void => {
       f.callerProven = false
     }
   }
+}
+
+/**
+ * Whether a host can call `sig` by its symbol, with arguments no caller in the
+ * program checked: one of the root package's external functions, as
+ * `externalFunctions` (`src/interop-abi.ts`) lists them for the sidecars.
+ */
+const hostCalls = (program: CheckedProgram, strictExports: boolean, sig: FunctionSig): boolean => {
+  const main = program.entryMain
+  if (main !== null && main === sig) {
+    return false
+  }
+  return (
+    program.packageName === ROOT_PACKAGE &&
+    !program.source.host &&
+    sig.definedIn(program.source) &&
+    (sig.exported || !strictExports) &&
+    !sig.compileTimeOnly()
+  )
+}
+
+/** Whether `site` is a forwarding method's call into its guard, which its callers' tests prove. */
+const forwardSite = (sig: FunctionSig, site: PanicSite): boolean => {
+  const forward = sig.windowForward !== null ? sig.windowForward : sig.faultForward
+  return (
+    forward !== null && site.node === forward && (site.kind === PANIC_WINDOW || site.kind === PANIC_FAULT)
+  )
+}
+
+/**
+ * Whether a forwarding method's call into its guard (`forwardSite`) is proven
+ * for a host that calls the method by its symbol: such a call holds no
+ * caller's test, so the site is judged as any call into the guard is, from
+ * what the method itself checked.
+ */
+const hostProof = (program: CheckedProgram, sig: FunctionSig, site: PanicSite): boolean => {
+  if (site.kind === PANIC_WINDOW) {
+    return program.nodeProvenIndex[site.node.id]
+  }
+  const guard = sig.faultGuard
+  return guard !== null && faultProven(program, sig, site.node, guard)
 }
 
 /** A window or fault guard's branch, the check its callers hold, or null for any other function. */
@@ -568,7 +610,7 @@ const firstPanic = (
   let c = 0
   while (c < f.callees.size()) {
     const callee = f.callees.at(c)
-    const guard = namedBy(sites, callee) ? -1 : windowGuardAt(facts, callee)
+    const guard = namedBy(sites, callee) ? -1 : forwardGuardAt(facts, callee)
     const window = guard >= 0 && guard < may.length && may[guard]
     if (!namedBy(sites, callee) && (mayPanicAt(facts, may, callee) || window)) {
       let reached: PanicSite | null = mayPanicAt(facts, may, callee) ? reachOf(facts, reach, callee) : null
@@ -611,15 +653,27 @@ const keepSites = (
   facts: FactsTable,
   reach: (PanicSite | null)[],
   sig: FunctionSig,
-  f: FunctionFacts
+  f: FunctionFacts,
+  hostCalled: boolean
 ): void => {
   const sites: PanicSite[] = []
   const named = new StringSet()
   // A contract guard its callers hold lists its own check as proven: each
   // call into it is the site, and counting both would count the check twice.
-  const held: Node | null = f.callerProven ? contractCheck(sig) : null
+  // A host that calls the guard by its symbol is a caller no site stands for,
+  // so that guard lists its check as it is.
+  const held: Node | null = f.callerProven && !hostCalled ? contractCheck(sig) : null
   for (const site of f.panicSites) {
     if (!isCallSite(site)) {
+      // The list answers for a host's call too, so a host-callable forwarder
+      // lists its call into the guard as the host would reach it; the facts
+      // its callers are settled from keep the forwarded proof.
+      if (hostCalled && forwardSite(sig, site) && site.proven && !hostProof(program, sig, site)) {
+        const copy = new PanicSite(site.node, site.source, site.kind, site.fn, false, site.callee)
+        copy.order = site.order
+        sites.push(copy)
+        continue
+      }
       if (held !== null && !site.proven && site.node.start >= held.start && site.node.end <= held.end) {
         const copy = new PanicSite(site.node, site.source, site.kind, site.fn, true, site.callee)
         copy.order = site.order
@@ -641,7 +695,7 @@ const keepSites = (
   let c = 0
   while (c < f.callees.size()) {
     const callee = f.callees.at(c)
-    const guard = windowGuardAt(facts, callee)
+    const guard = forwardGuardAt(facts, callee)
     const direct = reachOf(facts, reach, callee)
     const found = direct !== null || guard < 0 || guard >= reach.length ? direct : reach[guard]
     if (found !== null && !named.has(callee)) {

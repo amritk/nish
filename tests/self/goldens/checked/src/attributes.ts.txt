@@ -371,7 +371,7 @@ struct FunctionFacts (class) size=464 align=8 exported
   field cycleLow: i32 index=74 offset=388
   field onCycleStack: boolean index=75 offset=392
   field callerProven: boolean index=76 offset=393
-  field windowGuard: string index=77 offset=400
+  field forwardGuard: string index=77 offset=400
   field caps: i32 index=78 offset=408
   field capVia: string[] index=79 offset=416
   field capSite: Node | null[] index=80 offset=424
@@ -2753,7 +2753,7 @@ function collectStatedFacts(unit: AnalysisUnit, table: TypeTable, opts: Options,
   callee -178:5 isAtomicArrayMethod -> @isAtomicArrayMethod
   callee -177:5 isWindowGuard -> @isWindowGuard
   callee -176:5 isFaultGuard -> @isFaultGuard
-  local -175:9 windowGuard: FunctionSig | null (const)
+  local -175:9 forwardGuard: FunctionSig | null (const)
   callee -172:23 structSize -> @structSize
   callee -171:23 pointerAlign -> @pointerAlign
   callee -147:43 rootsHoldNoPointer -> @rootsHoldNoPointer

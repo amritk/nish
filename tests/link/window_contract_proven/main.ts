@@ -3,8 +3,10 @@
 // hands it its own window first, so each call into either is a `window` site
 // of its caller, judged as the slice would be: the whole buffer, a literal
 // window behind `buf.length >= 3`, and `end - off` behind its range test are
-// all listed as proven, and no call reaches the guard's `panic`, which stays
-// listed at its own line (`expected.panics`). `window_contract_unproven` is a
+// all listed as proven. Both are exported from the root package, so a host can
+// call either with any window: the guard's `panic` and `Sink.write`'s call into
+// it stay unproven (`expected.panics`). `window_contract_internal` is the pair
+// no host can call. `window_contract_unproven` is a
 // window nothing proves.
 import { checkWindow, Sink } from "./sink"
 

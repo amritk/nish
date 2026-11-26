@@ -4,5 +4,5 @@
 {"name":"Sink.constructor","symbol":"Sink.constructor","module":"tests/link/window_near_same_name/sink.ts","line":12,"panics":[]},
 {"name":"Sink.write","symbol":"Sink.write","module":"tests/link/window_near_same_name/sink.ts","line":15,"panics":[{"kind":"window","line":16,"column":5,"proven":false}]},
 {"name":"Sink.none","symbol":"Sink.none","module":"tests/link/window_near_same_name/sink.ts","line":20,"panics":[{"kind":"window","line":21,"column":5,"proven":true}]},
-{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_near_same_name/other.ts","line":2,"panics":[{"kind":"overflow","line":4,"column":49,"proven":true},{"kind":"panic","line":5,"column":5,"proven":true},{"kind":"oom","line":5,"column":11,"allowed":true}]}
+{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_near_same_name/other.ts","line":2,"panics":[{"kind":"overflow","line":4,"column":49,"proven":true},{"kind":"panic","line":5,"column":5,"proven":false},{"kind":"oom","line":5,"column":11,"allowed":true}]}
 ]}

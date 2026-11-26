@@ -965,11 +965,11 @@ export class FunctionFacts {
    */
   callerProven: boolean
   /**
-   * #2296: for a method that forwards its window or its fault value to a
-   * guard, the guard's symbol, else `""`: a route into the method that no call names reaches the
-   * guard's check (`src/panics.ts`).
+   * #2296: the symbol of the window guard or fault guard this method forwards
+   * its arguments to, else `""`. A route into the method that names no call,
+   * such as a host's, reaches that guard's check (`src/panics.ts`).
    */
-  windowGuard: string
+  forwardGuard: string
   // ---- WP35 capabilities (docs/wp35-capabilities.md) ----
   /**
    * The capabilities this function can reach, one bit each (`src/capabilities.ts`),
@@ -1044,7 +1044,7 @@ export class FunctionFacts {
     this.hoistedScopeStarts = []
     this.panicSites = []
     this.callerProven = false
-    this.windowGuard = ""
+    this.forwardGuard = ""
     this.cycleOrder = 0
     this.cycleLow = 0
     this.onCycleStack = false
@@ -4610,8 +4610,8 @@ const collectStatedFacts = (
     isAtomicArrayMethod(sig) ||
     isWindowGuard(sig) ||
     isFaultGuard(sig)
-  const windowGuard = sig.windowGuard !== null ? sig.windowGuard : sig.faultGuard
-  facts.windowGuard = windowGuard === null ? "" : windowGuard.name
+  const forwardGuard = sig.windowGuard !== null ? sig.windowGuard : sig.faultGuard
+  facts.forwardGuard = forwardGuard === null ? "" : forwardGuard.name
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
   facts.returnDeref = structSize(program, table, opts, sig.returnType)
   facts.returnAlign = pointerAlign(program, table, sig.returnType)

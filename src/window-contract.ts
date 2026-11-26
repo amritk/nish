@@ -10,7 +10,7 @@
 // contract: the guard's check is then followed as any call's is.
 
 import { shadowsGuardName } from "./checker"
-import { FLAG_CONST, Node, NodeKind } from "./nodes"
+import { FLAG_ASYNC, FLAG_CONST, FLAG_GENERATOR, Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD } from "./program"
 import { T_I32, T_VOID, TypeTable } from "./types"
 
@@ -143,6 +143,10 @@ const takesArgumentsAsWritten = (sig: FunctionSig): boolean => {
 const noteWindowGuard = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): void => {
   if (
     sig.role !== ROLE_FUNCTION ||
+    // Unreachable today, as is the type-parameter test below: a template is
+    // not in `program.functions` and its instances are made after
+    // `noteWindowContracts` runs, so no generic guard is noted
+    // (`window_near_generic`).
     sig.instance !== null ||
     sig.returnType !== T_VOID ||
     !sig.definedIn(program.source) ||
@@ -255,12 +259,18 @@ const windowGuardNamed = (program: CheckedProgram, name: string): FunctionSig | 
 const noteWindowForward = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): void => {
   if (
     sig.role !== ROLE_METHOD ||
+    // Unreachable today: instance signatures are made after
+    // `noteWindowContracts` runs (`window_near_generic`).
     sig.instance !== null ||
     sig.paramNames.length === 0 ||
     sig.paramNames[0] !== "this" ||
     !sig.definedIn(program.source) ||
     sig.decl.kind !== NodeKind.Method ||
     sig.decl.children.length > 4 ||
+    // A task or generator body runs after the call returns, when the caller's
+    // test no longer holds. The checker refuses async and generator methods
+    // today; this keeps the contract from reaching one that it later admits.
+    (sig.decl.flags & (FLAG_ASYNC | FLAG_GENERATOR)) !== 0 ||
     !takesArgumentsAsWritten(sig)
   ) {
     return

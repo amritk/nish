@@ -4,7 +4,9 @@ entry: src/fault-contract.ts src/checker.ts src/overloads.ts src/context.ts src/
 import declaresName from "./checker" -> function @declaresName
 import shadowsGuardName from "./checker" -> function @shadowsGuardName
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
+import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
+import FLAG_GENERATOR from "./nodes" -> const FLAG_GENERATOR
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
@@ -214,9 +216,9 @@ function noteFaultForward(program: CheckedProgram, sig: FunctionSig): void -> @n
   pointer program: size=928 writesThrough=false captured=false passedTo=faultGuardNamed#0
   pointer sig: size=296 writesThrough=true captured=false passedTo=fieldsStartAtLiterals#0 FunctionSig.definedIn#0 defaultsAreLiterals#0 FunctionSig.body#0 argumentAt#0 argumentAt#0 argumentAt#0
   stackSites=0 stackLocals=0
-  local -34:9 method: boolean (const)
-  local -32:9 ctor: boolean (const)
-  callee -31:80 fieldsStartAtLiterals -> @fieldsStartAtLiterals
+  local -37:9 method: boolean (const)
+  local -35:9 ctor: boolean (const)
+  callee -34:80 fieldsStartAtLiterals -> @fieldsStartAtLiterals
   callee -27:6 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee -26:6 defaultsAreLiterals -> @defaultsAreLiterals
   local -22:9 body: Node | null (const)
