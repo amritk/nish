@@ -200,8 +200,12 @@ import {
   PANIC_REGION,
   PANIC_SLICE,
   PANIC_SPAWN_SLOT,
+  PANIC_FAULT,
+  PANIC_WINDOW,
   PanicSite,
 } from "./panics"
+import { faultProven, isFaultGuard } from "./fault-contract"
+import { isWindowGuard } from "./window-contract"
 
 /** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
 const ARRAY_HEADER_BYTES: i32 = 24
@@ -954,10 +958,18 @@ export class FunctionFacts {
    * `src/panics.ts` follows no call into it. Its own `panic` is still listed,
    * at its own line. An atomic array's element method is one too: its index
    * check is listed at each call, proven by the guard or loop test around the
-   * call (#2206).
+   * call (#2206). So is a window guard, whose check is listed at each call
+   * into it or into a method that forwards to it (`PANIC_WINDOW`, #2296), and
+   * a fault guard, whose check is listed the same way (`PANIC_FAULT`).
    * Beside `onCycleStack`, so the two share a word.
    */
   callerProven: boolean
+  /**
+   * #2296: the symbol of the window guard or fault guard this method forwards
+   * its arguments to, else `""`. A route into the method that names no call,
+   * such as a host's, reaches that guard's check (`src/panics.ts`).
+   */
+  forwardGuard: string
   // ---- WP35 capabilities (docs/wp35-capabilities.md) ----
   /**
    * The capabilities this function can reach, one bit each (`src/capabilities.ts`),
@@ -1032,6 +1044,7 @@ export class FunctionFacts {
     this.hoistedScopeStarts = []
     this.panicSites = []
     this.callerProven = false
+    this.forwardGuard = ""
     this.cycleOrder = 0
     this.cycleLow = 0
     this.onCycleStack = false
@@ -2230,7 +2243,8 @@ class FactCollector {
    * a `parallelMapInto` instance's length check, proven by `src.length <=
    * dst.length` (`PANIC_PARALLEL_LENGTH`), and an atomic array's element
    * method's index, proven by the guard or loop test around the call
-   * (`PANIC_INDEX`, #2206).
+   * (`PANIC_INDEX`, #2206). A window contract's check is one more
+   * (`PANIC_WINDOW`, #2296), and a fault contract's (`PANIC_FAULT`).
    */
   noteCall(node: Node, callee: FunctionSig): void {
     const proven = this.unit.program.nodeProvenIndex[node.id]
@@ -2247,6 +2261,25 @@ class FactCollector {
     }
     if (isAtomicArrayMethod(callee)) {
       this.noteSite(node, PANIC_INDEX, proven, "")
+    }
+    // A window contract's check (#2296), proven where the window is, and at a
+    // forwarding method's own call into its guard, whose callers hold it.
+    if (callee.window.length > 0) {
+      const guard = this.sig.windowGuard
+      const forward = this.sig.windowForward
+      const forwards =
+        guard !== null && forward !== null && guard === callee && forward === node && isWindowGuard(callee)
+      this.noteSite(node, PANIC_WINDOW, proven || forwards, "")
+    }
+    // A fault contract's check (#2296), proven where the caller has run the
+    // same fault function on the same value and left, and at a forwarder's own
+    // call into its guard, whose callers hold it.
+    if (callee.fault !== null) {
+      const guard = this.sig.faultGuard
+      const forward = this.sig.faultForward
+      const forwards =
+        guard !== null && forward !== null && guard === callee && forward === node && isFaultGuard(callee)
+      this.noteSite(node, PANIC_FAULT, forwards || faultProven(this.unit.program, this.sig, node, callee), "")
     }
     this.noteSite(node, PANIC_CALL, false, callee.name)
   }
@@ -4574,7 +4607,11 @@ const collectStatedFacts = (
   facts.callerProven =
     ((sig.sourceName === "slotOutOfRange" || sig.sourceName === "dstTooShort") && isThreadsModule(program)) ||
     isArraySliceInstance(sig) ||
-    isAtomicArrayMethod(sig)
+    isAtomicArrayMethod(sig) ||
+    isWindowGuard(sig) ||
+    isFaultGuard(sig)
+  const forwardGuard = sig.windowGuard !== null ? sig.windowGuard : sig.faultGuard
+  facts.forwardGuard = forwardGuard === null ? "" : forwardGuard.name
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
   facts.returnDeref = structSize(program, table, opts, sig.returnType)
   facts.returnAlign = pointerAlign(program, table, sig.returnType)

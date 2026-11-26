@@ -1,0 +1,7 @@
+{"functions":[
+{"name":"part","symbol":"part","module":"tests/link/window_contract_proven/main.ts","line":13,"panics":[{"kind":"window","line":15,"column":5,"proven":true},{"kind":"overflow","line":15,"column":35,"proven":true},{"kind":"overflow","line":16,"column":12,"proven":true}]},
+{"name":"main","symbol":"nish_main","module":"tests/link/window_contract_proven/main.ts","line":21,"panics":[{"kind":"window","line":24,"column":3,"proven":true},{"kind":"window","line":26,"column":5,"proven":true},{"kind":"oom","line":28,"column":15,"allowed":true},{"kind":"oom","line":29,"column":15,"allowed":true}]},
+{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_contract_proven/sink.ts","line":1,"panics":[{"kind":"overflow","line":3,"column":49,"proven":true},{"kind":"panic","line":4,"column":5,"proven":false},{"kind":"oom","line":4,"column":11,"allowed":true}]},
+{"name":"Sink.constructor","symbol":"Sink.constructor","module":"tests/link/window_contract_proven/sink.ts","line":10,"panics":[]},
+{"name":"Sink.write","symbol":"Sink.write","module":"tests/link/window_contract_proven/sink.ts","line":13,"panics":[{"kind":"window","line":14,"column":5,"proven":false}]}
+]}

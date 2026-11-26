@@ -243,15 +243,27 @@ int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port) {
 
    A handle is still an `i32`. Below 2^20 it is a descriptor, which is why
    `nish_net_raise_nofile` stops the soft limit at 2^20 on Linux. At or above
-   it, `2^20 + ring * 2^20 + field` names a slot: `ring` is a global ring id,
-   64 per listener (`NR_RINGS`), and `field` is `slot + slots * (gen % G)`,
-   with `G = 2^20 / slots` the generations a slot's handles cycle through. A
-   close moves the slot's generation on, so the handle a program closed
-   answers -9 at once and does not reach the next connection in that slot
-   until the slot has been reused G times (1,024 at a limit of 1,024; never
-   fewer than 64). At most `NR_SETS` ring listeners exist in a process, which
-   keeps every handle below 2^31; their ids are not reused, so a closed
-   listener's handles answer -9 for good.
+   it, `2^20 + set * 2^26 + ring * 2^B + field` names a slot: each ring
+   listener's set has 2^26 handles, split into 2^(26 - B) rings of 2^B, and
+   `field` is `slot + slots * (gen % G)`, with `G = 2^B / slots` the
+   generations a slot's handles cycle through. B is the least that is at
+   least 20 and leaves G at 64 or more: 20 for a ring of up to 16,384 slots,
+   so 64 rings (`NR_RINGS`) a set, and 22 for one of 65,536, so 16. A set
+   holds about 2^20 connections either way. A close moves the slot's
+   generation on, so the handle a program closed answers -9 at once and does
+   not reach the next connection in that slot until the slot has been reused
+   G times (1,024 at a limit of 1,024; never fewer than 64; NURING-54). At
+   most `NR_SETS` ring listeners exist in a process, which keeps every handle
+   below 2^31; their ids are not reused, so a closed listener's handles
+   answer -9 for good.
+
+   A ring holds RLIMIT_NOFILE slots, the most io_uring lets one ring's table
+   have, up to 16,384 (`NR_SLOTS_MAX`), or up to 65,536 (`NR_SLOTS_WIDE`) for
+   a listener opened with `NET_LISTEN_RING_WIDE`. Each ring is a pass's
+   io_uring_enter and its eventfd, so fewer, wider rings cost a busy loop
+   less (measured: 3.5 points of one CPU at 250,000 connections); each slot
+   costs about 110 bytes a ring up front, so a ring of 65,536 is about 7 MB
+   where one of 16,384 is about 1.8 MB, which is why it is asked for.
 
    `netShutdown` queues an io_uring SHUTDOWN behind the slot's sends, so the
    peer reads every byte written before it and then the FIN (NURING-39);
@@ -325,8 +337,11 @@ void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *s
 /* A slot's first receive queue, doubled as it fills: small enough for
    glibc's thread cache, and freed once drained (NURING-38). */
 #define NR_RECV_FIRST 1024
-/* The most slots per ring: a table is the kernel's memory, sized up front. */
+/* The most slots per ring: a table is the kernel's memory, sized up front,
+   and so is the set's record of each slot. NET_LISTEN_RING_WIDE asks for
+   the larger. */
 #define NR_SLOTS_MAX 16384
+#define NR_SLOTS_WIDE 65536
 #define NR_EVENTS 256
 
 /* A loop's record of one virtual source, a slot or a ring listener: the loop
@@ -356,6 +371,7 @@ struct nr_set {
   struct nish_uring_set *u;
   struct nr_vent v; /* the listener's own entry */
   int32_t listener, port, slots, gens, dead, accept_err;
+  int32_t rbits; /* B above: log2 of each ring's share of the set's 2^26 handles */
   int32_t accept_once; /* an accept that found memory short, answered by the next tcpAccept */
   struct nr_conn *conns[NR_RINGS];
   uint32_t *fifo; /* accepted (ring << 20 | slot), not yet taken */
@@ -467,11 +483,12 @@ static int nr_push(uint32_t **a, uint32_t *n, uint32_t *cap, uint32_t x) {
 static struct nr_conn *nr_decode(int32_t h, struct nr_set **set, int32_t *ring, int32_t *slot) {
   if (h < NR_BASE) return NULL;
   uint32_t x = (uint32_t)h - NR_BASE;
-  uint32_t g = x >> 20, field = x & (NR_BASE - 1);
-  uint32_t si = g / NR_RINGS, ri = g % NR_RINGS;
+  uint32_t si = x >> 26;
   if (si >= (uint32_t)nr_nsets) return NULL;
   struct nr_set *S = nr_sets[si];
-  if (S->dead || !S->conns[ri]) return NULL;
+  uint32_t y = x & ((1u << 26) - 1);
+  uint32_t ri = y >> S->rbits, field = y & ((1u << S->rbits) - 1);
+  if (ri >= NR_RINGS || S->dead || !S->conns[ri]) return NULL;
   uint32_t sl = field % (uint32_t)S->slots, gm = field / (uint32_t)S->slots;
   struct nr_conn *c = &S->conns[ri][sl];
   if (gm >= (uint32_t)S->gens || !c->open || c->lingering || c->gen % (uint32_t)S->gens != gm) return NULL;
@@ -484,7 +501,7 @@ static struct nr_conn *nr_decode(int32_t h, struct nr_set **set, int32_t *ring, 
 static int32_t nr_encode(const struct nr_set *S, int32_t si, uint32_t ring, uint32_t slot) {
   const struct nr_conn *c = &S->conns[ring][slot];
   uint32_t field = slot + (uint32_t)S->slots * (c->gen % (uint32_t)S->gens);
-  return (int32_t)((uint32_t)NR_BASE + ((uint32_t)si * NR_RINGS + ring) * (uint32_t)NR_BASE + field);
+  return (int32_t)((uint32_t)NR_BASE + ((uint32_t)si << 26) + (ring << S->rbits) + field);
 }
 
 /* Ends a slot for good: the set closes it and the slot goes back to the
@@ -701,14 +718,15 @@ static int nr_refused(int32_t r) { return r == -1 || r == -38 || r == -22 || r =
    to descriptors (§5.4); a refusal before any set has opened also decides for
    every later listen, and any other failure, such as -24 or -12, only for
    this one (NURING-20, NURING-22). */
-static int32_t nr_slots(void) {
+static int32_t nr_slots(int wide) {
   struct rlimit rl;
   if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return -1;
-  int32_t n = rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur > NR_SLOTS_MAX ? NR_SLOTS_MAX : (int32_t)rl.rlim_cur;
+  int32_t cap = wide ? NR_SLOTS_WIDE : NR_SLOTS_MAX;
+  int32_t n = rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur > (rlim_t)cap ? cap : (int32_t)rl.rlim_cur;
   return n < 1 ? 1 : n;
 }
 
-static int32_t nr_open(int32_t fd, int32_t port) {
+static int32_t nr_open(int32_t fd, int32_t port, int wide) {
   if (nr_state < 0) return 0;
   /* Under `--sandbox` every set takes the rings made before the filter, so
      any failure of theirs, a refusal or not, decides for good: no ring can be
@@ -724,9 +742,12 @@ static int32_t nr_open(int32_t fd, int32_t port) {
   if (nr_nsets >= NR_SETS) return -23;
   struct nish_uring_opts o;
   memset(&o, 0, sizeof o);
-  o.slots = pooled > 0 ? pooled : nr_slots();
+  o.slots = pooled > 0 ? pooled : nr_slots(wide);
   if (o.slots < 0) return 0;
-  o.rings_max = NR_RINGS;
+  /* B above: each ring's handles hold 64 generations of every slot. */
+  int32_t rbits = 20;
+  while (((int64_t)1 << rbits) < (int64_t)o.slots * 64) rbits++;
+  o.rings_max = 1 << (26 - rbits);
   struct nr_set *S = calloc(1, sizeof *S);
   if (!S) return 0;
   int32_t r = nish_uring_open(&S->u, fd, &o);
@@ -742,7 +763,8 @@ static int32_t nr_open(int32_t fd, int32_t port) {
   S->listener = fd;
   S->port = port;
   S->slots = o.slots;
-  S->gens = NR_BASE / o.slots;
+  S->rbits = rbits;
+  S->gens = (1 << rbits) / o.slots;
   S->v.loop = -1;
   S->v.is_listener = 1;
   nr_sets[nr_nsets++] = S;
@@ -1211,11 +1233,13 @@ static int nr_batch(int32_t loop, int32_t *out, int n, int max, int32_t min, int
    has no io_uring, and answers -95. */
 /* WP63 S3: `--sandbox`, before its filter, makes the `n` restricted rings
    every ring listener of this process takes, at the slots `nr_open` would
-   give a set, and writes each ring's descriptor to `fds` (64 of them). With
-   `n` of 0 it records that no ring may be made. */
+   give a set without `NET_LISTEN_RING_WIDE` (they are made before the
+   program could ask for wider ones, so a sandboxed listener's rings are
+   never wide), and writes each ring's descriptor to `fds` (64 of them).
+   With `n` of 0 it records that no ring may be made. */
 int32_t nish_net_ring_premake(int32_t n, int32_t *fds) {
 #if defined(__linux__)
-  int32_t slots = nr_slots();
+  int32_t slots = nr_slots(0);
   return nish_uring_premake(n, slots < 0 ? 1 : slots, fds);
 #else
   (void)n;
@@ -1354,17 +1378,19 @@ int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog) {
    with io_uring, `tcpAccept` hands out slot handles rather than descriptors,
    so the listener holds connections past RLIMIT_NOFILE (above). Where rings
    are refused the listener is a plain one and `netRingState()` says why;
-   Darwin has none, and the flag does nothing there. Any other bit, or 4
-   without 1, is -22. */
+   Darwin has none, and the flag does nothing there. Flag 16, which needs
+   flag 8, makes the listener's rings as wide as RLIMIT_NOFILE allows up to
+   65,536 slots rather than 16,384 (above). Any other bit, 4 without 1, or
+   16 without 8, is -22. */
 int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags) {
-  if ((uint32_t)flags > 15 || (flags & 5) == 4) return -22;
+  if ((uint32_t)flags > 31 || (flags & 5) == 4 || (flags & 24) == 16) return -22;
 #if !defined(__linux__)
   if (flags & 4) return -95;
 #endif
   int32_t fd = nish_net_bound(host, port, SOCK_STREAM, backlog, flags & 7);
 #if defined(__linux__)
   if (fd >= 0 && (flags & 8)) {
-    int32_t r = nr_open(fd, nish_net_local_port(fd));
+    int32_t r = nr_open(fd, nish_net_local_port(fd), (flags & 16) != 0);
     if (r < 0) {
       close(fd);
       return r;

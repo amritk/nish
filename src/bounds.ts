@@ -1560,7 +1560,7 @@ const unsignedLengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
  * a bound that only one compiler folds is a bound that makes the two disagree
  * about a bounds check.
  */
-const literalValue = (expr: Node): i32 => {
+export const literalValue = (expr: Node): i32 => {
   const e = unwrapBoundsParens(expr)
   if (e.kind !== NodeKind.Number) {
     return -1
@@ -3435,6 +3435,20 @@ const judgeRangeCheck = (walk: BoundsWalk, state: State, call: Node): void => {
           provesWithin(walk, state, args[first], w)
         : provesRange(walk, state, w, args[first], args[first + 1])
     if (proven) {
+      noteProof(walk, call)
+    }
+    return
+  }
+  // A window contract's buffer, offset and count (#2296, `src/window-contract.ts`).
+  if (target !== null && target.window.length === 3 && args.length > target.window[2]) {
+    const at = target.window
+    const w = holderOf(walk, args[at[0]])
+    const first = Math.min(at[0], Math.min(at[1], at[2]))
+    if (
+      w !== null &&
+      quietFrom(ctx.program, call, first + 1) &&
+      provesWindow(walk, state, w, args[at[1]], args[at[2]])
+    ) {
       noteProof(walk, call)
     }
     return
@@ -5550,7 +5564,7 @@ export const analyzeBounds = (ctx: CheckContext, body: Node): BoundsWalk => {
  * called on: an element access, a call spelled `.charCodeAt(...)`,
  * `.substring(...)`, `.pop()`, `.spawn(...)`, `.slice(...)`, `.set(...)` or
  * `.fromBytes(...)` whatever its receiver, an atomic array's element method,
- * a buffer call, a `new`, a
+ * a buffer call, a call into a window guard or forward, a `new`, a
  * division, or a value entering a range. Read
  * off the syntax and the entries the checker recorded, so it answers `true`
  * for more than the walk judges, never less.
@@ -5576,8 +5590,12 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
       return true
     }
     // An array's `slice`, once the checker has rewritten it into a template call.
+    // A window contract's call, whose window `judgeRangeCheck` proves (#2296).
     const target = ctx.program.nodeCallees[node.id]
-    if (target !== null && (isArraySliceInstance(target) || isAtomicArrayMethod(target))) {
+    if (
+      target !== null &&
+      (isArraySliceInstance(target) || isAtomicArrayMethod(target) || target.window.length === 3)
+    ) {
       return true
     }
   }
