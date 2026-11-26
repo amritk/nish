@@ -2511,7 +2511,7 @@ const isNameDeclaration = (node: Node): boolean => {
  * reasoning about scopes. A question about the whole module goes through
  * `shadowsGuardName`, which walks it once.
  */
-const declaresName = (node: Node, name: string): boolean => {
+export const declaresName = (node: Node, name: string): boolean => {
   if (isNameDeclaration(node)) {
     for (const child of node.children) {
       if (child.kind === NodeKind.Ident && child.text === name) {
@@ -2560,7 +2560,7 @@ const guardNamesDeclared = (node: Node): i32 => {
  * all three and keeps the answer in `guardShadows`; every NL9007 warning
  * after it reads the bits, where it used to walk the module twice.
  */
-const shadowsGuardName = (program: CheckedProgram, name: string): boolean => {
+export const shadowsGuardName = (program: CheckedProgram, name: string): boolean => {
   if (program.guardShadows < 0) {
     program.guardShadows = guardNamesDeclared(program.file)
   }

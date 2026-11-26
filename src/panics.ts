@@ -30,18 +30,22 @@
 // writes `nsw` instead of the check; for the `nish:unsafe` `wrapping*` calls
 // nothing is checked and nothing is listed.
 
-import { AnalysisUnit, FactsTable, FunctionFacts } from "./attributes"
-import { unwrapBoundsParens, vectorAccessLanes } from "./bounds"
+import { AnalysisUnit, constructorOf, FactsTable, FunctionFacts } from "./attributes"
+import { literalValue, unwrapBoundsParens, vectorAccessLanes } from "./bounds"
 import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
+import { intrinsicType } from "./emit-util"
 import { StringSet } from "./map"
+import { faultProven, isFaultGuard } from "./fault-contract"
 import { isNetExport, isTermExport, netRangeBuffer } from "./nish-modules"
 import { Node, NodeKind } from "./nodes"
 import { ALLOW_PANICS_FLAG } from "./options"
+import { ROOT_PACKAGE } from "./packages"
 import { CheckedProgram, FunctionSig } from "./program"
 import { isSimdAccess } from "./simd"
 import { addJsonQuoted, StringBuilder } from "./strings"
 import { T_I32, T_STRING, TypeTable, isUnsigned } from "./types"
+import { isWindowGuard } from "./window-contract"
 
 // The kinds. The number is internal and never reused, so a kind added later
 // takes the next one wherever docs/LANGUAGE.md lists it; the name
@@ -109,6 +113,23 @@ export const PANIC_REGION: i32 = 17
  * the store.
  */
 export const PANIC_SPAWN_SLOT: i32 = 18
+/**
+ * #2296: a call into a window guard, or into a method whose first statement
+ * hands its own buffer, offset and count to one (`src/window-contract.ts`).
+ * The guard panics exactly when `[off, off + len)` is outside the buffer, and
+ * a call into it is not followed (`FunctionFacts.callerProven`): the check is
+ * this site's, proven where `src/bounds.ts` proves the window at the call.
+ */
+export const PANIC_WINDOW: i32 = 19
+/**
+ * #2296: a call into a fault guard, or into a constructor or method whose
+ * first statement hands a parameter of its own to one
+ * (`src/fault-contract.ts`). The guard panics exactly when its fault function
+ * finds a fault, and a call into it is not followed: the check is this
+ * site's, proven where the caller has run the same function on the same
+ * value and left on a fault (`faultProven`).
+ */
+export const PANIC_FAULT: i32 = 20
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -149,6 +170,10 @@ const panicKindName = (kind: i32): string => {
       return "region"
     case PANIC_SPAWN_SLOT:
       return "spawn-slot"
+    case PANIC_WINDOW:
+      return "window"
+    case PANIC_FAULT:
+      return "fault"
     default:
       return "oom"
   }
@@ -325,13 +350,16 @@ const inEvaluationOrder = (sites: PanicSite[]): PanicSite[] => {
  * attribute pass already built and propagates `callsNoReturn` over. It is not
  * `callsNoReturn` itself, which `process.exit` sets too.
  */
-export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): void => {
+export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable, strictExports: boolean): void => {
   const ordered: PanicSite[][] = []
   const reach: (PanicSite | null)[] = []
   for (const f of facts.list) {
     sortByPosition(f.panicSites)
     ordered.push(inEvaluationOrder(f.panicSites))
     reach.push(null)
+  }
+  for (const unit of units) {
+    keepWindowGuards(unit.program, facts)
   }
   const may = mayPanicSet(facts, ordered)
   // A function reaches the first of its sites, in the order the body reaches
@@ -376,7 +404,7 @@ export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): voi
     for (const sig of program.functions) {
       const f = listedFacts(program, facts, sig)
       if (f !== null) {
-        keepSites(program, facts, reach, sig, f)
+        keepSites(program, facts, reach, sig, f, hostCalls(program, strictExports, sig))
       }
     }
   }
@@ -422,12 +450,122 @@ const callsMayPanic = (facts: FactsTable, may: boolean[], sites: PanicSite[], f:
   }
   let c = 0
   while (c < f.callees.size()) {
-    if (mayPanicAt(facts, may, f.callees.at(c))) {
+    const callee = f.callees.at(c)
+    if (!namedBy(sites, callee) && (mayPanicAt(facts, may, callee) || windowMayPanic(facts, may, callee))) {
       return true
     }
     c = c + 1
   }
   return false
+}
+
+/** Whether a recorded call in `sites` names `callee`, which the call's own sites then answer for. */
+const namedBy = (sites: PanicSite[], callee: string): boolean => {
+  for (const site of sites) {
+    if (isCallSite(site) && site.callee === callee) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether `name` forwards its window to a guard that can panic (#2296): a
+ * route into it no call names holds no `window` site, so the guard's check is
+ * reached as if it were not the callers'.
+ */
+const windowMayPanic = (facts: FactsTable, may: boolean[], name: string): boolean => {
+  const guard = forwardGuardAt(facts, name)
+  return guard >= 0 && guard < may.length && may[guard]
+}
+
+/** The index of the guard `name` forwards its window or fault value to, or -1. */
+const forwardGuardAt = (facts: FactsTable, name: string): i32 => {
+  const at = facts.indexOf(name)
+  return at >= 0 && facts.list[at].forwardGuard.length > 0 ? facts.indexOf(facts.list[at].forwardGuard) : -1
+}
+
+/**
+ * A window or fault guard's check is its callers' (`FunctionFacts.callerProven`) only
+ * while nothing else in it can panic: every site outside its branch is
+ * proven or allowed and calls nothing, and it is never a value, which a call
+ * through would reach without a `window` site. Otherwise it is followed as any
+ * function is, and its callers' `window` sites only add to the list.
+ */
+const keepWindowGuards = (program: CheckedProgram, facts: FactsTable): void => {
+  for (const sig of program.functions) {
+    const branch = contractCheck(sig)
+    if (branch === null || !sig.definedIn(program.source)) {
+      continue
+    }
+    const f = facts.get(sig.name)
+    if (f === null) {
+      continue
+    }
+    let clean = sig.refTag === 0 && !sig.refHidden && !sig.dispatcher
+    // A fault guard's call into its fault function is its callers' too: each
+    // made the same call on the same value just before, and it returned.
+    const fault: FunctionSig | null = isFaultGuard(sig) ? sig.fault : null
+    for (const site of f.panicSites) {
+      const inside = site.node.start >= branch.start && site.node.end <= branch.end
+      const faultCall = fault !== null && isCallSite(site) && site.callee === fault.name
+      if (!inside && !faultCall && (isCallSite(site) || (!site.proven && !isAllowed(site)))) {
+        clean = false
+      }
+    }
+    if (!clean) {
+      f.callerProven = false
+    }
+  }
+}
+
+/**
+ * Whether a host can call `sig` by its symbol, with arguments no caller in the
+ * program checked: one of the root package's external functions, as
+ * `externalFunctions` (`src/interop-abi.ts`) lists them for the sidecars.
+ */
+const hostCalls = (program: CheckedProgram, strictExports: boolean, sig: FunctionSig): boolean => {
+  const main = program.entryMain
+  if (main !== null && main === sig) {
+    return false
+  }
+  return (
+    program.packageName === ROOT_PACKAGE &&
+    !program.source.host &&
+    sig.definedIn(program.source) &&
+    (sig.exported || !strictExports) &&
+    !sig.compileTimeOnly()
+  )
+}
+
+/** Whether `site` is a forwarding method's call into its guard, which its callers' tests prove. */
+const forwardSite = (sig: FunctionSig, site: PanicSite): boolean => {
+  const forward = sig.windowForward !== null ? sig.windowForward : sig.faultForward
+  return (
+    forward !== null && site.node === forward && (site.kind === PANIC_WINDOW || site.kind === PANIC_FAULT)
+  )
+}
+
+/**
+ * Whether a forwarding method's call into its guard (`forwardSite`) is proven
+ * for a host that calls the method by its symbol: such a call holds no
+ * caller's test, so the site is judged as any call into the guard is, from
+ * what the method itself checked.
+ */
+const hostProof = (program: CheckedProgram, sig: FunctionSig, site: PanicSite): boolean => {
+  if (site.kind === PANIC_WINDOW) {
+    return program.nodeProvenIndex[site.node.id]
+  }
+  const guard = sig.faultGuard
+  return guard !== null && faultProven(program, sig, site.node, guard)
+}
+
+/** A window or fault guard's branch, the check its callers hold, or null for any other function. */
+const contractCheck = (sig: FunctionSig): Node | null => {
+  if (isWindowGuard(sig)) {
+    return sig.windowCheck
+  }
+  return isFaultGuard(sig) ? sig.faultCheck : null
 }
 
 /**
@@ -472,10 +610,15 @@ const firstPanic = (
   let c = 0
   while (c < f.callees.size()) {
     const callee = f.callees.at(c)
-    if (mayPanicAt(facts, may, callee)) {
-      const found = reachOf(facts, reach, callee)
-      if (found !== null) {
-        return found
+    const guard = namedBy(sites, callee) ? -1 : forwardGuardAt(facts, callee)
+    const window = guard >= 0 && guard < may.length && may[guard]
+    if (!namedBy(sites, callee) && (mayPanicAt(facts, may, callee) || window)) {
+      let reached: PanicSite | null = mayPanicAt(facts, may, callee) ? reachOf(facts, reach, callee) : null
+      if (reached === null && window && guard >= 0 && guard < reach.length) {
+        reached = reach[guard]
+      }
+      if (reached !== null) {
+        return reached
       }
       if (!passOver) {
         return null
@@ -510,26 +653,51 @@ const keepSites = (
   facts: FactsTable,
   reach: (PanicSite | null)[],
   sig: FunctionSig,
-  f: FunctionFacts
+  f: FunctionFacts,
+  hostCalled: boolean
 ): void => {
   const sites: PanicSite[] = []
   const named = new StringSet()
+  // A contract guard its callers hold lists its own check as proven: each
+  // call into it is the site, and counting both would count the check twice.
+  // A host that calls the guard by its symbol is a caller no site stands for,
+  // so that guard lists its check as it is.
+  const held: Node | null = f.callerProven && !hostCalled ? contractCheck(sig) : null
   for (const site of f.panicSites) {
     if (!isCallSite(site)) {
+      // The list answers for a host's call too, so a host-callable forwarder
+      // lists its call into the guard as the host would reach it; the facts
+      // its callers are settled from keep the forwarded proof.
+      if (hostCalled && forwardSite(sig, site) && site.proven && !hostProof(program, sig, site)) {
+        const copy = new PanicSite(site.node, site.source, site.kind, site.fn, false, site.callee)
+        copy.order = site.order
+        sites.push(copy)
+        continue
+      }
+      if (held !== null && !site.proven && site.node.start >= held.start && site.node.end <= held.end) {
+        const copy = new PanicSite(site.node, site.source, site.kind, site.fn, true, site.callee)
+        copy.order = site.order
+        sites.push(copy)
+        continue
+      }
       sites.push(site)
       continue
     }
+    // Named even when it reaches nothing: a forwarding method's guard is then
+    // held by the call's own `window` site, never by the route fallback below.
+    named.add(site.callee)
     const found = reachOf(facts, reach, site.callee)
     if (found !== null) {
       site.reaches = found
       sites.push(site)
-      named.add(site.callee)
     }
   }
   let c = 0
   while (c < f.callees.size()) {
     const callee = f.callees.at(c)
-    const found = reachOf(facts, reach, callee)
+    const guard = forwardGuardAt(facts, callee)
+    const direct = reachOf(facts, reach, callee)
+    const found = direct !== null || guard < 0 || guard >= reach.length ? direct : reach[guard]
     if (found !== null && !named.has(callee)) {
       const site = new PanicSite(sig.decl, program.source, PANIC_CALL, sig.name, false, callee)
       site.reaches = found
@@ -872,6 +1040,10 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       )
     case PANIC_SPAWN_SLOT:
       return spawnSlotAdvice(program, table, node)
+    case PANIC_WINDOW:
+      return windowAdvice(program, node)
+    case PANIC_FAULT:
+      return faultAdvice(program, table, node)
     case PANIC_REGION:
       return (
         "`nish:region` checks the handle at every call, and stops the program on one that is freed, entered " +
@@ -961,6 +1133,68 @@ const spawnSlotAdvice = (program: CheckedProgram, table: TypeTable, call: Node):
       ? `\`${i}\` is not proven to be a slot of \`${xs}\` here`
       : "this slot is not proven to be in its array here"
   return `${what}, and \`spawn\` panics on one that is not: ${indexGuardAdvice(program, table, args[3], i, xs)}`
+}
+
+/**
+ * A call into a fault guard, or into a constructor or method that forwards
+ * to one (`PANIC_FAULT`), panics when the guard's fault function finds a
+ * fault, and `faultProven` in `src/fault-contract.ts` credits the caller that
+ * ran the same function on the same value just before and left on a fault.
+ */
+const faultAdvice = (program: CheckedProgram, table: TypeTable, call: Node): string => {
+  const target =
+    call.kind === NodeKind.New
+      ? constructorOf(program, table, intrinsicType(program, call))
+      : program.nodeCallees[call.id]
+  const fault: FunctionSig | null = target === null ? null : target.fault
+  const made = call.kind === NodeKind.New && call.children[0].kind === NodeKind.Ident
+  const name = made ? `new ${call.children[0].text}` : calledName(program, call)
+  const what = name.length > 0 ? `\`${name}\`` : "this call"
+  if (target === null || fault === null) {
+    return `${what} panics on a fault in its argument, and nothing proves there is none here`
+  }
+  const args = call.kind === NodeKind.New ? call.children[2].children : call.children[1].children
+  const at = target.faultAt
+  const arg = at >= 0 && at < args.length && args[at].kind === NodeKind.Ident ? args[at].text : "value"
+  return (
+    `${what} panics when \`${fault.sourceName}(${arg})\` finds a fault, and nothing proves it finds none here: ` +
+    `just before the call, write \`const fault = ${fault.sourceName}(${arg})\` and ` +
+    `\`if (fault.length > 0) { return ... }\`, with \`${arg}\` a parameter or \`const\` that nothing between writes`
+  )
+}
+
+/**
+ * A call into a window guard, or into a method that forwards to one
+ * (`PANIC_WINDOW`), checks `[off, off + len)` of its buffer, and the shapes
+ * `provesWindow` in `src/bounds.ts` credits are a count from 0, a literal
+ * count, and a count written `end - off` over a range the caller checked.
+ */
+const windowAdvice = (program: CheckedProgram, call: Node): string => {
+  const target = program.nodeCallees[call.id]
+  const none: i32[] = []
+  const at = target === null ? none : target.window
+  const name = calledName(program, call)
+  const what = name.length > 0 ? `\`${name}\`` : "this call"
+  if (at.length !== 3) {
+    return `${what} panics when its window is outside its buffer, and nothing proves it inside here`
+  }
+  const buf = argumentName(program, call, at[0], "buf")
+  const off = argumentName(program, call, at[1], "off")
+  const len = argumentName(program, call, at[2], "len")
+  const args = call.children[1].children
+  const start = literalValue(args[at[1]])
+  const count = literalValue(args[at[2]])
+  if (start > 0 && count > 0 && toI64(start) + toI64(count) < toI64(2147483647)) {
+    return (
+      `${what} panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it inside here: ` +
+      `guard the call with \`if (${buf}.length >= ${start + count})\`, or pass \`0\` and a count no larger than \`${buf}.length\``
+    )
+  }
+  return (
+    `${what} panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it inside here: ` +
+    `pass \`0\` and a count no larger than \`${buf}.length\`, or a count written \`end - ${off}\` behind a guard — ` +
+    `\`if (${off} >= 0 && ${off} <= end && end <= ${buf}.length)\` proves it`
+  )
 }
 
 /**
