@@ -8152,7 +8152,8 @@ if (dealtHere("fix")) {
 //                  module with a golden is compared, so there is no missing one to write;
 //                  `--update-link-goldens` rewrites each golden that differs from what
 //                  this run's compiler emitted, prints `WROTE link/<name>/<module>.ll`,
-//                  and compares again. Narrow it with a filter
+//                  and compares again; it rewrites a differing `expected.panics` and
+//                  `expected.caps.json` the same way. Narrow it with a filter
 //                  (`node tests/run.js <name> --update-link-goldens`) and read the diff
 //                  before committing it, as for any regenerated golden.
 // Every positive test is also assembled (llvm-as), verified (opt -passes=verify),
@@ -8605,8 +8606,13 @@ const runLinkProgram = async (name) => {
           : `no listed function names ${side("main.ts")} as its module`
       )
       if (fs.existsSync(side("expected.panics"))) {
-        const want = read("expected.panics").trim()
+        let want = read("expected.panics").trim()
         const got = listText.split(`${root}/`).join("").trim()
+        if (UPDATE_LINK_GOLDENS && got !== want) {
+          fs.writeFileSync(side("expected.panics"), got + "\n")
+          steps.push({ kind: "log", text: `WROTE link/${name}/expected.panics` })
+          want = got
+        }
         expect(
           `link/${name}: --emit-panics matches expected.panics`,
           got === want,
@@ -8616,8 +8622,13 @@ const runLinkProgram = async (name) => {
     }
 
     if (capsArgs.length > 0) {
-      const want = read("expected.caps.json")
+      let want = read("expected.caps.json")
       const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
+      if (UPDATE_LINK_GOLDENS && got.length > 0 && got !== want) {
+        fs.writeFileSync(side("expected.caps.json"), got)
+        steps.push({ kind: "log", text: `WROTE link/${name}/expected.caps.json` })
+        want = got
+      }
       expect(
         `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
         got === want,
@@ -46919,7 +46930,7 @@ if (!only || "std_term".includes(only) || "term-frame-loop".includes(only)) {
 // natively and under Node, which runs each task at its `spawn`.
 if (!only || "histogram-atomic".includes(only)) {
   const exe = path.join(buildDir, "histogram-atomic")
-  const linked = spawnNish(["examples/histogram-atomic.ts", ALLOW_PANICS, "--link", exe], {
+  const linked = spawnNish(["examples/histogram-atomic.ts", "--link", exe], {
     cwd: root,
     encoding: "utf8",
   })
