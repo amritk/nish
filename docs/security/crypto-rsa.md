@@ -171,7 +171,8 @@ different MGF1 hash, which the module does not offer.
   reads them.
 - `rsa_pkcs1_*_sig_gen`: signature generation.
 - `rsa_pkcs1_{2048,3072,4096}` and every `rsa_oaep_*` and
-  `rsa_three_primes_*` file: decryption.
+  `rsa_three_primes_*` file: decryption. The signing tests take their keys
+  and ciphertexts from `rsa_pkcs1_*` ([Method (signing)](#method-signing)).
 
 **Hand-made cases** (`tests/link/crypto_rsa`, 74 checks). The keys and
 signatures in `tests/link/crypto_rsa/vectors.ts` were made for this test.
@@ -397,8 +398,8 @@ Out of scope:
 ### Method (signing)
 
 - **Known answers.** `tests/link/crypto_rsa_sign` takes six Wycheproof keys,
-  2048 to 4096 bits, from the PKCS#8 files that `crypto_wycheproof_rsa`
-  vendors.
+  2048 to 4096 bits, from the `privateKeyPkcs8` of groups 0 and 1 of
+  Wycheproof `rsa_pkcs1_{2048,3072,4096}_test.json` (`generate.mjs`).
   - Each key must load, with its bit length and its public modulus.
   - The private operation must open each of 12 Wycheproof PKCS#1 v1.5
     ciphertexts to its block. That is a raw RSA known answer, since signing
@@ -428,7 +429,7 @@ Out of scope:
 | RSA-S3 | None (a property) | `rsaSignPssSha256`, `RsaSignScratch.saltInto` | The salt is derived, not drawn: it is the SHA-256 of a fixed label, d's k bytes and the message hash. So the same message under the same key gives the same signature. | **Accepted, not counted.** PSS's security does not rest on the salt being random (RFC 8017 §8.1, note 4), and a verifier cannot tell the difference. The salt is unpredictable without d, and the module needs no random source. Pinned by "rsaSignPssSha256 gives each of the 12 known answers byte for byte", "each of those signatures verifies under rsaVerifyPss with SHA-256 and a 32-byte salt" and "under each of the 6 keys, rsaSignPssSha256Salted signs under an empty and a 32-byte salt, each verifying at its own length only, the same twice, and unlike the derived salt". |
 | RSA-S4 | Low | `rsaParsePrivateKey`, `x509ParseRsaPrivateKey` | Key bounds and strict DER. A key is refused when it is under 2048 or over 4096 bits, uses a non-shortest length, has a non-minimal or negative INTEGER or a version other than 0, has an even modulus or public exponent, has e under 3 or at 2^32 or more, has d zero or not below n, or carries bytes after the key. A key that fails a trial signature is also refused. | **Fixed by design.** Pinned by "rsaParsePrivateKey refuses each of 9 changes to a key: empty, a byte short, a byte after, version 1, an even modulus, a negative modulus, an even public exponent, a private exponent one bit off, an outer length one long" (`crypto_rsa_sign`). Also pinned, in `net_tls_rsa_server`: "a 1024-bit key is refused, without a panic", "a certificate is not a key", and the PKCS#1 and PKCS#8 loads of the same key. **Untested**: no test offers a key over 4096 bits, a d not below n, or an e of 2^32 or more. Those refusals are read from the code only. |
 | RSA-S5 | Low | `rsaSignPrivateOp`, `RsaSignScratch`, `rsaParsePrivateKey`, `x509ParseRsaPrivateKey` | What a wipe cannot reach. The key's DER is the caller's, and so is the PEM string, which the language cannot zero ([crypto-x509.md](crypto-x509.md), X509-7). A signature that fails the check after signing is dropped to the collector unwiped, though it is a function of d. | **Recorded.** The `Secret` holds n, d and e. The seven arrays of the exponentiation, the three of the salt hasher, the exponent copy, and a key that fails its trial are wiped. Each is pinned by the opt -O2 wipe check above. `x509ParseRsaPrivateKey` wipes the blocks it decoded. A faulty signature is only produced by a fault the module does not expect, and it is never returned. |
-| RSA-S6 | None (a test gap) | `rsaSignPrivateOp` | The check after signing has no test. Every signature is raised to e and compared, but no test injects a fault. A known-answer test would still pass if the check were removed. | **Recorded, untested.** The check is read from the code only. |
+| RSA-S6 | None (a test gap) | `rsaSignPrivateOp`, `rsaSignPssEncode` | Two paths have no test. First, the check after signing: every signature is raised to e and compared, but no test injects a fault, so a known-answer test would still pass if the check were removed. Second, a modulus whose bit length is one more than a multiple of 8, such as 2049 bits, where the encoded message is one byte shorter than the modulus: every test key is 2048, 3072 or 4096 bits. | **Recorded, untested.** Both are read from the code only. |
 
 None of these is counted in the README's Areas table: RSA-S4 is fixed by
 design, and the others are properties or a recorded gap.
