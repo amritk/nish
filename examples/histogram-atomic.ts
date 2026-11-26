@@ -214,7 +214,7 @@ export const main = (): i32 => {
   const args = process.argv
   let mode = ""
   let shift: i32 = 0
-  for (let i = 1; i < args.length; i++) {
+  for (let i: i32 = 1; i < toI32(args.length); i++) {
     const arg = args[i]
     if (arg === "--lock" || arg === "--single" || arg === "--per-value") {
       mode = arg
@@ -236,7 +236,7 @@ export const main = (): i32 => {
       return 1
     }
     const bins: u32[] = made.value
-    for (let b = 0; b < bins.length; b++) {
+    for (let b: i32 = 0; b < toI32(bins.length); b++) {
       total = total + bins[b]
       checksum = (checksum * 31 + bins[b]) % 1000003
     }

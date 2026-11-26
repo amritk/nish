@@ -3122,8 +3122,6 @@ export const main = (): i32 => {
 };
 ```
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonDecoder, JsonNumber, jsonDecode, jsonEncode } from "nish/json-typed";
