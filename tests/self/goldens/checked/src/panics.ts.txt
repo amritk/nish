@@ -552,11 +552,11 @@ function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite):
   callee +20:14 arrayLengthAdvice -> @arrayLengthAdvice
   callee +26:14 ioExitAdvice -> @ioExitAdvice
   callee +34:14 overflowAdvice -> @overflowAdvice
-  local +41:13 reader: string (const)
-  callee +41:22 calledName -> @calledName
-  callee +57:14 spawnSlotAdvice -> @spawnSlotAdvice
-  callee +59:14 windowAdvice -> @windowAdvice
-  callee +61:14 faultAdvice -> @faultAdvice
+  local +42:13 reader: string (const)
+  callee +42:22 calledName -> @calledName
+  callee +58:14 spawnSlotAdvice -> @spawnSlotAdvice
+  callee +60:14 windowAdvice -> @windowAdvice
+  callee +62:14 faultAdvice -> @faultAdvice
 function arrayLengthAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @arrayLengthAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf TypeTable.typeName nish_panic_index nish_str_concat unwrapBoundsParens
