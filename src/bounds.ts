@@ -3068,9 +3068,9 @@ const isCharCodeAt = (ctx: CheckContext, call: Node): boolean => {
 /**
  * The local `s` of `s.indexOf("\u0000")`, the search for a NUL code unit, or
  * null: its answer is below 0 exactly when a string `s` holds no NUL, so C
- * reads all of it (`nulFreeFacts`). Only a `string` argument is judged
- * (`judgeForeignStrings`), so a fact this records on any other local, an
- * array's or a class's own `indexOf`, is never read.
+ * reads all of it (`nulFreeFacts`). The receiver must type as `string` at
+ * the search itself, so a class's own `indexOf` on a `string | C` local that
+ * is later narrowed to `string` proves nothing.
  */
 const nulSearchOf = (ctx: CheckContext, expr: Node): Local | null => {
   const call = unwrapBoundsParens(expr)
@@ -3087,7 +3087,8 @@ const nulSearchOf = (ctx: CheckContext, expr: Node): Local | null => {
   ) {
     return null
   }
-  return localOf(ctx.program, callee.children[0])
+  const receiver = unwrapBoundsParens(callee.children[0])
+  return ctx.program.nodeTypes[receiver.id] === T_STRING ? localOf(ctx.program, receiver) : null
 }
 
 /**

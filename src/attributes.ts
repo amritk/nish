@@ -3781,7 +3781,11 @@ class FactCollector {
     let i = 0
     while (i < args.length && i < callee.paramTypes.length) {
       const arg = args[i]
-      if (!host && this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(this.unit.program, arg)) {
+      if (
+        !host &&
+        this.table.stripNull(callee.paramTypes[i]) === T_STRING &&
+        !foreignStringIsNulFree(this.unit.program, arg)
+      ) {
         const checks: string[] = []
         foreignStringCallees(checks)
         this.addCallees(checks)
