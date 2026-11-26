@@ -133,7 +133,8 @@ import { TlsServerConfig } from "nish/net/tls"
 import { TLS_RECORD_DONE, TLS_RECORD_SIGN } from "nish/net/tls/record-server"
 import { TLS_TCP_POOL_FULL } from "nish/net/tls-tcp"
 import { URL_DECODE_ALLOW_NUL, URL_DECODE_ERR_SPACE, URL_DECODE_FORM, percentDecode } from "nish/net/url"
-import { netLocalPort, netRead, pollAdd, pollCreate, pollModify, pollRemove, pollWait, udpRecvFrom } from "nish:net"
+import { netLocalPort, pollAdd, pollCreate, pollModify, pollRemove, pollWait, udpRecvFrom } from "nish:net"
+import { netRead } from "nish:net"
 import { Secret } from "nish:secret"
 
 /** The base `digits` writes a content-length in, and the byte of its digit 0. */
@@ -145,9 +146,8 @@ const HTTP_SERVER_TOO_LARGE: i32 = 413
 /** The status a request gets when no request record is free. */
 const HTTP_SERVER_UNAVAILABLE: i32 = 503
 
-// A request's life: free, reading its body, whole but parked behind a full
-// output, queued for `take`, held by the program, streaming its response,
-// and flushing the response's last bytes.
+// A request's life: free, reading its body, whole but parked behind a full output, queued for `take`,
+// held by the program, streaming its response, and flushing the response's last bytes.
 const HTTP_SERVER_FREE: i32 = 0
 const HTTP_SERVER_READING: i32 = 1
 const HTTP_SERVER_PARKED: i32 = 2
@@ -4818,7 +4818,12 @@ export class HttpServer {
    */
   private expireAll(now: i64): void {
     for (const s of this.h1Slots) {
-      if (s.open && s.sniff && s.got > 0 && httpServerAfter(s.since, toI64(this.prefaceTimeout) * HTTP_SERVER_NANOS_PER_MS) <= now) {
+      if (
+        s.open &&
+        s.sniff &&
+        s.got > 0 &&
+        httpServerAfter(s.since, toI64(this.prefaceTimeout) * HTTP_SERVER_NANOS_PER_MS) <= now
+      ) {
         // Part of the preface and then silence: the slot has held its 24 bytes long enough.
         this.h1Close(s)
       }
