@@ -19,18 +19,31 @@ export class Preface {
   got: u8[]
   /** Whether the client has read the server's end of the connection. */
   ended: boolean = false
+  /** The listener's port, for `dial`. */
+  port: i32 = 0
 
-  /** A server under `limits` whose listener takes h2c peers when `h2c`, and a client connected to it. */
-  constructor(limits: HttpServerLimits, h2c: boolean) {
+  /**
+   * A server under `limits` whose listener, of `slots` slots, takes h2c
+   * peers when `h2c`, and a client connected to it.
+   */
+  constructor(limits: HttpServerLimits, h2c: boolean, slots: i32 = 4) {
     const h: HttpServer = bare(limits)
     const listener: i32 = tcpListen("127.0.0.1", 0, 8)
     if (h2c) {
-      h.listenHttp1(listener, new Http1Config(), toI32(4), new Http2Config())
+      h.listenHttp1(listener, new Http1Config(), slots, new Http2Config())
     } else {
-      h.listenHttp1(listener, new Http1Config(), toI32(4))
+      h.listenHttp1(listener, new Http1Config(), slots)
     }
+    this.h = h
+    this.port = netLocalPort(listener)
+    this.got = []
+    this.client = this.dial()
+  }
+
+  /** Another client connected to the listener, the caller's to read and write. */
+  dial(): i32 {
     const addr: u8[] = new Array<u8>(18)
-    netAddress(addr, "127.0.0.1", netLocalPort(listener))
+    netAddress(addr, "127.0.0.1", this.port)
     const client: i32 = tcpConnect(addr)
     const loop: i32 = pollCreate()
     const ready: i32[] = new Array<i32>(2)
@@ -38,9 +51,7 @@ export class Preface {
     if (pollWait(loop, ready, 5000) !== 1 || connectResult(client) !== 0) {
       panic("connect failed")
     }
-    this.h = h
-    this.client = client
-    this.got = []
+    return client
   }
 
   /** Writes `bytes` from the client, whole. */

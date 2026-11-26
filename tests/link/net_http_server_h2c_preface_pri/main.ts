@@ -1,8 +1,8 @@
 // A request whose method is `PRI` on a listener that takes h2c peers: it
-// matches the preface for 9 bytes and then differs, so HTTP/1.1 takes the
-// connection with those bytes and serves it as a listener that did not opt
-// in does. Both servers hand the program the same request, and both send its
-// answer.
+// matches the preface for 11 bytes (`PRI * HTTP/`) and differs at the
+// twelfth, so HTTP/1.1 takes the connection with those bytes and serves it as
+// a listener that did not opt in does. Both servers hand the program the same
+// request, and both send its answer.
 import { HttpServerLimits, HttpServerRequest } from "nish/net/http-server"
 import { ascii, ZERO } from "../net_tls_record_common/bytes"
 import { Preface } from "../net_http_server_h2c_preface/rig"

@@ -636,8 +636,9 @@ connection, and the façade decides each one before HTTP/1.1 reads a byte.
    HTTP/1.1's: the bytes read so far are fed to its `Http1Connection` with
    `feed`, as `readable` feeds what it reads, and the rest of the socket is
    read by `Http1Server` as on any other port. A request whose method is
-   `PRI` differs at its tenth byte (`PRI * HTTP/1.1` against
-   `PRI * HTTP/2.0`) and is answered exactly as a default port answers it.
+   `PRI` matches the preface for 11 bytes (`PRI * HTTP/`), differs at its
+   twelfth (`PRI * HTTP/1.1` against `PRI * HTTP/2.0`), and is answered
+   exactly as a default port answers it.
 3. When all 24 match, the socket leaves the loop and `Http1Server`, unclosed
    (`Http1Server.release`), and the h2c carrier takes it with the 24 bytes
    (`Http2CleartextServer.adopt`), which feeds them to `Http2Connection` as

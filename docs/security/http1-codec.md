@@ -118,7 +118,7 @@ The other targets each ran for 31 minutes (1,861 s, one core each, four at a tim
 
 Each property below is pinned by a test that fails if it stops holding.
 
-**A released slot was never read** (`tests/link/net_http_server_h2c_preface`):
+**A released slot was never read** (`tests/link/net_http_server_h2c_preface`, `_release`):
 `Http1Server.release` frees a slot without closing its socket only while the
 slot holds no connection (`at[slot] < 0`), so no parser state, input byte or
 queued response leaves the pool with the socket; it answers -1 for any other
@@ -128,6 +128,10 @@ releases the slot to hand an HTTP/2 preface to the h2c carrier
 ([http-server.md](http-server.md), HTTPSRV-24). The check: the h2c peer's
 request arrives as version 2 and its first frame back is SETTINGS, which fails
 if `release` answers -1 (the slot is closed instead) or closes the socket.
+`_release` calls it directly: "unknown: -1, before any accept: -1", an
+unread slot gives "a socket true, again -1, held false" and is the next
+accept's, and a slot that has read answers "read slot 0: -1, held true",
+which fails without the `at[slot] >= 0` test.
 
 **Cut anywhere, framed the same** (`tests/link/net_http1`, `_f64`): a corpus
 of pipelined keep-alive requests, both body framings, an upgrade and the
