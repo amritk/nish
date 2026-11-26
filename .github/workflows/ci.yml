@@ -196,6 +196,7 @@ jobs:
       sha256_macos: ${{ steps.scope.outputs.sha256_macos }}
       fuzz: ${{ steps.scope.outputs.fuzz }}
       postgres: ${{ steps.scope.outputs.postgres }}
+      gfx: ${{ steps.scope.outputs.gfx }}
       why: ${{ steps.scope.outputs.why }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -1914,17 +1915,29 @@ jobs:
   # a gfx check: here the libraries and an adapter are both present.
   gfx:
     name: gfx (ubuntu-latest, lavapipe)
+    needs: scope
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.gfx == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the gfx lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the gfx lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.gfx != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.gfx != 'false'
         with:
           node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18, Vulkan and SDL's build headers (Ubuntu)
+        if: needs.scope.outputs.gfx != 'false'
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
@@ -1932,6 +1945,7 @@ jobs:
 
       # The `test` job's step of the same name.
       - name: Link the LLVM 18 tools by their plain names
+        if: needs.scope.outputs.gfx != 'false'
         run: |
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
@@ -1941,10 +1955,12 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: needs.scope.outputs.gfx != 'false'
         timeout-minutes: 5
         run: npm ci --ignore-scripts
 
       - name: Fetch the seed
+        if: needs.scope.outputs.gfx != 'false'
         timeout-minutes: 5
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1952,13 +1968,16 @@ jobs:
         run: bash scripts/fetch-seed.sh
 
       - name: The compiler under test
+        if: needs.scope.outputs.gfx != 'false'
         uses: ./.github/actions/compiler-cache
 
       - name: Fetch and build SDL3 and wgpu-native
+        if: needs.scope.outputs.gfx != 'false'
         timeout-minutes: 10
         run: sh scripts/fetch-gfx.sh
 
       - name: The gfx section on lavapipe
+        if: needs.scope.outputs.gfx != 'false'
         run: |
           set -o pipefail
           node tests/run.js gfx | tee "$RUNNER_TEMP/gfx.log"
@@ -1975,33 +1994,48 @@ jobs:
   # that is the one SKIP this step allows.
   gfx-macos:
     name: gfx (macos-latest, Metal)
-    runs-on: macos-latest
+    needs: scope
+    runs-on: ${{ needs.scope.outputs.gfx == 'false' && 'ubuntu-latest' || 'macos-latest' }}
     timeout-minutes: 25
     steps:
+      - name: Say why this job was not selected
+        if: needs.scope.outputs.gfx == 'false'
+        env:
+          WHY: ${{ needs.scope.outputs.why }}
+        run: |
+          echo "### Not selected: the gfx lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the gfx lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: needs.scope.outputs.gfx != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: needs.scope.outputs.gfx != 'false'
         with:
           node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18, cmake and ninja (macOS)
+        if: needs.scope.outputs.gfx != 'false'
         timeout-minutes: 10
         uses: ./.github/actions/brew-install
         with:
           formulae: llvm@18 cmake ninja
 
       - name: Put LLVM 18 on PATH (macOS)
+        if: needs.scope.outputs.gfx != 'false'
         run: |
           prefix="$(brew --prefix llvm@18)"
           if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: needs.scope.outputs.gfx != 'false'
         timeout-minutes: 5
         run: npm ci --ignore-scripts
 
       - name: Fetch the seed
+        if: needs.scope.outputs.gfx != 'false'
         timeout-minutes: 5
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2009,13 +2043,16 @@ jobs:
         run: bash scripts/fetch-seed.sh
 
       - name: The compiler under test
+        if: needs.scope.outputs.gfx != 'false'
         uses: ./.github/actions/compiler-cache
 
       - name: Fetch and build SDL3 and wgpu-native
+        if: needs.scope.outputs.gfx != 'false'
         timeout-minutes: 10
         run: sh scripts/fetch-gfx.sh
 
       - name: The gfx section on Metal
+        if: needs.scope.outputs.gfx != 'false'
         run: |
           set -o pipefail
           node tests/run.js gfx | tee "$RUNNER_TEMP/gfx.log"
