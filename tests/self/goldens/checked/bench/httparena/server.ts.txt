@@ -61,7 +61,7 @@ struct ArenaHeld (class) size=24 align=8
   field due: i64 index=1 offset=8
   field ms: i32 index=2 offset=16
   constructor -> @ArenaHeld.constructor
-struct ArenaServer (class) size=112 align=8 exported
+struct ArenaServer (class) size=120 align=8 exported
   field h: HttpServer index=0 offset=0
   field data: ArenaDataset index=1 offset=8
   field db: ArenaDb index=2 offset=16
@@ -76,6 +76,8 @@ struct ArenaServer (class) size=112 align=8 exported
   field jsonValues: u8[][] index=11 offset=88
   field okBody: u8[] index=12 offset=96
   field answered: i64 index=13 offset=104 initialized
+  field h1Slots: i32 index=14 offset=112 initialized
+  field h2cSlots: i32 index=15 offset=116 initialized
   constructor -> @ArenaServer.constructor
   method waitMs -> @ArenaServer.waitMs
   method turn -> @ArenaServer.turn
@@ -169,7 +171,7 @@ function ArenaServer.constructor(this: ArenaServer, fd1: i32, fd2: i32, slots: i
   sharedWrite: via nish.Router.add
   escaping: data db fd1 fd2 h2cSlots slots
   calls: ArenaDb.attach arenaBytes nish.HttpCompressor.constructor nish.HttpServer.constructor nish.HttpServer.listenH2c nish.HttpServer.listenHttp1 nish.JsonWriter.constructor nish.Router.add nish.Router.constructor nish_alloc_struct
-  pointer this: size=112 writesThrough=true captured=false
+  pointer this: size=120 writesThrough=true captured=false
   pointer data: size=72 writesThrough=true captured=true
   pointer db: size=112 writesThrough=true captured=true
   stackSites=2 stackLocals=1
@@ -185,20 +187,20 @@ function ArenaServer.constructor(this: ArenaServer, fd1: i32, fd2: i32, slots: i
   local +8:11 limits: HttpServerLimits (const)
   callee +11:14 new HttpServer -> @nish.HttpServer.constructor
   callee +12:5 HttpServer.listenHttp1 -> @nish.HttpServer.listenHttp1
-  callee +14:7 HttpServer.listenH2c -> @nish.HttpServer.listenH2c
-  callee +18:16 new HttpCompressor -> @nish.HttpCompressor.constructor
-  callee +19:16 new JsonWriter -> @nish.JsonWriter.constructor
-  callee +22:21 arenaBytes -> @arenaBytes
-  callee +23:21 arenaBytes -> @arenaBytes
-  callee +24:23 arenaBytes -> @arenaBytes
-  callee +25:24 arenaBytes -> @arenaBytes
-  callee +26:19 arenaBytes -> @arenaBytes
-  callee +27:5 ArenaDb.attach -> @ArenaDb.attach
+  callee +15:7 HttpServer.listenH2c -> @nish.HttpServer.listenH2c
+  callee +20:16 new HttpCompressor -> @nish.HttpCompressor.constructor
+  callee +21:16 new JsonWriter -> @nish.JsonWriter.constructor
+  callee +24:21 arenaBytes -> @arenaBytes
+  callee +25:21 arenaBytes -> @arenaBytes
+  callee +26:23 arenaBytes -> @arenaBytes
+  callee +27:24 arenaBytes -> @arenaBytes
+  callee +28:19 arenaBytes -> @arenaBytes
+  callee +29:5 ArenaDb.attach -> @ArenaDb.attach
 function ArenaServer.waitMs(this: ArenaServer, now: i64): i32 -> @ArenaServer.waitMs [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ArenaDb.waitMs
   calls: ArenaDb.waitMs nish_panic_overflow
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 best: i64 (let)
   local +1:14 k: i32 (let)
@@ -210,7 +212,7 @@ function ArenaServer.turn(this: ArenaServer): boolean -> @ArenaServer.turn [expo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpServer.wait
   calls: ArenaDb.turn ArenaServer.answer ArenaServer.release ArenaServer.waitMs nish.HttpServer.fired nish.HttpServer.ready nish.HttpServer.take nish.HttpServer.wait nish_monotonic_nanos
-  pointer this: size=112 writesThrough=true captured=false passedTo=ArenaServer.waitMs#0 ArenaServer.answer#0 ArenaServer.release#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=ArenaServer.waitMs#0 ArenaServer.answer#0 ArenaServer.release#0
   stackSites=0 stackLocals=0
   callee +0:5 HttpServer.wait -> @nish.HttpServer.wait
   callee +0:17 ArenaServer.waitMs -> @ArenaServer.waitMs
@@ -224,7 +226,7 @@ function ArenaServer.release(this: ArenaServer, now: i64): void -> @ArenaServer.
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: ArenaServer.sendNumber nish_panic_index
-  pointer this: size=112 writesThrough=true captured=false passedTo=ArenaServer.sendNumber#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=ArenaServer.sendNumber#0
   stackSites=0 stackLocals=0
   local -4:9 k: i32 (let)
   local -2:13 d: ArenaHeld (const)
@@ -233,7 +235,7 @@ function ArenaServer.badRequest(this: ArenaServer, r: HttpServerRequest): void -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.HttpServer.send nish_panic_overflow
-  pointer this: size=112 writesThrough=true captured=false
+  pointer this: size=120 writesThrough=true captured=false
   pointer r: size=200 writesThrough=true captured=true passedTo=nish.HttpServer.send#1
   stackSites=0 stackLocals=0
   callee -1:5 HttpServer.send -> @nish.HttpServer.send
@@ -241,7 +243,7 @@ function ArenaServer.sendNumber(this: ArenaServer, r: HttpServerRequest, v: i64)
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.HttpServer.send nish_panic_overflow nish_str_from_i64
-  pointer this: size=112 writesThrough=true captured=false
+  pointer this: size=120 writesThrough=true captured=false
   pointer r: size=200 writesThrough=true captured=true passedTo=nish.HttpServer.send#1
   stackSites=0 stackLocals=0
   local -3:11 text: string (const)
@@ -253,7 +255,7 @@ function ArenaServer.queryDecimal(this: ArenaServer, r: HttpServerRequest, name:
   sharedWrite: via nish.HttpServerRequest.query
   escaping: fallback name
   calls: arenaDecimal nish.HttpServerRequest.query
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   pointer r: size=200 writesThrough=true captured=false passedTo=nish.HttpServerRequest.query#0
   stackSites=0 stackLocals=0
   local +0:11 n: i32 (const)
@@ -263,7 +265,7 @@ function ArenaServer.answer(this: ArenaServer, r: HttpServerRequest): void -> @A
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: ArenaDb.query ArenaHeld.constructor ArenaServer.badRequest ArenaServer.json ArenaServer.queryDecimal ArenaServer.sendNumber arenaDecimal nish.HttpServer.refuse nish.HttpServer.send nish.HttpServerRequest.paramDecimal nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_overflow
-  pointer this: size=112 writesThrough=true captured=false passedTo=ArenaServer.sendNumber#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0 ArenaServer.sendNumber#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0 ArenaServer.badRequest#0 ArenaServer.sendNumber#0 ArenaServer.json#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=ArenaServer.sendNumber#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0 ArenaServer.sendNumber#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0 ArenaServer.badRequest#0 ArenaServer.sendNumber#0 ArenaServer.json#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0
   pointer r: size=200 writesThrough=true captured=true passedTo=ArenaServer.sendNumber#1 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 ArenaServer.sendNumber#1 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 nish.HttpServer.send#1 nish.HttpServerRequest.paramDecimal#0 ArenaServer.badRequest#1 ArenaServer.sendNumber#1 ArenaHeld.constructor#1 ArenaServer.json#1 ArenaDb.query#2 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 nish.HttpServer.refuse#1
   stackSites=0 stackLocals=0
   callee -12:9 ArenaServer.sendNumber -> @ArenaServer.sendNumber
@@ -289,7 +291,7 @@ function ArenaServer.json(this: ArenaServer, r: HttpServerRequest): void -> @Are
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: ArenaDataset.size ArenaServer.badRequest ArenaServer.queryDecimal nish.HttpCompressor.addFields nish.HttpCompressor.compressAnyway nish.HttpServer.end nish.HttpServer.send nish.HttpServer.start nish.HttpServer.write nish.HttpServerRequest.header nish.HttpServerRequest.paramDecimal nish.HttpServerRequest.valueEnd nish.HttpServerRequest.valueStart nish.JsonWriter.beginArray nish.JsonWriter.beginObject nish.JsonWriter.boolean nish.JsonWriter.complete nish.JsonWriter.endArray nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.i64 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish.httpAcceptEncoding nish_panic_index nish_panic_overflow
-  pointer this: size=112 writesThrough=true captured=false passedTo=ArenaServer.badRequest#0 ArenaServer.queryDecimal#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=ArenaServer.badRequest#0 ArenaServer.queryDecimal#0
   pointer r: size=200 writesThrough=true captured=true passedTo=nish.HttpServerRequest.paramDecimal#0 ArenaServer.badRequest#1 ArenaServer.queryDecimal#1 nish.HttpServer.send#1 nish.HttpServerRequest.header#0 nish.HttpServerRequest.valueStart#0 nish.HttpServerRequest.valueEnd#0 nish.HttpServer.start#1 nish.HttpServer.write#1 nish.HttpServer.end#1 nish.HttpServer.send#1
   stackSites=0 stackLocals=0
   local -58:9 count: i32 (let)

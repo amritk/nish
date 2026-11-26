@@ -37117,6 +37117,46 @@ if (!only || "net_handler_ring".includes(only)) {
   }
 }
 
+// WP71 S3: `nish/net/http-server` on io_uring slots. The program in
+// tests/link/net_http_server_ring starts itself as a child under a descriptor
+// limit of 32; the child serves `HttpServer.listenHttp1` on a
+// `NET_LISTEN_RING` listener, and the parent opens 100 keep-alive connections
+// the child must hold at once and answer, so the check fails if the
+// listener's carriers are not on ring slots. The verdict is the program's exit
+// status; 2 with "rings refused: " says the kernel refused rings, a counted
+// skip, as is a hard descriptor limit under 32.
+if (!only || "net_http_server_ring".includes(only)) {
+  const hard = process.platform === "linux" ? spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" }) : null
+  const name = "net_http_server: on io_uring slots, the façade holds 100 connections under a descriptor limit of 32 and answers each"
+  if (!HAS_CLANG || hard === null) {
+    skip("net_http_server: io_uring slot handles are Linux's, and this host has no clang or is not Linux")
+  } else if (!(hardNofile(hard) >= 32)) {
+    skip(`${name}: the hard descriptor limit here is ${hard.stdout.trim()}, under the 32 the check sets`)
+  } else {
+    const dir = path.join(buildDir, "net_http_server_ring")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "ring")
+    const c = spawnNish([path.join(linkDir, "net_http_server_ring", "ring.ts"), "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const r = c.status === 0 ? spawnSync(exe, [], { encoding: "utf8", timeout: 180000 }) : null
+    if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+      skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n")[0]})`)
+    } else {
+      check(
+        name,
+        r !== null &&
+          r.status === 0 &&
+          r.stdout.includes("child: held 100 connections at once under a descriptor limit of 32, and answered each\n") &&
+          r.stdout.includes("parent: every one of 100 clients was answered\n"),
+        r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+  }
+}
+
 // ring-batch-wait: `HandlerLimits.minEvents` and `maxWaitMs` route
 // `HttpHandler.wait` through `pollWaitBatch`. tests/link/net_handler_batch
 // answers 40 connections through a handler at minEvents 64 and maxWaitMs 1
