@@ -5238,6 +5238,7 @@ struct Http1Server (class) size=168 align=8 exported
   method settle -> @nish.Http1Server.settle
   method send -> @nish.Http1Server.send
   method rearm -> @nish.Http1Server.rearm
+  method release -> @nish.Http1Server.release
   method close -> @nish.Http1Server.close
   method expire -> @nish.Http1Server.expire
 struct Http1TlsServer (class) size=88 align=8 exported
@@ -6442,6 +6443,16 @@ function Http1Server.rearm(this: Http1Server, slot: i32, wants: i32): boolean ->
   local -8:11 interest: i32 (const)
   callee -7:10 Http1Server.holds -> @nish.Http1Server.holds
   local -4:11 armed: i32[] (const)
+function Http1Server.release(this: Http1Server, slot: i32): i32 -> @nish.Http1Server.release [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: slot
+  calls: nish_array_grow
+  pointer this: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -6:11 fds: i32[] (const)
+  local -5:11 at: i32[] (const)
+  local -1:11 fd: i32 (const)
 function Http1Server.close(this: Http1Server, slot: i32): void -> @nish.Http1Server.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -40055,6 +40066,7 @@ import pollModify from "nish:net" -> builtin pollModify
 import pollRemove from "nish:net" -> builtin pollRemove
 import pollWait from "nish:net" -> builtin pollWait
 import udpRecvFrom from "nish:net" -> builtin udpRecvFrom
+import netRead from "nish:net" -> builtin netRead
 import Secret from "nish:secret" -> generic class Secret
 const HTTP_SERVER_TEN: i32 = 10
 const HTTP_SERVER_ZERO_DIGIT: i32 = 48
@@ -40098,6 +40110,8 @@ const HTTP_SERVER_BODY_TIER: i32 = 65536
 const HTTP_SERVER_BODY_FIRST: i32 = 64
 const HTTP_SERVER_UDP_SIZE: i32 = 65536
 const HTTP_SERVER_UDP_ADDRESS: i32 = 18
+const HTTP_SERVER_H2C_PREFACE: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+const HTTP_SERVER_H2C_PREFACE_SIZE: i32 = 24
 struct HttpServerLimits (class) size=48 align=4 exported
   field requests: i32 index=0 offset=0 initialized
   field maxBody: i32 index=1 offset=4 initialized
@@ -40173,17 +40187,21 @@ struct HttpServerRequest (class) size=200 align=8 exported
   method valueEnd -> @nish.HttpServerRequest.valueEnd
   method spanAt -> @nish.HttpServerRequest.spanAt
   method headerIs -> @nish.HttpServerRequest.headerIs
-struct HttpServerH1Slot (class) size=40 align=8
-  field slot: i32 index=0 offset=0
-  field tls: boolean index=1 offset=4
-  field carrier: i32 index=2 offset=8
-  field outputSize: i32 index=3 offset=12
-  field armed: i32 index=4 offset=16 initialized
-  field gen: i32 index=5 offset=20 initialized
-  field current: HttpServerRequest | null index=6 offset=24 initialized
-  field open: boolean index=7 offset=32 initialized
-  field starved: boolean index=8 offset=33 initialized
-  field driving: i32 index=9 offset=36 initialized
+struct HttpServerH1Slot (class) size=56 align=8
+  field current: HttpServerRequest | null index=0 offset=0 initialized
+  field head: u8[] index=1 offset=8 initialized
+  field since: i64 index=2 offset=16 initialized
+  field slot: i32 index=3 offset=24
+  field carrier: i32 index=4 offset=28
+  field outputSize: i32 index=5 offset=32
+  field armed: i32 index=6 offset=36 initialized
+  field gen: i32 index=7 offset=40 initialized
+  field driving: i32 index=8 offset=44 initialized
+  field got: i32 index=9 offset=48 initialized
+  field tls: boolean index=10 offset=52
+  field open: boolean index=11 offset=53 initialized
+  field starved: boolean index=12 offset=54 initialized
+  field sniff: boolean index=13 offset=55 initialized
   constructor -> @nish.HttpServerH1Slot.constructor
 struct HttpServer (class) size=568 align=8 exported
   field router: Router index=0 offset=0
@@ -40277,6 +40295,7 @@ struct HttpServer (class) size=568 align=8 exported
   method checkHttp1 -> @nish.HttpServer.checkHttp1
   method h1Grow -> @nish.HttpServer.h1Grow
   method listenH2c -> @nish.HttpServer.listenH2c
+  method clearHttp2 -> @nish.HttpServer.clearHttp2
   method checkHttp2 -> @nish.HttpServer.checkHttp2
   method listenHttp2Tls -> @nish.HttpServer.listenHttp2Tls
   method perOf -> @nish.HttpServer.perOf
@@ -40299,6 +40318,9 @@ struct HttpServer (class) size=568 align=8 exported
   method h1Record -> @nish.HttpServer.h1Record
   method h1Opened -> @nish.HttpServer.h1Opened
   method h1Serve -> @nish.HttpServer.h1Serve
+  method h1Sniff -> @nish.HttpServer.h1Sniff
+  method h1Decided -> @nish.HttpServer.h1Decided
+  method h1ToH2c -> @nish.HttpServer.h1ToH2c
   method h1Holds -> @nish.HttpServer.h1Holds
   method h1Conn -> @nish.HttpServer.h1Conn
   method h1Next -> @nish.HttpServer.h1Next
@@ -40679,10 +40701,20 @@ function httpServerLimit(name: string, value: i32, low: i32, high: i32): void ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
+function httpServerFeedHead(conn: Http1Connection, buf: u8[], off: i32, end: i32): i32 -> @nish.httpServerFeedHead
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Http1Connection.feed
+  escaping: off
+  calls: nish.Http1Connection.feed
+  pointer conn: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.feed#0
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.Http1Connection.feed#1
+  stackSites=0 stackLocals=0
+  callee +0:12 Http1Connection.feed -> @nish.Http1Connection.feed
 function HttpServerH1Slot.constructor(this: HttpServerH1Slot, slot: i32, tls: boolean, carrier: i32, outputSize: i32): void -> @nish.HttpServerH1Slot.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: carrier outputSize slot tls
-  pointer this: size=40 writesThrough=true captured=false
+  calls: nish_alloc_struct
+  pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function HttpServer.constructor(this: HttpServer, limits: HttpServerLimits, router: Router): void -> @nish.HttpServer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
@@ -40727,17 +40759,21 @@ function HttpServer.constructor(this: HttpServer, limits: HttpServerLimits, rout
   callee +62:27 httpFieldBytes -> @nish.httpFieldBytes
   callee +67:30 httpFieldBytes -> @nish.httpFieldBytes
   callee +68:21 httpFieldBytes -> @nish.httpFieldBytes
-function HttpServer.listenHttp1(this: HttpServer, fd: i32, config: Http1Config, slots: i32): void -> @nish.HttpServer.listenHttp1 [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function HttpServer.listenHttp1(this: HttpServer, fd: i32, config: Http1Config, slots: i32, h2c: Http2Config | null): void -> @nish.HttpServer.listenHttp1 [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: fd slots
-  calls: nish.Http1Server.constructor nish.HttpServer.checkHttp1 nish.HttpServer.h1Grow nish_alloc_struct nish_panic nish_poll_add
-  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.checkHttp1#0 nish.HttpServer.h1Grow#0
+  calls: nish.Http1Server.constructor nish.HttpServer.checkHttp1 nish.HttpServer.clearHttp2 nish.HttpServer.h1Grow nish_alloc_struct nish_panic nish_poll_add
+  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.checkHttp1#0 nish.HttpServer.clearHttp2#0 nish.HttpServer.h1Grow#0
   pointer config: size=48 writesThrough=true captured=true passedTo=nish.HttpServer.checkHttp1#2 nish.Http1Server.constructor#1
+  pointer h2c: size=48 writesThrough=true captured=true passedTo=nish.HttpServer.clearHttp2#3
   stackSites=0 stackLocals=0
-  callee -1:5 HttpServer.checkHttp1 -> @nish.HttpServer.checkHttp1
+  callee -4:5 HttpServer.checkHttp1 -> @nish.HttpServer.checkHttp1
+  callee -2:7 HttpServer.clearHttp2 -> @nish.HttpServer.clearHttp2
   callee +0:15 new Http1Server -> @nish.Http1Server.constructor
   callee +2:19 HttpServer.h1Grow -> @nish.HttpServer.h1Grow
+  local +4:13 table: HttpServerH1Slot[] (const)
+  local +5:16 k: i32 (let)
 function HttpServer.listenHttp1Tls(this: HttpServer, fd: i32, tls: TlsServerConfig, config: Http1Config, slots: i32): void -> @nish.HttpServer.listenHttp1Tls [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -40770,10 +40806,19 @@ function HttpServer.h1Grow(this: HttpServer, slots: i32, tls: boolean, outputSiz
   local -1:14 s: i32 (let)
   callee +0:18 new HttpServerH1Slot -> @nish.HttpServerH1Slot.constructor
 function HttpServer.listenH2c(this: HttpServer, fd: i32, config: Http2Config, slots: i32): void -> @nish.HttpServer.listenH2c [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: fd slots
-  calls: nish.Http2CleartextServer.constructor nish.HttpServer.checkHttp2 nish.HttpServer.h2Grow nish.HttpServer.perOf nish_alloc_struct nish_panic nish_poll_add
+  calls: nish.HttpServer.clearHttp2 nish_poll_add
+  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.clearHttp2#0
+  pointer config: size=48 writesThrough=true captured=true passedTo=nish.HttpServer.clearHttp2#3
+  stackSites=0 stackLocals=0
+  callee -1:5 HttpServer.clearHttp2 -> @nish.HttpServer.clearHttp2
+function HttpServer.clearHttp2(this: HttpServer, name: string, fd: i32, config: Http2Config, slots: i32): void -> @nish.HttpServer.clearHttp2 [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: fd name slots
+  calls: nish.Http2CleartextServer.constructor nish.HttpServer.checkHttp2 nish.HttpServer.h2Grow nish.HttpServer.perOf nish_alloc_struct nish_panic nish_str_concat
   pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.checkHttp2#0 nish.HttpServer.h2Grow#0 nish.HttpServer.perOf#0
   pointer config: size=48 writesThrough=true captured=true passedTo=nish.HttpServer.checkHttp2#2 nish.HttpServer.perOf#1 nish.Http2CleartextServer.constructor#1
   stackSites=0 stackLocals=0
@@ -41080,14 +41125,14 @@ function HttpServer.h1Opened(this: HttpServer, s: HttpServerH1Slot, fd: i32): vo
   sharedWrite: +0:5
   calls: nish_poll_add
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=true captured=false
+  pointer s: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function HttpServer.h1Serve(this: HttpServer, slot: i32, events: i32, key: Secret<u8[]> | null): void -> @nish.HttpServer.h1Serve [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1TlsServer.readable
   escaping: slot
-  calls: nish.Http1Server.readable nish.Http1Server.writable nish.Http1TlsServer.holds nish.Http1TlsServer.readable nish.Http1TlsServer.signP256 nish.Http1TlsServer.writable nish.HttpServer.drive nish.HttpServer.h1Holds nish.HttpServer.h1Slot
-  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Slot#0 nish.HttpServer.h1Holds#0 nish.HttpServer.drive#0
+  calls: nish.Http1Server.readable nish.Http1Server.writable nish.Http1TlsServer.holds nish.Http1TlsServer.readable nish.Http1TlsServer.signP256 nish.Http1TlsServer.writable nish.HttpServer.drive nish.HttpServer.h1Holds nish.HttpServer.h1Slot nish.HttpServer.h1Sniff
+  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Slot#0 nish.HttpServer.h1Holds#0 nish.HttpServer.h1Sniff#0 nish.HttpServer.drive#0
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.Http1TlsServer.signP256#2
   stackSites=0 stackLocals=0
   local +0:11 s: HttpServerH1Slot | null (const)
@@ -41102,14 +41147,71 @@ function HttpServer.h1Serve(this: HttpServer, slot: i32, events: i32, key: Secre
   callee +11:72 Http1TlsServer.holds -> @nish.Http1TlsServer.holds
   callee +14:17 Http1TlsServer.signP256 -> @nish.Http1TlsServer.signP256
   local +17:13 h1: Http1Server | null (const)
-  callee +20:11 Http1Server.readable -> @nish.Http1Server.readable
-  callee +22:11 Http1Server.writable -> @nish.Http1Server.writable
-  callee +26:5 HttpServer.drive -> @nish.HttpServer.drive
+  callee +18:38 HttpServer.h1Sniff -> @nish.HttpServer.h1Sniff
+  callee +23:11 Http1Server.readable -> @nish.Http1Server.readable
+  callee +25:11 Http1Server.writable -> @nish.Http1Server.writable
+  callee +29:5 HttpServer.drive -> @nish.HttpServer.drive
+function HttpServer.h1Sniff(this: HttpServer, s: HttpServerH1Slot, h1: Http1Server): boolean -> @nish.HttpServer.h1Sniff [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:22
+  calls: nish.Http1Server.fd nish.HttpServer.h1Decided nish.HttpServer.h1ToH2c nish_net_read nish_panic_slice
+  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Decided#0 nish.HttpServer.h1Decided#0 nish.HttpServer.h1ToH2c#0
+  pointer s: size=56 writesThrough=true captured=false passedTo=nish.HttpServer.h1Decided#1 nish.HttpServer.h1Decided#1 nish.HttpServer.h1ToH2c#1
+  pointer h1: size=168 writesThrough=false captured=false passedTo=nish.Http1Server.fd#0 nish.HttpServer.h1Decided#2 nish.HttpServer.h1Decided#2 nish.HttpServer.h1ToH2c#2
+  stackSites=0 stackLocals=0
+  local -5:11 fd: i32 (const)
+  callee -5:21 Http1Server.fd -> @nish.Http1Server.fd
+  local -4:11 head: u8[] (const)
+  local -3:11 want: string (const)
+  local -2:9 got: i32 (let)
+  local +0:13 n: i32 (const)
+  callee +6:16 HttpServer.h1Decided -> @nish.HttpServer.h1Decided
+  local +9:13 end: i32 (const)
+  local +10:16 k: i32 (let)
+  callee +13:18 HttpServer.h1Decided -> @nish.HttpServer.h1Decided
+  callee +19:5 HttpServer.h1ToH2c -> @nish.HttpServer.h1ToH2c
+function HttpServer.h1Decided(this: HttpServer, s: HttpServerH1Slot, h1: Http1Server): boolean -> @nish.HttpServer.h1Decided [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.Http1Connection.headArrived nish.Http1Server.connection nish.HttpServer.h1Close nish.httpServerFeedHead
+  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Close#0
+  pointer s: size=56 writesThrough=true captured=false passedTo=nish.HttpServer.h1Close#1
+  pointer h1: size=168 writesThrough=false captured=false passedTo=nish.Http1Server.connection#0
+  stackSites=0 stackLocals=0
+  local +1:11 head: u8[] (const)
+  local +2:11 got: i32 (const)
+  local +6:11 conn: Http1Connection (const)
+  callee +6:35 Http1Server.connection -> @nish.Http1Server.connection
+  local +8:11 taken: i32 (const)
+  callee +8:24 httpServerFeedHead -> @nish.httpServerFeedHead
+  callee +10:5 Http1Connection.headArrived -> @nish.Http1Connection.headArrived
+  callee +12:7 HttpServer.h1Close -> @nish.HttpServer.h1Close
+function HttpServer.h1ToH2c(this: HttpServer, s: HttpServerH1Slot, h1: Http1Server): void -> @nish.HttpServer.h1ToH2c [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.Http1Server.release nish.Http2CleartextServer.adopt nish.Http2CleartextServer.close nish.HttpServer.h1Close nish.HttpServer.h1Forget nish.HttpServer.h2Opened nish.HttpServer.h2Serve nish_poll_remove
+  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Close#0 nish.HttpServer.h1Close#0 nish.HttpServer.h1Forget#0 nish.HttpServer.h2Opened#0 nish.HttpServer.h2Serve#0
+  pointer s: size=56 writesThrough=true captured=false passedTo=nish.HttpServer.h1Close#1 nish.HttpServer.h1Close#1 nish.HttpServer.h1Forget#1
+  pointer h1: size=168 writesThrough=false captured=false passedTo=nish.Http1Server.release#0
+  stackSites=0 stackLocals=0
+  local +1:11 h2c: Http2CleartextServer | null (const)
+  callee +5:7 HttpServer.h1Close -> @nish.HttpServer.h1Close
+  local +8:11 freed: i32 (const)
+  callee +8:24 Http1Server.release -> @nish.Http1Server.release
+  callee +10:7 HttpServer.h1Close -> @nish.HttpServer.h1Close
+  callee +14:5 HttpServer.h1Forget -> @nish.HttpServer.h1Forget
+  local +15:11 slot: i32 (const)
+  callee +15:23 Http2CleartextServer.adopt -> @nish.Http2CleartextServer.adopt
+  local +19:11 v: i64 (const)
+  local +20:11 at: i32 (const)
+  callee +21:9 HttpServer.h2Opened -> @nish.HttpServer.h2Opened
+  callee +22:7 HttpServer.h2Serve -> @nish.HttpServer.h2Serve
+  callee +24:7 Http2CleartextServer.close -> @nish.Http2CleartextServer.close
 function HttpServer.h1Holds(this: HttpServer, s: HttpServerH1Slot): boolean -> @nish.HttpServer.h1Holds [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Server.holds nish.Http1TlsServer.holds
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=false captured=false
+  pointer s: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:13 h1Tls: Http1TlsServer | null (const)
   callee +1:32 Http1TlsServer.holds -> @nish.Http1TlsServer.holds
@@ -41120,7 +41222,7 @@ function HttpServer.h1Conn(this: HttpServer, s: HttpServerH1Slot): Http1Connecti
   sharedWrite: via nish.Http1TlsServer.connection
   calls: nish.Http1Server.connection nish.Http1TlsServer.connection
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=false captured=false
+  pointer s: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:13 h1Tls: Http1TlsServer | null (const)
   callee +1:31 Http1TlsServer.connection -> @nish.Http1TlsServer.connection
@@ -41131,7 +41233,7 @@ function HttpServer.h1Next(this: HttpServer, s: HttpServerH1Slot): i32 -> @nish.
   sharedWrite: via nish.Http1TlsServer.alpn
   calls: nish.Http1Server.next nish.Http1TlsServer.alpn nish.Http1TlsServer.next nish_str_eq
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=false captured=false
+  pointer s: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:13 h1Tls: Http1TlsServer | null (const)
   local +4:13 chosen: string (const)
@@ -41144,7 +41246,7 @@ function HttpServer.h1Flush(this: HttpServer, s: HttpServerH1Slot): i32 -> @nish
   sharedWrite: via nish.Http1TlsServer.flush
   calls: nish.Http1Server.flush nish.Http1TlsServer.flush
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=false captured=false
+  pointer s: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:13 h1Tls: Http1TlsServer | null (const)
   callee +1:31 Http1TlsServer.flush -> @nish.Http1TlsServer.flush
@@ -41154,7 +41256,7 @@ function HttpServer.h1Sealing(this: HttpServer, s: HttpServerH1Slot, conn: Http1
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Connection.isDone
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=false captured=false
+  pointer s: size=56 writesThrough=false captured=false
   pointer conn: size=312 writesThrough=false captured=false passedTo=nish.Http1Connection.isDone#0
   stackSites=0 stackLocals=0
   callee +0:55 Http1Connection.isDone -> @nish.Http1Connection.isDone
@@ -41162,7 +41264,7 @@ function HttpServer.h1Resting(this: HttpServer, s: HttpServerH1Slot): boolean ->
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Server.resting
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=false captured=false
+  pointer s: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 h1: Http1Server | null (const)
   callee +1:37 Http1Server.resting -> @nish.Http1Server.resting
@@ -41172,7 +41274,7 @@ function HttpServer.h1Arm(this: HttpServer, s: HttpServerH1Slot, wants: i32): vo
   escaping: wants
   calls: nish.Http1Server.fd nish.Http1Server.rearm nish.Http1TlsServer.fd nish.Http1TlsServer.holds nish_poll_modify
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=true captured=false
+  pointer s: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:11 interest: i32 (const)
   local -2:13 h1Tls: Http1TlsServer | null (const)
@@ -41186,7 +41288,7 @@ function HttpServer.drive(this: HttpServer, s: HttpServerH1Slot): void -> @nish.
   sharedWrite: +0:7
   calls: nish.HttpServer.drivePass
   pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.drivePass#0 nish.HttpServer.drivePass#0
-  pointer s: size=40 writesThrough=true captured=true passedTo=nish.HttpServer.drivePass#1 nish.HttpServer.drivePass#1
+  pointer s: size=56 writesThrough=true captured=true passedTo=nish.HttpServer.drivePass#1 nish.HttpServer.drivePass#1
   stackSites=0 stackLocals=0
   callee +4:5 HttpServer.drivePass -> @nish.HttpServer.drivePass
   callee +7:7 HttpServer.drivePass -> @nish.HttpServer.drivePass
@@ -41205,7 +41307,7 @@ function HttpServer.drivePass(this: HttpServer, s: HttpServerH1Slot): void -> @n
   sharedWrite: via nish.HttpServer.h1Conn
   calls: nish.HttpServer.begin nish.HttpServer.gather nish.HttpServer.h1Conn nish.HttpServer.h1Next nish.HttpServer.releaseReading nish.HttpServer.resume nish.HttpServer.settle nish.HttpServer.starve nish.HttpServer.unended nish.HttpServer.whole
   pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Conn#0 nish.HttpServer.starve#0 nish.HttpServer.unended#0 nish.HttpServer.h1Next#0 nish.HttpServer.h1Conn#0 nish.HttpServer.begin#0 nish.HttpServer.gather#0 nish.HttpServer.whole#0 nish.HttpServer.resume#0 nish.HttpServer.starve#0 nish.HttpServer.unended#0 nish.HttpServer.h1Next#0 nish.HttpServer.releaseReading#0 nish.HttpServer.h1Conn#0 nish.HttpServer.settle#0
-  pointer s: size=40 writesThrough=true captured=true passedTo=nish.HttpServer.h1Conn#1 nish.HttpServer.starve#1 nish.HttpServer.unended#1 nish.HttpServer.h1Next#1 nish.HttpServer.h1Conn#1 nish.HttpServer.begin#1 nish.HttpServer.gather#1 nish.HttpServer.whole#1 nish.HttpServer.resume#1 nish.HttpServer.starve#1 nish.HttpServer.unended#1 nish.HttpServer.h1Next#1 nish.HttpServer.releaseReading#1 nish.HttpServer.h1Conn#1 nish.HttpServer.settle#1
+  pointer s: size=56 writesThrough=true captured=true passedTo=nish.HttpServer.h1Conn#1 nish.HttpServer.starve#1 nish.HttpServer.unended#1 nish.HttpServer.h1Next#1 nish.HttpServer.h1Conn#1 nish.HttpServer.begin#1 nish.HttpServer.gather#1 nish.HttpServer.whole#1 nish.HttpServer.resume#1 nish.HttpServer.starve#1 nish.HttpServer.unended#1 nish.HttpServer.h1Next#1 nish.HttpServer.releaseReading#1 nish.HttpServer.h1Conn#1 nish.HttpServer.settle#1
   stackSites=0 stackLocals=0
   local +0:11 conn: Http1Connection | null (const)
   callee +0:42 HttpServer.h1Conn -> @nish.HttpServer.h1Conn
@@ -41229,7 +41331,7 @@ function HttpServer.drivePass(this: HttpServer, s: HttpServerH1Slot): void -> @n
 function HttpServer.unended(this: HttpServer, s: HttpServerH1Slot): boolean -> @nish.HttpServer.unended [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=false captured=false
+  pointer s: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 r: HttpServerRequest | null (const)
 function HttpServer.starve(this: HttpServer, s: HttpServerH1Slot): boolean -> @nish.HttpServer.starve [exported method]
@@ -41238,7 +41340,7 @@ function HttpServer.starve(this: HttpServer, s: HttpServerH1Slot): boolean -> @n
   escaping: s
   calls: nish_array_grow
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=true captured=true
+  pointer s: size=56 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function HttpServer.feedStarved(this: HttpServer): void -> @nish.HttpServer.feedStarved [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -41261,7 +41363,7 @@ function HttpServer.settle(this: HttpServer, s: HttpServerH1Slot, conn: Http1Con
   sharedWrite: via nish.HttpServer.h1Flush
   calls: nish.Http1Connection.wantsWrite nish.HttpServer.h1Arm nish.HttpServer.h1Close nish.HttpServer.h1Flush nish.HttpServer.h1Ready nish.HttpServer.h1Sealing nish.HttpServer.roomy
   pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Flush#0 nish.HttpServer.h1Close#0 nish.HttpServer.h1Sealing#0 nish.HttpServer.h1Close#0 nish.HttpServer.h1Arm#0 nish.HttpServer.roomy#0 nish.HttpServer.h1Ready#0
-  pointer s: size=40 writesThrough=true captured=false passedTo=nish.HttpServer.h1Flush#1 nish.HttpServer.h1Close#1 nish.HttpServer.h1Sealing#1 nish.HttpServer.h1Close#1 nish.HttpServer.h1Arm#1 nish.HttpServer.roomy#1
+  pointer s: size=56 writesThrough=true captured=false passedTo=nish.HttpServer.h1Flush#1 nish.HttpServer.h1Close#1 nish.HttpServer.h1Sealing#1 nish.HttpServer.h1Close#1 nish.HttpServer.h1Arm#1 nish.HttpServer.roomy#1
   pointer conn: size=312 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0 nish.HttpServer.h1Sealing#2 nish.HttpServer.roomy#2
   stackSites=0 stackLocals=0
   local +0:9 wants: i32 (let)
@@ -41277,7 +41379,7 @@ function HttpServer.settle(this: HttpServer, s: HttpServerH1Slot, conn: Http1Con
 function HttpServer.roomy(this: HttpServer, s: HttpServerH1Slot, conn: Http1Connection): boolean -> @nish.HttpServer.roomy [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=568 writesThrough=false captured=false
-  pointer s: size=40 writesThrough=false captured=false
+  pointer s: size=56 writesThrough=false captured=false
   pointer conn: size=312 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function HttpServer.begin(this: HttpServer, s: HttpServerH1Slot, conn: Http1Connection): void -> @nish.HttpServer.begin [exported method]
@@ -41285,7 +41387,7 @@ function HttpServer.begin(this: HttpServer, s: HttpServerH1Slot, conn: Http1Conn
   sharedWrite: +0:7
   calls: nish.Http1Connection.respond nish.HttpServer.admit nish.HttpServer.obtain nish.HttpServerRequest.methodIs nish.copyBytes nish_array_grow
   pointer this: size=568 writesThrough=false captured=false passedTo=nish.HttpServer.obtain#0 nish.HttpServer.admit#0
-  pointer s: size=40 writesThrough=true captured=false
+  pointer s: size=56 writesThrough=true captured=false
   pointer conn: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.respond#0
   stackSites=0 stackLocals=0
   local +2:11 r: HttpServerRequest | null (const)
@@ -41306,7 +41408,7 @@ function HttpServer.gather(this: HttpServer, s: HttpServerH1Slot, conn: Http1Con
   sharedWrite: via nish.HttpServer.append
   calls: nish.HttpServer.append
   pointer this: size=568 writesThrough=false captured=false passedTo=nish.HttpServer.append#0
-  pointer s: size=40 writesThrough=false captured=false
+  pointer s: size=56 writesThrough=false captured=false
   pointer conn: size=312 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 r: HttpServerRequest | null (const)
@@ -41316,7 +41418,7 @@ function HttpServer.whole(this: HttpServer, s: HttpServerH1Slot, conn: Http1Conn
   sharedWrite: +0:7
   calls: nish.HttpServer.h1Ready nish.HttpServer.roomy
   pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.roomy#0 nish.HttpServer.h1Ready#0
-  pointer s: size=40 writesThrough=false captured=false passedTo=nish.HttpServer.roomy#1
+  pointer s: size=56 writesThrough=false captured=false passedTo=nish.HttpServer.roomy#1
   pointer conn: size=312 writesThrough=false captured=false passedTo=nish.HttpServer.roomy#2
   stackSites=0 stackLocals=0
   local -7:11 r: HttpServerRequest | null (const)
@@ -41349,7 +41451,7 @@ function HttpServer.resume(this: HttpServer, s: HttpServerH1Slot, conn: Http1Con
   sharedWrite: via nish.HttpServer.pushH1
   calls: nish.HttpServer.finishH1 nish.HttpServer.pushH1
   pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.pushH1#0 nish.HttpServer.finishH1#0
-  pointer s: size=40 writesThrough=false captured=false
+  pointer s: size=56 writesThrough=false captured=false
   pointer conn: size=312 writesThrough=true captured=false passedTo=nish.HttpServer.pushH1#2 nish.HttpServer.finishH1#2
   stackSites=0 stackLocals=0
   local +0:11 r: HttpServerRequest | null (const)
@@ -41385,7 +41487,7 @@ function HttpServer.releaseReading(this: HttpServer, s: HttpServerH1Slot): void 
   sharedWrite: +0:7
   calls: nish.HttpServer.release
   pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.release#0
-  pointer s: size=40 writesThrough=true captured=false
+  pointer s: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 r: HttpServerRequest | null (const)
   callee +1:7 HttpServer.release -> @nish.HttpServer.release
@@ -41394,7 +41496,7 @@ function HttpServer.h1Close(this: HttpServer, s: HttpServerH1Slot): void -> @nis
   sharedWrite: via nish.Http1TlsServer.close
   calls: nish.Http1Server.close nish.Http1TlsServer.close nish.HttpServer.h1Forget
   pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Forget#0
-  pointer s: size=40 writesThrough=true captured=false passedTo=nish.HttpServer.h1Forget#1
+  pointer s: size=56 writesThrough=true captured=false passedTo=nish.HttpServer.h1Forget#1
   stackSites=0 stackLocals=0
   local +0:13 h1Tls: Http1TlsServer | null (const)
   callee +2:9 Http1TlsServer.close -> @nish.Http1TlsServer.close
@@ -41406,7 +41508,7 @@ function HttpServer.h1Forget(this: HttpServer, s: HttpServerH1Slot): void -> @ni
   sharedWrite: +0:5
   calls: nish.HttpServer.drop nish.httpServerNextGen
   pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.drop#0
-  pointer s: size=40 writesThrough=true captured=false
+  pointer s: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +1:13 httpServerNextGen -> @nish.httpServerNextGen
   local +2:11 r: HttpServerRequest | null (const)
@@ -42825,21 +42927,23 @@ function HttpServer.expireAll(this: HttpServer, now: i64): void -> @nish.HttpSer
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpServer.h1Close
   escaping: now
-  calls: nish.Http2CleartextServer.expire nish.HttpServer.h1Close nish.HttpServer.h1Holds nish.HttpServer.h2Expire nish.HttpServer.h3Expire nish.HttpServer.late
-  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.late#0 nish.HttpServer.h1Holds#0 nish.HttpServer.h1Close#0 nish.HttpServer.h2Expire#0 nish.HttpServer.h3Expire#0
+  calls: nish.Http2CleartextServer.expire nish.HttpServer.h1Close nish.HttpServer.h1Holds nish.HttpServer.h2Expire nish.HttpServer.h3Expire nish.HttpServer.late nish.httpServerAfter
+  pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Close#0 nish.HttpServer.late#0 nish.HttpServer.h1Holds#0 nish.HttpServer.h1Close#0 nish.HttpServer.h2Expire#0 nish.HttpServer.h3Expire#0
   stackSites=0 stackLocals=0
   local +0:16 s: HttpServerH1Slot (const)
-  local +1:13 r: HttpServerRequest | null (const)
-  callee +2:25 HttpServer.late -> @nish.HttpServer.late
-  callee +2:46 HttpServer.h1Holds -> @nish.HttpServer.h1Holds
-  callee +3:9 HttpServer.h1Close -> @nish.HttpServer.h1Close
-  local +6:11 h2c: Http2CleartextServer | null (const)
-  callee +10:7 Http2CleartextServer.expire -> @nish.Http2CleartextServer.expire
-  local +12:14 v: i32 (let)
-  callee +14:9 HttpServer.h2Expire -> @nish.HttpServer.h2Expire
-  local +17:11 h3: Http3Server | null (const)
-  local +19:16 s: i32 (let)
-  callee +21:11 HttpServer.h3Expire -> @nish.HttpServer.h3Expire
+  callee +5:9 httpServerAfter -> @nish.httpServerAfter
+  callee +8:9 HttpServer.h1Close -> @nish.HttpServer.h1Close
+  local +10:13 r: HttpServerRequest | null (const)
+  callee +11:25 HttpServer.late -> @nish.HttpServer.late
+  callee +11:46 HttpServer.h1Holds -> @nish.HttpServer.h1Holds
+  callee +12:9 HttpServer.h1Close -> @nish.HttpServer.h1Close
+  local +15:11 h2c: Http2CleartextServer | null (const)
+  callee +19:7 Http2CleartextServer.expire -> @nish.Http2CleartextServer.expire
+  local +21:14 v: i32 (let)
+  callee +23:9 HttpServer.h2Expire -> @nish.HttpServer.h2Expire
+  local +26:11 h3: Http3Server | null (const)
+  local +28:16 s: i32 (let)
+  callee +30:11 HttpServer.h3Expire -> @nish.HttpServer.h3Expire
 function HttpServer.late(this: HttpServer, r: HttpServerRequest, now: i64): boolean -> @nish.HttpServer.late [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
@@ -45305,6 +45409,7 @@ struct Http2CleartextServer (class) size=80 align=8 exported
   method prefaced -> @nish.Http2CleartextServer.prefaced
   method connection -> @nish.Http2CleartextServer.connection
   method accept -> @nish.Http2CleartextServer.accept
+  method adopt -> @nish.Http2CleartextServer.adopt
   method take -> @nish.Http2CleartextServer.take
   method admit -> @nish.Http2CleartextServer.admit
   method readable -> @nish.Http2CleartextServer.readable
@@ -45414,6 +45519,18 @@ function Http2CleartextServer.accept(this: Http2CleartextServer): i32 -> @nish.H
   local +4:11 s: H2cSlot | null (const)
   callee +4:31 Http2CleartextServer.take -> @nish.Http2CleartextServer.take
   callee +10:5 Http2Connection.restart -> @nish.Http2Connection.restart
+function Http2CleartextServer.adopt(this: Http2CleartextServer, fd: i32, preface: u8[]): i32 -> @nish.Http2CleartextServer.adopt [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: fd
+  calls: nish.Http2CleartextServer.take nish.Http2Connection.feed nish.Http2Connection.restart nish_monotonic_nanos nish_net_close
+  pointer this: size=80 writesThrough=false captured=false passedTo=nish.Http2CleartextServer.take#0
+  pointer preface: size=0 writesThrough=false captured=false passedTo=nish.Http2Connection.feed#1
+  stackSites=0 stackLocals=0
+  local -6:11 s: H2cSlot | null (const)
+  callee -6:31 Http2CleartextServer.take -> @nish.Http2CleartextServer.take
+  callee -1:5 Http2Connection.restart -> @nish.Http2Connection.restart
+  callee +4:5 Http2Connection.feed -> @nish.Http2Connection.feed
 function Http2CleartextServer.take(this: Http2CleartextServer): H2cSlot | null -> @nish.Http2CleartextServer.take [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

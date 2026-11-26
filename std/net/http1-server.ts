@@ -3352,6 +3352,27 @@ export class Http1Server {
   }
 
   /**
+   * Frees `slot` without closing its socket, which is the caller's from now
+   * on: for a program that moves a connection this pool has accepted but
+   * not yet read to another carrier. A slot that has read, and so holds a
+   * connection, is not released.
+   *
+   * @param slot the slot to free, as `accept` answered it
+   * @returns the slot's socket, now the caller's to close; -1 for a free or unknown slot, or one that has read
+   */
+  release(slot: i32): i32 {
+    const fds: i32[] = this.fds
+    const at: i32[] = this.at
+    if (slot < 0 || slot >= toI32(fds.length) || slot >= toI32(at.length) || fds[slot] < 0 || at[slot] >= 0) {
+      return -1
+    }
+    const fd: i32 = fds[slot]
+    fds[slot] = H1_FREE
+    this.free.push(slot)
+    return fd
+  }
+
+  /**
    * Closes `slot`'s socket, whatever is left unsent, and frees the slot. Its
    * connection, when it holds one, is aborted and restarted, and is spare.
    *

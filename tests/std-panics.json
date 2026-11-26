@@ -916,8 +916,8 @@
     },
     {
       "module": "std/net/http-server.ts",
-      "function": "HttpServer.listenH2c",
-      "reason": "an h2c listener may be configured only once; the caller controls its setup sequence statically"
+      "function": "HttpServer.clearHttp2",
+      "reason": "an h2c listener, by listenH2c or listenHttp1's h2c, may be configured only once; the caller controls its setup sequence statically"
     },
     {
       "module": "std/net/http-server.ts",

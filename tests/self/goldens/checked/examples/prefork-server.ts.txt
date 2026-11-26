@@ -302,6 +302,7 @@ struct Http1Server (class) size=168 align=8 exported
   method settle -> @nish.Http1Server.settle
   method send -> @nish.Http1Server.send
   method rearm -> @nish.Http1Server.rearm
+  method release -> @nish.Http1Server.release
   method close -> @nish.Http1Server.close
   method expire -> @nish.Http1Server.expire
 struct Http1TlsServer (class) size=88 align=8 exported
@@ -1506,6 +1507,16 @@ function Http1Server.rearm(this: Http1Server, slot: i32, wants: i32): boolean ->
   local -8:11 interest: i32 (const)
   callee -7:10 Http1Server.holds -> @nish.Http1Server.holds
   local -4:11 armed: i32[] (const)
+function Http1Server.release(this: Http1Server, slot: i32): i32 -> @nish.Http1Server.release [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: slot
+  calls: nish_array_grow
+  pointer this: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -6:11 fds: i32[] (const)
+  local -5:11 at: i32[] (const)
+  local -1:11 fd: i32 (const)
 function Http1Server.close(this: Http1Server, slot: i32): void -> @nish.Http1Server.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

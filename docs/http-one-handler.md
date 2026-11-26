@@ -562,8 +562,10 @@ length runs in bounded memory.
   `Upgrade: h2c` that arrives on an h2c port fails the preface check and is
   closed. The same request arriving on the HTTP/1.1 port is served as plain
   HTTP/1.1, with no upgrade.
-- **No sniffing.** An h2c port never falls back to HTTP/1.1. A deployment
-  that wants both runs two ports.
+- **No sniffing, unless a listener opts in.** An h2c port (`listenH2c`)
+  never falls back to HTTP/1.1, and a default HTTP/1.1 port reads nothing
+  ahead. A deployment that wants both on one port passes `listenHttp1` an
+  `Http2Config` as its fourth argument (§4.3); without it, it runs two ports.
 
 ### 4.1 Finding F1: the preface and "close with no response"
 
@@ -619,6 +621,40 @@ ALPN fallback on one port is deferred until wp34-finish lands, and it is a
 change to `http2-tls.ts` that its owner makes. Behind a TLS-terminating
 proxy, which is the common deployment, this costs nothing: the proxy speaks
 TLS and talks to h2c or HTTP/1.1 upstream.
+
+### 4.3 One cleartext port for HTTP/1.1 and h2c (issue #2012)
+
+The owner's decision of 2026-11-20: opt in per listener, off by default.
+`listenHttp1(fd, config, slots, h2c)` with an `Http2Config` makes the h2c
+carrier with `slots` slots of its own on the same socket, beside the
+HTTP/1.1 ones, and registers no second listener: `Http1Server` accepts every
+connection, and the façade decides each one before HTTP/1.1 reads a byte.
+
+1. A new slot reads into its own 24-byte array, as the h2c carrier does
+   (§4.1 step 1), and compares each byte as it arrives with the preface.
+2. At the first byte that differs, or the peer's end, the slot is
+   HTTP/1.1's: the bytes read so far are fed to its `Http1Connection` with
+   `feed`, as `readable` feeds what it reads, and the rest of the socket is
+   read by `Http1Server` as on any other port. A request whose method is
+   `PRI` matches the preface for 11 bytes (`PRI * HTTP/`), differs at its
+   twelfth (`PRI * HTTP/1.1` against `PRI * HTTP/2.0`), and is answered
+   exactly as a default port answers it.
+3. When all 24 match, the socket leaves the loop and `Http1Server`, unclosed
+   (`Http1Server.release`), and the h2c carrier takes it with the 24 bytes
+   (`Http2CleartextServer.adopt`), which feeds them to `Http2Connection` as
+   §4.1 step 3 does. The slot is served at once, so the server's SETTINGS go
+   out in the same turn.
+4. A peer that sends part of the preface and then nothing holds its slot and
+   24 bytes until `prefaceTimeout` after accept, when `expireAll` closes it;
+   one that sends nothing at all holds it until `idleTimeout`, as on a
+   default port.
+
+The two carriers gain one method each, `release` and `adopt`, both recorded
+([http1-codec.md](security/http1-codec.md),
+[http2-cleartext.md](security/http2-cleartext.md)); neither codec changes.
+There is still no `Upgrade: h2c`, and a TLS port still serves one protocol
+(F2). The façade's record is [http-server.md](security/http-server.md)
+(HTTPSRV-24).
 
 ## 5. Alt-Svc
 
@@ -777,7 +813,7 @@ a warmed run. For HTTP/3 that pin is new. Today `net_http3_server` pins only
 | --- | --- |
 | HTTP/1.1 | `Upgrade` and WebSocket (stay on `Http1Server`, [WebSocket](guide/using-nish/websocket.md)); `Upgrade: h2c` (served as plain HTTP/1.1) |
 | HTTP/2 over TLS | HTTP/1.1 fallback on the port (F2); server push; extended CONNECT; the ALTSVC frame; RFC 9218 priorities |
-| h2c | `Upgrade: h2c` and 101; HTTP/1.1 or sniffing on the port; any response to a bad preface; confidentiality of any kind |
+| h2c | `Upgrade: h2c` and 101; HTTP/1.1 on an h2c port (`listenHttp1` with `h2c` serves both, §4.3); any response to a bad preface; confidentiality of any kind |
 | HTTP/3 | WebTransport, datagrams and extended CONNECT; any ALPN but `h3` |
 | all | response trailers on HTTP/1.1 and HTTP/3 (`trailers` panics there; HTTP/2 has them since WP72 S2); 1xx and 103 Early Hints; streaming request bodies on HTTP/1.1 and HTTP/3 (held whole up to `maxBody`, 413 above; HTTP/2 has them per route since WP72 S6a, §3.5); async `serve` over the façade (follow-up, §2.5) |
 

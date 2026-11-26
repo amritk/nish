@@ -1,0 +1,4 @@
+opted in: after 23 bytes: 0 bytes back, ended false
+opted in: HTTP/1.1 505 HTTP Version Not Supported, taken false
+default:  after 23 bytes: 118 bytes back, ended false
+default:  HTTP/1.1 505 HTTP Version Not Supported, taken false
