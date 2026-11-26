@@ -205,8 +205,8 @@ the version, and whose tag `release.yml` runs this workflow on anyway, with
 the compiler just published. The skip is the `build` job's `if:`; every other
 job needs `build` and skips with it.
 
-Each `quic-interop-runner` client deals its cases into four rows that run
-side by side: ten tests, the two rebindings, goodput and crosstraffic. In one
+Each `quic-interop-runner` client deals its cases into rows that run side
+by side: ten tests, the two rebindings, goodput and crosstraffic. In one
 row per client they took 21 to 28 minutes of the runner step
 ([run 45866563974](https://github.com/amritk/nish/actions/runs/45866563974)),
 the longest job of the workflow. A row reaches its first case some 4.5
@@ -214,8 +214,10 @@ minutes into the run (the image's build, then the row's setup). There,
 ngtcp2's cases took 2.2 minutes for the ten tests, 3.9 for the rebindings, 4.7
 for goodput's five transfers and 17.2 for crosstraffic's five. Most of a
 measurement's time is the runner reading the trace through pyshark after the
-transfer, 43 of goodput's 56 s, so crosstraffic's row is still the run's
-long pole.
+transfer, 43 of goodput's 56 s. crosstraffic's row ends some 22 minutes in,
+so it runs only on a release's tag, where release.yml passes
+`crosstraffic: true`. A pull request's run and main's end near 10 minutes
+with goodput's row, whose five transfers must every one complete as well.
 
 ### Shards and time limits
 

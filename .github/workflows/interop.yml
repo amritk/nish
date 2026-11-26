@@ -15,7 +15,8 @@
 #         mid-transfer, each new path validated before it is trusted; and the
 #         runner's two measurements, five transfers each over its 10 Mbps
 #         link, every one of which must complete: goodput (G), 10 MB alone,
-#         and crosstraffic (C), 25 MB beside an iperf TCP CUBIC flow.
+#         and crosstraffic (C), 25 MB beside an iperf TCP CUBIC flow, which
+#         runs only on a release's tag (release.yml's `crosstraffic: true`).
 # h2spec: every h2spec case against the HTTP/2 server.
 # grpc:   grpcurl calls the gRPC server over TLS and over h2c
 #         (tests/interop/grpc/check.sh): GetSum's sum, PERMISSION_DENIED with
@@ -117,6 +118,10 @@ on:
         description: the release whose compiler builds the image; empty for the newest
         type: string
         default: ""
+      crosstraffic:
+        description: also run the quic-interop-runner's crosstraffic measurement
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -210,7 +215,7 @@ jobs:
           if-no-files-found: error
 
   quic-interop-runner:
-    name: quic-interop-runner (${{ matrix.client }}, ${{ matrix.group.name }})
+    name: quic-interop-runner (${{ matrix.client }}, ${{ matrix.group }})
     needs: build
     runs-on: ubuntu-24.04
     # Every case in one row per client took 21 to 28 minutes of `Run the
@@ -222,7 +227,8 @@ jobs:
     # crosstraffic's five 25 MB ones, sharing the 10 Mbps link with a TCP
     # flow, 17.2. Most of a measurement's time is the runner reading the
     # trace through pyshark after the transfer (43 of goodput's 56 s), not the
-    # transfer. Each row has room to run what failed once more.
+    # transfer. Each row has room to run what failed once more; only
+    # crosstraffic's, on a release, needs more than 15 minutes.
     timeout-minutes: 30
     env:
       # The endpoint crosstraffic's iperf server and client run in, which the
@@ -232,16 +238,11 @@ jobs:
       fail-fast: false
       matrix:
         client: [quic-go, ngtcp2]
-        # The runner's cases, by the names its --json file gives them.
-        group:
-          - name: tests
-            cases: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3
-          - name: rebind
-            cases: rebind-port,rebind-addr
-          - name: goodput
-            cases: goodput
-          - name: crosstraffic
-            cases: crosstraffic
+        # A row's cases are RUNNER_CASES's below. crosstraffic's row, the
+        # long pole, runs only when release.yml calls this workflow on a
+        # release's tag: a pull request's or main's run ends near 10 minutes
+        # with goodput's, which needs every transfer to complete as well.
+        group: ${{ fromJSON(inputs.crosstraffic && '["tests","rebind","goodput","crosstraffic"]' || '["tests","rebind","goodput"]') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -380,7 +381,9 @@ jobs:
       - name: Run the runner
         env:
           CLIENT: ${{ matrix.client }}
-          RUNNER_CASES: ${{ matrix.group.cases }}
+          # The runner's cases, by the names its --json file gives them; a
+          # measurement's row runs the one its name gives.
+          RUNNER_CASES: ${{ fromJSON('{"tests":"handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3","rebind":"rebind-port,rebind-addr"}')[matrix.group] || matrix.group }}
         working-directory: ${{ runner.temp }}/qir
         run: |
           docker version --format 'docker {{.Server.Version}}'
@@ -410,7 +413,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: runner-logs-${{ matrix.client }}-${{ matrix.group.name }}
+          name: runner-logs-${{ matrix.client }}-${{ matrix.group }}
           path: |
             ${{ runner.temp }}/logs
             ${{ runner.temp }}/result.json

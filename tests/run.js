@@ -43992,6 +43992,20 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
       /^ {4}uses: \.\/\.github\/workflows\/interop\.yml$/m.test(ciJob(releaseYml, "interop")),
     `build job's if: ${interopBuildIf || "(none)"}`
   )
+
+  // crosstraffic, the runner's longest row, runs on a release's tag and no
+  // other run: release.yml's call is the only one that sets the input, so a
+  // matrix that dropped the gate would put it back on every pull request, and
+  // a call that dropped `crosstraffic: true` would run it nowhere.
+  const runnerGroups = /^ {8}group: (.*)$/m.exec(ciJob(interopYml, "quic-interop-runner"))?.[1] ?? ""
+  check(
+    "interop.yml: the quic-interop-runner's crosstraffic row runs only when release.yml's call asks for it",
+    runnerGroups ===
+      `\${{ fromJSON(inputs.crosstraffic && '["tests","rebind","goodput","crosstraffic"]' || '["tests","rebind","goodput"]') }}` &&
+      /^ {6}crosstraffic: true$/m.test(ciJob(releaseYml, "interop")) &&
+      !/crosstraffic: /.test(ciJob(interopYml, "quic-interop-runner").replace(/^ *#.*$/gm, "")),
+    `matrix group: ${runnerGroups || "(none)"}`
+  )
 }
 // release.yml runs ci.yml again only when no green run tested the tag's tree
 // (docs/wp10-ci.md, "The release reuses the Release PR's run"). These checks

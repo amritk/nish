@@ -792,6 +792,8 @@ jobs:
     uses: ./.github/workflows/interop.yml
     with:
       seed: ${{ github.ref_name }}
+      # The runner's crosstraffic measurement, which only a release runs.
+      crosstraffic: true
 
   # The registry half of the release: the N+1 packages `release` just attached,
   # published by npm's trusted publishing. Each package trusts this workflow
