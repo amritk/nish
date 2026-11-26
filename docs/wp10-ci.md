@@ -203,11 +203,19 @@ change that breaks a live peer. The one push it skips is the Release PR's
 merge (a `chore(release)` subject), which changes only the release notes and
 the version, and whose tag `release.yml` runs this workflow on anyway, with
 the compiler just published. The skip is the `build` job's `if:`; every other
-job needs `build` and skips with it. Each `quic-interop-runner` client runs
-its twelve tests and its two measurements as two rows: in one row they took
-22 to 24 minutes of the runner step
-([run 45857451991](https://github.com/amritk/nish/actions/runs/45857451991)),
-the longest job of the workflow, so the split runs them side by side.
+job needs `build` and skips with it.
+
+Each `quic-interop-runner` client deals its cases into four rows that run
+side by side: ten tests, the two rebindings, goodput and crosstraffic. In one
+row per client they took 21 to 28 minutes of the runner step
+([run 45866563974](https://github.com/amritk/nish/actions/runs/45866563974)),
+the longest job of the workflow. A row reaches its first case some 4.5
+minutes into the run (the image's build, then the row's setup). There,
+ngtcp2's cases took 2.2 minutes for the ten tests, 3.9 for the rebindings, 4.7
+for goodput's five transfers and 17.2 for crosstraffic's five. Most of a
+measurement's time is the runner reading the trace through pyshark after the
+transfer, 43 of goodput's 56 s, so crosstraffic's row is still the run's
+long pole.
 
 ### Shards and time limits
 
@@ -544,7 +552,7 @@ the same jobs a tag's run does: every lane (it is not a `pull_request`), the
 is the tag or `release/next`. Merging the Release PR then cuts the tag, and
 `release.yml` used to run the whole of `ci.yml` again on it before building
 anything. Its `verdict` job now runs `scripts/ci-verdict.mjs` first, with a
-token that reads `actions` and nothing else. The script takes the newest
+token that adds `actions: read` to `contents: read`. The script takes the newest
 twenty green runs of `ci.yml` dispatched on `release/next` and names the
 newest one whose commit has the tag commit's git tree. A squash merge makes
 a new commit, but its tree is the Release PR head's tree whenever

@@ -7,9 +7,11 @@
 // The Release PR's head is the release: release-pr.yml dispatches ci.yml at
 // `release/next`, and merging that pull request is what cuts the tag. A
 // dispatched run selects every lane and the `runner` job, as the tag's own run
-// would, and nothing else in ci.yml reads the ref (tests/run.js pins both).
-// So a run of that kind whose commit has the tag commit's tree tested the
-// same bytes. Matching trees rather than commits is what lets a squash merge
+// would. ci.yml's other reads of the ref or event (its concurrency group,
+// `cancel-in-progress` and the dispatch's commit status) pick no job or test
+// (tests/run.js pins the list). The seed both runs build with is the newest
+// release, and only this tag's own release can ship between them. So a run
+// of that kind whose commit has the tag commit's tree tested the same bytes. Matching trees rather than commits is what lets a squash merge
 // through: its commit is new, but its tree is the head's when `release/next`
 // was up to date with `main`. When `main` moved, the trees differ and CI runs.
 //

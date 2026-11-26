@@ -43978,6 +43978,20 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
       /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m.test(ciJob(releaseYml, "ci")),
     `runner job's if: ${runnerIf || "(none)"}`
   )
+
+  // interop.yml's `build`, which every interop job needs, skips the Release
+  // PR's push to main. release.yml calls interop.yml on the tag with the tag
+  // push as `github.event`, whose head commit has the same `chore(release)`
+  // subject, so a skip that read only the message would skip the release's
+  // own interop run, and release.yml's `interop` job would still pass.
+  const interopBuildIf = /^ {4}if: (.*)$/m.exec(ciJob(interopYml, "build"))?.[1] ?? ""
+  check(
+    "interop.yml: `build` skips only a `chore(release)` push to main, never the tag run release.yml calls",
+    interopBuildIf ===
+      "${{ github.event_name != 'push' || github.ref != 'refs/heads/main' || !startsWith(github.event.head_commit.message, 'chore(release)') }}" &&
+      /^ {4}uses: \.\/\.github\/workflows\/interop\.yml$/m.test(ciJob(releaseYml, "interop")),
+    `build job's if: ${interopBuildIf || "(none)"}`
+  )
 }
 // release.yml runs ci.yml again only when no green run tested the tag's tree
 // (docs/wp10-ci.md, "The release reuses the Release PR's run"). These checks

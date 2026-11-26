@@ -148,10 +148,6 @@ env:
   SIMULATOR: martenseemann/quic-network-simulator@sha256:c23d82a55caffe681b1bdae65d4d30d23e1283141a414a7f02ee56cf15f9c6b9
   QUIC_GO: martenseemann/quic-go-interop@sha256:6743eea41cb8d525686eb8f2437e3ac45835740ec87c62728f645cd89e85ab88
   NGTCP2: ghcr.io/ngtcp2/ngtcp2-interop@sha256:bd635531dbe210e5d7138a08dc61c2da2d702670ff718e440b961860f5e18235
-  # The runner's cases, by the names its --json file gives them: its tests,
-  # and its two measurements. Each client's run of each is a row of its own.
-  RUNNER_TESTS: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3,rebind-port,rebind-addr
-  RUNNER_MEASUREMENTS: goodput,crosstraffic
   # h2spec 2.6.0's release tarball and its SHA-256.
   H2SPEC_URL: https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz
   H2SPEC_SHA256: 157ee0de702e01ad40e752dbf074b366027e550c8e7504f9450da2809e279318
@@ -188,8 +184,10 @@ jobs:
     # The Release PR's merge changes only the release notes and the version,
     # and release.yml calls this workflow on its tag once the release is
     # published, so its push to main runs nothing here. Every job needs this
-    # one, so every job skips with it.
-    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore(release)') }}
+    # one, so every job skips with it. Under that call `github.event` is the
+    # tag push's, whose head commit is the same `chore(release)` squash, so
+    # the skip names the ref as well: only a push to main skips.
+    if: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' || !startsWith(github.event.head_commit.message, 'chore(release)') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -212,14 +210,19 @@ jobs:
           if-no-files-found: error
 
   quic-interop-runner:
-    name: quic-interop-runner (${{ matrix.client }}, ${{ matrix.cases }})
+    name: quic-interop-runner (${{ matrix.client }}, ${{ matrix.group.name }})
     needs: build
     runs-on: ubuntu-24.04
-    # One client's tests and its measurements (five transfers each, and
-    # crosstraffic's 25 MB sharing the 10 Mbps link with a TCP flow) in one
-    # row took 22 to 24 minutes of `Run the runner` (run 45857451991), the
-    # longest job of the workflow, so each is a row of its own and the two
-    # run side by side. Either still has room to run what failed once more.
+    # Every case in one row per client took 21 to 28 minutes of `Run the
+    # runner` (run 45866563974), the longest job of the workflow, so each
+    # client's cases are dealt into rows that run side by side. A row starts
+    # some 4.5 minutes in (the image's build, then this job's setup), and
+    # ngtcp2's cases there took: the ten tests below 2.2 minutes in all, the
+    # two rebindings 3.9, goodput's five 10 MB transfers 4.7, and
+    # crosstraffic's five 25 MB ones, sharing the 10 Mbps link with a TCP
+    # flow, 17.2. Most of a measurement's time is the runner reading the
+    # trace through pyshark after the transfer (43 of goodput's 56 s), not the
+    # transfer. Each row has room to run what failed once more.
     timeout-minutes: 30
     env:
       # The endpoint crosstraffic's iperf server and client run in, which the
@@ -229,7 +232,16 @@ jobs:
       fail-fast: false
       matrix:
         client: [quic-go, ngtcp2]
-        cases: [tests, measurements]
+        # The runner's cases, by the names its --json file gives them.
+        group:
+          - name: tests
+            cases: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3
+          - name: rebind
+            cases: rebind-port,rebind-addr
+          - name: goodput
+            cases: goodput
+          - name: crosstraffic
+            cases: crosstraffic
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -368,7 +380,7 @@ jobs:
       - name: Run the runner
         env:
           CLIENT: ${{ matrix.client }}
-          RUNNER_CASES: ${{ matrix.cases == 'measurements' && env.RUNNER_MEASUREMENTS || env.RUNNER_TESTS }}
+          RUNNER_CASES: ${{ matrix.group.cases }}
         working-directory: ${{ runner.temp }}/qir
         run: |
           docker version --format 'docker {{.Server.Version}}'
@@ -398,7 +410,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: runner-logs-${{ matrix.client }}-${{ matrix.cases }}
+          name: runner-logs-${{ matrix.client }}-${{ matrix.group.name }}
           path: |
             ${{ runner.temp }}/logs
             ${{ runner.temp }}/result.json
