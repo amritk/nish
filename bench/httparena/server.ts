@@ -201,6 +201,10 @@ export class ArenaServer {
   okBody: u8[]
   /** How many requests this worker answered. */
   answered: i64 = 0
+  /** The HTTP/1.1 listener's connection slots. */
+  h1Slots: i32 = 0
+  /** The h2c listener's connection slots, 0 with no h2c listener. */
+  h2cSlots: i32 = 0
 
   /**
    * Serves HTTP/1.1 on `fd1` with `slots` connections and h2c on `fd2` (when
@@ -220,8 +224,10 @@ export class ArenaServer {
     limits.maxBody = 65536
     this.h = new HttpServer(limits, router)
     this.h.listenHttp1(fd1, new Http1Config(), slots)
+    this.h1Slots = slots
     if (fd2 >= 0) {
       this.h.listenH2c(fd2, new Http2Config(), h2cSlots)
+      this.h2cSlots = h2cSlots
     }
     this.data = data
     this.db = db

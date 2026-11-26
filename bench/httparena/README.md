@@ -32,8 +32,9 @@ requests, `json-comp` with no `Accept-Encoding`, and `/async-db` against a
 stand-in PostgreSQL (`pg.ts` there) that answers the entry's query with known
 rows, and refuses it. It serves on `0.0.0.0`, as HttpArena runs it, and asks
 for `/baseline11` on `127.0.0.2`, `127.0.0.32` and `127.0.0.160`, and holds 200
-keep-alive connections idle for 6 s. It runs one worker, so the prefork path
-that starts a worker a core is not tested there.
+keep-alive connections idle for 6 s. It starts the server with `slots` 0, as
+the CMD does, and checks the slots that gave each listener. It runs one worker,
+so the prefork path that starts a worker a core is not tested there.
 
 The server listens with `tcpListenFlags` flag 0 for nodelay only, on the poll
 loop, not io_uring (flag 8): WP71 S3's rings lost to it on CPU per request

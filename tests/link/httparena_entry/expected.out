@@ -50,7 +50,16 @@ PASS  and each again after 6 s idle, past the 5 s no idle close may fall under
 PASS  one worker's HTTP/1.1 slots are the most one server holds
 PASS  64 workers' are each 4 times its even share
 PASS  never fewer than 16384
+PASS  no workers counts as one
+PASS  and fewer than none as one
+PASS  3 workers' share is clamped to the most
+PASS  4 workers' share, under it, is not
+PASS  a share that does not divide evenly rounds up
+PASS  244 workers' share is above the fewest
+PASS  245 workers' is raised to it
 PASS  and slots above 0 are as given
 PASS  SIGTERM stops the server
+PASS  slots 0 gave its one worker the most HTTP/1.1 slots
+PASS  and h2c 16384
 PASS  and it exits 0
-httparena entry: 55 passed, 0 failed, 0 skipped
+httparena entry: 64 passed, 0 failed, 0 skipped

@@ -38,8 +38,11 @@
 //      held idle for 6 s, past the 5 s no idle close may fall under, and each
 //      is answered again; `arenaSlots` sizes a worker's HTTP/1.1 slots at its
 //      share of the million with headroom, between 16384 and 1048576, and a
-//      `slots` above 0 as given.
-//  11. SIGTERM stops the server and it exits 0.
+//      `slots` above 0 as given; no workers counts as one, a share rounds up,
+//      and each clamp is checked on both sides of its edge.
+//  11. SIGTERM stops the server and it exits 0, and the server, started with
+//      `slots` 0 as the CMD starts it, had 1048576 HTTP/1.1 slots and 16384
+//      h2c.
 //
 // Every wait is bounded: five seconds without a wake is a failure, never a
 // hang; section 10's 6 s idle is a pause, not a wait. The driver kills and
@@ -522,7 +525,8 @@ const exitStatus = (pid: i32, ms: i32): i32 => {
 /**
  * `serve <udp port> <port> <h2c port> <host> <slots> <workers> <dataset>`:
  * main.ts's program, telling the driver `ready <port> <h2c port> <pid>` once
- * it listens and `done <answered>` once SIGTERM stops it.
+ * it listens and `done <answered> <HTTP/1.1 slots> <h2c slots>` once SIGTERM
+ * stops it.
  */
 const serve = (argv: string[]): i32 => {
   const driver: i32 = parseInt(preforkArgs(argv)[2]);
@@ -533,7 +537,7 @@ const serve = (argv: string[]): i32 => {
       tell(driver, `ready ${port} ${h2cPort} ${selfPid()}`);
     },
     (worker: i32, server: ArenaServer): void => {
-      tell(driver, `done ${server.answered}`);
+      tell(driver, `done ${server.answered} ${server.h1Slots} ${server.h2cSlots}`);
     }
   );
 };
@@ -570,7 +574,7 @@ export const main = (): i32 => {
     "0",
     "0",
     "0.0.0.0",
-    "256",
+    "0",
     "1",
     DATASET,
   ]);
@@ -787,12 +791,21 @@ export const main = (): i32 => {
   t.eqI32("one worker's HTTP/1.1 slots are the most one server holds", arenaSlots(ZERO, toI32(1)), toI32(1048576));
   t.eqI32("64 workers' are each 4 times its even share", arenaSlots(ZERO, toI32(64)), (ARENA_FLEET / 64) * 4);
   t.eqI32("never fewer than 16384", arenaSlots(ZERO, toI32(512)), toI32(16384));
+  t.eqI32("no workers counts as one", arenaSlots(ZERO, ZERO), toI32(1048576));
+  t.eqI32("and fewer than none as one", arenaSlots(ZERO, toI32(-1)), toI32(1048576));
+  t.eqI32("3 workers' share is clamped to the most", arenaSlots(ZERO, toI32(3)), toI32(1048576));
+  t.eqI32("4 workers' share, under it, is not", arenaSlots(ZERO, toI32(4)), toI32(1000000));
+  t.eqI32("a share that does not divide evenly rounds up", arenaSlots(ZERO, toI32(7)), toI32(571429));
+  t.eqI32("244 workers' share is above the fewest", arenaSlots(ZERO, toI32(244)), toI32(16394));
+  t.eqI32("245 workers' is raised to it", arenaSlots(ZERO, toI32(245)), toI32(16384));
   t.eqI32("and slots above 0 are as given", arenaSlots(toI32(256), toI32(64)), toI32(256));
 
   // --- 11. SIGTERM -------------------------------------------------------------------------------
   kill(pid, 15);
   const done: string[] = message(fd, udp, 5000);
-  t.ok("SIGTERM stops the server", done.length === 2 && done[0] === "done" && parseInt(done[1]) > 0);
+  t.ok("SIGTERM stops the server", done.length === 4 && done[0] === "done" && parseInt(done[1]) > 0);
+  t.eqI32("slots 0 gave its one worker the most HTTP/1.1 slots", done.length === 4 ? parseInt(done[2]) : ZERO, toI32(1048576));
+  t.eqI32("and h2c 16384", done.length === 4 ? parseInt(done[3]) : ZERO, toI32(16384));
   t.eqI32("and it exits 0", exitStatus(sup, 5000), ZERO);
   exitStatus(pg, 0);
   netClose(udp);
