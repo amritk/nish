@@ -3598,10 +3598,13 @@ function JsonDecoder.text(this: JsonDecoder): string -> @nish.JsonDecoder.text [
   callee +1:20 JsonTokenizer.stringLength -> @nish.JsonTokenizer.stringLength
   local +5:11 start: i32 (const)
   local +6:11 end: i32 (const)
-  local +17:11 bytes: u8[] (const)
-  callee +17:25 jsonTypedZeroBytes -> @nish.jsonTypedZeroBytes
-  local +18:11 at: i32 (const)
-  callee +19:5 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
+  local +7:11 src: u8[] (const)
+  local +13:13 to: i32 (const)
+  local +15:15 from: i32 (const)
+  local +26:11 bytes: u8[] (const)
+  callee +26:25 jsonTypedZeroBytes -> @nish.jsonTypedZeroBytes
+  local +27:11 at: i32 (const)
+  callee +28:5 JsonTokenizer.stringInto -> @nish.JsonTokenizer.stringInto
 function JsonDecoder.unknownField(this: JsonDecoder): void -> @nish.JsonDecoder.unknownField [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.fail
