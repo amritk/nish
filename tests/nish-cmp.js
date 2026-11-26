@@ -519,6 +519,10 @@ const asyncFetch = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why }))
   )
+// The held pipelined request behind a length-finished stream lands under
+// this PR's subject.
+const HANDLER_PIPELINED_STREAM_END =
+  "HttpHandler holds a length-finished stream's pipelined request until its end"
 // Echoing ECN counts lands under this PR's subject.
 const ECN_ECHO = "ECN counts in the QUIC server's ACKs"
 const ecnEcho = (why, filesByProgram) =>
@@ -10584,6 +10588,17 @@ const serverTrailersDeclared = () =>
     why: "the program calls HttpServer.trailers, which the seed's std/net does not have, so only the candidate compiles it",
   }))
 
+/** The changelog words of WP39 G7, which serves HTTP/1.1 over TLS on nish/net/http-server. */
+const SERVER_H1_TLS = "HTTP/1.1 over TLS on the nish/net/http-server façade"
+/** WP39 G7's programs call `HttpServer.listenHttp1Tls`, which the seed's std/net does not have. */
+const serverH1TlsDeclared = () =>
+  ["", "_slots", "_twice", "_wait"].map((name) => ({
+    program: `tests/link/net_http_server_h1_tls${name}/main.ts`,
+    file: "exit",
+    changelog: SERVER_H1_TLS,
+    why: "the program calls HttpServer.listenHttp1Tls, which the seed's std/net does not have, so only the candidate compiles it",
+  }))
+
 /** The changelog words of WP82 S6, which proves or removes the HTTP/3 stack's panic sites. */
 const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free"
 const http3PanicFree = (why, filesByProgram) =>
@@ -12533,6 +12548,26 @@ const DECLARED = [
   ...wp84Sums(
     "WP84 S3 replaces std/compress/deflate.ts's u32-cast wrapping sums, masks and loop caps with i32 ops the prover discharges or a DEFLATE_ERR_* refusal, so the deflate and inflate code these programs reach through http-compress, gzip and zlib moves, and a main module or header that inlines or names it moves with it",
     {
+      "bench/httparena/main.ts": [
+        "db.ll",
+        "gzip.ll",
+        "handler.ll",
+        "http-compress.ll",
+        "main.h",
+        "main.ll",
+        "server.ll",
+        "zlib.ll",
+      ],
+      "tests/link/httparena_entry/main.ts": [
+        "db.ll",
+        "gzip.ll",
+        "handler.ll",
+        "http-compress.ll",
+        "main.h",
+        "main.ll",
+        "server.ll",
+        "zlib.ll",
+      ],
       "tests/link/net_grpc/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
       "tests/link/net_grpc_interop/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
       "tests/link/net_handler_batch_limits/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
@@ -13679,6 +13714,7 @@ const DECLARED = [
   ),
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
+  ...serverH1TlsDeclared(),
   ...http3PanicFree(
     "a probe new with this change: it feeds malformed frames to std/net's HTTP/3 frame and QPACK readers, whose proved indexes and Results differ from the seed's, so each module it writes differs, the std/crypto ones it reaches included",
     {
@@ -23893,6 +23929,25 @@ const DECLARED = [
       "tests/link/std_http1_config_checked/main.ts": ["main.h"],
     }
   ),
+  // WP39: HttpHandler.drive holds a pipelined request behind a stream that
+  // finishes on its length until that stream ends; the probe is new to the
+  // corpus.
+  ...[
+    "chacha20poly1305.ll",
+    "gzip.ll",
+    "handler.ll",
+    "hmac.ll",
+    "http-compress.ll",
+    "main.h",
+    "main.ll",
+    "testing.ll",
+    "zlib.ll",
+  ].map((file) => ({
+    program: "tests/link/net_handler_pipelined_stream/main.ts",
+    file,
+    changelog: HANDLER_PIPELINED_STREAM_END,
+    why: "the case is new to the corpus and the seed's std predates HttpHandler.drive's `unended` gate (#1556) and the HTTP stack this branch links, so every module it writes differs from the seed's",
+  })),
 ]
 
 /**
