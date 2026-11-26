@@ -43447,6 +43447,15 @@ function httpServerLimit(name: string, value: i32, low: i32, high: i32): void ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
+function httpServerFeedHead(conn: Http1Connection, buf: u8[], off: i32, end: i32): i32 -> @nish.httpServerFeedHead
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Http1Connection.feed
+  escaping: off
+  calls: nish.Http1Connection.feed
+  pointer conn: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.feed#0
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.Http1Connection.feed#1
+  stackSites=0 stackLocals=0
+  callee +0:12 Http1Connection.feed -> @nish.Http1Connection.feed
 function HttpServerH1Slot.constructor(this: HttpServerH1Slot, slot: i32, tls: boolean, carrier: i32, outputSize: i32): void -> @nish.HttpServerH1Slot.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: carrier outputSize slot tls
@@ -43910,17 +43919,19 @@ function HttpServer.h1Sniff(this: HttpServer, s: HttpServerH1Slot, h1: Http1Serv
 function HttpServer.h1Decided(this: HttpServer, s: HttpServerH1Slot, h1: Http1Server): boolean -> @nish.HttpServer.h1Decided [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Server.connection nish.HttpServer.h1Close
+  calls: nish.Http1Connection.headArrived nish.Http1Server.connection nish.HttpServer.h1Close nish.httpServerFeedHead
   pointer this: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.h1Close#0
   pointer s: size=56 writesThrough=true captured=false passedTo=nish.HttpServer.h1Close#1
   pointer h1: size=168 writesThrough=false captured=false passedTo=nish.Http1Server.connection#0
   stackSites=0 stackLocals=0
-  local +4:11 conn: Http1Connection (const)
-  callee +4:35 Http1Server.connection -> @nish.Http1Server.connection
-  local +6:11 taken: i32 (const)
-  callee +6:24 Http1Connection.feed -> @nish.Http1Connection.feed
-  callee +8:5 Http1Connection.headArrived -> @nish.Http1Connection.headArrived
-  callee +10:7 HttpServer.h1Close -> @nish.HttpServer.h1Close
+  local +1:11 head: u8[] (const)
+  local +2:11 got: i32 (const)
+  local +6:11 conn: Http1Connection (const)
+  callee +6:35 Http1Server.connection -> @nish.Http1Server.connection
+  local +8:11 taken: i32 (const)
+  callee +8:24 httpServerFeedHead -> @nish.httpServerFeedHead
+  callee +10:5 Http1Connection.headArrived -> @nish.Http1Connection.headArrived
+  callee +12:7 HttpServer.h1Close -> @nish.HttpServer.h1Close
 function HttpServer.h1ToH2c(this: HttpServer, s: HttpServerH1Slot, h1: Http1Server): void -> @nish.HttpServer.h1ToH2c [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

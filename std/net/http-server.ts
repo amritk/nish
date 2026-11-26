@@ -910,7 +910,7 @@ const HTTP_SERVER_H2C_PREFACE_SIZE: i32 = 24
  * its head's 24 bytes, so the test always holds. -1 should it ever fail.
  */
 const httpServerFeedHead = (conn: Http1Connection, buf: u8[], off: i32, end: i32): i32 => {
-  if (off >= 0 && off <= end && end <= buf.length) {
+  if (off >= 0 && off <= end && end <= toI32(buf.length)) {
     return conn.feed(buf, off, end - off)
   }
   return toI32(-1)

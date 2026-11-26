@@ -10611,6 +10611,14 @@ const serverH2cPrefaceDeclared = () =>
       changelog: SERVER_H2C_PREFACE,
       why: "the program calls HttpServer.listenHttp1 with a fourth argument or Http1Server.release, which the seed's std/net does not have, so only the candidate compiles it",
     }))
+    .concat(
+      ["server.ll", "server.h"].map((file) => ({
+        program: "bench/http-server-ring/server.ts",
+        file,
+        changelog: SERVER_H2C_PREFACE,
+        why: "HttpServerH1Slot gains the sniff's head, count and timestamp and is laid out widest first, so the main module that lays out the façade's slots moves",
+      }))
+    )
 
 /** The changelog words of WP82 S6, which proves or removes the HTTP/3 stack's panic sites. */
 const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free"
