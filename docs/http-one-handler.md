@@ -15,6 +15,7 @@ four listeners:
 | Listener | Carrier it drives | Port |
 | --- | --- | --- |
 | HTTP/1.1 cleartext | `Http1Server` (`std/net/http1-server.ts`) | TCP |
+| HTTP/1.1 over TLS | `Http1TlsServer` (`std/net/http1-server.ts`), on a port of its own (§4.2) | TCP |
 | HTTP/2 cleartext (h2c) | **new** `Http2CleartextServer` (`std/net/http2-cleartext.ts`) over `Http2Connection` | TCP |
 | HTTP/2 over TLS | `Http2TlsServer` (`std/net/http2-tls.ts`) | TCP |
 | HTTP/3 | `Http3Server` (`std/net/http3-server.ts`) | UDP |
@@ -192,6 +193,7 @@ export class HttpServer {
   constructor(limits: HttpServerLimits, router: Router);
 
   listenHttp1(fd: i32, config: Http1Config, slots: i32): void;
+  listenHttp1Tls(fd: i32, tls: TlsServerConfig, config: Http1Config, slots: i32): void;
   listenH2c(fd: i32, config: Http2Config, slots: i32): void;
   listenHttp2Tls(fd: i32, tls: TlsServerConfig, config: Http2Config, slots: i32): void;
   listenHttp3(fd: i32, quic: QuicServerConfig, config: Http3Config, slots: i32,
@@ -201,6 +203,8 @@ export class HttpServer {
 - Each kind of listener can be configured at most once. A second call
   panics.
 - `listenHttp3` panics when `config.webtransportSessions > 0`.
+- `listenHttp1Tls` panics as `listenHttp1` does, and when the two HTTP/1.1
+  listeners' `slots` together pass 1048576.
 - `listenH2c` and `listenHttp2Tls` panic when
   `config.enableConnectProtocol` is set.
 - These are configuration mistakes, found at start-up, so they panic and do
@@ -597,10 +601,19 @@ a carrier change. `Http2TlsServer` closes any slot whose ALPN is not `h2`
 with close_notify, and it has no way to hand that slot to an HTTP/1.1
 server. G7 therefore offers:
 
-- HTTP/1.1 over cleartext `Http1Server` only. `Http1TlsServer` is left out
-  of the façade, because a second TLS port for HTTP/1.1 doubles the
-  certificate and port setup for little gain.
+- HTTP/1.1 over cleartext `Http1Server`, and HTTP/1.1 over TLS
+  `Http1TlsServer` (`listenHttp1Tls`) on a port of its own. The TLS
+  listener takes ALPN `http/1.1` or none; a client whose handshake chose
+  another protocol is shut down, never handed to the HTTP/2 listener. Its
+  requests say `secure` true, and its responses carry Alt-Svc as HTTP/2
+  over TLS ones do. The two HTTP/1.1 listeners share one slot table, so
+  their `slots` together are at most 1048576.
 - HTTP/2 over TLS on its own port.
+
+The façade checks the chosen protocol itself before it asks the carrier for
+a request (`h1Next`). The carrier's own refusal reads its TLS state, which
+its shutdown moves past open, so on its own it would hand on a request a
+client sent right after its Finished on a connection whose ALPN was `h2`.
 
 ALPN fallback on one port is deferred until wp34-finish lands, and it is a
 change to `http2-tls.ts` that its owner makes. Behind a TLS-terminating
@@ -762,7 +775,7 @@ a warmed run. For HTTP/3 that pin is new. Today `net_http3_server` pins only
 
 | Version | Not offered by G7 |
 | --- | --- |
-| HTTP/1.1 | TLS (F2); `Upgrade` and WebSocket (stay on `Http1Server`, [WebSocket](guide/using-nish/websocket.md)); `Upgrade: h2c` (served as plain HTTP/1.1) |
+| HTTP/1.1 | `Upgrade` and WebSocket (stay on `Http1Server`, [WebSocket](guide/using-nish/websocket.md)); `Upgrade: h2c` (served as plain HTTP/1.1) |
 | HTTP/2 over TLS | HTTP/1.1 fallback on the port (F2); server push; extended CONNECT; the ALTSVC frame; RFC 9218 priorities |
 | h2c | `Upgrade: h2c` and 101; HTTP/1.1 or sniffing on the port; any response to a bad preface; confidentiality of any kind |
 | HTTP/3 | WebTransport, datagrams and extended CONNECT; any ALPN but `h3` |
@@ -842,6 +855,19 @@ fixtures in `tests/link/net_interop_server`. When `curl` with HTTP/3
 exists, one GET goes over it as a smoke check; otherwise a skip line is
 printed. The guide page, `docs/guide/using-nish/http-server.md` (with its
 route in `scalar.config.json`), lands with g7-facade.
+
+### 8.3 `tests/link/net_http_server_h1_tls` (g7-h1-tls)
+
+| Case | Expect |
+| --- | --- |
+| GET `/hello`, GET `/users/42`, POST `/echo` and an unrouted path over TLS with ALPN `http/1.1` | served, `secure` true, Alt-Svc on `/hello`; a plain GET on the cleartext listener says `secure` false |
+| a TLS client that offers no ALPN | served |
+| `Arena.used()` over 32 warmed requests | flat |
+| a client offering only `h2`, against a listener that offers only `http/1.1` | alert 120 (no_application_protocol), closed, nothing taken |
+| a client offering only `h2`, against a listener that offers `http/1.1` and `h2`, with a GET sent after its Finished | close_notify, closed, nothing taken |
+| `idleTimeout` and a body stalled past `bodyTimeout` | closed; the stalled request never reaches `take` |
+| `drain` | open connections closed |
+| negative: a second `listenHttp1Tls`; `wait` with the listener; `slots` past 1048576 with `listenHttp1`'s | panics (`net_http_server_h1_tls_twice`, `_wait`, `_slots`) |
 
 ## 9. Security
 

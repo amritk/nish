@@ -3154,6 +3154,31 @@ a and b are the same binary, so the ratios are the noise band: about ±20 to 30%
 Not h2load's HTTP/3 number: Ubuntu's nghttp2-client is built without ngtcp2 and nghttp3, so the script falls back to `main h3-load`, the server and `client.ts`'s QUIC client in one process on CPU 0, one connection with its requests one after another. That figure is the two sides' work together and falls as the connection's streams pile up; it compares builds and is not a server capacity, nor comparable with an h2load HTTP/3 run.
 
 What the cloud VM allows: the median requests per second of one shared-host guest, useful against another build measured the same way on the same machine, in the same session. They are not comparable with bare metal, another VM size or another h2load.
+
+### The Date field's cost on HTTP/2 and HTTP/3 (#696)
+
+What a final head's `date` costs the two TLS carriers that send it, `Http2TlsServer` and `Http3Server`. a is the interop server built from commit `7d0c7699` (main, whose `bench/h2load.mjs` produced the table); b is the same commit with the eight `this.date.current()` lines deleted: `std/net/http2-tls.ts` lines 154 and 164 (`first.date =`, `conn.date =`) and 223 and 337 (the refreshes in `connection` and `next`), and `std/net/http3-server.ts` lines 916 (`conn.date =`) and 852, 978 and 1064 (the refreshes), so no slot is handed a date, none is encoded, and the pool's clock is never read. `nghttp -nv` showed a's HTTP/2 404 carrying `date:` and b's carrying none. HTTPS/1.1 is the control: `Http1TlsServer` dates its responses in both builds, so its ratio should show only noise.
+
+```bash
+build/nish --allow-panics tests/link/net_interop_server/main.ts -o build/interop-dated.ir/ --link build/interop-dated
+# the same from a worktree with the eight lines deleted, giving build/interop-nodate
+node bench/h2load.mjs --bin build/interop-dated --rounds 25 --requests 100000
+node bench/h2load.mjs --bin build/interop-dated --against build/interop-nodate --rounds 25 --requests 100000
+```
+
+Measured 2026-11-25, both builds by `build/nish` (nish 0.47.0, built from `7d0c7699` by the 0.46.0 seed), no `--profile`, so the default `speed` (-O3 with LTO). Machine: a KVM guest, Intel Xeon @ 2.10 GHz, 4 vCPUs, Linux 6.18.44, h2load nghttp2 1.59.0, loopback. 25 rounds, 64 slots, 100,000 requests per round for the h2load rows (16 clients, 8 streams each for HTTP/2) and 2,000 for HTTP/3. Four runs, one after another: band, A/B, band, A/B. Each cell is the median of the per-round ratios b / a, with the min–max:
+
+| scenario | band 1 (a / a) | A/B 1 (no date / date) | band 2 (a / a) | A/B 2 (no date / date) |
+| --- | ---: | ---: | ---: | ---: |
+| HTTPS/1.1 `h2load --h1` c=16 (control) | 0.990 (0.917–1.171) | 0.985 (0.820–1.175) | 0.987 (0.891–1.104) | 1.001 (0.850–1.102) |
+| HTTP/2 over TLS, `h2load` c=16 m=8 | 1.013 (0.801–1.172) | 1.046 (0.873–1.320) | 1.005 (0.865–1.115) | 1.049 (0.956–1.292) |
+| HTTP/3, `main h3-load` c=1, 2,000 requests, in process | 1.000 (0.641–1.311) | 1.032 (0.735–1.534) | 0.984 (0.484–1.516) | 1.034 (0.615–1.316) |
+
+The A/B runs' medians, in req/s with the date and without: HTTP/2 191,895 and 200,927, then 193,722 and 205,526; HTTP/3 32,258 and 32,787, then 32,787 and 33,898.
+
+- **HTTP/2: inside the band, but the median leans one way.** Each A/B median lies within the min–max of the band run before it (1.046 within band 1's 0.801–1.172, 1.049 within band 2's 0.865–1.115), so by the band the date's cost does not show. Yet each A/B median sits above the median of the band run before it (1.046 against 1.013, 1.049 against 1.005), and so did each of the four shorter A/B runs made before them in the same session, each against its own band: 9 rounds of 20,000, 1.100 against 1.037 and 1.048 against 1.019; 15 rounds of 100,000, 1.037 against 0.979 and 1.114 against 1.000. Read as a cost, the 25-round runs put it at about 5% of the HTTP/2 rate (1.046, 1.049), some 0.2 to 0.3 µs a request (1/191,895 − 1/200,927 s is 0.23 µs; 1/193,722 − 1/205,526 s is 0.30 µs). That figure comes from the rates; no profile attributed it to the field's encoding (`encodeStatus` in `std/net/http2.ts` measures the date's Huffman length and encodes it on every final head) or to the clock read.
+- **HTTP/3: inside the band.** The A/B medians lie inside the band run before each: 1.032 within band 1's 0.641–1.311, 1.034 within band 2's 0.484–1.516. `main h3-load` reports whole milliseconds over about 62 ms, so its rate moves in steps of about 1.6% (32,258 is 62 ms, 32,787 is 61 ms, 33,898 is 59 ms), and a difference of one or two steps is all these medians show.
+- **The control stayed level**: 0.985 and 1.001 against band medians 0.990 and 0.987.
 <!-- http-load:end -->
 
 <!-- postgres-profile:begin -->

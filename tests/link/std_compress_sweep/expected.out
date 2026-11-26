@@ -1,0 +1,4 @@
+fmt 0: inputs 17424 refused 8033 exact 28 raw-differs 9363 wrong 0
+fmt 1: inputs 17744 refused 17710 exact 34 raw-differs 0 wrong 0
+fmt 2: inputs 18384 refused 18108 exact 276 raw-differs 0 wrong 0
+streams 48 inputs 53552 refused 43851 exact 338 raw-differs 9363 wrong 0 truncated-accepted 0 limit-refused 48/48 hash 778857
