@@ -102,8 +102,7 @@ import {
   p256SignSha256,
   p256SignSha256Into,
 } from "nish/crypto/p256"
-import { RsaSignScratch, rsaPrivateKeyBits } from "nish/crypto/rsa-key"
-import { rsaSignPssSha256Into } from "nish/crypto/rsa-sign"
+import { RsaSignScratch, rsaPrivateKeyBits, rsaSignPssSha256Into } from "nish/crypto/rsa-sign"
 import { timingSafeEqual, timingSafeEqualAt } from "nish/crypto/ct"
 import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519"
 import {
@@ -541,10 +540,13 @@ export class TlsRsaSigner {
    */
   sign(priv: Secret<u8[]>, content: u8[]): u8[] | null {
     const bits: i32 = rsaPrivateKeyBits(priv)
-    if (bits === 0) {
+    if (bits < 2048 || bits > 4096) {
       return null
     }
-    const k: i32 = toI32((bits + 7) / 8)
+    const k: i32 = (bits + 7) >> 3
+    if (k < 256 || k > 512) {
+      return null
+    }
     if (toI32(this.out.length) !== k) {
       this.out = new Array<u8>(k)
     }
