@@ -14,7 +14,7 @@
  *     if (slot >= 0) { pollAdd(loop, tls.fd(slot), 1, slot); }
  *     // when a connection's token comes back:
  *     let wants: i32 = (events & 5) !== 0 ? tls.readable(slot) : tls.writable(slot);
- *     if ((wants & TLS_RECORD_SIGN) !== 0) { wants = tls.signP256(slot, leafKey); }
+ *     if ((wants & TLS_RECORD_SIGN) !== 0) { wants = tls.signKey(slot, leafKey); }
  *     if ((wants & TLS_RECORD_DATA) !== 0) { tls.read(slot, buf, 0, buf.length); ... }
  *     if ((wants & TLS_RECORD_DONE) !== 0) { tls.close(slot); }
  *     else { pollModify(loop, tls.fd(slot), wants & 3, slot); }
@@ -59,9 +59,9 @@
  * the slot's copy of the key is wiped once the ServerHello is written, when the
  * handshake fails, or when the slot is closed.
  *
- *  **Signing is the caller's**, as `TlsServer`'s is: `signP256` signs the
- *  CertificateVerify with a P-256 key the caller holds as a `Secret` and borrows
- *  for the call, and `signatureInput` / `sign` hand the input out and take any
+ *  **Signing is the caller's**, as `TlsServer`'s is: `signKey` signs the
+ *  CertificateVerify with the key the caller holds as a `Secret` and borrows
+ *  for the call (P-256 or RSA, as the configuration's `signatureScheme` says), and `signatureInput` / `sign` hand the input out and take any
  *  signature back.
  *
  * **Resumption is opt-in, and its keys are the caller's.** After
@@ -117,7 +117,7 @@ import {
   tcpConnect,
 } from "nish:net"
 import { monotonicNanos, wallClockNanos } from "nish:process"
-import { TlsP256Signer, TlsServer, TlsServerConfig } from "nish/net/tls"
+import { TlsKeySigner, TlsServer, TlsServerConfig } from "nish/net/tls"
 import { TlsClient, TlsClientConfig } from "nish/net/tls/client"
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client"
 import { TlsClientTrust, tlsClientAuthenticate, tlsClientSystemTrust } from "nish/net/tls/verify"
@@ -224,8 +224,8 @@ export class TlsTcpServer {
   private scratch: u8[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
   peer: u8[]
-  /** Signs every slot's CertificateVerify in `signP256`, one for the pool, keeping nothing per signature. */
-  private signer: TlsP256Signer
+  /** Signs every slot's CertificateVerify in `signKey`, in the configuration's scheme, one for the pool, keeping nothing per signature. */
+  private signer: TlsKeySigner
   /**
    * Each slot's own copy of its connection's server random: `TlsServer`
    * keeps the array it is given and writes it into the ServerHello only once
@@ -290,7 +290,7 @@ export class TlsTcpServer {
     this.pools = new TlsRecordPools(this.slots)
     this.scratch = new Array<u8>(TLS_MAX_RECORD)
     this.peer = new Array<u8>(TLS_TCP_ADDRESS_SIZE)
-    this.signer = new TlsP256Signer()
+    this.signer = new TlsKeySigner(config.signatureScheme)
   }
 
   /**
@@ -754,17 +754,18 @@ export class TlsTcpServer {
   }
 
   /**
-   * Signs `slot`'s CertificateVerify with the P-256 private key `key` and
-   * hands it over, as `sign` does, through the pool's `TlsP256Signer`, so a
-   * handshake's signature keeps nothing. The key is borrowed: the caller made
-   * the `Secret`, and wipes it. A malformed key fails the connection with
-   * `internal_error`.
+   * Signs `slot`'s CertificateVerify with `key` in the configuration's
+   * `signatureScheme` — a P-256 key for `ecdsa_secp256r1_sha256`, an RSA key
+   * for `rsa_pss_rsae_sha256` — and hands it over, as `sign` does, through
+   * the pool's `TlsKeySigner`, so a handshake's signature keeps nothing. The
+   * key is borrowed: the caller made the `Secret`, and wipes it. A key of the
+   * wrong kind or a malformed one fails the connection with `internal_error`.
    *
    * @param slot The slot whose interest says `TLS_RECORD_SIGN`.
-   * @param key The certificate's P-256 private key; borrowed, still the caller's to wipe.
+   * @param key The certificate's private key; borrowed, still the caller's to wipe.
    * @returns The slot's interest after sending; the current interest when the slot wants no signature.
    */
-  signP256(slot: i32, key: Secret<u8[]>): i32 {
+  signKey(slot: i32, key: Secret<u8[]>): i32 {
     const input: u8[] | null = this.signatureInput(slot)
     if (input === null) {
       return this.interest(slot)
@@ -779,6 +780,18 @@ export class TlsTcpServer {
       return this.flush(slot)
     }
     return this.sign(slot, signature)
+  }
+
+  /**
+   * `signKey`, under the name it had when P-256 was the only scheme: it signs
+   * in whatever scheme the configuration names.
+   *
+   * @param slot The slot whose interest says `TLS_RECORD_SIGN`.
+   * @param key The certificate's private key; borrowed, still the caller's to wipe.
+   * @returns The slot's interest after sending.
+   */
+  signP256(slot: i32, key: Secret<u8[]>): i32 {
+    return this.signKey(slot, key)
   }
 
   /**
