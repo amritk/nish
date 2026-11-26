@@ -1443,7 +1443,7 @@ export class HttpServer {
    * QUIC handshake with `key`, closes what is past its timeouts, and answers
    * how many whole requests are waiting for `take`.
    * @param timeoutMs the longest to block, in milliseconds, or -1 to block until something is ready
-   * @param key the certificate's P-256 private key; borrowed for the call, still the caller's to wipe
+   * @param key the certificate's private key, P-256 or RSA as `signatureScheme` says; borrowed for the call, still the caller's to wipe
    * @returns how many whole requests are queued for `take` after this turn
    */
   waitSigned(timeoutMs: i32, key: Secret<u8[]>): i32 {

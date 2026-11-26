@@ -111,6 +111,7 @@
 import { Secret, secret, wipe } from "nish:secret"
 import { base64StdPadDecode, base64StdPadEncode } from "nish/crypto/base64url"
 import { p256PublicKey, p256SignSha256, p256VerifySha256 } from "nish/crypto/p256"
+import { rsaParsePrivateKey } from "nish/crypto/rsa-sign"
 import { sha256 } from "nish/crypto/sha256"
 
 /** The longest validity `x509MintSelfSigned` writes, in days: WebTransport's two weeks. */
@@ -1564,6 +1565,80 @@ export const x509ParseP256PrivateKey = (pem: string): Secret<u8[]> | null => {
   }
   // X509-7: the decoded DER holds the scalar too, whichever block it was.
   x509WipeBlocks(sec1)
+  x509WipeBlocks(pkcs8)
+  return key
+}
+
+/**
+ * The RSA key of a PKCS#8 PrivateKeyInfo (RFC 5208 §5) or OneAsymmetricKey
+ * (RFC 5958 §2): version 0 or 1, the algorithm rsaEncryption with NULL
+ * parameters (RFC 3279 §2.3.1), and a PKCS#1 RSAPrivateKey filling the OCTET
+ * STRING, which `rsaParsePrivateKey` reads and tries. The optional `[0]`
+ * attributes are skipped; anything after them, a version 1 public key
+ * included, is refused, since nothing here would check it against the key.
+ */
+const x509Pkcs8RsaKey = (der: u8[]): Secret<u8[]> | null => {
+  const total: i32 = toI32(der.length)
+  const seq: X509DerElement | null = x509DerExpect(der, 0, total, X509_TAG_SEQUENCE)
+  if (seq === null || seq.end !== total) {
+    return null
+  }
+  const version: X509DerElement | null = x509DerRead(der, seq.start, seq.end)
+  if (version === null) {
+    return null
+  }
+  const v: i32 = x509DerSmallInteger(der, version)
+  if (v !== 0 && v !== 1) {
+    return null
+  }
+  const alg: X509DerElement | null = x509DerRead(der, version.end, seq.end)
+  if (alg === null || !x509DerIsAlgorithmNull(der, alg, x509OidPkcs1(1))) {
+    return null
+  }
+  const key: X509DerElement | null = x509DerExpect(der, alg.end, seq.end, X509_TAG_OCTET_STRING)
+  if (key === null) {
+    return null
+  }
+  let at: i32 = key.end
+  if (x509DerPeek(der, at, seq.end) === 0xa0) {
+    const attributes: X509DerElement | null = x509DerRead(der, at, seq.end)
+    if (attributes === null) {
+      return null
+    }
+    at = attributes.end
+  }
+  if (at !== seq.end) {
+    return null
+  }
+  return rsaParsePrivateKey(der, key.start, key.end)
+}
+
+/**
+ * The RSA private key in `pem`, as the `Secret` `nish/crypto/rsa-sign` signs
+ * with: one `RSA PRIVATE KEY` block (PKCS#1, RFC 8017 §A.1.2) or one `PRIVATE
+ * KEY` block (unencrypted PKCS#8 with rsaEncryption, RFC 5208 or RFC 5958),
+ * and not both. The key must be 2048 to 4096 bits, a whole number of bytes,
+ * with a private exponent that signs under its modulus (`rsaParsePrivateKey`).
+ * `null` for no such block or more than one, for a smaller or larger key, for
+ * an EC or any other key, and for anything malformed. Every block decoded
+ * from `pem` is wiped before this returns, whichever answer it gives; `pem`
+ * itself is the caller's string, which nothing can wipe (X509-7 in
+ * docs/security/crypto-x509.md).
+ *
+ * @param pem The PEM text holding the key.
+ * @returns The key in `rsaParsePrivateKey`'s layout, in a fresh `Secret` the caller wipes, or `null`.
+ */
+export const x509ParseRsaPrivateKey = (pem: string): Secret<u8[]> | null => {
+  const pkcs1: u8[][] | null = pemToDer(pem, "RSA PRIVATE KEY")
+  const pkcs8: u8[][] | null = pemToDer(pem, "PRIVATE KEY")
+  let key: Secret<u8[]> | null = null
+  if (pkcs1 !== null && pkcs8 === null && toI32(pkcs1.length) === 1) {
+    const der: u8[] = x509FirstBlock(pkcs1)
+    key = rsaParsePrivateKey(der, 0, toI32(der.length))
+  } else if (pkcs8 !== null && pkcs1 === null && toI32(pkcs8.length) === 1) {
+    key = x509Pkcs8RsaKey(x509FirstBlock(pkcs8))
+  }
+  x509WipeBlocks(pkcs1)
   x509WipeBlocks(pkcs8)
   return key
 }
