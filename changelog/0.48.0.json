@@ -1,0 +1,233 @@
+{
+  "version": "0.48.0",
+  "date": "2026-11-26",
+  "tag": "v0.48.0",
+  "range": {
+    "from": "v0.47.0",
+    "to": "ed014e6ae"
+  },
+  "entries": [
+    {
+      "id": "wp89-s3-the-c-shim-the-link-wiring",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP89 S3 — the C shim, the link wiring, the fetch script and the CI lane",
+      "body": "Adds runtime/gfx/nish-gfx.c, a C shim over wgpu-native and SDL3 that a nishgfx_ call links against. A program that uses no nishgfx_ symbol links as before. scripts/fetch-gfx.sh fetches and checks the pinned libraries into build/gfx/<platform>. An interrupted fetch never leaves an install that a later run accepts: the old install is moved aside rather than deleted, and \"already there\" requires the headers as well as the stamp and archives. A gfx CI lane renders a triangle and reads it back on lavapipe and on Metal. Where the libraries are missing, the gfx tests print SKIP.\n\nFixes #2238\n\nRefs: docs/wp89-gfx.md, docs/security/gfx.md\nTests: tests/gfx.js, tests/gfx/triangle.c\nVerified: pr-adversary 4 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "4073b59"
+      ],
+      "pr": 2295,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "wp85-s4-game-starter-without-allow-panics-raster",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP85 S4 — game-starter without --allow-panics, raster trails draw again, the guide catches up",
+      "body": "synthSilence picks its length with a guard the prover reads, so std/synth.ts\nholds no panic site and examples/game-starter builds under the no-panic\ndefault: its opt-out header, smoke args and build flag are gone.\n\nrasterTrail draws the slots that land in range again when a caller sets its\npublic head outside the ring, as it did before WP85 S1, bounded by n and with\nno new panic site. It walks the trail as two runs of slots, so std-raster's\ninstruction count stays inside its band. tests/link/std_raster_trail_head\npins heads of 6, -2, 1000 and ±2147483647.\n\nterm-probe's and break-web's opt-outs now name the sites they still reach,\nrecorded against #2208 and #2316. The guide stops saying nish/host/game,\nnish/raster and nish/synth calls reach panic sites, and documents the\nrasterMixWeight clamp, rasterTrail's out-of-range head, Screen.flush covering\nbuffers up to the shortest, and ringCapacity's 2^30 - 1 cap.\n\nFixes #2289\nFixes #2290\nFixes #2292\nTests: tests/link/std_raster_trail_head\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "d9e3fb7"
+      ],
+      "pr": 2319,
+      "author": "Redis Stasa",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "wp85-s5-tests-for-four-rewritten-std-term",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP85 S5 — tests for four rewritten std/term.ts input paths",
+      "body": "tests/link/std_term_decoder_bounds feeds KeyDecoder.feed, feedEvents, poll\nand pollEvents the inputs that reached the panics WP85 S3 removed: empty reads,\nnegative byte counts, counts past the buffer, cut UTF-8 sequences, ESC O and\nCSI runs cut at the end of a read, and pastes whose text is empty or cut. It\npins what each one gives back.\n\ndocs/security/term.md moves the guards in KeyDecoder.keep, termDecodeKeys and\ntermDecodeEvents out of \"Open: untested defensive bounds\". No public input\nreaches those guards. Each row now names the std-panics check that fails, at\nits site, when the guard is removed. termBytesText's clamp stays open, because\nno check fails without it. Screen.flush's flush up to the shortest buffer is\nrecorded as specified behaviour (owner decision on #2290).\n\nFixes #2291\nTests: tests/link/std_term_decoder_bounds\nVerified: pr-adversary 1 round, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7d0c769"
+      ],
+      "pr": 2318,
+      "author": "Redis Stasa",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "check-deflate-s-sums-instead-of-wrapping-them",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "check deflate's sums instead of wrapping them",
+      "body": "std/compress/deflate.ts computed sums, differences and products of indexes, lengths, bit counts and code values as toI32(toU32(a) + toU32(b)), so a value past i32 wrapped silently. Each such site is now an i32 op the prover discharges, or answers a negative DEFLATE_ERR_* code where input can reach it. The multiplicative hash keeps its intended wrap. No new error code, panic site or nish:unsafe is added; a 53,552-input sweep gives the same return code as before for every input. Recorded as COMP-21 in docs/security/compress.md.\n\nTests: tests/link/std_compress_checked_sums, tests/link/std_compress_sweep\nFixes #2285",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "307ee8c"
+      ],
+      "pr": 2320,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "make-bench-http1-conn-base-build-pre-netwrite2",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "make bench/http1-conn --base build pre-netWrite2 bases and re-measure idle memory and codec cost",
+      "body": "`bench/http1-conn/run.mjs --base` now builds any base, including ones older than `nish:net`'s `netWrite2` (v0.34.1). Such a base gets `netWrite` in `main.ts`'s stages calibration, which it never runs.\n\nThe README re-measures two things on main 7d0c7699 against 7d921842, interleaved with a base-against-base noise band:\n- Idle RSS per connection: 50,000 connections, 5 runs.\n- The socket-less codec's ns per request: hot, cold and idle, 15 rounds.\n\nResults:\n- Codec cost is unchanged within the band. In the cold row the band itself is 9.3% wide.\n- Idle RSS is about 113 bytes lower in every row.\n- The 2026-11-13 memory table (base 7d921842, 4,258 to 1,215) does not reproduce with any base tried, and the README now says so.\n- Server keep-alive throughput was not re-measured, so the section claims none.\n\nFixes #1560\n\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "86ce9bc"
+      ],
+      "pr": 2325,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "wp39-h1-repeated-date-fields-and-the-http",
+      "type": "docs",
+      "scope": "net",
+      "breaking": false,
+      "title": "WP39 H1 — repeated Date fields and the HTTP/2 and HTTP/3 cost of the Date header",
+      "body": "`main` already refuses a second Date field on every carrier\n(`httpFieldsCheckOutgoing` answers HTTP_FIELDS_DATE_REPEATED, RFC 9110\n§5.3); the user guide now says so and names each carrier's result.\n\ndocs/BENCHMARKS.md measures what the Date field costs on HTTP/2 and\nHTTP/3: an interop build from 7d0c7699 against the same build with its\neight `date.current()` calls deleted, in interleaved band and A/B runs of\n`bench/h2load.mjs`. Both protocols stay inside the noise band. On HTTP/2\nevery A/B median sat above its own band's median, about 5% (0.23 to 0.30 µs\na request) in the 25-round runs, a lean no profile has attributed to the\nfield's encoding or the clock read. docs/security/http2.md states the same.\n\nPart of #2324\nFixes #696\n\nVerified: pr-adversary 3 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3ae077c"
+      ],
+      "pr": 2326,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "refresh-wp71-to-httparena-s-21-scored-profiles",
+      "type": "docs",
+      "breaking": false,
+      "title": "refresh WP71 to HttpArena's 21 scored profiles and split RSA server signing out of WP34",
+      "body": "HttpArena now scores 21 profiles on its overall board, up from 19:\nconnections-1m and connections-1m-tls joined the HTTP/1.1 board. async-db\nand fortunes have a scored database board of their own, and gateway-h2 is\nnow gateway-64. The harness also mounts an RSA-2048 certificate, and\nvalidate.sh fails any TLS listener that serves a different one. The TLS\nserver signs only with ECDSA P-256, so every TLS profile waits on RSA\nsigning.\n\nWP34 S26 (#481), RSA certificates on the TLS server, moves to its own\nplan, tls-rsa-server.plan.md, so it can sit right after WP71 on the\nRoadmap. WP71 S1 shrinks to the 8 plaintext profiles that need only their\nroutes, plus async-db and pipelined. baseline-h2 and baseline-h3 move to\na new S2f behind RSA. S2g and S2h add the two connections profiles.\nS2a, S2c and S2d now also wait on RSA, and S2d no longer waits on WP43's\nstatic files, which have landed. D5 declares middleware, since WP43 S5's\nroute steps have landed.",
+      "metrics": [],
+      "refs": [
+        "docs/wp71-httparena.md",
+        ".claude/plans/tls-rsa-server.plan.md"
+      ],
+      "tests": [],
+      "commits": [
+        "bdc6371"
+      ],
+      "pr": 2315,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "add-the-httparena-entry-in-bench-httparena-wp71",
+      "type": "feat",
+      "breaking": false,
+      "title": "add the HttpArena entry in bench/httparena (WP71 S1)",
+      "body": "bench/httparena/ is a standard-mode HttpArena framework entry for Nish,\nlaid out as HttpArena's frameworks/nish/ directory. It serves baseline11\n(GET, and POST with a Content-Length or chunked body), pipeline, delay,\njson with json-comp gzip, and async-db over nish/net/postgres on 8080,\nthrough nish/net/http-server under nish/net/prefork. It serves baseline2\nand json over h2c on 8082. Every body is computed per request.\nHttpArena's validate.sh passes it, 47 passed and 0 failed, at HttpArena\n3388e458. meta.json enters ten profiles. fortunes, connections-1m, h2 and\nh3 are not entered.\n\ndb.ts reimplements the plain-TCP query loop of std/net/postgres-carrier.ts,\nbecause PgCarrier needs an HttpHandler that HttpServer does not expose.\n\ntests/link/httparena_entry builds server.ts and drives every route\nthrough one worker in 46 checks. The checks cover split and pipelined\nrequests, a chunked POST, overlapping delays, gzip and identity\njson-comp, a wrong async-db query answered with an ErrorResponse, h2c,\nand a clean SIGTERM shutdown.\n\nFixes #2020\nPart of #2323\n\nTests: tests/link/httparena_entry\nVerified: pr-adversary 3 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "63b6f52"
+      ],
+      "pr": 2329,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "wp39-g7-http-1-1-over-tls-on",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "WP39 G7 — HTTP/1.1 over TLS on the nish/net/http-server façade",
+      "body": "HttpServer.listenHttp1Tls serves HTTP/1.1 over TLS through Http1TlsServer on the same façade as listenHttp1, applying Alt-Svc, bodyTimeout, idleTimeout and the head deadline the same way. A graceful drain holds a TLS slot open until its sealed records and close_notify are sent, so a draining server no longer truncates a response body.\n\nTests: tests/link/net_http_server_h1_tls, net_http_server_h1_tls_slots, net_http_server_h1_tls_twice, net_http_server_h1_tls_wait\nFixes #2010\nPart of #2324\n\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f54595e"
+      ],
+      "pr": 2332,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "httphandler-holds-a-length-finished-stream-s-pipelined",
+      "type": "fix",
+      "scope": "interop",
+      "breaking": false,
+      "title": "HttpHandler holds a length-finished stream's pipelined request until its end",
+      "body": "A pipelined request that arrives behind a request whose body is a length-finished stream is now held until that stream ends, instead of being parsed while the stream is still being read. tests/link/net_handler_pipelined_stream pins it, including a held stream whose peer hangs up, and docs/security/handler.md records the hold.\n\nTests: tests/link/net_handler_pipelined_stream\nFixes #1556\nPart of #2324\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "95ab033"
+      ],
+      "pr": 2327,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "the-http-server-fa-ade-on-io-uring",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "the http-server façade on io_uring slots, held and measured at HttpArena's latency shape",
+      "body": "tests/link/net_http_server_ring checks that flag 8 (NET_LISTEN_RING) puts the http-server façade's carriers on io_uring slots. Under `ulimit -n 32`, the server holds 100 keep-alive connections at once and answers every one. The check skips only when the kernel refuses rings or the hard descriptor limit is under 32.\n\nbench/http-server-ring measures the façade on rings against epoll at HttpArena's latency route, holding 1,024 connections at 10,000 and 100,000 req/s. The run is recorded in docs/BENCHMARKS.md. At the medians, the rings spent more server CPU per request than epoll: +23.0% at 10,000 and +24.8% at 100,000. The 100,000 gap is well beyond the widest noise band, 3.3%. The HttpArena entry therefore stays on flag 0.\n\nTests: tests/link/net_http_server_ring\nFixes #2028\nPart of #2323\nVerified: pr-adversary 3 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1447553"
+      ],
+      "pr": 2330,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "record-a-window-contract-s-check-at-its",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "record a window contract's check at its callers",
+      "body": "A method whose first statement forwards a (buffer, offset, length) window to a guard that panics now holds a `window` site at each call. The site is proven when the caller has already checked the window, so the guard's own panic is no longer reached through those callers. A constructor that hands its limits to a fault-pure guard gets the same treatment when the caller tests the same fault on a steady local and the fault branch leaves. openHttpHandler's construction of HttpHandler is discharged this way.\n\nAn exported forwarder still lists the host's route into the guard as unproven. The http1 connection cap and the router's contract panics stay reached: their config is a mutable class stored as given, so no caller's proof reaches the guard. Both are recorded in docs/security.\n\nPart of #2296.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b654a09"
+      ],
+      "pr": 2321,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-25"
+    },
+    {
+      "id": "net-listen-ring-wide-rings-of-up-to",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "NET_LISTEN_RING_WIDE rings of up to 65,536 slots, and a busy ring set sleeps in its first ring",
+      "body": "Two changes to io_uring ring listeners, each measured on a 1-vCPU Xeon\n8260 VM (Ubuntu 24.04, kernel 6.8.0-147, stock sysctls, a real NIC), with\n250,000 keep-alive connections at ~25,500 requests a second from three load\ngenerators, alternating builds, two runs each:\n\n| build                        | CPU busy     | system time  | p99           |\n| ---------------------------- | ------------ | ------------ | ------------- |\n| 0.47.0                       | 73.7%, 77.2% | 22.6%, 25.2% | 369 ms, 1.4 s |\n| wide rings                   | 71.9%, 72.1% | 19.4%, 18.9% | 411, 354 ms   |\n| wide rings + first-ring wait | 71.2%, 73.5% | 19.0%, 20.3% | 45, 44 ms     |\n\n- NET_LISTEN_RING_WIDE, tcpListenFlags flag 16 (with 8): each ring holds\n  as many slots as RLIMIT_NOFILE allows, up to 65,536 rather than 16,384.\n  Under DEFER_TASKRUN every ring with work costs a pass an enter and an\n  eventfd read, so the 16 rings of a narrow set at 250k connections cost\n  3.5 points of CPU more than the 4 of a wide one. The width is asked for,\n  not the default: a slot costs about 110 bytes a ring up front (7 MB for a\n  wide ring, 1.8 MB for a narrow one). A set's 2^26 handles are now split\n  into rings of 2^B, the least B >= 20 that keeps 64 generations a slot, so\n  narrow sets are encoded exactly as before and a closed handle still\n  answers -9 until its slot was reused 64 times (NURING-54). Sandboxed\n  listeners keep their premade, narrow rings.\n- A set of several rings now takes the direct wait while it is busy: it\n  hands every ring's queued submissions to the kernel and sleeps in its\n  first ring for at most UR_DIRECT_BUSY_MS (1 ms), which the other rings'\n  completions cannot end. The first such sleep followed by no events sends\n  the caller back to the set's epoll descriptor, whose eventfds wake it for\n  any ring, so an idle set sleeps as long as before (NURING-55).\n\nTests: net_ring_calls pins the bit, 24 and 31 listening and 16 without 8\nand 32 refused; the net_ring section runs the echo server under a limit of\n20,000 with and without the bit and reads the set's slots from the stats\ndump (20,000 against 16,384); uring-test's direct_rings mode pins the busy\ngate, the 1 ms bound, the return to the descriptor and a byte served on the\nsecond ring alone. Budgets: runtime-net.c 13,290 -> 13,435 (13,568),\nruntime-uring.c 9,907 -> 10,010 (10,240), measured with clang 18.1.3.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ed014e6"
+      ],
+      "pr": 2338,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-26"
+    }
+  ]
+}
