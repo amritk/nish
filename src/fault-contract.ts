@@ -665,7 +665,7 @@ export const faultProven = (
   }
   // From the call outwards: each block around it, and the statement in it that holds the call.
   let k = path.length - 2
-  while (k >= 0) {
+  while (k >= 0 && k + 1 < path.length) {
     const block = path[k]
     if (repeats(block)) {
       return false
