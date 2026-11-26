@@ -10615,20 +10615,20 @@ const serverH2cPrefaceDeclared = () =>
       why: "the program calls HttpServer.listenHttp1 with a fourth argument or Http1Server.release, which the seed's std/net does not have, so only the candidate compiles it",
     }))
     .concat(
-      ["server.ll", "server.h"].map((file) => ({
+      ["server.ll", "server.h", "handler.ll"].map((file) => ({
         program: "bench/http-server-ring/server.ts",
         file,
         changelog: SERVER_H2C_PREFACE,
-        why: "HttpServerH1Slot gains the sniff's head, count and timestamp and is laid out widest first, so the main module that lays out the façade's slots moves",
+        why: "HttpServerH1Slot gains the sniff's head, count and timestamp and is laid out widest first and Http1Server gains release, so the modules that lay out or declare the façade's HTTP/1.1 slots move",
       }))
     )
     .concat(
-      Object.entries({
-        "": ["client.ll", "handler.ll", "main.h", "main.ll", "rig.ll"],
-        _slots: ["handler.ll", "main.h", "main.ll", "taken.ll"],
-        _twice: ["handler.ll", "main.h", "main.ll", "taken.ll"],
-        _wait: ["handler.ll", "main.h", "main.ll", "taken.ll"],
-      }).flatMap(([name, files]) =>
+      [
+        ["", ["client.ll", "handler.ll", "main.h", "main.ll", "rig.ll"]],
+        ["_slots", ["handler.ll", "main.h", "main.ll", "taken.ll"]],
+        ["_twice", ["handler.ll", "main.h", "main.ll", "taken.ll"]],
+        ["_wait", ["handler.ll", "main.h", "main.ll", "taken.ll"]],
+      ].flatMap(([name, files]) =>
         files.map((file) => ({
           program: `tests/link/net_http_server_h1_tls${name}/main.ts`,
           file,
