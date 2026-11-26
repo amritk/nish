@@ -139,6 +139,8 @@ const spawnNish = (args, options) => spawnSync(NISH, withAllowPanics(NISH, args)
  * opt-out, its header says why), else `[]`: a check that walks examples
  * builds each as that line does. `file` is relative to the root.
  */
+/** The codes a build out of no-panic scope is refused with: a site of its own (NL2457), or one a call reaches (NL2458). */
+const NO_PANIC_CODES = ["NL2457", "NL2458"]
 const optOutArgs = (file) => corpusArgs(path.join(root, file)).filter((arg) => arg === ALLOW_PANICS)
 const casesDir = path.join(root, "tests", "cases")
 const buildDir = path.join(root, "build", "test")
@@ -6579,17 +6581,23 @@ if (dealtHere("performance")) {
   const optOuts = gateSources.filter((source) => source.startsWith("examples/") && optOutArgs(source).length > 0)
   const strictResults = await pool(optOuts, defaultJobs(), (source) => {
     const args = corpusArgs(path.join(root, source)).filter((arg) => arg !== ALLOW_PANICS)
+    const out = path.join(buildDir, "perf_gate", "strict", source.replace(/[/.]/g, "_"))
+    // `--link`, as smoke and a user build it: a linked build is a closed world,
+    // whose call-site ranges can leave a site unproven that `-o` alone proves.
     // strict: proves the example's opt-out is still needed
-    return spawnAsync(NISH, [source, ...args, "-o", `${path.join(buildDir, "perf_gate", "strict", source.replace(/[/.]/g, "_"))}/`], {
+    return spawnAsync(NISH, [source, ...args, "--json", "-o", `${out}/`, "--link", path.join(out, "bin")], {
       cwd: root,
       encoding: "utf8",
     })
   })
   for (const [at, source] of optOuts.entries()) {
+    const refused = diagnosticsOf(strictResults[at].stdout).some((d) => NO_PANIC_CODES.includes(d.code))
     check(
       `performance gate: ${source}'s --allow-panics opt-out is still needed`,
-      strictResults[at].status !== 0,
-      "it builds without the flag: drop --allow-panics from its `// smoke: args` line and its header's words about it"
+      strictResults[at].status !== 0 && refused,
+      strictResults[at].status === 0
+        ? "it builds without the flag: drop --allow-panics from its `// smoke: args` line and its header's words about it"
+        : `refused, but not for a panic site:\n${strictResults[at].stdout}${strictResults[at].stderr}`
     )
   }
 
@@ -30198,11 +30206,14 @@ if (dealtHere("releaseChecks")) {
           // strict, so its marker, its `allow-panics:` line and the page's
           // sentence about the flag come out.
           if (run.status === 0 && s.args.includes(ALLOW_PANICS)) {
-            const strictEntry = { ...s, args: s.args.filter((arg) => arg !== ALLOW_PANICS) }
+            // Linked, as a user's build is: a closed world can leave a site
+            // unproven that an `-o` build alone proves.
+            const exe = path.join(snippetDir, `${prefix}_${s.line}_strict_bin`)
+            const strictEntry = { ...s, args: [...s.args.filter((arg) => arg !== ALLOW_PANICS), "--link", exe] }
             const bare = compileProgram({ ...program, entry: strictEntry }, `${prefix}_${s.line}_strict`)
             check(
               `${rel}:${s.line}: its --allow-panics opt-out is still needed`,
-              bare.run.status !== 0,
+              bare.run.status !== 0 && bare.errors.some((e) => NO_PANIC_CODES.includes(e.code)),
               "it builds without the flag: drop --allow-panics from its marker, the `<!-- allow-panics: -->` line above, and the page's words about it"
             )
           }
