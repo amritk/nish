@@ -23588,6 +23588,29 @@ const DECLARED = [
       "tests/link/json_tagged_union/main.ts": ["json-typed.ll"],
     }
   ),
+  ...byFinding(WP80_EXAMPLES_FREED)(
+    "std/bytes.ts tests the lead byte's index inside its UTF-8 walk, where a call had forgotten the caller's loop test, so bytes.ll moves in every program that skips JSON text",
+    {
+      "docs/cookbook/json-union.ts": ["bytes.ll"],
+      "bench/httparena/main.ts": ["bytes.ll"],
+      "bench/postgres/main.ts": ["bytes.ll"],
+      "tests/link/compact_json/main.ts": ["bytes.ll"],
+      "tests/link/httparena_entry/main.ts": ["std_bytes.ll"],
+      "tests/link/json_tagged_union/main.ts": ["bytes.ll"],
+      "tests/link/net_grpc/main.ts": ["std_bytes.ll"],
+      "tests/link/net_grpc_interop/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_batch_limits/main.ts": ["bytes.ll"],
+      "tests/link/net_handler_bomb/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_open/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_pipelined_stream/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_refused/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_steps/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_steps_split/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_try_answers/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http1_server_lend_park/main.ts": ["bytes.ll"],
+      "tests/link/net_http1_wire_refusals/main.ts": ["bytes.ll"],
+    }
+  ),
   {
     program: "tests/link/atomic_index_proven/main.ts",
     file: "threads.ll",
