@@ -42,6 +42,15 @@ PASS  h2c /baseline2 answers :status 200
 PASS  with the sum
 PASS  h2c /json/2?m=3 answers :status 200
 PASS  with the exact body
+PASS  GET /baseline11 on 127.0.0.2 answers 55
+PASS  GET /baseline11 on 127.0.0.32 answers 55
+PASS  GET /baseline11 on 127.0.0.160 answers 55
+PASS  200 keep-alive connections are each answered
+PASS  and each again after 6 s idle, past the 5 s no idle close may fall under
+PASS  one worker's HTTP/1.1 slots are the most one server holds
+PASS  64 workers' are each 4 times its even share
+PASS  never fewer than 16384
+PASS  and slots above 0 are as given
 PASS  SIGTERM stops the server
 PASS  and it exits 0
-httparena entry: 46 passed, 0 failed, 0 skipped
+httparena entry: 55 passed, 0 failed, 0 skipped

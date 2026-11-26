@@ -1,7 +1,7 @@
 // The HttpArena entry (bench/httparena) against the rules HttpArena's
 // validate.sh applies to the profiles it serves, over loopback. The test runs
-// itself as `serve`, `arenaMain` with one worker on ports the kernel picks and
-// the eight-item dataset beside this file, and as `pg`, the stand-in
+// itself as `serve`, `arenaMain` with one worker on ports the kernel picks on
+// 0.0.0.0, as HttpArena runs it, and the eight-item dataset beside this file, and as `pg`, the stand-in
 // PostgreSQL of pg.ts that `DATABASE_URL` names; the driver is a plain client
 // of the server:
 //
@@ -29,10 +29,20 @@
 //   7. Another path answers 404.
 //   8. Over h2c with prior knowledge, /baseline2 answers `:status` 200 and the
 //      sum, and /json/2?m=3 the exact body.
-//   9. SIGTERM stops the server and it exits 0.
+//   9. connections-1m's addresses: GET /baseline11?a=13&b=42 answers 55 on
+//      127.0.0.2, on 127.0.0.32 (the last of the 32 its load generator
+//      spreads over) and on 127.0.0.160 (validate.sh's). A host whose
+//      loopback does not hold an address (no UDP socket binds it) records a
+//      skip for it.
+//  10. Held connections: 200 keep-alive connections, each answered once, are
+//      held idle for 6 s, past the 5 s no idle close may fall under, and each
+//      is answered again; `arenaSlots` sizes a worker's HTTP/1.1 slots at its
+//      share of the million with headroom, between 16384 and 1048576, and a
+//      `slots` above 0 as given.
+//  11. SIGTERM stops the server and it exits 0.
 //
 // Every wait is bounded: five seconds without a wake is a failure, never a
-// hang. The driver kills and reaps both children whatever its checks found;
+// hang; section 10's 6 s idle is a pause, not a wait. The driver kills and reaps both children whatever its checks found;
 // a driver that died leaves the stand-in to exit once idle for 20 seconds,
 // and the server to answer until it is stopped.
 import {
@@ -55,7 +65,7 @@ import { kill, platform, spawn, waitPid } from "nish:process";
 import { gzipDecompress } from "nish/compress/gzip";
 import { preforkArgs } from "nish/net/prefork";
 import { Suite } from "nish/testing";
-import { ArenaServer, arenaMain } from "../../../bench/httparena/server";
+import { ARENA_FLEET, ArenaServer, arenaMain, arenaSlots } from "../../../bench/httparena/server";
 import { ZERO, ascii } from "../net_tls_record_common/bytes";
 import { pgStandIn } from "./pg";
 
@@ -181,12 +191,12 @@ class Conn {
   buf: u8[];
   ready: i32[];
 
-  constructor(port: i32) {
+  constructor(port: i32, host: string = "127.0.0.1") {
     this.got = [];
     this.buf = new Array<u8>(65536);
     this.ready = new Array<i32>(2);
     const addr: u8[] = new Array<u8>(18);
-    netAddress(addr, "127.0.0.1", port);
+    netAddress(addr, host, port);
     this.loop = pollCreate();
     this.fd = tcpConnect(addr);
     if (this.fd < 0) {
@@ -558,7 +568,7 @@ export const main = (): i32 => {
     `${netLocalPort(fd)}`,
     "0",
     "0",
-    "127.0.0.1",
+    "0.0.0.0",
     "256",
     "1",
     DATASET,
@@ -737,7 +747,48 @@ export const main = (): i32 => {
   t.eqStr("with the exact body", text(json.data, ZERO, toI32(json.data.length)), JSON_BODY);
   hj.close();
 
-  // --- 9. SIGTERM -------------------------------------------------------------------------------
+  // --- 9. connections-1m's addresses ---------------------------------------------------------
+  for (const host of ["127.0.0.2", "127.0.0.32", "127.0.0.160"]) {
+    const probe: i32 = udpBind(host, ZERO, ZERO);
+    if (probe < 0) {
+      t.skip(`GET /baseline11 on ${host} answers 55`, `this host's loopback does not hold ${host}`);
+      continue;
+    }
+    netClose(probe);
+    const c = new Conn(port, host);
+    c.send(get("/baseline11?a=13&b=42"));
+    t.eqStr(`GET /baseline11 on ${host} answers 55`, c.response().text(), "55");
+    c.close();
+  }
+
+  // --- 10. Held connections ---------------------------------------------------------------------
+  const held: Conn[] = [];
+  let first: i32 = 0;
+  for (let k: i32 = 0; k < 200; k++) {
+    const c = new Conn(port);
+    c.send(get(`/baseline11?a=${k}&b=1`));
+    if (c.response().text() === `${k + 1}`) {
+      first = first + 1;
+    }
+    held.push(c);
+  }
+  t.eqI32("200 keep-alive connections are each answered", first, toI32(200));
+  pause(6000);
+  let again: i32 = 0;
+  for (let k: i32 = 0; k < 200; k++) {
+    held[k].send(get(`/baseline11?a=${k}&b=2`));
+    if (held[k].response().text() === `${k + 2}`) {
+      again = again + 1;
+    }
+    held[k].close();
+  }
+  t.eqI32("and each again after 6 s idle, past the 5 s no idle close may fall under", again, toI32(200));
+  t.eqI32("one worker's HTTP/1.1 slots are the most one server holds", arenaSlots(ZERO, toI32(1)), toI32(1048576));
+  t.eqI32("64 workers' are each 4 times its even share", arenaSlots(ZERO, toI32(64)), (ARENA_FLEET / 64) * 4);
+  t.eqI32("never fewer than 16384", arenaSlots(ZERO, toI32(512)), toI32(16384));
+  t.eqI32("and slots above 0 are as given", arenaSlots(toI32(256), toI32(64)), toI32(256));
+
+  // --- 11. SIGTERM -------------------------------------------------------------------------------
   kill(pid, 15);
   const done: string[] = message(fd, udp, 5000);
   t.ok("SIGTERM stops the server", done.length === 2 && done[0] === "done" && parseInt(done[1]) > 0);
