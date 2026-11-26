@@ -283,6 +283,10 @@ Pre-alpha and on 0.x, with no compatibility promise: a construct's spelling,
 a flag's name and the IR either lowers to can change between minor releases.
 Every commit compiles, tests and rebuilds the compiler with itself.
 
+What comes next is on the **[Roadmap issue](https://github.com/amritk/nish/issues/1849)**:
+one sub-issue per plan, in the order the work is built, and under each plan
+one issue per stage.
+
 ## Contributing, security and license
 
 - **Contributing:** building the compiler, the tests and the conventions are in
