@@ -76,7 +76,8 @@ export const PANIC_OVERFLOW: i32 = 13
 /**
  * A string handed to a `declare function` (WP27 S3.1) holds a NUL byte, which
  * C would read as its end. Proven, with no check emitted, for a literal that
- * holds none (`foreignStringIsNulFree` in `src/emit-strings.ts`).
+ * holds none and for a local a `s.indexOf("\u0000") < 0` guard proved free of
+ * one (`foreignStringIsNulFree` in `src/emit-strings.ts`).
  */
 export const PANIC_FFI_NUL: i32 = 14
 /**

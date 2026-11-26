@@ -668,15 +668,18 @@ export const stringConstructCallees = (name: string, proven: boolean): string[] 
 /**
  * Whether the argument a `declare function` takes as a `string` needs no NUL
  * check (WP27 S3.1, `docs/wp27-ffi.md` §8c): a literal with no NUL byte in it,
- * which the checker reads at compile time, or a `null` literal, which passes
- * `NULL`. Everything else may hold a NUL that C would read as the end. The
- * attribute pass asks this to record the `ffi-nul` site that the emitter makes.
+ * which the checker reads at compile time, a `null` literal, which passes
+ * `NULL`, or a local a `s.indexOf("\u0000") < 0` guard proved NUL-free at the
+ * call (`judgeForeignStrings` in `src/bounds.ts`, #2298). Everything else may
+ * hold a NUL that C would read as the end. The attribute pass asks this to
+ * record the `ffi-nul` site that the emitter makes.
  */
-export const foreignStringIsNulFree = (arg: Node): boolean => {
+export const foreignStringIsNulFree = (program: CheckedProgram, arg: Node): boolean => {
   const inner = unwrapBoundsParens(arg)
   return (
     inner.kind === NodeKind.Null ||
-    (inner.kind === NodeKind.String && inner.text.indexOf(String.fromCharCode(0)) < 0)
+    (inner.kind === NodeKind.String && inner.text.indexOf(String.fromCharCode(0)) < 0) ||
+    program.nodeProvenIndex[inner.id]
   )
 }
 
@@ -710,7 +713,7 @@ export const emitForeignString = (
   if (unwrapBoundsParens(arg).kind === NodeKind.Null) {
     return "null"
   }
-  if (foreignStringIsNulFree(arg)) {
+  if (foreignStringIsNulFree(emitter.program, arg)) {
     return fn.emitValue(`getelementptr inbounds i8, i8* ${value}, i64 8`)
   }
   let nullBlock: IRBlock | null = null
