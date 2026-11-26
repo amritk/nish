@@ -23588,6 +23588,12 @@ const DECLARED = [
     changelog: WP80_EXAMPLES_FREED,
     why: "AtomicI32Array's and AtomicI64Array's constructors forward their length to the shared `atomicArrayCheckLength` guard, and std/threads.ts gains their checked twins, so threads.ll moves",
   },
+  {
+    program: "tests/link/atomic_array_checked/main.ts",
+    file: "exit",
+    changelog: WP80_EXAMPLES_FREED,
+    why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
+  },
 ]
 
 /**
