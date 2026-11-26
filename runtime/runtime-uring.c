@@ -440,6 +440,9 @@ struct nish_uring_set {
    * events it answered and not yet taken, and whether one failed, after
    * which no descriptor is watched again. */
   int poll_fd, poll_armed, poll_broken;
+  /* Events the set's waits have handed out, and that count when a set of
+   * several rings last slept in its first ring (`nish_uring_wait_direct`). */
+  uint64_t events_seen, events_at_direct;
   int32_t poll_revents;
   struct nish_uring_stats stats;
 };
@@ -1460,6 +1463,10 @@ static int ur_flagged(const struct ur_ring *r) {
  * wakes a second. */
 #define UR_SLEEP_MAX_MS 10
 
+/* The longest a busy set of several rings sleeps in its first ring, whose
+ * enter the other rings' completions do not end (`nish_uring_wait_direct`). */
+#define UR_DIRECT_BUSY_MS 1
+
 /* How long a caller may sleep on `nish_uring_fd` before it calls wait, given
  * the longest it wants (`timeout_ms`, -1 for ever). Answers 0 while a wait has
  * work it can do now: a ring the kernel flagged, completions not yet reaped,
@@ -1543,6 +1550,7 @@ again:
   int n = 0;
   for (int ri = 0; ri < s->nrings && n < cap; ri++) n += ur_service(s, ri, ev + n, cap - n);
   ur_submit_queued(s);
+  s->events_seen += (uint64_t)n;
   if (n > 0) return n;
   /* No eventfd is trusted to end the sleep (NURING-8): the bound does, and the
    * flagged rings are serviced below whether an eventfd was read or not. */
@@ -1561,6 +1569,7 @@ again:
   for (int ri = 0; ri < s->nrings && n < cap; ri++)
     if (ur_flagged(s->rings[ri])) n += ur_service(s, ri, ev + n, cap - n);
   ur_submit_queued(s);
+  s->events_seen += (uint64_t)n;
   if (n == 0 && timeout_ms < 0) goto again;
   return n;
 }
@@ -1577,15 +1586,31 @@ again:
  * with `nish_uring_poll_events` (NURING-45), so a caller that also waits on one
  * descriptor, `signalFd()`, needs no epoll set beside the ring.
  *
+ * A set of several rings sleeps in its first ring too, but only while it is
+ * busy: the other rings' completions cannot end that sleep, so it lasts at
+ * most UR_DIRECT_BUSY_MS, and their queued submissions are handed to the
+ * kernel first. It is busy while its waits have handed out events since its
+ * last such sleep; once a sleep is followed by none, the next call answers
+ * -EOPNOTSUPP and the caller sleeps on `nish_uring_fd`, whose eventfds wake
+ * it for any ring, until events come again (NURING-55). Under load that
+ * replaces each pass's epoll_wait and per-ring eventfd reads with the one
+ * enter, which also gathers the first ring's completions for up to the
+ * bound; idle, the set sleeps as long as before.
+ *
  * Answers 0 after a sleep or when there is work to do now, and the caller
- * then takes events with `nish_uring_wait(s, 0, ...)`; -EOPNOTSUPP when the
- * set has more than one ring, the kernel lacks IORING_FEAT_EXT_ARG (before
- * 5.11), or `watch_fd` cannot be watched (a restricted ring, a poll that
- * failed, or one still armed on another descriptor), and the caller sleeps on
- * `nish_uring_fd` as before; or the enter's negative errno. A timeout or a
- * signal ends the sleep with 0, as epoll_wait's would. */
+ * then takes events with `nish_uring_wait(s, 0, ...)`; -EOPNOTSUPP when a set
+ * of several rings has had no events since its last direct sleep, the
+ * kernel lacks IORING_FEAT_EXT_ARG (before 5.11), or `watch_fd` cannot be
+ * watched (a restricted ring, a poll that failed, or one still armed on
+ * another descriptor), and the caller sleeps on `nish_uring_fd` as before;
+ * or the enter's negative errno. A timeout or a signal ends the sleep with
+ * 0, as epoll_wait's would. */
 int32_t nish_uring_wait_direct(struct nish_uring_set *s, int32_t watch_fd, int32_t min_complete, int32_t timeout_ms) {
-  if (s->nrings != 1) return -EOPNOTSUPP;
+  int multi = s->nrings > 1;
+  if (multi) {
+    if (s->events_seen == s->events_at_direct) return -EOPNOTSUPP;
+    s->events_at_direct = s->events_seen;
+  }
   struct ur_ring *r = s->rings[0];
   if (!r->ext_arg) return -EOPNOTSUPP;
   if (watch_fd >= 0 && (r->restricted || s->poll_broken || (s->poll_armed && s->poll_fd != watch_fd)))
@@ -1609,8 +1634,15 @@ int32_t nish_uring_wait_direct(struct nish_uring_set *s, int32_t watch_fd, int32
    * enter submits them and sleeps rather than answering at once for the
    * caller's pump to send them. */
   ur_send_marked(s, r);
+  if (multi) {
+    for (int ri = 1; ri < s->nrings; ri++) {
+      ur_send_marked(s, s->rings[ri]);
+      if (s->rings[ri]->to_submit) (void)ur_flush(s->rings[ri]);
+    }
+  }
   int32_t t = nish_uring_sleep_ms(s, timeout_ms);
   if (t == 0) return 0;
+  if (multi && (t < 0 || t > UR_DIRECT_BUSY_MS)) t = UR_DIRECT_BUSY_MS;
   struct {
     int64_t sec, nsec;
   } ts = {t / 1000, (int64_t)(t % 1000) * 1000000};

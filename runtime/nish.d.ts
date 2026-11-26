@@ -1674,14 +1674,16 @@ declare function tcpListen(host: string, port: i32, backlog: i32): i32;
  * Flag 8 (`NET_LISTEN_RING` in `nish:net`) accepts into io_uring slots on
  * Linux, so connections are not bound by the descriptor limit; where rings are
  * refused the listener serves descriptors and `netRingState` says why. Elsewhere
- * the flag is accepted and does nothing.
+ * the flag is accepted and does nothing. Flag 16 (`NET_LISTEN_RING_WIDE`), with 8, makes each
+ * ring hold as many slots as the descriptor limit allows, up to 65,536 rather than 16,384: fewer
+ * rings for a busy loop to enter, at about 110 bytes a slot per ring up front.
  *
  * @param host the numeric address to bind.
  * @param port the port, 0 for any.
  * @param backlog the kernel's queue of unaccepted connections.
- * @param flags 1, 2, 4 and 8 as above.
+ * @param flags 1, 2, 4, 8 and 16 as above.
  * @returns the listener's descriptor, or a negative errno: -22 for any other bit (a negative
- *   `flags` included) or 4 without 1, before a socket is made; -95 for flag 4 off Linux; -98
+ *   `flags` included), 4 without 1 or 16 without 8, before a socket is made; -95 for flag 4 off Linux; -98
  *   for a port in use; -23 once the process has opened 31 ring listeners, closed or not.
  */
 declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
@@ -2277,6 +2279,15 @@ declare const NET_UNIX_SEQPACKET: i32;
  * descriptors, and `netRingState` says why. Inert on Darwin. Capability: none.
  */
 declare const NET_LISTEN_RING: i32;
+/**
+ * `tcpListenFlags` flag 16, with `NET_LISTEN_RING`: each of the listener's rings holds as many
+ * slots as `RLIMIT_NOFILE` allows, up to 65,536, rather than up to 16,384. A busy loop enters
+ * each ring once a pass, so fewer, wider rings cost it less; each slot costs about 110 bytes a
+ * ring up front, about 7 MB for a ring of 65,536. A ring listener under `--sandbox` takes rings
+ * made before its filter, at the narrow width. Without `NET_LISTEN_RING` it is -22. Inert on
+ * Darwin. Capability: none.
+ */
+declare const NET_LISTEN_RING_WIDE: i32;
 /**
  * Whether listeners opened with `NET_LISTEN_RING` accept into rings: 1 when they do, 0 until a
  * listener has found rings or a refusal, or the negative errno the kernel refused rings with (-1
@@ -3220,13 +3231,17 @@ declare module "nish:net" {
    * memory serves descriptors itself, and a later listener asks again. Off
    * Linux the flag is accepted and does nothing.
    *
+   * Flag 16, `NET_LISTEN_RING_WIDE`, with flag 8, makes each ring hold as
+   * many slots as `RLIMIT_NOFILE` allows, up to 65,536 rather than 16,384.
+   *
    * @param host A numeric host, as for `tcpListen`.
    * @param port The port.
    * @param backlog The length of the accept queue.
    * @param flags The sum of the flags: `3` is both, `5` and `7` steer, `8`
-   *   accepts into rings, and `0` is `tcpListen` exactly.
+   *   accepts into rings, `24` into wide ones, and `0` is `tcpListen` exactly.
    * @returns The listener's descriptor or the failure: `-22` for any other
-   *   bit, a negative `flags`, or flag 4 without 1, before a socket is made;
+   *   bit, a negative `flags`, flag 4 without 1, or flag 16 without 8, before
+   *   a socket is made;
    *   `-95` for flag 4 off Linux; `-23` once the process has opened 31 ring
    *   listeners, closed or not.
    */
@@ -3683,6 +3698,8 @@ declare module "nish:net" {
   export const NET_UNIX_SEQPACKET: i32;
   /** `tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors. */
   export const NET_LISTEN_RING: i32;
+  /** `tcpListenFlags` flag 16, with flag 8: rings of up to 65,536 slots rather than 16,384. */
+  export const NET_LISTEN_RING_WIDE: i32;
   /**
    * Whether `NET_LISTEN_RING` listeners accept into rings.
    *

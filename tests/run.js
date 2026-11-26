@@ -19373,6 +19373,7 @@ if (dealtHere("runtimeChecks")) {
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
         ["hupheld", "a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)"],
         ["direct", "a direct wait on the ring (IORING_ENTER_EXT_ARG) sleeps its bound idle, ends early on its minimum, waits the bound out short of it, answers a watched pipe by POLL_ADD, does not sleep while that answer is untaken, and a ring without EXT_ARG is refused it (NURING-45)"],
+        ["direct_rings", "a set of several rings takes the direct wait only while busy, sleeps in its first ring for at most the busy bound, goes back to its descriptor once a sleep finds nothing, and still takes a byte that arrives on its second ring alone (NURING-55)"],
         ["shutclose", "a close waits for its slot's shutdown, which io-wq resolves late, so the slot's next connection reads no end of the stream (NURING-39)"],
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
@@ -36664,11 +36665,13 @@ if (!only || "net_ring".includes(only)) {
         stats,
         `import { spawn } from "node:child_process"
 import net from "node:net"
-const [exe, knob] = process.argv.slice(2)
+const [exe, knob, limit = "1024", wide = ""] = process.argv.slice(2)
 const env = { ...process.env }
 delete env.NISH_URING_STATS
+delete env.NET_RING_WIDE
 if (knob) env.NISH_URING_STATS = knob
-const server = spawn("bash", ["-c", 'ulimit -n 1024 && exec "$0"', exe], { stdio: ["ignore", "pipe", "pipe"], env })
+if (wide) env.NET_RING_WIDE = wide
+const server = spawn("bash", ["-c", 'ulimit -n "$1" && exec "$0"', exe, limit], { stdio: ["ignore", "pipe", "pipe"], env })
 let out = "", err = "", echoed = 0, asked = false
 const sockets = []
 const finish = (why) => {
@@ -36717,9 +36720,9 @@ server.on("exit", (code, sig) => {
 })
 `
       )
-      const drive = (knob) => {
+      const drive = (knob, limit = "1024", wide = "") => {
         if (b.exe === null) return null
-        const r = spawnSync(process.execPath, [stats, b.exe, knob], { encoding: "utf8", timeout: 180000 })
+        const r = spawnSync(process.execPath, [stats, b.exe, knob, limit, wide], { encoding: "utf8", timeout: 180000 })
         try {
           return JSON.parse(r.stdout)
         } catch {
@@ -36730,11 +36733,11 @@ server.on("exit", (code, sig) => {
       if (on !== null && on.why === "exit 2" && on.out.includes("rings refused: ")) {
         skip("net_ring: NISH_URING_STATS: this kernel refuses io_uring")
       } else {
-        const line = (why) => {
+        const line = (why, run = on) => {
           const m = new RegExp(
             `^uring-stats ${why} port=\\d+ sends=(\\d+) pool_new=(\\d+) pool_held=(\\d+) pool_cached=(\\d+) live=(\\d+) slots=(\\d+) enters=(\\d+) windows=(\\d+) window_waits=(\\d+)$`,
             "m"
-          ).exec(on?.err ?? "")
+          ).exec(run?.err ?? "")
           return m === null ? null : m.slice(1).map(Number)
         }
         const sig = line("signal")
@@ -36768,6 +36771,24 @@ server.on("exit", (code, sig) => {
           off !== null && off.why === "signal SIGUSR1" && off.err === "",
           off === null ? `does not compile and link\n${shown(b.c)}` : `${off.why}\nstdout: ${off.out}\nstderr: ${off.err}`
         )
+        // NET_LISTEN_RING_WIDE (NURING-54): under a limit of 20,000 the 3,000
+        // connections share one ring either way, so the set's `slots` is that
+        // ring's width: the limit with the wide bit, 16,384 without it. The
+        // wide set's handles are split 2^21 a ring, so its echoes and closes
+        // also cover the wider split.
+        if (room >= 20000) {
+          const wide = drive("1", "20000", "1")
+          const narrow = drive("1", "20000", "")
+          const w = line("close", wide)
+          const n = line("close", narrow)
+          check(
+            "net_ring: NET_LISTEN_RING_WIDE makes a ring as wide as the descriptor limit (20,000), where a ring without it stops at 16,384 (NURING-54)",
+            wide !== null && wide.why === "exit 0" && narrow !== null && narrow.why === "exit 0" && w !== null && n !== null && w[5] === 20000 && n[5] === 16384 && w[4] === 0,
+            wide === null ? `does not compile and link\n${shown(b.c)}` : `wide: ${wide.why}\nstdout: ${wide.out}\nstderr: ${wide.err}\nnarrow: ${narrow?.why}\nstderr: ${narrow?.err}`
+          )
+        } else {
+          skip(`net_ring: NET_LISTEN_RING_WIDE: the hard descriptor limit here is ${hard.stdout.trim()}, under 20,000`)
+        }
       }
     } else {
       skip(`net_ring: NISH_URING_STATS: the hard descriptor limit here is ${hard.stdout.trim()}, under 1,024`)

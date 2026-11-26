@@ -9597,7 +9597,7 @@ and `io_nish_import_global` and comparing the two bodies.
 `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`,
 `recvFd`, `peerCredentials`, `netRingState` and the constants
 `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET`,
-`NET_LISTEN_RING`. Each is a global too
+`NET_LISTEN_RING`, `NET_LISTEN_RING_WIDE`. Each is a global too
 ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
 
 **[`nish:term`](reference/nish-term.md)** exports `readStdin`, `waitStdin`,
@@ -12132,8 +12132,11 @@ runtime sets on every accepted connection, on every platform, closing one on
 which it cannot. `4`, with `1`, steers each connection to the listener of the
 CPU that received it, Linux only (`-95` elsewhere, `-22` without `1`). `8`
 (`NET_LISTEN_RING`) accepts into io_uring slots on Linux, as
-[slot handles](#slot-handles) say, and does nothing elsewhere. Any other bit
-is `-22` before a socket is made.
+[slot handles](#slot-handles) say, and does nothing elsewhere. `16`
+(`NET_LISTEN_RING_WIDE`), with `8`, makes each ring hold as many slots as the
+descriptor limit allows, up to 65,536 rather than 16,384: fewer rings for a
+busy loop to enter each pass, at about 110 bytes a slot per ring up front
+(`-22` without `8`). Any other bit is `-22` before a socket is made.
 
 - *Tests:* `net_tcp_reuseport`, `net_tcp_nodelay`, `net_ring_calls`,
   `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`;
