@@ -911,10 +911,14 @@ const HTTP_SERVER_H2C_PREFACE_SIZE: i32 = 24
  * `listenHttp1Tls` make one per carrier slot.
  */
 class HttpServerH1Slot {
+  /** The request the slot is reading or answering, null for none. */
+  current: HttpServerRequest | null = null
+  /** The slot's first bytes while `sniff`: 24 on a listener that takes h2c peers, none on any other. */
+  head: u8[] = []
+  /** When the slot was accepted, in `monotonicNanos`: while `sniff`, its `prefaceTimeout` starts here. */
+  since: i64 = 0
   /** The slot's index in the server's `h1Slots`, which is also its poll token. */
   slot: i32
-  /** Whether the slot is on the TLS carrier (`listenHttp1Tls`) rather than the cleartext one. */
-  tls: boolean
   /** The slot's number in its own carrier. */
   carrier: i32
   /** Its carrier's `outputSize`. */
@@ -923,12 +927,6 @@ class HttpServerH1Slot {
   armed: i32 = 0
   /** Bumped each time the slot closes, so an answer still owed to the connection before is dropped; it wraps. */
   gen: i32 = 0
-  /** The request the slot is reading or answering, null for none. */
-  current: HttpServerRequest | null = null
-  /** Whether the carrier's connection in the slot is open. */
-  open: boolean = false
-  /** Whether it stopped reading for want of a free request and waits on `starved`. */
-  starved: boolean = false
   /**
    * 0 while no `drive` of it runs, 1 while one does, 2 once a call inside it
    * (an answer screened while it reads) asked for another pass. The nested
@@ -936,18 +934,20 @@ class HttpServerH1Slot {
    * requests one write pipelines.
    */
   driving: i32 = 0
+  /** How many of `head` are read. */
+  got: i32 = 0
+  /** Whether the slot is on the TLS carrier (`listenHttp1Tls`) rather than the cleartext one. */
+  tls: boolean
+  /** Whether the carrier's connection in the slot is open. */
+  open: boolean = false
+  /** Whether it stopped reading for want of a free request and waits on `starved`. */
+  starved: boolean = false
   /**
    * Whether the slot is on a listener that takes h2c peers and has not yet
    * read the byte that decides (`listenHttp1`'s `h2c`): `head` holds what it
    * has read of the preface so far.
    */
   sniff: boolean = false
-  /** The slot's first bytes while `sniff`: 24 on a listener that takes h2c peers, none on any other. */
-  head: u8[] = []
-  /** How many of `head` are read. */
-  got: i32 = 0
-  /** When the slot was accepted, in `monotonicNanos`: while `sniff`, its `prefaceTimeout` starts here. */
-  since: i64 = 0
 
   constructor(slot: i32, tls: boolean, carrier: i32, outputSize: i32) {
     this.slot = slot
@@ -1938,7 +1938,7 @@ export class HttpServer {
     }
     const conn: Http1Connection = h1.connection(s.carrier)
     // A fresh connection has room for a head, past the 24 bytes this hands it.
-    const taken: i32 = conn.feed(s.head, 0, s.got)
+    const taken: i32 = conn.feed(s.head, toI32(0), s.got)
     conn.lastActive = this.turnAt
     conn.headArrived(this.turnAt)
     if (taken !== s.got) {
