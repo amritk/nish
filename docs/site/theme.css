@@ -309,12 +309,13 @@ aside.t-doc__toc .container {
 }
 
 /* A visited link: Scalar greys it to the secondary text colour, which reads
-   as body text. Halfway between the link and that grey still marks it a
-   link, and a visited one (#583d95, 6.31:1 light; #b69adb, 5.81:1 dark, on
-   the gradient's brightest stop). */
+   as body text. A quarter of the way from that grey to the link keeps a
+   violet cast, so it still reads as a link, but far enough from the link
+   colour to tell apart (#564b7e, 5.86:1 light; #b6a8d0, 6.43:1 dark, on the
+   gradient's brightest stop). Halfway (#b69adb) looked unvisited in dark mode. */
 .light-mode,
 .dark-mode {
-  --scalar-link-color-visited: color-mix(in srgb, var(--scalar-link-color), var(--scalar-color-2));
+  --scalar-link-color-visited: color-mix(in srgb, var(--scalar-link-color) 25%, var(--scalar-color-2));
 }
 
 /* Links: the underline thickens instead of the colour jumping. */
