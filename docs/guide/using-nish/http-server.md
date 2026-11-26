@@ -141,6 +141,30 @@ and after the preface `idleTimeout` applies as on HTTP/2 over TLS.
 Nothing on an h2c connection is encrypted or authenticated. Serve it only
 behind a proxy that ends TLS for you, or on a network you trust.
 
+#### HTTP/1.1 and h2c on one port
+
+A `listenH2c` port serves HTTP/2 alone. To serve both HTTP/1.1 and
+prior-knowledge h2c on one cleartext port, pass `listenHttp1` the HTTP/2
+caps as a fourth argument instead of calling `listenH2c`:
+
+```ts
+server.listenHttp1(tcpFd, new Http1Config(), 256, new Http2Config());
+```
+
+- The server reads each new connection's first bytes, up to 24, against
+  the HTTP/2 preface. All 24 matching makes it an h2c connection, with
+  `r.version` 2; anything else, from the first byte that differs, is served
+  as HTTP/1.1, with nothing lost of what was read.
+- A request whose method is `PRI` is answered as on any HTTP/1.1 port.
+- A client that sends part of the preface and then nothing is closed
+  `prefaceTimeout` after it connected.
+- Up to `slots` h2c connections are held beside the `slots` HTTP/1.1 ones.
+  The call panics as `listenH2c` does on the `Http2Config`, and when the
+  server already has an h2c listener.
+- Without the fourth argument nothing is read ahead, and an h2c client
+  gets `505 HTTP Version Not Supported`.
+- There is still no `Upgrade: h2c`, and the h2c warning above applies.
+
 ### HTTP/1.1 over TLS
 
 `server.listenHttp1Tls(fd, tls, new Http1Config(), slots)` serves HTTP/1.1

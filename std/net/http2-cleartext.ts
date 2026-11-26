@@ -3,7 +3,9 @@
  * (h2c, RFC 9113 §3.3): a pool of `Http2Connection`s, one per accepted
  * socket, for a program that owns its readiness loop. The client starts with
  * the 24-byte connection preface; there is no `Upgrade: h2c` (RFC 9113 §3.1
- * deprecates it) and no fallback to HTTP/1.1 on the same port.
+ * deprecates it), and the pool serves no HTTP/1.1 on its own port. One port
+ * for both is `nish/net/http-server`'s `listenHttp1` with `h2c`: the façade
+ * reads the preface itself and hands a matching socket over with `adopt`.
  *
  * **No confidentiality, no integrity.** Anyone on the path reads and edits
  * the traffic. Serve h2c only upstream of a TLS-terminating proxy, on
@@ -336,6 +338,33 @@ export class Http2CleartextServer {
     s.since = monotonicNanos()
     s.ended = false
     this.waiting += 1
+    return s.at
+  }
+
+  /**
+   * Takes `fd`, a connection the program accepted and has read the whole
+   * 24-byte preface from, into a free slot, as `accept` does, and feeds
+   * `preface` to its connection: the slot starts past its preface, so
+   * `expire` never closes it for one. The bytes are the connection's to
+   * check, which refuses any other 24 as a bad preface (RFC 9113 §3.4).
+   *
+   * @param fd The socket, which is this pool's from now on, whatever it answers.
+   * @param preface The 24 bytes read from `fd`, in order; a shorter array panics, as `feed` does.
+   * @returns The slot, 0 or more, that now holds the connection; or `H2C_POOL_FULL` when every slot is busy
+   *   (the socket is closed with nothing sent).
+   */
+  adopt(fd: i32, preface: u8[]): i32 {
+    const s: H2cSlot | null = this.take()
+    if (s === null) {
+      netClose(fd)
+      return H2C_POOL_FULL
+    }
+    s.conn.restart()
+    s.fd = fd
+    s.got = H2C_PREFACE_SIZE
+    s.since = monotonicNanos()
+    s.ended = false
+    s.conn.feed(preface, H2C_ZERO, H2C_PREFACE_SIZE)
     return s.at
   }
 

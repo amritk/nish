@@ -133,7 +133,7 @@ import { TlsServerConfig } from "nish/net/tls"
 import { TLS_RECORD_DONE, TLS_RECORD_SIGN } from "nish/net/tls/record-server"
 import { TLS_TCP_POOL_FULL } from "nish/net/tls-tcp"
 import { URL_DECODE_ALLOW_NUL, URL_DECODE_ERR_SPACE, URL_DECODE_FORM, percentDecode } from "nish/net/url"
-import { netLocalPort, pollAdd, pollCreate, pollModify, pollRemove, pollWait, udpRecvFrom } from "nish:net"
+import { netLocalPort, netRead, pollAdd, pollCreate, pollModify, pollRemove, pollWait, udpRecvFrom } from "nish:net"
 import { Secret } from "nish:secret"
 
 /** The base `digits` writes a content-length in, and the byte of its digit 0. */
@@ -179,6 +179,9 @@ const HTTP_SERVER_H2_BASE: i32 = 1048576
 const HTTP_SERVER_READ_BITS: i32 = 5
 const HTTP_SERVER_ZERO: i32 = 0
 const HTTP_SERVER_ACCEPT_NONE: i32 = -11
+// The HTTP/2 connection preface (RFC 9113 §3.4), which `listenHttp1`'s `h2c` reads a connection's first bytes against.
+const HTTP_SERVER_H2C_PREFACE: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+const HTTP_SERVER_H2C_PREFACE_SIZE: i32 = 24
 const HTTP_SERVER_ACCEPT_ABORTED: i32 = -103
 // How long a listener rests after an accept failed for want of a resource.
 const HTTP_SERVER_ACCEPT_REST: i64 = 100000000
@@ -932,6 +935,18 @@ class HttpServerH1Slot {
    * requests one write pipelines.
    */
   driving: i32 = 0
+  /**
+   * Whether the slot is on a listener that takes h2c peers and has not yet
+   * read the byte that decides (`listenHttp1`'s `h2c`): `head` holds what it
+   * has read of the preface so far.
+   */
+  sniff: boolean = false
+  /** The slot's first bytes while `sniff`: 24 on a listener that takes h2c peers, none on any other. */
+  head: u8[] = []
+  /** How many of `head` are read. */
+  got: i32 = 0
+  /** When the slot was accepted, in `monotonicNanos`: while `sniff`, its `prefaceTimeout` starts here. */
+  since: i64 = 0
 
   constructor(slot: i32, tls: boolean, carrier: i32, outputSize: i32) {
     this.slot = slot
@@ -1190,18 +1205,41 @@ export class HttpServer {
    * its `maxHeaderBytes` and 44 bytes of request line) or more fields than
    * `limits.maxFields`, or when `slots`, with the TLS listener's if it came
    * first, pass 1048576. `config.maxBody` is set to `limits.maxBody`.
+   *
+   * With `h2c`, the listener also takes cleartext HTTP/2 peers by prior
+   * knowledge: each connection's first bytes are read, up to 24, against the
+   * HTTP/2 preface. One whose 24 bytes are the preface is served as h2c
+   * with `h2c`'s caps, as `listenH2c` serves it (up to `slots` such
+   * connections, beside the HTTP/1.1 ones); one whose first byte to differ
+   * comes sooner, or that ends first, is served as HTTP/1.1, with what was
+   * read as the start of its input. One that sends part of the preface and
+   * then nothing is closed `limits.prefaceTimeout` after it was accepted.
+   * There is no `Upgrade: h2c`. Without `h2c`, nothing is read ahead and
+   * every connection is HTTP/1.1. Panics also, with `h2c`, as `listenH2c`
+   * does on its `config` and `slots`, and when an h2c listener is already
+   * configured.
    * @param fd the listening socket's descriptor, still the program's to close
    * @param config the carrier's caps and timeouts, kept by the carrier
    * @param slots the most connections held at once
+   * @param h2c the h2c carrier's caps, to take h2c peers on this listener; null, the default, for none
    */
-  listenHttp1(fd: i32, config: Http1Config, slots: i32): void {
+  listenHttp1(fd: i32, config: Http1Config, slots: i32, h2c: Http2Config | null = null): void {
     if (this.h1Fd >= 0) {
       panic("HttpServer.listenHttp1: an HTTP/1.1 listener is already configured")
     }
     this.checkHttp1("listenHttp1", config, slots)
+    if (h2c !== null) {
+      this.clearHttp2("listenHttp1", fd, h2c, slots)
+    }
     this.h1 = new Http1Server(config, fd, slots)
     this.h1Fd = fd
     this.h1Base = this.h1Grow(slots, false, config.outputSize)
+    if (h2c !== null) {
+      const table: HttpServerH1Slot[] = this.h1Slots
+      for (let k: i32 = this.h1Base; k >= 0 && k < toI32(table.length); k++) {
+        table[k].head = new Array<u8>(HTTP_SERVER_H2C_PREFACE_SIZE)
+      }
+    }
     pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H1_LISTENER)
   }
 
@@ -1287,10 +1325,20 @@ export class HttpServer {
    * @param slots the most connections held at once
    */
   listenH2c(fd: i32, config: Http2Config, slots: i32): void {
-    if (this.h2cFd >= 0) {
-      panic("HttpServer.listenH2c: an h2c listener is already configured")
+    this.clearHttp2("listenH2c", fd, config, slots)
+    this.h2cFd = fd
+    pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H2C_LISTENER)
+  }
+
+  /**
+   * The h2c carrier, on `fd` and with `slots` slots, for `listenH2c` or for
+   * `listenHttp1`'s `h2c`: there is one at most, so a second panics.
+   */
+  private clearHttp2(name: string, fd: i32, config: Http2Config, slots: i32): void {
+    if (this.h2c !== null) {
+      panic(`HttpServer.${name}: an h2c listener is already configured`)
     }
-    this.checkHttp2("listenH2c", config, slots)
+    this.checkHttp2(name, config, slots)
     const base: i32 = this.h2Grow(slots, this.perOf(config))
     this.h2cBase = base
     const clear: boolean[] = this.h2Clear
@@ -1298,8 +1346,6 @@ export class HttpServer {
       clear[v] = true
     }
     this.h2c = new Http2CleartextServer(config, fd, slots, this.prefaceTimeout)
-    this.h2cFd = fd
-    pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H2C_LISTENER)
   }
 
   /** The checks every HTTP/2 listener's configuration passes. */
@@ -1801,6 +1847,9 @@ export class HttpServer {
     s.open = true
     s.current = null
     s.armed = H1_WANT_READ
+    s.sniff = toI32(s.head.length) === HTTP_SERVER_H2C_PREFACE_SIZE
+    s.got = 0
+    s.since = this.turnAt
     pollAdd(this.loop, fd, H1_WANT_READ, s.slot)
   }
 
@@ -1824,6 +1873,9 @@ export class HttpServer {
       }
     } else {
       const h1: Http1Server | null = this.h1
+      if (h1 !== null && s.sniff && !this.h1Sniff(s, h1)) {
+        return
+      }
       if (h1 !== null) {
         if (read) {
           h1.readable(s.carrier)
@@ -1833,6 +1885,96 @@ export class HttpServer {
       }
     }
     this.drive(s)
+  }
+
+  /**
+   * A ready socket on a listener that takes h2c peers, not yet decided:
+   * reads into `s.head` up to the preface's 24 bytes. The first byte that
+   * differs from the preface, the peer's end or a failed read gives the slot
+   * to HTTP/1.1, with what was read as its first input; 24 that match move
+   * the socket to the h2c carrier. Answers whether the slot is HTTP/1.1's
+   * now, for `h1Serve` to read on; false while it waits for more, or once it
+   * is h2c's or closed.
+   */
+  private h1Sniff(s: HttpServerH1Slot, h1: Http1Server): boolean {
+    const fd: i32 = h1.fd(s.carrier)
+    const head: u8[] = s.head
+    const want: string = HTTP_SERVER_H2C_PREFACE
+    let got: i32 = s.got
+    while (got >= 0 && got < toI32(head.length)) {
+      const n: i32 = netRead(fd, head, got, toI32(head.length) - got)
+      if (n === HTTP_SERVER_ACCEPT_NONE) {
+        return false
+      }
+      if (n <= 0) {
+        // The peer's end or a failure: HTTP/1.1 reads it again and answers it as it does today.
+        return this.h1Decided(s, h1)
+      }
+      // `netRead` answers at most the bytes it was asked for, so the unsigned sum is at most 24.
+      const end: i32 = toI32(toU32(got) + toU32(n))
+      for (let k: i32 = got; k < end && k < toI32(head.length) && k < toI32(want.length); k++) {
+        if (toI32(head[k]) !== toI32(want.charCodeAt(k))) {
+          s.got = end
+          return this.h1Decided(s, h1)
+        }
+      }
+      got = end
+      s.got = end
+    }
+    this.h1ToH2c(s, h1)
+    return false
+  }
+
+  /**
+   * Slot `s` is HTTP/1.1's: what it read ahead is its connection's first
+   * input, stamped as `readable` stamps what it reads. False, with the slot
+   * closed, should the connection not take it all.
+   */
+  private h1Decided(s: HttpServerH1Slot, h1: Http1Server): boolean {
+    s.sniff = false
+    if (s.got <= 0) {
+      return true
+    }
+    const conn: Http1Connection = h1.connection(s.carrier)
+    // A fresh connection has room for a head, past the 24 bytes this hands it.
+    const taken: i32 = conn.feed(s.head, 0, s.got)
+    conn.lastActive = this.turnAt
+    conn.headArrived(this.turnAt)
+    if (taken !== s.got) {
+      this.h1Close(s)
+      return false
+    }
+    return true
+  }
+
+  /**
+   * Slot `s` read the whole preface: its socket leaves HTTP/1.1's loop and
+   * carrier, unclosed, for the h2c carrier, which takes the 24 bytes as
+   * `listenH2c`'s accept would have read them, and is served at once.
+   */
+  private h1ToH2c(s: HttpServerH1Slot, h1: Http1Server): void {
+    const fd: i32 = h1.fd(s.carrier)
+    pollRemove(this.loop, fd)
+    s.sniff = false
+    const freed: i32 = h1.release(s.carrier)
+    this.h1Forget(s)
+    const h2c: Http2CleartextServer | null = this.h2c
+    if (h2c === null || freed < 0) {
+      // `listenHttp1` makes the carrier with the sniffing records, and an unread slot is released.
+      h1.close(s.carrier)
+      return
+    }
+    const slot: i32 = h2c.adopt(freed, s.head)
+    if (slot < 0) {
+      return
+    }
+    const v: i64 = toI64(this.h2cBase) + toI64(slot)
+    const at: i32 = v <= 2147483647 ? toI32(v) : toI32(-1)
+    if (this.h2Opened(at, freed)) {
+      this.h2Serve(at, H1_WANT_READ, null)
+    } else {
+      h2c.close(slot)
+    }
   }
 
   /** Whether `s`'s carrier holds a connection in it. */
@@ -4671,6 +4813,10 @@ export class HttpServer {
    */
   private expireAll(now: i64): void {
     for (const s of this.h1Slots) {
+      if (s.open && s.sniff && s.got > 0 && httpServerAfter(s.since, toI64(this.prefaceTimeout) * HTTP_SERVER_NANOS_PER_MS) <= now) {
+        // Part of the preface and then silence: the slot has held its 24 bytes long enough.
+        this.h1Close(s)
+      }
       const r: HttpServerRequest | null = s.current
       if (r !== null && this.late(r, now) && this.h1Holds(s)) {
         this.h1Close(s)
