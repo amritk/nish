@@ -5,9 +5,11 @@
 // netWrite. With all 3,000 open and echoed it counts /proc/self/fd, then
 // closes each one at its end of stream. Exit 0 is a pass, 2 says the kernel
 // refused rings (the section's skip), and 1 is a failure, with its line.
+// With NET_RING_WIDE=1 it listens with NET_LISTEN_RING_WIDE as well.
 import { readdirSync } from "nish:fs"
 import {
   NET_LISTEN_RING,
+  NET_LISTEN_RING_WIDE,
   netClose,
   netLocalPort,
   netRead,
@@ -19,6 +21,7 @@ import {
   tcpAccept,
   tcpListenFlags,
 } from "nish:net"
+import { getenv } from "nish:process"
 
 /** The connections the client opens. */
 const CLIENTS: i32 = 3000
@@ -28,7 +31,9 @@ const EACH: i32 = 5
 const LISTENER: i32 = -1
 
 export const main = (): i32 => {
-  const listener: i32 = tcpListenFlags("127.0.0.1", 0, 4096, NET_LISTEN_RING)
+  const wide: boolean = (getenv("NET_RING_WIDE") ?? "") === "1"
+  const flags: i32 = wide ? NET_LISTEN_RING | NET_LISTEN_RING_WIDE : NET_LISTEN_RING
+  const listener: i32 = tcpListenFlags("127.0.0.1", 0, 4096, flags)
   if (listener < 0) {
     console.log(`tcpListenFlags failed with ${listener}`)
     return 1

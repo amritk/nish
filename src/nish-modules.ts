@@ -307,7 +307,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, spawnPipedWithin, spawnWithFds, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, setCpuAffinity, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netWrite2, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, pollWaitBatch, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET, netRingState, NET_LISTEN_RING"
+    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netWrite2, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, pollWaitBatch, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET, netRingState, NET_LISTEN_RING, NET_LISTEN_RING_WIDE"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -519,7 +519,8 @@ export const netSymbol = (name: string): string => {
  * with no raw `setsockopt`. The `NET_UNIX_` ones are `unixListen`'s flag and
  * `unixSocketPair`'s two kinds, which share 1 because no call takes both.
  * `NET_LISTEN_RING` is `tcpListenFlags`'s ring bit (WP63 S2), 8 because 1, 2
- * and 4 are the bits before it.
+ * and 4 are the bits before it, and `NET_LISTEN_RING_WIDE` the bit after,
+ * which asks for rings of up to 65,536 slots.
  */
 export const netOption = (name: string): i32 => {
   if (name === "NET_TCP_NODELAY") {
@@ -545,6 +546,9 @@ export const netOption = (name: string): i32 => {
   }
   if (name === "NET_LISTEN_RING") {
     return 8
+  }
+  if (name === "NET_LISTEN_RING_WIDE") {
+    return 16
   }
   return 0
 }

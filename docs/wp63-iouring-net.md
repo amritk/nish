@@ -481,7 +481,9 @@ NURING-8's bound stays: the timeout given to the enter is what
 `nish_uring_sleep_ms` allows, at most `UR_SLEEP_MAX_MS` (10 ms) while slots
 are live, and NURING-14's re-check of `IORING_SQ_TASKRUN` runs on every pump
 as it did. The wait goes through epoll as before on a kernel without
-`IORING_FEAT_EXT_ARG` (before 5.11), on a set that has grown a second ring,
+`IORING_FEAT_EXT_ARG` (before 5.11), on a set of several rings that has had
+no events since its last direct sleep (a busy one sleeps in its first ring
+for at most 1 ms, which the other rings' completions cannot end; NURING-55),
 with a second live set or any other descriptor in the loop, when
 `signalFd()` sits beside a ring `--sandbox` restricted, whose restrictions
 refuse `POLL_ADD` (NURING-45), and for good once `netClose` or `fileClose`
@@ -530,6 +532,22 @@ of the slices is that a batch can end up to one slice after `minEvents`
 became ready. Tests: `uring`'s
 "direct" mode, `link/net_ring_batch` (run with every epoll wait refused, so
 a batch that fell back to epoll would fail), `net_poll_batch`.
+
+### 5.6 Wide rings
+
+*Landed after 0.47.0.* A ring holds `RLIMIT_NOFILE` slots, the most
+io_uring lets one ring's table have, up to 16,384; `NET_LISTEN_RING_WIDE`
+(flag 16, with 8) raises the cap to 65,536. Under DEFER_TASKRUN every ring
+with work costs each pass an enter, and in the epoll path an eventfd read, so
+on one vCPU at 250,000 connections the 16 rings of a narrow set cost 3.5
+points of CPU more than the 4 of a wide one. The width is asked for because
+the set's record of each slot and the kernel's table are sized up front,
+about 110 bytes a slot per ring: 7 MB for a wide ring, 1.8 MB for a narrow
+one. A set's 2^26 handles are split into rings of 2^B, the least B of 20 or
+more that leaves every slot 64 generations, so a wide set has 16 rings of
+2^22 where a narrow one has 64 of 2^20, and holds as many connections
+(NURING-54). A listener under `--sandbox` takes rings made before its filter,
+at the narrow width.
 
 ## 6. The sandbox
 
