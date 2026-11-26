@@ -89,20 +89,24 @@ and these figures are not a measurement of one.
 
 ## Validation
 
-`scripts/validate.sh nish` passed, 47 passed and 0 failed, at HttpArena
+`scripts/validate.sh nish` passed, 49 passed and 0 failed, at HttpArena
 commit `3388e4586647ad7d9fd09faec3363f078ded0a9e`, with the entry installing
-Nish 0.46.0, before `connections-1m` was in `meta.json`. Its subscribed
-profiles were `baseline`, `pipelined`, `limited-conn`, `async`,
-`latency-1m`, `latency-10k`, `json-comp`, `baseline-h2c`, `json-h2c` and
-`async-db`, and its checks included the exhaustive fragmentation check (9 request shapes,
-1,047 split offsets).
+Nish 0.46.0. Its subscribed profiles were `baseline`, `pipelined`,
+`limited-conn`, `async`, `latency-1m`, `latency-10k`, `json-comp`,
+`baseline-h2c`, `json-h2c`, `async-db` and `connections-1m`, and its checks
+included the exhaustive fragmentation check (9 request shapes, 1,047 split
+offsets) and `/baseline11` on `127.0.0.2` and `127.0.0.160`.
 
-The run was in a sandbox that needed three local changes, none to this
+The run was in a sandbox that needed four local changes, none to this
 directory's code:
 
 - The base images were pulled from `mirror.gcr.io` and tagged `ubuntu:24.04`
   and `postgres:18`, because Docker Hub answered 429 Too Many Requests.
-- The image trusted the sandbox's TLS proxy CA, added before `install.sh` is
-  fetched.
+- The image trusted the sandbox's TLS proxy CA, installed before `apt-get`
+  runs, and its apt sources were switched to `https`, because the proxy
+  refused plain HTTP.
 - `--ulimit memlock=-1:-1` was lowered to the sandbox's 8 MiB hard limit,
   which runc could not raise. The entry locks no memory.
+- The image was built beforehand with `docker build --network host` and the
+  run reused it (`VALIDATE_SKIP_BUILD=1`), because the build needs the
+  sandbox's proxy, which only the host network reaches.
