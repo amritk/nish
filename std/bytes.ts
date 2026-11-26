@@ -589,11 +589,6 @@ const skipDigitsWalk = (b: u8[], from: i32, to: i32): i32 => {
  * length, so the caller steps to it without a sum.
  */
 const bytesUtf8End = (b: u8[], i: i32, to: i32): i32 => {
-  // The caller's loop tested `i`, but a call forgets it: the lead is read
-  // only once it is known to lie in the array.
-  if (i < 0 || i >= toI32(b.length)) {
-    return i
-  }
   const lead: i32 = toI32(b[i])
   let low: i32 = BYTES_NON_ASCII
   let high: i32 = BYTES_CONTINUATION_TOP
@@ -621,6 +616,9 @@ const bytesUtf8End = (b: u8[], i: i32, to: i32): i32 => {
   }
   // Each continuation byte is read only once it is known to lie before both
   // `to` and the array's end; a sequence cut short by either is not one.
+  if (i < 0 || i >= toI32(b.length)) {
+    return i
+  }
   let j: i32 = i + 1
   let k: i32 = 1
   while (k < n) {

@@ -11709,8 +11709,8 @@ const cursorReadRow = (why, filesByProgram) =>
 const JSON_PUT_STRING = "jsonPutString"
 /** The release-note words of `Http1Server.tick` (std/net/http1-server.ts). */
 const HTTP1_TICK = "Http1Server.tick"
-/** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and two examples drop `--allow-panics`. */
-const WP80_EXAMPLES_FREED = "histogram-atomic and merge-patch examples without --allow-panics"
+/** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. */
+const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
 
 const DECLARED = [
   // #2297: the bounds walk proves `end - start` of two index locals with
@@ -23574,41 +23574,12 @@ const DECLARED = [
     changelog: HANDLER_PIPELINED_STREAM_END,
     why: "the case is new to the corpus and the seed's std predates HttpHandler.drive's `unended` gate (#1556) and the HTTP stack this branch links, so every module it writes differs from the seed's",
   })),
-  {
-    program: "examples/merge-patch.ts",
-    file: "exit",
-    changelog: WP80_EXAMPLES_FREED,
-    why: "std/json-typed.ts proves the slice at its string-field decode, which the seed's keeps as a panic site, so only the candidate builds the example with no --allow-panics",
-  },
   ...byFinding(WP80_EXAMPLES_FREED)(
     "std/json-typed.ts tests the window of its string-field slice where the prover reads it, so json-typed.ll moves in every program that decodes a typed string field",
     {
       "docs/cookbook/json-union.ts": ["json-typed.ll"],
       "tests/link/json_enum_string/main.ts": ["json-typed.ll"],
       "tests/link/json_tagged_union/main.ts": ["json-typed.ll"],
-    }
-  ),
-  ...byFinding(WP80_EXAMPLES_FREED)(
-    "std/bytes.ts tests the lead byte's index inside its UTF-8 walk, where a call had forgotten the caller's loop test, so bytes.ll moves in every program that skips JSON text",
-    {
-      "docs/cookbook/json-union.ts": ["bytes.ll"],
-      "bench/httparena/main.ts": ["bytes.ll"],
-      "bench/postgres/main.ts": ["bytes.ll"],
-      "tests/link/compact_json/main.ts": ["bytes.ll"],
-      "tests/link/httparena_entry/main.ts": ["std_bytes.ll"],
-      "tests/link/json_tagged_union/main.ts": ["bytes.ll"],
-      "tests/link/net_grpc/main.ts": ["std_bytes.ll"],
-      "tests/link/net_grpc_interop/main.ts": ["std_bytes.ll"],
-      "tests/link/net_handler_batch_limits/main.ts": ["bytes.ll"],
-      "tests/link/net_handler_bomb/main.ts": ["std_bytes.ll"],
-      "tests/link/net_handler_open/main.ts": ["std_bytes.ll"],
-      "tests/link/net_handler_pipelined_stream/main.ts": ["std_bytes.ll"],
-      "tests/link/net_handler_refused/main.ts": ["std_bytes.ll"],
-      "tests/link/net_handler_steps/main.ts": ["std_bytes.ll"],
-      "tests/link/net_handler_steps_split/main.ts": ["std_bytes.ll"],
-      "tests/link/net_handler_try_answers/main.ts": ["std_bytes.ll"],
-      "tests/link/net_http1_server_lend_park/main.ts": ["bytes.ll"],
-      "tests/link/net_http1_wire_refusals/main.ts": ["bytes.ll"],
     }
   ),
   {
