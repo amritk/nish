@@ -3671,7 +3671,9 @@ net.
 Flag 8 (`NET_LISTEN_RING` in `nish:net`) accepts into io_uring slots on
 Linux, so connections are not bound by the descriptor limit; where rings are
 refused the listener serves descriptors and `netRingState` says why. Elsewhere
-the flag is accepted and does nothing.
+the flag is accepted and does nothing. Flag 16 (`NET_LISTEN_RING_WIDE`), with 8, makes each
+ring hold as many slots as the descriptor limit allows, up to 65,536 rather than 16,384: fewer
+rings for a busy loop to enter, at about 110 bytes a slot per ring up front.
 
 ```ts
 const tcpListenFlags: (
@@ -3702,14 +3704,14 @@ the kernel's queue of unaccepted connections.
 
 <scalar-field name="flags" type="i32" required>
 
-1, 2, 4 and 8 as above.
+1, 2, 4, 8 and 16 as above.
 
 </scalar-field>
 
 <scalar-field name="returns" type="i32">
 
 the listener's descriptor, or a negative errno: -22 for any other bit (a negative
-  `flags` included) or 4 without 1, before a socket is made; -95 for flag 4 off Linux; -98
+  `flags` included), 4 without 1 or 16 without 8, before a socket is made; -95 for flag 4 off Linux; -98
   for a port in use; -23 once the process has opened 31 ring listeners, closed or not.
 
 </scalar-field>
@@ -5470,6 +5472,19 @@ take a descriptor, except that a slot is in one poll loop at a time (a second lo
 answers -17); `netSetOption` answers -95 and every other call -9. A program can so hold
 more connections than its descriptor limit. Where the kernel refuses rings the listener serves
 descriptors, and `netRingState` says why. Inert on Darwin. Capability: none.
+
+</scalar-card>
+
+<scalar-card title="NET_​LISTEN_​RING_​WIDE" icon="phosphor/regular/hash">
+
+`NET_LISTEN_RING_WIDE: i32`
+
+`tcpListenFlags` flag 16, with `NET_LISTEN_RING`: each of the listener's rings holds as many
+slots as `RLIMIT_NOFILE` allows, up to 65,536, rather than up to 16,384. A busy loop enters
+each ring once a pass, so fewer, wider rings cost it less; each slot costs about 110 bytes a
+ring up front, about 7 MB for a ring of 65,536. A ring listener under `--sandbox` takes rings
+made before its filter, at the narrow width. Without `NET_LISTEN_RING` it is -22. Inert on
+Darwin. Capability: none.
 
 </scalar-card>
 

@@ -1,9 +1,13 @@
 ring bit: 8
+wide bit: 16
 before a listen: 0
 flags 8: 0
 decided after: yes
 flags 15: 0
 flags 16: -22
+flags 24: 0
+flags 31: 0
+flags 32: -22
 flags -1: -22
 empty accept: -11
 handle 1048576: read -9 write -9 poll -9 send -9 close -9
