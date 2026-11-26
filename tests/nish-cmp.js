@@ -10599,6 +10599,19 @@ const serverH1TlsDeclared = () =>
     why: "the program calls HttpServer.listenHttp1Tls, which the seed's std/net does not have, so only the candidate compiles it",
   }))
 
+/** The changelog words of WP39 G7, which takes an h2c peer by its preface on nish/net/http-server's HTTP/1.1 listener. */
+const SERVER_H2C_PREFACE = "an h2c peer by its preface on an opted-in HTTP/1.1 listener"
+/** WP39 G7's preface programs call `listenHttp1` with an `Http2Config` or `Http1Server.release`, which the seed's std/net does not have. */
+const serverH2cPrefaceDeclared = () =>
+  ["default_refused", "preface", "preface_drain", "preface_ended", "preface_full", "preface_h1"]
+    .concat(["preface_late", "preface_partial", "preface_pri", "preface_release", "preface_silent"])
+    .map((name) => ({
+      program: `tests/link/net_http_server_h2c_${name}/main.ts`,
+      file: "exit",
+      changelog: SERVER_H2C_PREFACE,
+      why: "the program calls HttpServer.listenHttp1 with a fourth argument or Http1Server.release, which the seed's std/net does not have, so only the candidate compiles it",
+    }))
+
 /** The changelog words of WP82 S6, which proves or removes the HTTP/3 stack's panic sites. */
 const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free"
 const http3PanicFree = (why, filesByProgram) =>
@@ -13330,6 +13343,7 @@ const DECLARED = [
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
   ...serverH1TlsDeclared(),
+  ...serverH2cPrefaceDeclared(),
   ...http3PanicFree(
     "a probe new with this change: it feeds malformed frames to std/net's HTTP/3 frame and QPACK readers, whose proved indexes and Results differ from the seed's, so each module it writes differs, the std/crypto ones it reaches included",
     {
