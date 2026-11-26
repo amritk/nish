@@ -905,6 +905,18 @@ const HTTP_SERVER_H2C_PREFACE: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 const HTTP_SERVER_H2C_PREFACE_SIZE: i32 = 24
 
 /**
+ * Feeds `conn` the `[off, end)` of `buf` that an h2c sniff read ahead, behind
+ * the window's range test, spelled so the prover reads it: the sniff stops at
+ * its head's 24 bytes, so the test always holds. -1 should it ever fail.
+ */
+const httpServerFeedHead = (conn: Http1Connection, buf: u8[], off: i32, end: i32): i32 => {
+  if (off >= 0 && off <= end && end <= buf.length) {
+    return conn.feed(buf, off, end - off)
+  }
+  return toI32(-1)
+}
+
+/**
  * One HTTP/1.1 slot's bookkeeping beside the carrier's connection in it: the
  * slot number, its carrier, its generation, its request, and whether it is
  * open, waits for a free request or is being driven. `listenHttp1` and
@@ -1935,14 +1947,12 @@ export class HttpServer {
     s.sniff = false
     const head: u8[] = s.head
     const got: i32 = s.got
-    // `0 < got <= head.length`, spelled so the prover reads the window: the
-    // sniff stops at the preface's 24 bytes, so a longer count never reaches it.
-    if (got <= 0 || got > toI32(head.length)) {
+    if (got <= 0) {
       return true
     }
     const conn: Http1Connection = h1.connection(s.carrier)
     // A fresh connection has room for a head, past the 24 bytes this hands it.
-    const taken: i32 = conn.feed(head, toI32(0), got)
+    const taken: i32 = httpServerFeedHead(conn, head, toI32(0), got)
     conn.lastActive = this.turnAt
     conn.headArrived(this.turnAt)
     if (taken !== got) {
