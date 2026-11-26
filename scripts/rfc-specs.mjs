@@ -12,9 +12,13 @@
 //
 // A citation is `RFC` or `RFCs` and a number, in either case and in any
 // std/**/*.ts file, comments and identifiers included (`rfc822Name`,
-// `rfc-editor.org/rfc/rfc9000`); `RFCs 8446 and 9001` and `RFC 5208/5958` cite
-// each number. The file is read as text, so a citation a parser would miss
-// still counts.
+// `rfc-editor.org/rfc/rfc9000`), and across a comment's line break (`RFC` at
+// the end of one line, ` * 9000` or `// 9000` on the next). A list cites each
+// number (`RFCs 8446 and 9001`, `RFCs 7230, 7231, and 7232`, `RFC 5208/5958`)
+// and a range each number in it (`RFCs 7230-7235`, up to 64 of them; a wider
+// one only its ends). The file is read as text, so a citation a parser would
+// miss still counts, and a number after `and` that is not an RFC is read as
+// one: list it as `cites:`.
 //
 // A contract `contracts/<n>.json` covers the pair (std/<module>.ts, RFC r) for
 // its `target.module` `nish/<module>` and each `sources[].rfc` r, once its spec
@@ -131,7 +135,31 @@ const walk = (dir) => {
   return out
 }
 
-const citation = /RFCs?[\s-]*(\d{1,5}(?:\s*(?:,|\/|&|and|or)\s*(?:RFC[\s-]*)?\d{1,5})*)(?!\d)/gi
+// What may stand between the words of a citation: space, and the `*` or `//`
+// that starts a wrapped comment line.
+const gap = String.raw`(?:\s|\*|//)*`
+const rfcWord = String.raw`RFCs?(?:[\s-]|\*|//)*`
+const separator = String.raw`${gap}(?:,|/|&|and|or|-|\u2013)${gap}(?:(?:and|or)${gap})?(?:${rfcWord})?`
+const citation = new RegExp(String.raw`${rfcWord}(\d{1,5}(?:${separator}\d{1,5})*)(?!\d)`, "gi")
+const rangeStep = new RegExp(String.raw`^${gap}[-\u2013]`)
+/** The RFC numbers a matched citation names: each listed one, and each one a range spans. */
+const citedNumbers = (body) => {
+  const out = []
+  const numbers = [...body.matchAll(/\d+/g)]
+  for (const [i, m] of numbers.entries()) {
+    const n = Number(m[0])
+    const prev = numbers[i - 1]
+    const between = prev === undefined ? "" : body.slice(prev.index + prev[0].length, m.index)
+    const from = Number(prev?.[0])
+    if (prev !== undefined && rangeStep.test(between) && n > from && n - from <= 64) {
+      for (let r = from + 1; r < n; r++) {
+        out.push(r)
+      }
+    }
+    out.push(n)
+  }
+  return out
+}
 const pairKey = (file, rfc) => `${file} RFC${rfc}`
 
 const cited = new Map()
@@ -139,8 +167,8 @@ for (const file of walk("std").sort()) {
   const text = fs.readFileSync(path.join(root, file), "utf8")
   for (const m of text.matchAll(citation)) {
     const line = text.slice(0, m.index).split("\n").length
-    for (const n of m[1].match(/\d+/g)) {
-      const key = pairKey(file, Number(n))
+    for (const n of citedNumbers(m[1])) {
+      const key = pairKey(file, n)
       if (!cited.has(key)) {
         cited.set(key, line)
       }

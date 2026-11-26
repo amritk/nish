@@ -42617,10 +42617,13 @@ if (!only || "spec".includes(only)) {
     // `--slow`, does not fail the run; each is a SKIP here so the summary counts it.
     for (const l of lines) if (l.startsWith("SKIP  ")) skip(`spec: ${rel}: ${l.slice("SKIP  ".length)}`)
   }
+}
 
-  // Every RFC a std/ module cites is covered by a contract of that module or
-  // listed in scripts/rfc-unspecified.txt (CLAUDE.md, "Definition of done").
-  // `npm run lint` runs the live check too; the rows below are what it refuses.
+// ---- rfc-specs: every RFC std/ cites has a vector spec of its module, or a list line ----
+// CLAUDE.md, "Definition of done": a module that implements an RFC lands spec-first.
+// `npm run lint` runs the live check too; the rows below are what it refuses. The
+// `spec` filter reaches this section as well as `rfc-specs`.
+if (!only || "rfc-specs".includes(only)) {
   const rfcScript = path.join(root, "scripts", "rfc-specs.mjs")
   const rfcLive = spawnSync(process.execPath, [rfcScript], { cwd: root, encoding: "utf8" })
   check(
@@ -42701,6 +42704,19 @@ if (!only || "spec".includes(only)) {
       ],
     },
     {
+      name: "reads a citation wrapped across a comment line, a list with `, and`, `&` and `or`, and a range",
+      files: {
+        "std/w.ts":
+          "/**\n * Written from RFC\n * 9001, RFCs 9002, 9003, and 9004, rfcs 9005 & 9006 or 9007\n * and RFC\n// 9010-9012, RFC 100-900\n */\n",
+      },
+      exit: 1,
+      // One citation runs on across the wrapped lines, so each pair names line 2.
+      has: [9001, 9002, 9003, 9004, 9005, 9006, 9007, 9010, 9011, 9012, 100, 900].map(
+        (rfc) => `std/w.ts:2: cites RFC${rfc},`
+      ),
+      lacks: ["cites RFC101,"],
+    },
+    {
       name: "reads no citation in rfc-editor or RFCX with no number, and none in a file that is not .ts",
       files: { "std/x.ts": "// see the rfc-editor, RFCX\n", "std/notes.md": "RFC 9999\n" },
       exit: 0,
@@ -42743,6 +42759,16 @@ if (!only || "spec".includes(only)) {
         "std/crypto/new.ts": "// RFC 9999\n",
         ...rfcSpec("new", "nish/crypto/new", 9999),
         "test/spec/new.ts": `// vector-contract-sha256: ${"0".repeat(64)}\n`,
+      },
+      exit: 1,
+      has: ["contracts/new.json: test/spec/new.ts was not emitted from it"],
+    },
+    {
+      name: "refuses a contract whose test pins it twice, once rightly",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999),
+        "test/spec/new.ts": `${rfcSpec("new", "nish/crypto/new", 9999)["test/spec/new.ts"]}// vector-contract-sha256: ${"0".repeat(64)}\n`,
       },
       exit: 1,
       has: ["contracts/new.json: test/spec/new.ts was not emitted from it"],
@@ -42876,6 +42902,14 @@ if (!only || "spec".includes(only)) {
       list: (l) => l === "",
     },
     {
+      name: "--grow-baseline refuses a file whose lines from before the rule were edited by hand",
+      files: { "std/net/old.ts": "// RFC 9999 and RFC 9998\n", [listRel]: `${oldNet}\nstd/net/old.ts RFC9998\n` },
+      flags: ["--grow-baseline", "--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: ["are not the set --pin pins: restore them"],
+      list: (l) => l === `${oldNet}\nstd/net/old.ts RFC9998\n`,
+    },
+    {
       name: "--grow-baseline adds the line and names it and the new pin",
       files: { "std/net/new.ts": "// RFC 9999\n" },
       flags: ["--grow-baseline"],
@@ -42894,6 +42928,7 @@ if (!only || "spec".includes(only)) {
       has: ["unknown argument --bogus", "unknown argument update-baseline", "--pin is for a --root tree"],
     },
   ]
+  const rfcScriptBefore = fs.readFileSync(rfcScript, "utf8")
   for (const row of rfcRows) {
     const files = Object.fromEntries(Object.entries(row.files ?? {}).filter(([, v]) => v !== undefined))
     const runs = row.runs ?? [[row.flags ?? [], { links: row.links }]]
@@ -42903,8 +42938,47 @@ if (!only || "spec".includes(only)) {
       `spec: rfc-specs: ${row.name}`,
       results.every((r) => r.status === row.exit) &&
         (row.has ?? []).every((h) => out.includes(h)) &&
+        !(row.lacks ?? []).some((h) => out.includes(h)) &&
         (!row.list || results.every((r) => row.list(r.list))),
       `exit ${results.map((r) => r.status).join(", ")}\n${out}${row.list ? `\n${listRel}:\n${results.map((r) => r.list).join("\n")}` : ""}`
+    )
+  }
+  // The --update-baseline and --grow-baseline rows above moved their tree's pin:
+  // under --root that is --pin's, and the script's own PRE_RULE_SHA256 stays.
+  check(
+    "spec: rfc-specs: an --update-baseline or --grow-baseline run under --root leaves scripts/rfc-specs.mjs as it was",
+    fs.readFileSync(rfcScript, "utf8") === rfcScriptBefore,
+    "scripts/rfc-specs.mjs changed during the fixture runs"
+  )
+  {
+    // On its own tree, --update-baseline re-pins the script's constants: a copy of
+    // the script in a scratch tree's scripts/ is that tree's live script.
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), "nish-rfc-specs-"))
+    const put = (rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true })
+      fs.writeFileSync(path.join(tree, rel), text)
+    }
+    const kept = "std/net/old.ts RFC9998"
+    put("std/net/old.ts", "// RFC 9998\n")
+    put(listRel, `${oldNet}\n${kept}\n`)
+    put(
+      "scripts/rfc-specs.mjs",
+      rfcScriptBefore
+        .replace(/^const PRE_RULE_LINES = \d+$/m, "const PRE_RULE_LINES = 2")
+        .replace(/^const PRE_RULE_SHA256 = "[0-9a-f]+"$/m, `const PRE_RULE_SHA256 = "${rfcPin(oldNet, kept)}"`)
+    )
+    const copy = path.join(tree, "scripts", "rfc-specs.mjs")
+    const r = spawnSync(process.execPath, [copy, "--update-baseline"], { encoding: "utf8" })
+    const after = fs.readFileSync(copy, "utf8")
+    const again = spawnSync(process.execPath, [copy], { encoding: "utf8" })
+    fs.rmSync(tree, { recursive: true, force: true })
+    check(
+      "spec: rfc-specs: --update-baseline on its own tree re-pins PRE_RULE_LINES and PRE_RULE_SHA256, and the check then passes",
+      r.status === 0 &&
+        after.includes("\nconst PRE_RULE_LINES = 1\n") &&
+        after.includes(`\nconst PRE_RULE_SHA256 = "${rfcPin(kept)}"\n`) &&
+        again.status === 0,
+      `exit ${r.status}, then ${again.status}\n${r.stdout}${r.stderr}${again.stdout}${again.stderr}`
     )
   }
   {

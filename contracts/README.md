@@ -13,13 +13,17 @@ A `std/` module that implements an RFC lands spec-first, and
 `node scripts/rfc-specs.mjs` (in `npm run lint`) holds the tree to it. It reads
 a `std/**/*.ts` file as text, comments and identifiers included, and takes
 `RFC` or `RFCs` and a number in either case as a citation: `RFC 7748`,
-`RFC-7748`, `rfc822Name`, `rfc-editor.org/rfc/rfc9000`, and each number of
-`RFCs 8446 and 9001` or `RFC 5208/5958`. Each pair of file and RFC needs one of:
+`RFC-7748`, `rfc822Name`, `rfc-editor.org/rfc/rfc9000`, a citation wrapped
+onto the next comment line, each number of a list (`RFCs 8446 and 9001`,
+`RFCs 7230, 7231, and 7232`, `RFC 5208/5958`) and of a range up to 64 wide
+(`RFCs 7230-7235`). Each pair of file and RFC needs one of:
 
 - a contract here whose `target.module` is that file's module and whose
-  `sources` include the RFC, with its spec `specs/<name>.md` and the test
-  `test/spec/<name>.ts` vector emitted from it, which pins the contract's
-  SHA-256. A contract with no such test covers nothing and fails the check.
+  `sources` include the RFC, with its spec `specs/<name>.md` and a
+  `test/spec/<name>.ts` whose one `// vector-contract-sha256:` line is the
+  contract's SHA-256. A contract with no such test covers nothing and fails
+  the check. The check reads only that pin: `node tests/run.js spec` builds
+  and runs the test, and vector's `check` ties the contract to its spec.
   `contracts/rfc7748-x25519.json` covers `std/crypto/x25519.ts`'s citations
   of RFC 7748 and nothing else.
 - a line `std/<file>.ts RFC<n>` in
