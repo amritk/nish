@@ -10622,6 +10622,21 @@ const serverH2cPrefaceDeclared = () =>
         why: "HttpServerH1Slot gains the sniff's head, count and timestamp and is laid out widest first, so the main module that lays out the façade's slots moves",
       }))
     )
+    .concat(
+      Object.entries({
+        "": ["client.ll", "handler.ll", "main.h", "main.ll", "rig.ll"],
+        _slots: ["handler.ll", "main.h", "main.ll", "taken.ll"],
+        _twice: ["handler.ll", "main.h", "main.ll", "taken.ll"],
+        _wait: ["handler.ll", "main.h", "main.ll", "taken.ll"],
+      }).flatMap(([name, files]) =>
+        files.map((file) => ({
+          program: `tests/link/net_http_server_h1_tls${name}/main.ts`,
+          file,
+          changelog: SERVER_H2C_PREFACE,
+          why: "HttpServerH1Slot gains the sniff's head, count and timestamp and Http1Server gains release, so the modules that lay out or declare the façade's HTTP/1.1 slots move",
+        }))
+      )
+    )
 
 /** The changelog words of WP82 S6, which proves or removes the HTTP/3 stack's panic sites. */
 const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free"
