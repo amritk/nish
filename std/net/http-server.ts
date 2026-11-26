@@ -179,9 +179,6 @@ const HTTP_SERVER_H2_BASE: i32 = 1048576
 const HTTP_SERVER_READ_BITS: i32 = 5
 const HTTP_SERVER_ZERO: i32 = 0
 const HTTP_SERVER_ACCEPT_NONE: i32 = -11
-// The HTTP/2 connection preface (RFC 9113 §3.4), which `listenHttp1`'s `h2c` reads a connection's first bytes against.
-const HTTP_SERVER_H2C_PREFACE: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
-const HTTP_SERVER_H2C_PREFACE_SIZE: i32 = 24
 const HTTP_SERVER_ACCEPT_ABORTED: i32 = -103
 // How long a listener rests after an accept failed for want of a resource.
 const HTTP_SERVER_ACCEPT_REST: i64 = 100000000
@@ -902,6 +899,10 @@ const httpServerLimit = (name: string, value: i32, low: i32, high: i32): void =>
     panic(`HttpServer: limits.${name} ${value} is outside ${low} to ${high}`)
   }
 }
+
+// The HTTP/2 connection preface (RFC 9113 §3.4), which `listenHttp1`'s `h2c` reads a connection's first bytes against.
+const HTTP_SERVER_H2C_PREFACE: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+const HTTP_SERVER_H2C_PREFACE_SIZE: i32 = 24
 
 /**
  * One HTTP/1.1 slot's bookkeeping beside the carrier's connection in it: the
@@ -1953,17 +1954,21 @@ export class HttpServer {
    * `listenH2c`'s accept would have read them, and is served at once.
    */
   private h1ToH2c(s: HttpServerH1Slot, h1: Http1Server): void {
-    const fd: i32 = h1.fd(s.carrier)
-    pollRemove(this.loop, fd)
     s.sniff = false
-    const freed: i32 = h1.release(s.carrier)
-    this.h1Forget(s)
     const h2c: Http2CleartextServer | null = this.h2c
-    if (h2c === null || freed < 0) {
-      // `listenHttp1` makes the carrier with the sniffing records, and an unread slot is released.
-      h1.close(s.carrier)
+    // `listenHttp1` makes the h2c carrier with the sniffing records, and an
+    // unread slot is released, so neither close is reached; each keeps the socket owned.
+    if (h2c === null) {
+      this.h1Close(s)
       return
     }
+    const freed: i32 = h1.release(s.carrier)
+    if (freed < 0) {
+      this.h1Close(s)
+      return
+    }
+    pollRemove(this.loop, freed)
+    this.h1Forget(s)
     const slot: i32 = h2c.adopt(freed, s.head)
     if (slot < 0) {
       return
