@@ -52,7 +52,7 @@ them for review.
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs and `--emit-ts` holds them to the TypeScript round trip. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince`. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
 | `nish-cmp elision (<asset>)` | the row's `runner` | `tests/differential/soundness.js`: the same candidate, linked by the same seed, builds the corpus and 600 generated programs with and without every proof-backed elision, and both must print and exit alike (the generated ones under ASan too). It ran after the byte compare in `nish-cmp` until that job was among the last to finish (330 s of compare and 221 s of elision); beside it, each is about half. Same rows and gating as `nish-cmp`. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
-| `runner (shard <i>/3)` | Ubuntu, LLVM 18 | **only on the release**: on the Release PR (`release/next`) and on the `v*` tag, where `release.yml`'s `ci` job calls this workflow and `release` needs it. It took about 36 runner-minutes a push ([run 44224030613](https://github.com/amritk/nish/actions/runs/44224030613)) for assertions the `test` job makes too; on a push the harness itself is held by the `nishRunner` section's `pop` run. It builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here: on the Release PR's run, before the tag is cut (the run `release-pr.yml` dispatches at `release/next`, since its `GITHUB_TOKEN` push raises `pull_request` runs that wait as `action_required`), and otherwise first at the tag |
+| `runner (shard <i>/3)` | Ubuntu, LLVM 18 | **only on the release**: on the Release PR (`release/next`) and on the `v*` tag, where `release.yml`'s `ci` job calls this workflow and `release` needs it, unless the Release PR's dispatched run already tested the tag's tree ([The release reuses the Release PR's run](#the-release-reuses-the-release-prs-run)). It took about 36 runner-minutes a push ([run 44224030613](https://github.com/amritk/nish/actions/runs/44224030613)) for assertions the `test` job makes too; on a push the harness itself is held by the `nishRunner` section's `pop` run. It builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here: on the Release PR's run, before the tag is cut (the run `release-pr.yml` dispatches at `release/next`, since its `GITHUB_TOKEN` push raises `pull_request` runs that wait as `action_required`), and otherwise first at the tag |
 | `runtime-net (macos-latest, shard <i>/3)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. In shard 1, `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then, in every shard, `node tests/run.js net_ --shard <i>/3 --delegate-ir-checks` ([shards](#shards-and-time-limits)), which links and runs each program and delegates the checks of its compile (goldens, `llvm-as`, `opt`, declares, `--emit-panics`, rejections) to `test`, which makes them on Linux. Each run's summary line and every skip, with its reason, go to the job summary |
 | `scope` | Ubuntu | `node scripts/ci-scope.mjs`: decides which [scoped lanes](#scoped-lanes) this run needs and writes one `<lane>=true\|false` output per lane |
 | `ci-gate` | Ubuntu | `if: always()`, needs every other job: `node scripts/ci-scope.mjs --gate` fails unless each one succeeded or was skipped by its own `if:` ([below](#scoped-lanes)) |
@@ -125,15 +125,16 @@ seconds, whatever runner its rows would otherwise take.
 | `sha256_macos`, `fuzz` | `sha256-macos`, `fuzz-smoke` | the compiler, any file under `tests/` but `tests/ci-scope/` (a `tests/run.js` section can open any fixture there), `bench/`, `examples/` |
 | `simd` | `simd-arm64` | the same as `sha256_macos`, and `docs/LANGUAGE.md` (the `crc32 kernel` section gzips it) |
 | `postgres` | `postgres-live` | the compiler, `tests/self/` (the compiler-cache action), `tests/postgres/`, `bench/techempower/` |
+| `gfx` | `gfx`, `gfx-macos` | the same as `sha256_macos` (its `tests/run.js gfx` section, `scripts/fetch-gfx.sh` under the compiler's `scripts/`, and the `bench/` and `examples/` programs it builds); about 7.7 runner-minutes a run, from [run 45857452100](https://github.com/amritk/nish/actions/runs/45857452100), most of it the macOS row |
 
 The rule fails closed. A lane is off only when **every** changed path is on that
 lane's allowlist of paths it does not read (`docs/`, `web/`, `skills/`,
 `.claude/`, the top-level prose files and the other lanes' test trees), and
 the read set wins over the allowlist. A path on neither list turns every lane
 on. Each list was read from the code of every command the lane runs, composite
-actions included (`node tests/run.js ci-scope` pins a file per command, 21
-commands across the seven lanes, the compiler-cache action counted once for
-each of the five lanes that run it). That check proves only that a change to a
+actions included (`node tests/run.js ci-scope` pins a file per command, 24
+commands across the eight lanes, the compiler-cache action counted once for
+each of the six lanes that run it). That check proves only that a change to a
 listed file turns its lane on: it cannot find a read nobody listed. Some were also traced with `strace -f` on
 x86_64 Linux: the compiler-cache key, the `nish-cli` build and run,
 `soundness.js`, the `simd`, `float-corpus`, `sha256_hw` and five kernel
@@ -196,11 +197,24 @@ server's sources, followed through every relative and `nish/` import. The
 `build` job's own reads (`scripts/`, `src/`, `runtime/`, `install.sh`,
 `package.json`) are shared with every interop job and are not checked.
 
+Those paths leave most of `src/` and `scripts/` off on purpose, so a push to
+`main` runs every interop job unfiltered: that run is what catches a compiler
+change that breaks a live peer. The one push it skips is the Release PR's
+merge (a `chore(release)` subject), which changes only the release notes and
+the version, and whose tag `release.yml` runs this workflow on anyway, with
+the compiler just published. The skip is the `build` job's `if:`; every other
+job needs `build` and skips with it. Each `quic-interop-runner` client runs
+its twelve tests and its two measurements as two rows: in one row they took
+22 to 24 minutes of the runner step
+([run 45857451991](https://github.com/amritk/nish/actions/runs/45857451991)),
+the longest job of the workflow, so the split runs them side by side.
+
 ### Shards and time limits
 
 Every job stops at 15 minutes (`timeout-minutes`) but `test` (25),
-`runtime-net` (20) and interop.yml's `arena` (25: its Chromium soak of
-examples/wasm-arena runs ten minutes by design, docs/wp50-wasm-host.md §10),
+`runtime-net` (20), interop.yml's `arena` (25: its Chromium soak of
+examples/wasm-arena runs ten minutes by design, docs/wp50-wasm-host.md §10)
+and its `quic-interop-runner` rows (30),
 and every LLVM install step at 5 (10 for Homebrew). Without them a job that hangs runs to GitHub's six-hour
 limit: on #502 three jobs waited on one `apt-get update` fetch from
 archive.ubuntu.com from 19:22 to 01:22 and no test ran. apt has no timeout of
@@ -395,6 +409,16 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   a shard, but each of the three added jobs repeats the setup and the
   compiler build, so the job stays nine ways.
 
+  The table was refitted again from `main`'s runs 45857452100, 45751157072
+  and 45742983720, whose slowest shards reached their summaries at 13.4,
+  14.0 and 12.5 minutes. The 151 `link` programs added since the last refit
+  had no cost and were dealt at their floor, and the `stdPanics` section at
+  the 1 s a missing section is given; it had no recognizer either, so
+  `scripts/shard-costs.mjs` stopped with "DEALT_SECTIONS.stdPanics has no
+  recognizer" until one was added. The
+  same shard took 8.4 to 14 minutes across those runs, so a refit's gain is
+  read off later runs, not predicted.
+
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
   rather than running their section again, so those sections stay in shard
@@ -511,6 +535,32 @@ The Darwin narrowing in `scripts/verify-binaries.sh` stays as a net under a
 comparison that now holds, and `tests/run.js` pins its `LC_UUID` case as a
 known limitation of that script. `scripts/verify-binaries.sh`'s header carries
 the offsets.
+
+### The release reuses the Release PR's run
+
+`release-pr.yml` dispatches `ci.yml` at `release/next`, and that run selects
+the same jobs a tag's run does: every lane (it is not a `pull_request`), the
+`runner` job, and the gate's expectations, which read only whether the ref
+is the tag or `release/next`. Merging the Release PR then cuts the tag, and
+`release.yml` used to run the whole of `ci.yml` again on it before building
+anything. Its `verdict` job now runs `scripts/ci-verdict.mjs` first, with a
+token that reads `actions` and nothing else. The script takes the newest
+twenty green runs of `ci.yml` dispatched on `release/next` and names the
+newest one whose commit has the tag commit's git tree. A squash merge makes
+a new commit, but its tree is the Release PR head's tree whenever
+`release/next` was up to date with `main`, so the bytes tested are the bytes
+released. When `main` moved after the last dispatch, no tree matches and
+the `ci` job runs as before. The rule fails closed: a run of any other
+event, branch, repository or workflow, or not completed with `success`, is
+passed over, and any API error names no run, so `ci` runs.
+
+`release` needs `ci` to have passed, or to have been skipped because
+`verdict` succeeded and named a run. `binaries` no longer waits for `ci`:
+it needs only `targets`, so the four platforms build while CI runs, and
+`release`, which publishes, still waits for both. `node tests/run.js
+release.yml` pins all of it: the eligibility rule against each kind of run
+it refuses, the newest-matching pick, that `verdict` alone is given
+`actions: read`, and each job's `needs` and `if`.
 
 ### The seeded build, and what a missing seed reports
 

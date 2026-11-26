@@ -70,6 +70,7 @@ import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms, extraArgs as corpusArgs } from "./self/corpus.js"
 import * as ciScope from "../scripts/ci-scope.mjs"
+import * as ciVerdict from "../scripts/ci-verdict.mjs"
 import { cwdFor } from "./differential/lib.js"
 import { ACCEPTED_ROWS as emitTsAcceptedRows, HOST as emitTsHost, NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
@@ -43773,6 +43774,20 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
         "bench/techempower/async-db-main.ts",
       ],
     },
+    gfx: {
+      "compiler-cache": compilerCache,
+      "sh scripts/fetch-gfx.sh": ["scripts/fetch-gfx.sh"],
+      "node tests/run.js gfx": [
+        ...importsOf("tests/run.js"),
+        "scripts/build.sh",
+        "src/run-cache.ts",
+        "src/c-symbols.ts",
+        "runtime/gfx/nish-gfx.c",
+        "runtime/gfx/nish-gfx.h",
+        "runtime/gfx/nish-gfx.overrides.json",
+        "tests/gfx/triangle.c",
+      ],
+    },
   }
   const commandGaps = Object.entries(laneCommands).flatMap(([lane, commands]) => [
     ...(ciScope.LANES.some((l) => l.name === lane) ? [] : [`${lane}: not a lane`]),
@@ -43784,7 +43799,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   ])
   const uncoveredLanes = ciScope.LANES.map((l) => l.name).filter((l) => !(l in laneCommands))
   check(
-    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (21) of all seven lanes",
+    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (24) of all eight lanes",
     commandGaps.length === 0 && uncoveredLanes.length === 0,
     `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
   )
@@ -43962,6 +43977,129 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
       "github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'" &&
       /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m.test(ciJob(releaseYml, "ci")),
     `runner job's if: ${runnerIf || "(none)"}`
+  )
+}
+// release.yml runs ci.yml again only when no green run tested the tag's tree
+// (docs/wp10-ci.md, "The release reuses the Release PR's run"). These checks
+// hold scripts/ci-verdict.mjs to taking only a dispatched, green ci.yml run of
+// this repository on `release/next` whose commit has that tree, and release.yml
+// to publishing only behind a `ci` that passed or a verdict that named a run.
+if (selects("ci.yml", "ci-verdict", "release.yml")) {
+  // The verdict trusts a dispatched `release/next` run to have run what the
+  // tag's run would: every lane (the ci-scope checks) and `runner` (its `if:`,
+  // pinned above). That holds only while nothing else in ci.yml reads the ref
+  // or the event, so a new read has to be weighed here before it lands.
+  const refReadRe = /github\.(?:ref|head_ref|ref_type|ref_name|base_ref|event_name|event\.)/
+  const refReads = fs
+    .readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => !line.startsWith("#") && refReadRe.test(line))
+  const knownRefReads = [
+    (l) => l.startsWith("ci-${{ github.workflow }}-"), // concurrency group
+    (l) => l.startsWith("${{ github.event_name == 'pull_request' || "), // cancel-in-progress
+    (l) =>
+      l ===
+      "if: github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'",
+    (l) => l.startsWith('["runtime-net"${{ !(github.ref_type == \'tag\''), // the gate's expected skips
+    (l) => l === "if: always() && github.event_name == 'workflow_dispatch'", // the dispatch status
+    (l) => l === "PR_NUMBER: ${{ github.event.pull_request.number }}",
+    (l) => l === "PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}",
+  ]
+  const unknownRefReads = refReads.filter((l) => !knownRefReads.some((known) => known(l)))
+  check(
+    "ci.yml: only the concurrency group, the `runner` job, the gate, the dispatch status and the scope job read the ref or event",
+    unknownRefReads.length === 0 && refReads.length === knownRefReads.length,
+    `reads: ${refReads.length} of ${knownRefReads.length} expected\nunknown: ${unknownRefReads.join("\n") || "none"}`
+  )
+  const repo = "amritk/nish"
+  const sha = (c) => c.repeat(40)
+  const good = {
+    id: 7,
+    path: ".github/workflows/ci.yml",
+    event: "workflow_dispatch",
+    head_branch: "release/next",
+    status: "completed",
+    conclusion: "success",
+    repository: { full_name: repo },
+    head_repository: { full_name: repo },
+    head_sha: sha("a"),
+  }
+  const refused = {
+    "a pull_request run": { event: "pull_request" },
+    "a push run": { event: "push" },
+    "a run on main": { head_branch: "main" },
+    "a failed run": { conclusion: "failure" },
+    "a cancelled run": { conclusion: "cancelled" },
+    "a run still going": { status: "in_progress", conclusion: null },
+    "a fork's run": { head_repository: { full_name: "someone/nish" } },
+    "another repository's run": { repository: { full_name: "someone/nish" } },
+    "another workflow's run": { path: ".github/workflows/interop.yml" },
+    "a run with no commit": { head_sha: "abc" },
+  }
+  const wrongly = Object.entries(refused)
+    .filter(([, change]) => ciVerdict.eligible({ ...good, ...change }, repo))
+    .map(([what]) => what)
+  check(
+    "ci-verdict: only a green, dispatched ci.yml run of this repository on release/next is eligible",
+    ciVerdict.eligible(good, repo) && ciVerdict.eligible(null, repo) === false && wrongly.length === 0,
+    `eligible though refused: ${wrongly.join(", ") || "none"}`
+  )
+  const trees = { [sha("a")]: sha("1"), [sha("b")]: sha("2"), [sha("c")]: sha("2") }
+  const treeOf = async (commit) => trees[commit] ?? ""
+  const runs = [
+    { ...good, id: 1, head_sha: sha("a") },
+    { ...good, id: 2, head_sha: sha("b"), conclusion: "failure" },
+    { ...good, id: 3, head_sha: sha("b"), head_repository: { full_name: "someone/nish" } },
+    { ...good, id: 4, head_sha: sha("c") },
+  ]
+  const picked = await ciVerdict.pickRun({ runs, repo, tree: sha("2"), treeOf })
+  const none = await ciVerdict.pickRun({ runs, repo, tree: sha("3"), treeOf })
+  const notTree = await ciVerdict.pickRun({ runs, repo, tree: "", treeOf: async () => "" })
+  check(
+    "ci-verdict: the run picked is the newest eligible one with the tag's tree, and none matches no tree",
+    picked?.id === 4 && none === null && notTree === null,
+    `picked ${picked?.id ?? "none"}, unmatched ${none?.id ?? "none"}, empty tree ${notTree?.id ?? "none"}`
+  )
+
+  const releaseText = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
+  const job = (name) => ciJob(releaseText, name)
+  const verdictJob = job("verdict")
+  const permsOf = (text) =>
+    (/^ {4}permissions:\n((?: {6}\S.*\n?)+)/m.exec(text)?.[1] ?? "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .sort()
+  const ifOf = (text) =>
+    /^ {4}if: >-\n((?: {6}.*\n?)+)/m
+      .exec(text)?.[1]
+      ?.split("\n")
+      .map((l) => l.trim())
+      .join(" ")
+      .trim() ??
+    /^ {4}if: (.*)$/m.exec(text)?.[1] ??
+    ""
+  const needsOf = (text) => /^ {4}needs: (.*)$/m.exec(text)?.[1] ?? ""
+  const releaseIf =
+    "${{ !cancelled() && needs.targets.result == 'success' && needs.binaries.result == 'success' && " +
+    "(needs.ci.result == 'success' || (needs.ci.result == 'skipped' && needs.verdict.result == 'success' && needs.verdict.outputs.run != '')) }}"
+  check(
+    "release.yml: `verdict` reads actions only, `ci` runs unless it named a run, and `release` needs a passed `ci` or that run",
+    JSON.stringify(permsOf(verdictJob)) === JSON.stringify(["actions: read", "contents: read"]) &&
+      /^ {8}run: node scripts\/ci-verdict\.mjs$/m.test(verdictJob) &&
+      /^ {6}run: \$\{\{ steps\.verdict\.outputs\.run \}\}$/m.test(verdictJob) &&
+      needsOf(job("ci")) === "verdict" &&
+      ifOf(job("ci")) === "${{ !cancelled() && needs.verdict.outputs.run == '' }}" &&
+      needsOf(job("binaries")) === "[targets]" &&
+      needsOf(job("release")) === "[verdict, ci, targets, binaries]" &&
+      ifOf(job("release")) === releaseIf &&
+      ifOf(job("interop")) === "${{ !cancelled() && needs.release.result == 'success' }}" &&
+      ifOf(job("npm")) === "${{ !cancelled() && needs.targets.result == 'success' && needs.release.result == 'success' }}" &&
+      (releaseText.match(/^ {6}actions: /gm) ?? []).length === 1 &&
+      /^ {6}actions: read$/m.test(verdictJob),
+    `verdict permissions: ${permsOf(verdictJob).join(", ")}\nci if: ${ifOf(job("ci"))}\n` +
+      `binaries needs: ${needsOf(job("binaries"))}\nrelease if: ${ifOf(job("release"))}`
   )
 }
 // #1836: the stored console log of shard 8 has stopped partway through the

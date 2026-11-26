@@ -1,7 +1,8 @@
 # Nish release: on a `v*` tag, run the full CI workflow (test matrix, lint,
-# smoke), then build the npm tarball and one native compiler per supported
-# target and attach them all to a GitHub release whose notes are the matching
-# CHANGELOG.md section.
+# smoke) unless the Release PR's dispatched run already tested the tag's tree
+# (the `verdict` job), build the npm tarball and one native compiler per
+# supported target beside it, and attach them all to a GitHub release whose
+# notes are the matching CHANGELOG.md section.
 #
 # Two audiences, and as many artifacts as the release is due to carry:
 #   nish-<version>.tgz             the npm package (nish); needs Node
@@ -96,8 +97,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Whether the Release PR's own run already proved this tag's tree
+  # (scripts/ci-verdict.mjs). release-pr.yml dispatches ci.yml at
+  # `release/next`, which selects every lane and the `runner` job, and merging
+  # that pull request is what cuts the tag; so when the tag commit's tree is
+  # that run's tree, running ci.yml again here tests the same bytes a second
+  # time, for about 40 minutes of wall clock before anything is published.
+  # `run` is that run's id, or empty, and on empty `ci` runs as it always did:
+  # any error, any `main` commit the Release PR did not have, any run that is
+  # not a green dispatched one on `release/next` is a full CI here.
+  verdict:
+    name: did the Release PR's run test this tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # `actions: read` lists ci.yml's runs; nothing else here needs it.
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run: ${{ steps.verdict.outputs.run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: scripts/ci-verdict.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26.13.1
+
+      - name: Find a green run of ci.yml on this tree
+        id: verdict
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci-verdict.mjs
+
   ci:
     name: ci
+    needs: verdict
+    if: ${{ !cancelled() && needs.verdict.outputs.run == '' }}
     # What ci.yml asks for, at its top and on its jobs: a called workflow
     # gets no more than this job grants, and a job of it asking for more
     # fails the whole run at startup, before any job runs (0.45.0's first
@@ -185,7 +224,9 @@ jobs:
   # some later `bootstrap` row will look for and not find.
   binaries:
     name: binary (${{ matrix.target.asset }})
-    needs: [ci, targets]
+    # Not `ci`: the binaries build beside the test suite rather than after it,
+    # and `release`, which publishes them, still needs both.
+    needs: [targets]
     runs-on: ${{ matrix.target.runner }}
     permissions:
       contents: read
@@ -486,7 +527,13 @@ jobs:
 
   release:
     name: release
-    needs: [ci, targets, binaries]
+    needs: [verdict, ci, targets, binaries]
+    # `ci` passed here, or was skipped because `verdict` named the green run
+    # that tested this tree. `!cancelled()` because a skipped need otherwise
+    # skips this job whatever the expression says.
+    if: >-
+      ${{ !cancelled() && needs.targets.result == 'success' && needs.binaries.result == 'success' &&
+      (needs.ci.result == 'success' || (needs.ci.result == 'skipped' && needs.verdict.result == 'success' && needs.verdict.outputs.run != '')) }}
     runs-on: ubuntu-latest
     # `contents: write` for `gh release create`; `id-token: write` and
     # `attestations: write` for the provenance step, and for nothing else this
@@ -734,6 +781,8 @@ jobs:
   interop:
     name: interop
     needs: [release]
+    # A skipped `ci` upstream would skip this job too, without the status check.
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
     # `attestations: read` because interop.yml asks for it, to check the
     # attestation of the seed it fetches; a called workflow gets no more than
     # this job grants.
@@ -767,6 +816,8 @@ jobs:
   npm:
     name: publish to npm
     needs: [targets, release]
+    # A skipped `ci` upstream would skip this job too, without the status check.
+    if: ${{ !cancelled() && needs.targets.result == 'success' && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     environment: npm
     permissions:

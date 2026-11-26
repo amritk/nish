@@ -149,8 +149,9 @@ env:
   QUIC_GO: martenseemann/quic-go-interop@sha256:6743eea41cb8d525686eb8f2437e3ac45835740ec87c62728f645cd89e85ab88
   NGTCP2: ghcr.io/ngtcp2/ngtcp2-interop@sha256:bd635531dbe210e5d7138a08dc61c2da2d702670ff718e440b961860f5e18235
   # The runner's cases, by the names its --json file gives them: its tests,
-  # then its two measurements.
-  RUNNER_CASES: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3,rebind-port,rebind-addr,goodput,crosstraffic
+  # and its two measurements. Each client's run of each is a row of its own.
+  RUNNER_TESTS: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3,rebind-port,rebind-addr
+  RUNNER_MEASUREMENTS: goodput,crosstraffic
   # h2spec 2.6.0's release tarball and its SHA-256.
   H2SPEC_URL: https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz
   H2SPEC_SHA256: 157ee0de702e01ad40e752dbf074b366027e550c8e7504f9450da2809e279318
@@ -178,13 +179,17 @@ env:
 
 # Every job stops at 15 minutes, the repository's cap (docs/wp10-ci.md), but
 # `arena`, whose soak is ten minutes by design and is given 25, and
-# `quic-interop-runner`, whose measurements take it to 27 and which is given
-# 45; and every step that waits on the network at 5 or 10: the slowest other
-# lane takes about 3 minutes, so a limit is reached only by a hang, in the
-# step that names it.
+# `quic-interop-runner`, whose rows are given 30; and every step that waits
+# on the network at 5 or 10: the slowest other lane takes about 3 minutes, so
+# a limit is reached only by a hang, in the step that names it.
 jobs:
   build:
     name: build the server image
+    # The Release PR's merge changes only the release notes and the version,
+    # and release.yml calls this workflow on its tag once the release is
+    # published, so its push to main runs nothing here. Every job needs this
+    # one, so every job skips with it.
+    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore(release)') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -207,14 +212,15 @@ jobs:
           if-no-files-found: error
 
   quic-interop-runner:
-    name: quic-interop-runner (${{ matrix.client }})
+    name: quic-interop-runner (${{ matrix.client }}, ${{ matrix.cases }})
     needs: build
     runs-on: ubuntu-24.04
-    # A run takes 25 to 27 minutes, most of it the two measurements: five
-    # transfers each, and crosstraffic's 25 MB shares the 10 Mbps link with a
-    # TCP flow. The rest is room to run a failed measurement once more; a
-    # run that crashed and retries every case does not fit, and times out.
-    timeout-minutes: 45
+    # One client's tests and its measurements (five transfers each, and
+    # crosstraffic's 25 MB sharing the 10 Mbps link with a TCP flow) in one
+    # row took 22 to 24 minutes of `Run the runner` (run 45857451991), the
+    # longest job of the workflow, so each is a row of its own and the two
+    # run side by side. Either still has room to run what failed once more.
+    timeout-minutes: 30
     env:
       # The endpoint crosstraffic's iperf server and client run in, which the
       # runner's docker-compose.yml names by tag.
@@ -223,6 +229,7 @@ jobs:
       fail-fast: false
       matrix:
         client: [quic-go, ngtcp2]
+        cases: [tests, measurements]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -361,6 +368,7 @@ jobs:
       - name: Run the runner
         env:
           CLIENT: ${{ matrix.client }}
+          RUNNER_CASES: ${{ matrix.cases == 'measurements' && env.RUNNER_MEASUREMENTS || env.RUNNER_TESTS }}
         working-directory: ${{ runner.temp }}/qir
         run: |
           docker version --format 'docker {{.Server.Version}}'
@@ -390,7 +398,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: runner-logs-${{ matrix.client }}
+          name: runner-logs-${{ matrix.client }}-${{ matrix.cases }}
           path: |
             ${{ runner.temp }}/logs
             ${{ runner.temp }}/result.json
