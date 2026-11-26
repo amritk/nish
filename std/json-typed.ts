@@ -890,20 +890,31 @@ export class JsonDecoder {
     }
     const start: i32 = tok.tokStart
     const end: i32 = tok.tokEnd
+    const src: u8[] = tok.src
     // In `i64`, where the width between the quotes cannot wrap. A string
     // token starts at a byte of the input and spans `n + 2` bytes, so the
-    // other tests always hold; they prove both quotes' moves fit.
-    if (toI64(n) === toI64(end) - toI64(start) - toI64(2) && start >= 0 && start < end && end > 0) {
-      // No escape, so the bytes between the quotes are the string's, copied
-      // once by `String.fromBytes`.
-      return String.fromBytes(tok.src, start + 1, end - 1)
+    // other tests always hold: they prove both quotes' moves fit, and that
+    // the bytes between the quotes are a window of `src`.
+    if (toI64(n) === toI64(end) - toI64(start) - toI64(2) && start >= 0 && end > 0) {
+      const to: i32 = end - 1
+      if (start < to && to < toI32(src.length)) {
+        const from: i32 = start + 1
+        // Never false, after `start < to`: it states the window's order for
+        // the slice. No escape, so the bytes between the quotes are the
+        // string's, copied once by `String.fromBytes`.
+        if (from <= to) {
+          return String.fromBytes(src, from, to)
+        }
+      }
     }
     // The unescaped bytes are a temporary: a caller that keeps only the string
     // it answers gives them back (the call-site reclaim, docs/LANGUAGE.md).
     const bytes: u8[] = jsonTypedZeroBytes(n)
     const at: i32 = 0
     tok.stringInto(bytes, at)
-    return String.fromBytes(bytes, 0, n)
+    // `bytes` is `n` long, and `stringInto` writes its elements without
+    // growing it: its own length is the window's end, which needs no proof.
+    return String.fromBytes(bytes, 0, toI32(bytes.length))
   }
 
   /**

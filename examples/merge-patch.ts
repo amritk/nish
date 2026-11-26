@@ -1,15 +1,7 @@
-// Opt-out (`--allow-panics`): this file keeps no panic site of its own, and
-// nothing in `std/bytes` is reached. The one site its calls still reach is the
-// `String.fromBytes` slice in `std/json-typed` (`JsonDecoder.text`'s no-escape
-// path, std/json-typed.ts:899:14), whose bounds are fields, not locals, so
-// even #2279 (for #2208) leaves it unproven. Once that slice is proven, build
-// this file without `--allow-panics`.
-// smoke: args --allow-panics
-//
 // A JSON Merge Patch (RFC 7396) applied to a typed record, with typed JSON's
 // `presence` option telling a key that was left out from one that was given:
 //
-//     build/nish --allow-panics examples/merge-patch.ts --link build/merge-patch
+//     build/nish examples/merge-patch.ts --link build/merge-patch
 //     build/merge-patch
 //
 // The patch is its own class: every field optional, so a missing key is no
