@@ -204,6 +204,7 @@ struct HttpHandler (class) size=304 align=8 exported
   method flush -> @nish.HttpHandler.flush
   method sends -> @nish.HttpHandler.sends
   method drive -> @nish.HttpHandler.drive
+  method unended -> @nish.HttpHandler.unended
   method owable -> @nish.HttpHandler.owable
   method currentOf -> @nish.HttpHandler.currentOf
   method requestAt -> @nish.HttpHandler.requestAt
@@ -666,22 +667,33 @@ function HttpHandler.drive(this: HttpHandler, slot: i32): void -> @nish.HttpHand
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: slot
-  calls: nish.Http1Server.connection nish.Http1Server.next nish.HttpHandler.begin nish.HttpHandler.gather nish.HttpHandler.owable nish.HttpHandler.releaseReading nish.HttpHandler.resume nish.HttpHandler.settle nish.HttpHandler.whole
-  pointer this: size=304 writesThrough=true captured=false passedTo=nish.HttpHandler.begin#0 nish.HttpHandler.gather#0 nish.HttpHandler.whole#0 nish.HttpHandler.resume#0 nish.HttpHandler.releaseReading#0 nish.HttpHandler.owable#0 nish.HttpHandler.settle#0
+  calls: nish.Http1Server.connection nish.Http1Server.next nish.HttpHandler.begin nish.HttpHandler.gather nish.HttpHandler.owable nish.HttpHandler.releaseReading nish.HttpHandler.resume nish.HttpHandler.settle nish.HttpHandler.unended nish.HttpHandler.whole
+  pointer this: size=304 writesThrough=true captured=false passedTo=nish.HttpHandler.unended#0 nish.HttpHandler.begin#0 nish.HttpHandler.gather#0 nish.HttpHandler.whole#0 nish.HttpHandler.resume#0 nish.HttpHandler.unended#0 nish.HttpHandler.releaseReading#0 nish.HttpHandler.owable#0 nish.HttpHandler.settle#0
   stackSites=0 stackLocals=0
   local -25:11 conn: Http1Connection (const)
   callee -25:35 Http1Server.connection -> @nish.Http1Server.connection
   local -24:9 event: i32 (let)
-  callee -24:22 Http1Server.next -> @nish.Http1Server.next
+  callee -24:22 HttpHandler.unended -> @nish.HttpHandler.unended
+  callee -24:58 Http1Server.next -> @nish.Http1Server.next
   callee -21:9 HttpHandler.begin -> @nish.HttpHandler.begin
   callee -19:9 HttpHandler.gather -> @nish.HttpHandler.gather
   callee -17:9 HttpHandler.whole -> @nish.HttpHandler.whole
   callee -15:9 HttpHandler.resume -> @nish.HttpHandler.resume
-  callee -13:15 Http1Server.next -> @nish.Http1Server.next
+  callee -13:15 HttpHandler.unended -> @nish.HttpHandler.unended
+  callee -13:51 Http1Server.next -> @nish.Http1Server.next
   callee -8:7 HttpHandler.releaseReading -> @nish.HttpHandler.releaseReading
   callee -7:16 HttpHandler.owable -> @nish.HttpHandler.owable
   local -2:13 n: i32 (const)
   callee +6:5 HttpHandler.settle -> @nish.HttpHandler.settle
+function HttpHandler.unended(this: HttpHandler, slot: i32): boolean -> @nish.HttpHandler.unended [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: slot
+  calls: nish.HttpHandler.currentOf nish.HttpHandler.requestAt
+  pointer this: size=304 writesThrough=false captured=false passedTo=nish.HttpHandler.requestAt#0 nish.HttpHandler.currentOf#0
+  stackSites=0 stackLocals=0
+  local +0:11 r: HttpRequest | null (const)
+  callee +0:35 HttpHandler.requestAt -> @nish.HttpHandler.requestAt
+  callee +0:50 HttpHandler.currentOf -> @nish.HttpHandler.currentOf
 function HttpHandler.owable(this: HttpHandler, slot: i32, conn: Http1Connection): boolean -> @nish.HttpHandler.owable [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot

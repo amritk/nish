@@ -1,0 +1,16 @@
+PASS  the streamed request is held unended after its whole body, then ended
+PASS  the request pipelined behind it is not taken before its end
+PASS  the streamed response arrives first, whole
+PASS  then the pipelined request's answer
+PASS  which the program took once
+PASS  and the connection stays open
+PASS  a warm connection answers a hundred and twenty pairs in order
+PASS  with no pipelined request taken early
+PASS  and the pool makes no request past its warm size
+PASS  a request sent behind a held stream does not wake the handler's wait
+PASS  and is answered after the stream's end
+PASS  a stream held past its peer's hang-up ends as dropped
+PASS  with the request pipelined behind it never taken
+PASS  and the other connection still answers a pair in order
+PASS  with the pool at its warm size
+handler pipelined stream: 15 passed, 0 failed, 0 skipped
