@@ -56,6 +56,20 @@ stages:
       - id: s3-security
         content: Write docs/security/gfx.md and its index row, and extend security-scope.mjs to runtime/gfx/ — see WP89 S3
         status: pending
+  - id: s3b-export-bindings
+    title: WP89 S3b — a module exports its C bindings
+    goal: A module may export an opaque declare class and a declare function, and an importing module calls them and carries ffi, so std/gpu/sys.ts stays the one generated binding the other std/gpu modules import
+    verification: tests/link cases import an exported opaque declare class and declare function and run natively, the refusals that remain fire with their codes, and node tests/run.js ffi, c-import, wasi and performance pass
+    todos:
+      - id: s3b-export
+        content: Accept export on an opaque declare class and a declare function, resolve them in an importing module, and carry ffi to it — see WP89 S3b
+        status: pending
+      - id: s3b-cimport-docs
+        content: Carry a header declaration's doc comment onto the binding nish c-import writes — see WP89 S3b
+        status: pending
+      - id: s3b-rule-tests
+        content: Rewrite the LANGUAGE.md export rule and the interop and c-import guide pages, and add tests/link cases and negatives — see WP89 S3b
+        status: pending
   - id: s4-raw-bindings
     title: WP89 S4 — raw bindings by nish c-import and the clear-screen example
     goal: std/gpu/sys.ts is generated from the shim header with nish c-import, and a Nish program opens a window and clears it every frame
@@ -291,9 +305,24 @@ Extend the buffer rule in [docs/LANGUAGE.md](../../docs/LANGUAGE.md) ("A `u8[]` 
 
 `node tests/run.js c-symbols` reads `llvm-nm` over the runtime's own objects against `src/c-symbols.ts`. The stage checks whether that includes optional units such as `runtime/sqlite/`; if not, it adds the shim's objects, and reserves each libc call the shim makes.
 
+## WP89 S3b — a module exports its C bindings
+
+**Decided by the owner on #2239 (2026-11-26):** let a module export its C bindings, as a stage before S4. S4 found that the compiler refuses every route from a second module to `std/gpu/sys.ts`: `export declare function` (`src/declarations.ts`, "cannot be exported: it is a C function this program calls"), `export declare class` (`src/structs.ts`, "a C struct layout is used in the module that declares it"), and redeclaring a handle class in a second module (class names are program-unique).
+
+**Owns:** `src/checker*.ts`, `src/declarations.ts`, `src/structs.ts`, `src/emit*.ts`, `src/module*.ts`, `src/program.ts`, `src/compilation.ts`, `src/capabilities.ts`, `src/capability-report.ts`, `src/c-import*.ts`, `src/codes.ts`, `src/diagnostics.ts`, `src/types*.ts`, `src/escape*.ts`, `docs/LANGUAGE.md`, `docs/AI.md`, `docs/guide/**` (the interop and c-import pages), `docs/cookbook/**`, `docs/IR_COOKBOOK.md`, `docs/reference/**`, `tests/cases/reject_ffi_export*`, `tests/cases/ffi_export_*`, `tests/link/*export_declare*/**`, `tests/link/*c_binding*/**`, `tests/c-import/**`, `tests/wordings/**`, `tests/nish-cmp.js`, `tests/differential/**`, `tests/self/goldens/checked/src/**` except `run-cache.ts.txt` and `c-symbols.ts.txt`, `tests/self/goldens/checked/{std,tests,examples,bench,docs}/**`. **Not** `tests/run.js` or `std/`. **Depends on:** nothing unmerged (S2 and S6 own the same compiler files and are merged). **Blocks:** S4.
+
+- **An opaque `declare class`** (no members, no heritage clause: the C type a library hands out and takes back) may be exported, and an importing module names it in a type and passes it to the exported `declare function`s that take it. A `declare class` with fields stays refused across modules unless its layout carries to the importer unchanged; the rule says which, and the refusal keeps its code.
+- **A `declare function` may be exported.** An importing module calls it as it calls the declaring module's own call: the same buffer and count rules, the same escape treatment, the same IR at the call site. The importer **reaches `ffi`**, so `--deny ffi`, the capability report and `tests/link/*/expected.caps.json` see it. Whether a module may re-export one it imported is decided and tested.
+- **`nish c-import` carries doc comments.** A `/** … */` comment directly before a declaration in the header lands on the binding it writes, so a generated module documents its exported constants and functions (`node scripts/gen-reference.mjs --check`, whose `scripts/undocumented.txt` only shrinks). S4 writes the comments in `runtime/gfx/nish-gfx.h`. It is in this stage because it is a `src/` change with the same gates.
+- **Rolling freeze.** `src/` may not use an exported C binding until the next release ships the rule; `std/` may.
+- **Tests:** `tests/link` cases where one module exports an opaque handle and a C function and another imports and calls them, run natively against a small C file, with `expected.caps.json` showing `ffi` on the importer; a negative for each refusal left (a field-carrying layout, and whatever the re-export decision refuses); `reject_ffi_export` flips to a positive or is rewritten for what stays refused, with `file: "exit"` `DECLARED` entries for any nish-cmp corpus program that flips; a `tests/c-import` case for the doc comment.
+- **Compiler-change rules**, as for S2 and S6: self goldens, `node tests/run.js wasi` and `performance`, `gen-diagnostic-codes.mjs --check` and `docs/reference/diagnostics` for any new code, nish-cmp `DECLARED` entries, and a grep of `docs/wp*.md`, `docs/MASTER_PLAN.md` and `tests/**` comments for the old rule's wording.
+
 ## WP89 S4 — raw bindings by nish c-import and the clear-screen example
 
-**Owns:** `std/gpu/sys.ts`, `examples/gfx/clear.ts`, `tests/gfx.js`, `tests/gfx/**`, `docs/reference/**`, `scalar.config.json`, `tests/self/goldens/checked/{std,examples}/**`. **Depends on:** S2, S3, S6.
+**Owns:** `std/gpu/sys.ts`, `examples/gfx/clear.ts`, `tests/gfx.js`, `tests/gfx/**`, `runtime/gfx/nish-gfx.h` (doc comments only), `runtime/gfx/nish-gfx.overrides.json`, `scripts/gen-reference.mjs` (the `gpu` area), `biome.json` (a naming-convention override for generated C bindings only), `tests/smoke/gfx-*`, `docs/reference/**`, `scalar.config.json`, `tests/self/goldens/checked/{std,examples}/**`. **Depends on:** S2, S3, S3b, S6.
+
+- **Folded in by the #2239 decision:** the `gpu` area in `scripts/gen-reference.mjs`, doc comments on every exported `NISHGFX_*` constant and binding (written in the header, carried by S3b's c-import), and Biome's `useNamingConvention` errors on the generated C names (an override scoped to `std/gpu/sys.ts`, not a rule change). Draft PR #2333 holds the generated `sys.ts` and its currency check; S4 resumes on its branch once S3b merges.
 
 - **`std/gpu/sys.ts`** is generated by `nish c-import runtime/gfx/nish-gfx.h`, with a header comment naming the command. A `tests/run.js` check regenerates it and fails on a diff, the way the reference check does.
 - **`examples/gfx/clear.ts`:** open a window (offscreen under test), clear to a colour that changes each frame, and exit after N frames. The `gfx` section reads back pixels and compares them with the expected colour.
