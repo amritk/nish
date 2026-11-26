@@ -5,9 +5,9 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1036,
+  "total": 1040,
   "explicit": {
-    "kept": 364,
+    "kept": 366,
     "toFix": 7
   },
   "modules": {
@@ -125,8 +125,8 @@
     },
     "std/net/http-server.ts": {
       "array-length": 3,
-      "io-exit": 2,
-      "panic": 43,
+      "io-exit": 4,
+      "panic": 45,
       "slice": 1
     },
     "std/net/http1-client-codec.ts": {
@@ -894,6 +894,11 @@
     },
     {
       "module": "std/net/http-server.ts",
+      "function": "HttpServer.checkHttp1",
+      "reason": "config caps within limits.maxHead/maxFields, slots at least 1 and at most 1048576 over both HTTP/1.1 listeners; static listener configuration contract"
+    },
+    {
+      "module": "std/net/http-server.ts",
       "function": "HttpServer.checkHttp2",
       "reason": "maxHeaderListSize within limits.maxHead, no extended CONNECT, slots at least 1; static listener configuration contract"
     },
@@ -916,6 +921,11 @@
       "module": "std/net/http-server.ts",
       "function": "HttpServer.listenHttp1",
       "reason": "one HTTP/1.1 listener only, config caps within limits.maxHead/maxFields, slots at least 1; all static setup contract"
+    },
+    {
+      "module": "std/net/http-server.ts",
+      "function": "HttpServer.listenHttp1Tls",
+      "reason": "an HTTP/1.1 over TLS listener may be configured only once; the caller controls its setup sequence"
     },
     {
       "module": "std/net/http-server.ts",

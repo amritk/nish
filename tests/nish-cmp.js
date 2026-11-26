@@ -1223,6 +1223,12 @@ const wp84Deflate = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: WP84_DEFLATE, why }))
   )
+/** The changelog words of WP84 S3, which turns deflate's u32-wrapping sums into proven i32 ops or refusals. */
+const WP84_SUMS = "check deflate's sums instead of wrapping them"
+const wp84Sums = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: WP84_SUMS, why }))
+  )
 /** The changelog words of WP83 S4, which clears the panic sites of x509, pki, pki-roots and x509-random. */
 const WP83_PKI = "X.509 and the PKI"
 const wp83Pki = (why, filesByProgram) =>
@@ -10582,6 +10588,17 @@ const serverTrailersDeclared = () =>
     why: "the program calls HttpServer.trailers, which the seed's std/net does not have, so only the candidate compiles it",
   }))
 
+/** The changelog words of WP39 G7, which serves HTTP/1.1 over TLS on nish/net/http-server. */
+const SERVER_H1_TLS = "HTTP/1.1 over TLS on the nish/net/http-server façade"
+/** WP39 G7's programs call `HttpServer.listenHttp1Tls`, which the seed's std/net does not have. */
+const serverH1TlsDeclared = () =>
+  ["", "_slots", "_twice", "_wait"].map((name) => ({
+    program: `tests/link/net_http_server_h1_tls${name}/main.ts`,
+    file: "exit",
+    changelog: SERVER_H1_TLS,
+    why: "the program calls HttpServer.listenHttp1Tls, which the seed's std/net does not have, so only the candidate compiles it",
+  }))
+
 /** The changelog words of WP82 S6, which proves or removes the HTTP/3 stack's panic sites. */
 const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free"
 const http3PanicFree = (why, filesByProgram) =>
@@ -12143,6 +12160,71 @@ const DECLARED = [
       "tests/link/std_http1_output_bytes/main.ts": ["gzip.ll"],
     }
   ),
+  ...wp84Sums(
+    "WP84 S3 replaces std/compress/deflate.ts's u32-cast wrapping sums, masks and loop caps with i32 ops the prover discharges or a DEFLATE_ERR_* refusal, so the deflate and inflate code these programs reach through http-compress, gzip and zlib moves, and a main module or header that inlines or names it moves with it",
+    {
+      "bench/httparena/main.ts": [
+        "db.ll",
+        "gzip.ll",
+        "handler.ll",
+        "http-compress.ll",
+        "main.h",
+        "main.ll",
+        "server.ll",
+        "zlib.ll",
+      ],
+      "tests/link/httparena_entry/main.ts": [
+        "db.ll",
+        "gzip.ll",
+        "handler.ll",
+        "http-compress.ll",
+        "main.h",
+        "main.ll",
+        "server.ll",
+        "zlib.ll",
+      ],
+      "tests/link/net_grpc/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_grpc_interop/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_batch_limits/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_bomb/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_open/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_refused/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_steps/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_steps_split/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_handler_try_answers/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http1_server_lend_park/main.ts": ["gzip.ll", "http-compress.ll", "main.ll", "zlib.ll"],
+      "tests/link/net_http1_wire_refusals/main.ts": [
+        "gzip.ll",
+        "http-compress.ll",
+        "main.h",
+        "main.ll",
+        "zlib.ll",
+      ],
+      "tests/link/net_http_server_caps/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_carriers/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_h2_refused/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_lifecycle/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_matrix/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_steps/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_steps_full/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_steps_split/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_stream/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_timeouts/main.ts": ["zlib.ll"],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_h3/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_short/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_serve_try/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/net_static/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+      "tests/link/std_compress_checked_sums/main.ts": ["main.h"],
+      "tests/link/std_compress_gzip_errors/main.ts": ["gzip.ll", "main.h", "zlib.ll"],
+      "tests/link/std_compress_sweep/main.ts": ["gzip.ll", "main.h", "zlib.ll"],
+      "tests/link/std_http1_config_checked/main.ts": ["gzip.ll", "http-compress.ll", "zlib.ll"],
+    }
+  ),
   // WP83 S4 first: `declaredFor` takes the first match, so no broader entry claims these moves.
   ...wp83Pki(
     "WP83 S4 proves or refuses all but four of the 195 panic sites in std/crypto/x509.ts, pki.ts, pki-roots.ts and x509-random.ts (guards before each read, u32 length sums bounded by the comparison before them, readers that answer null rather than an invented value, linear-time hex writers for the trust-store keys, rewritten host readers), so those modules move wherever they are reached; pkiRootsDirEntry is declared with its new attributes in crypto_pki_roots's main module, the one program that calls it directly",
@@ -13247,6 +13329,7 @@ const DECLARED = [
   ),
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
+  ...serverH1TlsDeclared(),
   ...http3PanicFree(
     "a probe new with this change: it feeds malformed frames to std/net's HTTP/3 frame and QPACK readers, whose proved indexes and Results differ from the seed's, so each module it writes differs, the std/crypto ones it reaches included",
     {

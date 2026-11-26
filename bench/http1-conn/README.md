@@ -18,8 +18,9 @@ build/nish bench/http1-conn/bytes.ts --link build/bench/http1-conn/bytes && buil
 `run.mjs` builds `main.ts` twice at `--profile speed`, once against `std/` as
 `--base` has it (default: `96a38347484f`, the commit before the hot-field
 layout, so the default compares against something on `main` too) and once
-against the working tree's, and links a byte-identical copy of the first. The
-old build is made by a copy of the compiler placed in
+against the working tree's, and links a byte-identical copy of the first. A base from before
+`nish:net`'s `netWrite2` (v0.34.1) builds too: `run.mjs` gives it `netWrite` in the stages calibration that base
+never runs. The old build is made by a copy of the compiler placed in
 `build/bench/http1-conn/old-package/` beside the base's `std/`, `scripts/` and
 `runtime/`, since the compiler reads `nish/<module>` from the package it sits
 in: a change to `http1-codec.ts` or any other module is compared too. Every
@@ -427,7 +428,8 @@ floor (±1 byte):
 
 On the default config an idle keep-alive connection therefore goes from
 4,258 bytes (idleInput off on the base) to 1,215 (on, now the default), 3.5x
-less. In the arena, `tests/link/net_http1_server/startup.ts` reads 3,384
+less. (Not reproduced against this base on 2026-11-25: see
+"Measured: idle memory and the codec's cost per request" below.) In the arena, `tests/link/net_http1_server/startup.ts` reads 3,384
 bytes for a connection that has served four GETs and parked on the base,
 2,232 with the trims and idleInput off, and 904 with it on; that last figure
 is `HTTP1_SERVER_IDLE_BYTES`'s measurement.
@@ -452,3 +454,76 @@ and every idleInput-on median sits between them or within 3% of the nearer,
 so the throughput change is inside the noise band. User CPU per request
 moved no more: 0.75 µs against 0.76 for plaintext, 0.80 against 0.85–0.94
 for json, 3.80 against 3.71–3.80 for post-json.
+
+## Measured: idle memory and the codec's cost per request, base against main (2026-11-25)
+
+This section re-measures the per-connection memory and the socket-less codec.
+It does **not** re-measure the keep-alive server throughput of the
+2026-11-13 table (`bench/http.mjs`, wrk, req/s over sockets): `wrk` is not
+installed on the machine that ran this, so that figure stands as recorded and
+is neither confirmed nor contradicted here.
+
+Timings: `node bench/http1-conn/run.mjs --shape hot,cold,idle --rss 5 --connections 10000 --rounds 15 --base 7d921842`
+on main `7d0c7699` (`main.ts` and `run.mjs` as that commit has them; `7d921842`
+has `netWrite2`, so the shim above does not touch this run). Intel(R) Xeon(R)
+Processor @ 2.30GHz, 4 cores, pinned to core 1, builds at `--profile speed`.
+`old′` is a second copy of the `old` binary run in the same interleaved
+rounds: the noise band.
+
+ns per request, median (min–max) over 15 rounds, each the fastest of 5
+batches of 200,000, ratio of medians to `old`:
+
+| shape | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| hot | 228.9 (224.5–241.2) | 230.9 (225.3–240.5) 1.008 | 227.5 (224.3–238.5) 0.994 |
+| cold | 238.8 (233.5–314.9) | 260.9 (234.6–320.2) 1.093 | 240.6 (233.8–317.8) 1.008 |
+| idle | 317.7 (314.2–340.2) | 319.7 (314.2–340.1) 1.006 | 317.4 (314.4–335.6) 0.999 |
+
+`new` is within the band of `old` on all three: 0.6% under on `hot`, 0.8%
+over on `cold` and 0.1% under on `idle`, against `old′` at 0.8%, 9.3% and
+0.6% over. `cold`'s `old′` is 9.3% off `old` because its median caught a slow
+stretch (`old′`'s range reaches 320; `new`'s reaches 318 and `old`'s 315), so
+read `cold` as no change, not as a measurement to the percent. The idle
+median implies at most 3.1 million requests a second through
+`Http1Connection` on one core, a maximum of the codec with no socket, not
+what a server serves.
+
+Memory: `node bench/http1-conn/run.mjs --shape rss --rss 5 --connections 50000 --base 7d921842`,
+the same machine and tree. Peak RSS per idle connection in bytes: the
+difference of the peak at 50,000 connections and the peak at 0, divided by
+50,000, median (min–max) of 5 runs:
+
+| | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| idleInput, 1 request | 1,202 (1,201–1,202) | 1,202 (1,201–1,202) | 1,089 (1,089–1,090) |
+| idleInput, 4 requests | 1,386 (1,386–1,386) | 1,386 (1,386–1,386) | 1,273 (1,273–1,274) |
+| idleInput off, 1 request | 3,071 (3,071–3,072) | 3,071 (3,071–3,071) | 2,959 (2,958–2,959) |
+| idleInput off, 4 requests | 3,255 (3,255–3,255) | 3,255 (3,255–3,255) | 3,143 (3,143–3,143) |
+
+The same run at 10,000 connections (timings run above) gave 1,404 and 1,290
+for the 4-request idleInput rows, within 20 bytes, so the connection count is
+not the difference below. `new` is about 113 bytes under `old` in every row.
+
+**This does not reproduce the 2026-11-13 table above, which names the same
+`--base 7d921842`.** That table's base rows are 1,170 and 2,385
+(idleInput on, 1 and 4 requests) and 3,044 and 4,258 (off); here they are
+1,202, 1,386, 3,071 and 3,255, so the four-request rows are 1,000 bytes
+apart, and its headline "4,258 to 1,215, 3.5x" does not hold against this
+base. The base `e0a1661e3` (the parent of #1552's squash) and `96a38347` (at
+2,000 connections, see the note below) give 1,386 and about 1,450 for the same
+row: no base
+tried gives the 11-13 figures. Its `new` column (1,215) is also 58 bytes
+under today's 1,273; that is later main, not bisected. Which run is right is
+not settled here; the 11-13 figures stay as recorded, unreproduced, and this
+section's are the ones a reader can rerun with the commands above.
+
+A base before `netWrite2` builds: `--base v0.34.1` and the default
+`96a38347484f` each ran `--shape rss --rss 1 --connections 2000` to the end
+(v0.34.1: 1,268 and 1,460 for the idleInput rows on `old`). These 2,000-connection
+runs, and the 1,386 and about 1,450 above, are single runs that show a base
+builds and reads near these figures; they are not comparable to the
+50,000-connection tables and are not counted in the figures below.
+
+Figures: 63 numbers in the tables (27 timing and 36 memory medians and
+ranges) and 6 timing ratios, each checked against the recorded runs' printed
+tables; the percentages above are recomputed from the medians.
