@@ -14,12 +14,12 @@ class Slot {
     slot_close(this.p)
   }
 }
-function open(): Slot {
+const open = (): Slot => {
   return new Slot()
-}
-function lend(s: Slot): Slot {
+};
+const lend = (s: Slot): Slot => {
   return s
-}
+};
 const arrow = (): Slot => new Slot()
 class K {
   make(): Slot {

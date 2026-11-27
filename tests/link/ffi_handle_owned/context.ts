@@ -63,20 +63,20 @@ export class Pool {
 }
 
 /** Opens a `Gpu`, or says why not. */
-export function openGpu(id: i32): Result<Gpu, string> {
+export const openGpu = (id: i32): Result<Gpu, string> => {
   if (id < 0) {
     return Err("no such device")
   }
   return Ok(new Gpu(id))
-}
+};
 
 /** Opens a `Pool` on a new `Gpu`, or `null` for an empty one. */
-export function openPool(id: i32, size: i32): Pool | null {
+export const openPool = (id: i32, size: i32): Pool | null => {
   if (size <= 0) {
     return null
   }
   return new Pool(new Gpu(id), size)
-}
+};
 
 /** What a borrowed `Pool` holds, read through the `Gpu` it owns. */
 export const describe = (p: Pool): i32 => p.gpu.id() * 1000 + p.size()

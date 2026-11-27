@@ -27,9 +27,9 @@ export class Stack {
 }
 
 /** Opens a `Stack` `n` deep. */
-export function openStack(n: i32): Stack {
+export const openStack = (n: i32): Stack => {
   return new Stack(n)
-}
+};
 
 /** How deep a borrowed `Stack` is. */
 export const depth = (s: Stack): i32 => s.depth()

@@ -38,9 +38,9 @@ class Stack {
   }
 }
 
-function openPair(): Pair {
+const openPair = (): Pair => {
   return new Pair()
-}
+};
 
 const both = (p: Pair): i32 => p.read()
 
