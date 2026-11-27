@@ -39,14 +39,26 @@ stages:
         content: Drop --allow-panics from examples/node-addon.mjs, package.json scripts, tests/run.js builds of these programs, README and docs/guide mentions
         status: pending
   - id: s4-term
-    title: examples-strict S4 — term-probe and the term std sites break-web also reaches
-    goal: term-probe builds strict; std/term-pixels.ts:230 (Framebuffer.set), :157 and std/term.ts:729 are removed or proved, which also clears break-web's term-pixels calls.
+    title: examples-strict S4 — std/term.ts:729
+    goal: std/term.ts:729 is removed or proved (narrowed 2026-11-27 - term-probe reaches term-pixels, term-io, term-rate and base64 sites the plan did not count; those moved to S4b).
     verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js term && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/self/goldens.js && node tests/nish-cmp.js
     todos:
       - id: s4-fix
-        content: Remove or prove the term-pixels and term sites (Result where failure is real, proof where unreachable, no nish:unsafe beyond wrapping*); regenerate pinned std line numbers
+        content: Remove or prove std/term.ts:729 (Result where failure is real, proof where unreachable, no nish:unsafe beyond wrapping*); regenerate pinned std line numbers
         status: pending
-      - id: s4-optout
+  - id: s4b-term-pixels
+    title: examples-strict S4b — Framebuffer with private fields and a Result factory; term-probe builds strict
+    goal: term-probe builds strict. Framebuffer (std/term-pixels.ts) keeps width, height and pixels private so they cannot fall out of step, sizing goes through a Result-returning factory and resize returns a Result (owner, 2026-11-27; a breaking std change, feat!); set/get's range checks are proved unreachable. The other term-pixels, term-io, term-rate and base64 sites term-probe reaches are removed or proved, and every Framebuffer caller moves to the new API.
+    after: [s4-term]
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js term && node tests/run.js break && node tests/run.js link && WASI_SYSROOT=/usr node tests/run.js wasi && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/self/goldens.js && node examples/break-web/build.mjs --check && NISH=build/nish bash docs/cookbook/regen.sh --check && node tests/nish-cmp.js
+    todos:
+      - id: s4b-framebuffer
+        content: Private fields, a Result factory and a Result-returning resize on Framebuffer; set/get's range checks proved; callers in std/term-io.ts, src/break-gfx.ts, src/break.ts, src/break-director.ts, examples/break-web/game.ts and std/raster.ts's doc example moved (src/ uses only what the 0.44.0 seed ships)
+        status: pending
+      - id: s4b-sites
+        content: Remove or prove the remaining term-pixels, term-io, term-rate and base64 sites term-probe reaches; regenerate pinned std line numbers, docs/reference, goldens
+        status: pending
+      - id: s4b-optout
         content: Drop term-probe's opt-out header, smoke args and its ALLOW_PANICS build in tests/run.js; guide and docs/security record mentions (#2208)
         status: pending
   - id: s5-wasm-arena
@@ -61,7 +73,7 @@ stages:
   - id: s6-break-web
     title: examples-strict S6 — break-web game and src/break-*.ts
     goal: game.ts (wasm32 --deterministic) builds strict, with src/break-*.ts, std/raster.ts and std/random.ts:152 cleared; build.mjs drops the flag and help.ts and docs/site/break are regenerated.
-    after: [s1-prover-storage, s4-term]
+    after: [s1-prover-storage, s4b-term-pixels]
     verification: node examples/break-web/build.mjs --check && node tests/run.js performance && node tests/run.js break && node tests/run.js std-panics && WASI_SYSROOT=/usr node tests/run.js wasi && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/self/goldens.js && node tests/nish-cmp.js --no-sidecars
     todos:
       - id: s6-fix
@@ -102,7 +114,7 @@ stages:
   - id: s10-guard
     title: examples-strict S10 — refuse a new opt-out under examples/
     goal: tests/run.js fails when any file under examples/ (smoke line, build script, README) names --allow-panics, except an allowlist that only shrinks (merge-patch until WP80 S7 lands); the stale opt-out check folds into it.
-    after: [s3-own-small, s4-term, s5-wasm-arena, s6-break-web, s7-http, s9-relay]
+    after: [s3-own-small, s4-term, s4b-term-pixels, s5-wasm-arena, s6-break-web, s7-http, s9-relay]
     verification: node tests/run.js performance && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
     todos:
       - id: s10-guard
@@ -158,7 +170,8 @@ and reviewed, then left green for the owner to merge.
 - **S1** `src/bounds.ts`, `src/attributes.ts`, new `tests/cases/*storage*`, new `tests/link/*storage*`
 - **S2** `src/bounds.ts`, `src/attributes.ts` (after S1), new `tests/cases/*caller*`, new `tests/link/*caller*`
 - **S3** `examples/add.ts`, `examples/main.c`, `examples/multi/**`, `examples/arrays.ts`, `examples/node-addon.mjs`, `scripts/size-report.sh`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `package.json`, `docs/guide/using-nish/interop.md`, `docs/wp50-wasm-host.md`
-- **S4** `std/term-pixels.ts`, `std/term.ts`, `examples/term-probe.ts`, `docs/guide/using-nish/terminal.md`, `docs/security/term*.md`
+- **S4** `std/term.ts`
+- **S4b** `std/term-pixels.ts`, `std/term-io.ts`, `std/term-rate.ts`, `std/base64.ts`, `examples/term-probe.ts`, `docs/guide/using-nish/terminal.md`, `docs/security/term*.md`; the Framebuffer call sites only in `src/break-gfx.ts`, `src/break.ts`, `src/break-director.ts`, `examples/break-web/game.ts`, `std/raster.ts` (S6 owns the rest of those files and runs after S4b)
 - **S5** `examples/wasm-arena/**`, `tests/interop/chrome-arena.py`, `tests/runtime-budgets.js` (arena rows), any `std/math.ts` site that surfaces
 - **S6** `examples/break-web/**`, `src/break-*.ts`, `std/raster.ts`, `std/random.ts`, `docs/site/break/**`, `tests/break-web/**`
 - **S7** `std/net/fetch.ts`, `std/net/url.ts`, `std/bytes.ts`, `std/net/http-compress.ts`, `examples/http-get-json.ts`, `examples/http-app/**`, `tests/link/net_http_app/**`, `docs/security/{handler,router,static}.md`, `docs/guide/using-nish/api-server.md`
@@ -167,7 +180,7 @@ and reviewed, then left green for the owner to merge.
 - **S10** the stale opt-out block of `tests/run.js` (~6577), `AGENTS.md`
 
 **Waves.** First: S1, S3, S4, S8 (disjoint). Then S2 (after S1), S5 (after
-S1), S6 (after S1, S4), S9 (after S8), S7 (after S2), S10 last. No stage runs on
+S1), S4b (after S4), S6 (after S1, S4b), S9 (after S8), S7 (after S2), S10 last. No stage runs on
 Sonnet: each one designs a proof, a Result or a prover rule.
 
 ## Rules (from WP80, binding on every stage)
@@ -183,6 +196,7 @@ Sonnet: each one designs a proof, a Result or a prover rule.
 
 - Signed off with autonomous merge on green CI; report handed over as a file.
 - add and multi: return a `Result` (the export ABI carries it to C, N-API and wasm); not narrowed inputs, not wrapping, not kept opted out.
+- S4 split (2026-11-27): S4 keeps std/term.ts:729; S4b takes term-probe and the term-pixels/term-io/term-rate/base64 sites. Framebuffer: private fields plus a Result factory, resize returns a Result.
 - Deliberate traps (arrays' `squares(-1)`, relay's four): a `Result` reported on stderr, same exit code, tests re-pin the message.
 
 ## Acceptance criteria
