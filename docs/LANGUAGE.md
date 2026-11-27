@@ -7932,7 +7932,10 @@ declare void @counter_free(i8*)
   C library** as it would for a declaration of its own. The symbol stays C's:
   no module defines it, so `--emit-header`, `--emit-dts` and `--emit-napi`,
   which describe the functions the program defines for a host, leave it out
-  however it is exported (`tests/link/export_declare_header`).
+  however it is exported (`tests/link/export_declare_header`). The
+  `--emit-capabilities` report lists it under no module's functions either:
+  the `ffi` a call of it reaches is the caller's, witnessed at the call
+  (`tests/link/export_declare_handle`).
 
 #### `readStruct`: a struct out of memory C owns
 

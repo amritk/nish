@@ -52,29 +52,7 @@
         {
           "path": "sys.ts",
           "capabilities": [],
-          "functions": [
-            {
-              "name": "counter_bump",
-              "exported": true,
-              "capabilities": [],
-              "witnesses": {},
-              "panics": []
-            },
-            {
-              "name": "counter_free",
-              "exported": true,
-              "capabilities": [],
-              "witnesses": {},
-              "panics": []
-            },
-            {
-              "name": "counter_new",
-              "exported": true,
-              "capabilities": [],
-              "witnesses": {},
-              "panics": []
-            }
-          ]
+          "functions": []
         }
       ]
     }
