@@ -82,7 +82,9 @@ const base64urlCharOf = (v: i32): i32 => {
  * Each range contributes its value under its own mask, and a byte in none of
  * them has every bit set by the final OR.
  */
-const base64urlSextetOf = (c: integer<0, 65535>): i32 => {
+const base64urlSextetOf = (code: i32): i32 => {
+  // A character code is 16 bits: the mask proves each sum below in range.
+  const c: i32 = code & 0xffff
   const upper: i32 = base64urlRangeMask(c, 65, 90)
   const lower: i32 = base64urlRangeMask(c, 97, 122)
   const digit: i32 = base64urlRangeMask(c, 48, 57)
@@ -263,7 +265,9 @@ const base64StdPadCharOf = (v: i32): i32 => {
 }
 
 /** The sextet the byte `c` stands for in standard base64, or `-1` when it is not in the alphabet. */
-const base64StdPadSextetOf = (c: integer<0, 65535>): i32 => {
+const base64StdPadSextetOf = (code: i32): i32 => {
+  // A character code is 16 bits: the mask proves each sum below in range.
+  const c: i32 = code & 0xffff
   const upper: i32 = base64urlRangeMask(c, 65, 90)
   const lower: i32 = base64urlRangeMask(c, 97, 122)
   const digit: i32 = base64urlRangeMask(c, 48, 57)
