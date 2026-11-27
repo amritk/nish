@@ -1,0 +1,7 @@
+{
+  "name": "storage-index-unbounded",
+  "private": true,
+  "nish": {
+    "noPanic": ["main.ts"]
+  }
+}

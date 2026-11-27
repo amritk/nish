@@ -18,7 +18,7 @@ is ignored by git: it is a build artefact like `build/`.
 Without a browser, through `node:worker_threads`:
 
 ```bash
-node web/compile.mjs web/nish.wasm examples/add.ts --allow-panics
+node web/compile.mjs web/nish.wasm examples/add.ts
 node web/compile.mjs web/nish.wasm examples/nbody.ts --number-mode f64
 node web/compile.mjs web/nish.wasm src/compile.ts --allow-panics | head   # the compiler, compiled by itself, in wasm
 ```
