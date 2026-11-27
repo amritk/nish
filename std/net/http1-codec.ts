@@ -1699,8 +1699,8 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
   // 2^30 bytes, so the copy's start and length are too; the test spells that
   // out for the bounds proof, and refuses a parser moved by hand.
   const at: i32 = http1Past(a, delta)
-  const length: i32 = http1Less(b, a)
-  if (at < 0 || at > 1073741823 || length < 0 || length > 1073741823) {
+  const length: i32 = b - a
+  if (at < 0 || at > 1073741823 || length > 1073741823) {
     return http1Fail(p, 431, "a head of more than 2^30 bytes")
   }
   const end: i32 = at + length
@@ -2302,12 +2302,13 @@ const http1Section = (p: Http1Parser): i32 => {
     }
     if (lf >= 0) {
       const start: i32 = p.start
-      if (lf === start || lf < 1 || lf > toI32(buf.length) || buf[lf - 1] !== 13) {
+      if (lf === start || start < 0 || lf < 1 || lf >= toI32(buf.length) || buf[lf - 1] !== 13) {
         return http1Fail(p, 400, "a line ended in a bare LF")
       }
-      // The line, `start` to `lf`, is in `buf`.
-      const after: i32 = http1Past(lf, 1)
-      const sectionBytes: i32 = http1Past(p.sectionBytes, http1Less(after, start))
+      // The line, `start` to `lf`, is in `buf`, so `after` is at most its
+      // length.
+      const after: i32 = lf + 1
+      const sectionBytes: i32 = http1Past(p.sectionBytes, after - start)
       if (toI64(sectionBytes) - toI64(2) > toI64(p.maxHeaderBytes)) {
         return http1Fail(p, 431, "a line over its limit")
       }
@@ -2807,18 +2808,16 @@ export const http1PutText = (out: u8[], at: i32, text: string): i32 => {
   // Every caller has made sure it fits; outside `out` nothing is written.
   // Before its start the text is skipped, so a negative `at` writes the tail.
   let k: i32 = 0
-  let j: i32 = at
   if (at < 0) {
     k = at > -n ? http1Less(0, at) : n
-    j = http1Past(at, k)
   }
+  let j: i32 = http1Past(at, k)
   while (k >= 0 && k < n && j >= 0 && j < toI32(out.length)) {
     out[j] = toU8(text.charCodeAt(k))
     j += 1
     k += 1
   }
-  // Written whole, `j` is the end; `http1Past` answers for a text cut short.
-  return k === n ? j : http1Past(at, n)
+  return http1Past(at, n)
 }
 
 /**
