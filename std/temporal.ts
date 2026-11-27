@@ -613,27 +613,25 @@ const temporalDayOfYear = (month: i32, day: i32, leap: boolean): i32 => {
 }
 
 /**
- * The ISO weekday of an epoch day in Temporal's range: 1 for Monday to 7 for
- * Sunday. The day counts from 1,000 eras before 0000-03-01, a nonnegative `u64`
- * there, and 146,816,470 days is 3 more than a whole number of weeks, which
- * puts 1970-01-01, a Thursday, on 4.
+ * The ISO weekday of an epoch day: 1 for Monday to 7 for Sunday. 1970-01-01,
+ * day 0, was a Thursday, so the day plus 3 taken mod 7 puts it on 4.
  */
-const temporalDayOfWeek = (epochDay: i64): i32 => toI32(((toU64(epochDay) + 146816470) % 7) + 1)
+const temporalDayOfWeek = (epochDay: i64): i32 => temporalModSmall(temporalAdd(epochDay, 3), 7) + 1
 
 /** How many ISO weeks `year` has: 53 when it starts on a Thursday, or is a leap year starting on a Wednesday. */
 const temporalWeeksInYear = (year: i32): i32 =>
-  temporalWeekdayOfDecember31(toI64(year)) === 4 || temporalWeekdayOfDecember31(toI64(year) - 1) === 3
-    ? 53
-    : 52
+  temporalWeekdayOfDecember31(year, 0) === 4 || temporalWeekdayOfDecember31(year, 1) === 3 ? 53 : 52
 
 /**
- * The weekday of 31 December of `y`, a year in Temporal's range, 0 for Sunday
- * to 6 for Saturday. The year counts from 400,000 years before 0, a
- * nonnegative `u64` there; the shift adds 497,000 days, a whole number of
- * weeks, so the weekday is unchanged.
+ * The weekday of 31 December of the year `back` years before `y`, a year in
+ * Temporal's range, 0 for Sunday to 6 for Saturday. The year counts from
+ * 400,000 years before 0, nonnegative there; the shift adds 497,000 days, a
+ * whole number of weeks, so the weekday is unchanged.
  */
-const temporalWeekdayOfDecember31 = (y: i64): i64 => {
-  const ys: u64 = toU64(y) + 400000
+const temporalWeekdayOfDecember31 = (y: i32, back: integer<0, 1>): i64 => {
+  // Temporal's years are within 275,760 of 0, so the test is always true.
+  const up: i32 = y >= -399999 && y <= 400000 ? y + 400000 - back : 0
+  const ys: integer<0, 800000> = up >= 0 && up <= 800000 ? up : 0
   return toI64((ys + ys / 4 - ys / 100 + ys / 400) % 7)
 }
 
@@ -746,15 +744,15 @@ const temporalDateOfEpochDay = (epochDay: i64): PlainDate => {
  * stays below 2^31 over Temporal's whole range. `temporalCivilYear`,
  * `temporalCivilMonth` and `temporalCivilDay` take it apart. Every caller has
  * checked the day is in that range, so the test is never true for one here.
- * The days count from 0000-03-01 less 1,000 eras of 400 years, so every term
- * is a nonnegative `u64` below 2^28 and the arithmetic is exact.
+ * The days count from 0000-03-01 less 1,000 eras of 400 years, so in range
+ * every term is a nonnegative `u64` below 2^28 and the arithmetic is exact.
  */
 const temporalCivilOfEpochDay = (epochDay: i64): i64 => {
-  const z: u64 = toU64(epochDay) + 146816468
-  if (z < 46816467 || z > 246816468) {
+  if (epochDay < -100000001 || epochDay > 100000000) {
     temporalRangeError("PlainDate: the date is outside Temporal's range")
     return 0
   }
+  const z: u64 = toU64(epochDay + 146816468)
   const doe: u64 = z % 146097
   const yoe: u64 = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
   const doy: u64 = doe - (yoe * 365 + yoe / 4 - yoe / 100)
@@ -2019,10 +2017,9 @@ export class PlainTime {
    */
   toString(): string {
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
-    // Each field is under 1000, so the u32 sum never wraps.
-    const sub: u32 =
-      toU32(this.millisecond) * 1000000 + toU32(this.microsecond) * 1000 + toU32(this.nanosecond)
-    const end: i32 = temporalPutTime(out, 0, this.hour, this.minute, this.second, toI32(sub))
+    // The nanoseconds past the second, which the constructor built `nanoOfDay` from.
+    const sub: i32 = temporalModSmall(this.nanoOfDay, 1000000000)
+    const end: i32 = temporalPutTime(out, 0, this.hour, this.minute, this.second, sub)
     return temporalText(out, end)
   }
 
@@ -2054,11 +2051,11 @@ export class PlainTime {
    */
   add(duration: Duration): PlainTime {
     const span: TemporalSpan = temporalSpanOfDuration(duration, false)
-    const seconds: i64 = temporalFloorMod(span.seconds, TEMPORAL_SECONDS_PER_DAY)
-    // `seconds` is below a day, `span.nanos` below a second and `nanoOfDay` below a day's
-    // nanoseconds, so the `u64` sum stays under 2 × 10^14 and never wraps.
-    const ns: u64 = toU64(seconds) * 1000000000 + toU64(span.nanos) + toU64(this.nanoOfDay)
-    return temporalTimeOfNanos(temporalFloorMod(toI64(ns), TEMPORAL_NS_PER_DAY))
+    const seconds: i32 = temporalModSmall(span.seconds, 86400)
+    // `seconds` is below a day and `span.nanos` below a second, so their sum
+    // in nanoseconds is under 10^14; `nanoOfDay` is below a day's nanoseconds.
+    const ns: i64 = temporalAdd(toI64(seconds) * 1000000000 + toI64(span.nanos), this.nanoOfDay)
+    return temporalTimeOfNanos(temporalFloorMod(ns, TEMPORAL_NS_PER_DAY))
   }
 
   /**
@@ -3485,8 +3482,8 @@ export const instantFromOrNull = (text: string): Instant | null => {
     ) {
       if (minutes >= 0 && minutes <= 59) {
         timeEnd = length - 6
-        const offset: u64 = toU64(hours) * 3600 + toU64(minutes) * 60
-        offsetSeconds = sign === 43 ? toI64(offset) : toI64(0 - offset)
+        const offset: i64 = toI64(hours) * 3600 + toI64(minutes) * 60
+        offsetSeconds = sign === 43 ? offset : 0 - offset
       }
     }
   }

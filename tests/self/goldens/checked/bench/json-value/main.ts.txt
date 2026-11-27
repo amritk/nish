@@ -3708,7 +3708,7 @@ function JsonDocument.reserve(this: JsonDocument, c: i32, n: i32): void -> @nish
   local -9:11 top: i32 (const)
   callee -8:30 jsonValueGet -> @nish.jsonValueGet
   callee -8:69 jsonValueGet -> @nish.jsonValueGet
-  local -4:11 reserved: u32 (const)
+  local -4:11 reserved: i64 (const)
   callee +1:22 jsonValueRoomI32 -> @nish.jsonValueRoomI32
   callee +2:22 jsonValueRoomI32 -> @nish.jsonValueRoomI32
   callee +3:26 jsonValueRoomI32 -> @nish.jsonValueRoomI32

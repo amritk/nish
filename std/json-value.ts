@@ -1953,9 +1953,9 @@ export class JsonDocument {
     if (n <= 0 || top < 0 || jsonValueGet(this.first, c) !== top || jsonValueGet(this.room, c) !== 0) {
       return
     }
-    // Both below 2^31, so the `u32` sum is exact.
-    const reserved: u32 = toU32(top) + toU32(n)
-    if (reserved > toU32(JSON_VALUE_RESERVE_LIMIT)) {
+    // Both below 2^31, so the `i64` sum is exact.
+    const reserved: i64 = toI64(top) + toI64(n)
+    if (reserved > toI64(JSON_VALUE_RESERVE_LIMIT)) {
       return
     }
     this.slotTop = toI32(reserved)

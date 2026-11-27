@@ -93,11 +93,6 @@ type JsonNumberByte = integer<0, 65535>
 const jsonNumberIsDigit = (c: i32): boolean => c >= JSON_NUMBER_DIGIT_0 && c <= JSON_NUMBER_DIGIT_9
 
 /**
- * One number text read as a sign, significant digits and an exponent. The
- * digits are not copied: `digit(k)` reads the k-th of them from the text,
- * stepping over the point.
- */
-/**
  * The exponent of the digit at `place` of a number whose integer part is
  * `intLen` digits and whose exponent's size is `size`, negated when `minus`:
  * `intLen - 1 - place` plus the exponent, plus `biasMillions` millions. The
@@ -139,6 +134,11 @@ const jsonNumberPlaceExponent = (
   )
 }
 
+/**
+ * One number text read as a sign, significant digits and an exponent. The
+ * digits are not copied: `digit(k)` reads the k-th of them from the text,
+ * stepping over the point.
+ */
 class JsonNumberParts {
   private text: string
   /**
