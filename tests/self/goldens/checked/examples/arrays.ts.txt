@@ -4,6 +4,8 @@ entry: examples/arrays.ts
 import exit from "nish:process" -> builtin process.exit
 const I64_MAX: i64 = 9223372036854775807
 const I64_MIN: i64 = -9223372036854775808
+const ABOVE: i32 = 1
+const BELOW: i32 = -1
 function sumF64(xs: f64[]): f64 -> @sumF64 [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer xs: size=0 writesThrough=false captured=false
