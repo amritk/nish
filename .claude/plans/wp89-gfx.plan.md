@@ -82,9 +82,33 @@ stages:
       - id: s4-clear
         content: Add examples/gfx/clear.ts and its tests/run.js readback check — see WP89 S4
         status: pending
+  - id: s5a-owned-handles
+    title: WP89 S5a — owned handles, a std class owns its native object, is exported, and closes with using
+    goal: A std class can hold an opaque declare class, a CPtr or a HostHandle, own several of them, be exported, come from a factory, move into an owning field and close with using, at the cost of a direct declare function call
+    verification: A tests/link case exports an owned handle class from one module, builds it in another through a factory, moves it into an owning class and closes it with using, and C counts the releases in order. The golden .ll shows a method call is one field load and the C call. Each remaining refusal has a negative, and node tests/run.js ffi, link, wasi and performance pass
+    issue: 2379
+    todos:
+      - id: s5a-rule
+        content: Widen the handle-class rule in src/handles.ts and the checker, covering field types, several owned fields, export, factories, moves into an owning field, and cross-module lending — see WP89 S5a
+        status: pending
+      - id: s5a-tests
+        content: Add the tests/link round trip with release counting, the golden .ll, and a negative per refusal left — see WP89 S5a
+        status: pending
+      - id: s5a-docs
+        content: Rewrite the LANGUAGE.md handle-class rule, its cookbook entry, docs/AI.md and the interop guide page — see WP89 S5a
+        status: pending
+  - id: s5a-standard
+    title: WP89 S5a-standard — write the owned-handle resource standard into the agent files
+    goal: CLAUDE.md, .claude/architecture.md, AGENTS.md and docs/AI.md state that a std resource closes with using and holds its native object directly unless it is shared
+    verification: node docs/check-links.mjs and npm run lint pass, and each file's wording links the LANGUAGE.md rule S5a adds
+    issue: 2380
+    todos:
+      - id: s5a-standard-text
+        content: Write the standard into the agent files, linking the LANGUAGE.md rule — see WP89 S5a-standard
+        status: pending
   - id: s5-gpu-core
     title: WP89 S5 — std/gpu, the safe WebGPU core
-    goal: Handle classes closed with using for device, surface, buffers, shaders, pipelines, textures, samplers and bind groups, with resize and device-lost handled
+    goal: Owned handle classes, built on S5a and closed with using, for device, surface, buffers, shaders, pipelines, textures, samplers and bind groups, with resize and device-lost handled
     verification: examples/gfx/triangle.ts draws an indexed coloured triangle that matches its reference pixels in CI, every public declaration is documented, and the guide page exists
     issue: 2240
     todos:
@@ -328,11 +352,41 @@ Extend the buffer rule in [docs/LANGUAGE.md](../../docs/LANGUAGE.md) ("A `u8[]` 
 - **`examples/gfx/clear.ts`:** open a window (offscreen under test), clear to a colour that changes each frame, and exit after N frames. The `gfx` section reads back pixels and compares them with the expected colour.
 - `node scripts/gen-reference.mjs` regenerates `docs/reference/` for the new module. Every public declaration carries its doc comment.
 
+## WP89 S5a — owned handles: a std class owns its native object, is exported, and closes with using
+
+**Decided by the owner on #2240 (2026-11-27): option 1.** A compiler stage lands first, and S5 is built on it. The owner's priority is performance first, then one standard, with one design for both targets. S5 found the language refuses its signed-off design:
+- an opaque `declare class` cannot be a field or a parameter of a Nish function;
+- a handle class holds exactly one `CPtr`, cannot be exported, and lives only in a `using` block or as a parameter it is lent to (`docs/LANGUAGE.md` handle classes, `src/handles.ts`);
+- `using` takes only handle classes, scope, lock and arena.
+
+**Owns:** `src/handles.ts`, `src/checker*.ts`, `src/structs.ts`, `src/declarations.ts`, `src/emit*.ts`, `src/module*.ts`, `src/program.ts`, `src/compilation.ts`, `src/capabilities.ts`, `src/capability-report.ts`, `src/codes.ts`, `src/diagnostics.ts`, `src/types*.ts`, `src/escape*.ts`, `src/region-rules.ts`, `src/generics.ts`, `src/attributes.ts`, `src/module-storage.ts`, `src/interop*.ts`, `docs/LANGUAGE.md`, `docs/AI.md`, `docs/guide/**` (the interop and handles pages), `docs/cookbook/**`, `docs/IR_COOKBOOK.md`, `docs/reference/**`, `docs/wp53-ffi-buffers-handles.md`, `tests/cases/ffi_handle_*`, `tests/cases/reject_ffi_handle_*`, `tests/link/*handle*/**`, `tests/wordings/**`, `tests/nish-cmp.js`, `tests/differential/**`, `tests/self/goldens/checked/src/**` except `run-cache.ts.txt` and `c-symbols.ts.txt`, `tests/self/goldens/checked/{std,tests,examples,bench,docs}/**`. **Not** `tests/run.js` or `std/`. **Depends on:** nothing unmerged. **Blocks:** S5, S5a-standard.
+
+- **The owned field** is a `CPtr`, an opaque `declare class` (local or imported), or, in a `std/<name>.wasm32.ts` twin, a `HostHandle<"kind">`. A class may own several, and dispose closes them in reverse declaration order. `GpuContext` holds an instance, an adapter, a device and a surface.
+- **Export.** A handle class may be exported, and an importing module follows the same rules as the declaring one.
+- **Factories.** A function or a static method may return a handle as `H`, `H | null` or `Result<H, E>`. The caller binds the result with `using`, or moves it into an owning field of another handle class, which then closes it.
+- **One owner, no copy.** Copies, arrays, object literals, captures, builtin arguments and comparisons stay refused, so the compiler proves there is no use after close, with no runtime check. Lending to a parameter works across modules.
+- **Cost.** A method call is one field load and the C call, the same as a direct `declare function` call. A golden `.ll` shows it.
+- **Left open for S8:** an array of handles stays refused. S8's many textures use an id table or a pool, decided there.
+- **Tests:** a `tests/link` case where one module exports an owned handle class and another imports it, builds it through a factory, moves it into an owning class and closes it with `using`, run natively against a small C file that counts releases and prints their order. A golden `.ll` for the method call. A negative for each refusal left, and `file: "exit"` `DECLARED` entries for any nish-cmp corpus program that flips.
+- **The construct checklist** (`docs/ARCHITECTURE.md`, "How to add a construct"): golden `.ll`, `llvm-as`, a native round trip, negatives, the `docs/LANGUAGE.md` rule, a cookbook entry and the guide page.
+- **Compiler-change rules**, as for S3b: self goldens, `node tests/run.js wasi` and `performance`, `gen-diagnostic-codes.mjs --check` and `docs/reference/diagnostics` for any new code, nish-cmp `DECLARED` entries, and a grep of `docs/wp*.md`, `docs/MASTER_PLAN.md` and `tests/**` comments for the old rule's wording.
+- **Rolling freeze.** `src/` may not use the wider rule until the next release ships it; `std/` may.
+
+## WP89 S5a-standard — write the owned-handle resource standard into the agent files
+
+**Decided by the owner on #2240 (2026-11-27):** the rule becomes the repository standard, written where agents read first, once S5a lands. Until then the compiler refuses it.
+
+**Owns:** `CLAUDE.md`, `.claude/architecture.md`, `AGENTS.md`, `docs/AI.md`. **Depends on:** S5a. **Sensitive:** every file but `docs/AI.md` is a CODEOWNERS path, so this stage ends as a reviewed PR awaiting the owner's merge.
+
+> A `std/` resource that must be released closes with `using`. When it has a single owner, it holds its native object directly: a pointer natively, and a `HostHandle` on `wasm32`. It holds an id into a table only when the object is shared, kept in collections, or owned by the JS side. A bare `close()` alone is not the standard for new modules.
+
+The wording links the `docs/LANGUAGE.md` rule S5a adds. It names `std/sqlite.ts` as the id case: a use after close answers `MISUSE` there. Moving the other closeable `std/` modules onto `using` is a follow-up outside WP89.
+
 ## WP89 S5 — std/gpu, the safe WebGPU core
 
-**Owns:** `std/gpu/**`, `examples/gfx/**`, `tests/gfx.js`, `tests/gfx/**`, `docs/guide/using-nish/gpu.md`, `docs/guide/**` index links, `docs/reference/**`, `scalar.config.json`, `scripts/undocumented.txt`, `tests/self/goldens/checked/{std,examples}/**`, `tests/nish-cmp.js`. **Depends on:** S4.
+**Owns:** `std/gpu/**`, `examples/gfx/**`, `tests/gfx.js`, `tests/gfx/**`, `docs/guide/using-nish/gpu.md`, `docs/guide/**` index links, `docs/reference/**`, `scalar.config.json`, `scripts/undocumented.txt`, `tests/self/goldens/checked/{std,examples}/**`, `tests/nish-cmp.js`. **Depends on:** S4, S5a.
 
-Handle classes own their `CPtr` and are closed with `using`, which calls `wgpu*Release` through the shim.
+The classes are S5a's owned handles. Each holds its shim object directly and is closed with `using`, which calls `wgpu*Release` through the shim, so a method call costs one field load and the C call. A factory such as `GpuContext.open` returns a `Result`. Child objects a context creates are moved into the class that owns them. The `std/gpu/*.wasm32.ts` twins (S6) keep the same API and hold a `HostHandle<"kind">` instead, which S7 serves from the page.
 
 | Module | Holds |
 | --- | --- |
