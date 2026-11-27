@@ -512,9 +512,8 @@ const qpackStaticValue = (index: i32): string => {
 }
 /** Panics unless `buf[off, off + len)` lies inside `buf`. */
 const qpackCheckWindow = (where: string, buf: u8[], off: i32, len: i32): void => {
-  const size: i32 = toI32(buf.length)
-  if (off < 0 || len < 0 || off > size || len > size - off) {
-    panic(`${where}: the window [${off}, ${off} + ${len}) is outside a buffer of ${size} bytes`)
+  if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(buf.length)) {
+    panic(`${where}: the window [${off}, ${off} + ${len}) is outside a buffer of ${buf.length} bytes`)
   }
 }
 
