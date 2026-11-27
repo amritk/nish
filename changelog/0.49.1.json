@@ -1,0 +1,48 @@
+{
+  "version": "0.49.1",
+  "date": "2026-11-27",
+  "tag": "v0.49.1",
+  "range": {
+    "from": "v0.49.0",
+    "to": "09a6f22a8"
+  },
+  "entries": [
+    {
+      "id": "build-the-histogram-atomic-example-without-allow-panics",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "build the histogram-atomic example without --allow-panics",
+      "body": "examples/histogram-atomic.ts and the JsonNumber guide snippet now build without --allow-panics. std/threads.ts adds checked twins, atomicI32ArrayChecked and atomicI64ArrayChecked, which return Err for a negative length where the constructors panic. std/json-typed.ts tests its string-field window, removing two slice panic sites. std/net/websocket.ts checks a close frame's reason without the window panic.\n\nThe stale-opt-out checks now build each example and snippet both with -o and with --link, and keep an opt-out while either build refuses it for a panic site.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/atomic_array_checked"
+      ],
+      "commits": [
+        "31ea52d"
+      ],
+      "pr": 2350,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-26"
+    },
+    {
+      "id": "refuse-an-rfc-a-std-module-cites-with",
+      "type": "ci",
+      "breaking": false,
+      "title": "refuse an RFC a std/ module cites with no vector spec",
+      "body": "scripts/rfc-specs.mjs, now part of npm run lint, reads every RFC citation in\nstd/**/*.ts as text: RFC or RFCs and a number in either case, across a\nwrapped comment line, and each number of a list or a range. Each (file, RFC)\npair needs a vector spec of that module (its contract, specs/<n>.md, and a\ntest/spec/<n>.ts pinning the contract's SHA-256) or a line in\nscripts/rfc-unspecified.txt.\n\nThe 231 pairs that predate the rule are listed there, and PRE_RULE_SHA256 in\nthe script pins their set: a line added, swapped or deleted by hand fails,\nand --update-baseline, which runs only on the pinned set, is the one way a\nline goes. A `cites: <reason>` line is for an RFC a file names without\nimplementing it; std/crypto/x509.ts's rfc822Name is the first. A listed pair\na spec now covers, or the file no longer cites, fails until its line goes.\n\nCLAUDE.md, AGENTS.md (\"Picking up a work package\"), the orientation and\ncontracts/README.md now say that a module implementing an RFC lands\nspec-first, and that a change to a module with a spec reruns vector's check\nand mutate.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "node tests/run.js rfc-specs (32 checks)"
+      ],
+      "commits": [
+        "09a6f22"
+      ],
+      "pr": 2339,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-26"
+    }
+  ]
+}
