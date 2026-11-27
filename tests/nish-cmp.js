@@ -11813,7 +11813,10 @@ const storageIndex = () => [
     "tests/differential/corpus/const_modules/main.ts": ["main.ll"],
     "tests/link/httparena_entry/main.ts": ["pg.ll"],
     "tests/link/net_http2_stream/main.ts": ["main.ll"],
-    "tests/link/net_http_server_h1_tls/main.ts": ["net_quic_conn_replay_server.ll", "peer.ll"],
+    "tests/link/net_http_server_h1_tls/main.ts": ["peer.ll"],
+    "tests/link/net_protobuf/main.ts": ["checks.ll"],
+    "tests/link/net_protobuf_bad_depth/main.ts": ["main.ll"],
+    "tests/link/net_protobuf_f64/main.ts": ["checks.ll"],
     "tests/link/module_target_std_twin/main.ts": ["lexer.ll", "manifest.ll"],
     "tests/link/module_target_twin/main.ts": ["lexer.ll"],
     "tests/link/storage_import_record/main.ts": ["cells.ll", "main.ll"],
@@ -11829,6 +11832,16 @@ const storageIndex = () => [
         `the program indexes module storage or compares with a constant, which src/bounds.ts now proves, so ${file} drops those index or overflow checks and renumbers its values`,
     }))
   ),
+  {
+    file: "net_quic_conn_replay_server.ll",
+    changelog: STORAGE_INDEX,
+    why: "the QUIC replay server's helpers compare against folded module constants, which the prover now orders, so a dropped overflow check renumbers the module's attribute groups in every program that builds it",
+  },
+  {
+    file: "net_http3_peer.ll",
+    changelog: STORAGE_INDEX,
+    why: "a callee the HTTP/3 peer declares now proves its constant-guarded arithmetic, so its attribute group number moves in every program that builds the peer",
+  },
   {
     file: "chacha20poly1305.ll",
     changelog: STORAGE_INDEX,
