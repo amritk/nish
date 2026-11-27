@@ -20,8 +20,8 @@ import JSON_TOK_TRUE from "nish/json-tokenizer" -> const JSON_TOK_TRUE
 import JsonLimits from "nish/json-tokenizer" -> struct JsonLimits
 import JsonTokenizer from "nish/json-tokenizer" -> struct JsonTokenizer
 unsafe import 152:10 uncheckedSet from "nish:unsafe"
-unsafe call 2048:7 uncheckedSet (node 8313)
-unsafe call 2088:7 uncheckedSet (node 8481)
+unsafe call 2053:7 uncheckedSet (node 8372)
+unsafe call 2093:7 uncheckedSet (node 8540)
 const JSON_VALUE_NONE: i32 = 0 [exported]
 const JSON_VALUE_NULL: i32 = 1 [exported]
 const JSON_VALUE_BOOLEAN: i32 = 2 [exported]
@@ -723,7 +723,7 @@ function JsonDocument.keyAt(this: JsonDocument, v: i32, i: i32): string -> @nish
   callee +8:24 jsonValueGet -> @nish.jsonValueGet
   callee +8:57 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.keys(this: JsonDocument, v: i32): string[] -> @nish.JsonDocument.keys [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: v
   calls: nish.JsonDocument.index nish.JsonDocument.kindAt nish.JsonDocument.textOf nish.jsonValueEnd nish.jsonValueGet nish_array_grow
   pointer this: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.kindAt#0 nish.JsonDocument.textOf#0
@@ -734,13 +734,13 @@ function JsonDocument.keys(this: JsonDocument, v: i32): string[] -> @nish.JsonDo
   callee +2:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
   local +5:11 start: i32 (const)
   callee +5:24 jsonValueGet -> @nish.jsonValueGet
-  local +8:11 end: i32 (const)
-  callee +8:22 jsonValueEnd -> @nish.jsonValueEnd
-  callee +8:42 jsonValueGet -> @nish.jsonValueGet
-  local +9:14 s: i32 (let)
-  callee +10:16 JsonDocument.textOf -> @nish.JsonDocument.textOf
-  callee +10:28 jsonValueGet -> @nish.jsonValueGet
-  callee +10:61 jsonValueGet -> @nish.jsonValueGet
+  local +6:11 end: i32 (const)
+  callee +6:22 jsonValueEnd -> @nish.jsonValueEnd
+  callee +6:42 jsonValueGet -> @nish.jsonValueGet
+  local +7:11 keyAt: i32[] (const)
+  local +8:11 keyLength: i32[] (const)
+  local +13:11 s: i32 (let)
+  callee +17:16 JsonDocument.textOf -> @nish.JsonDocument.textOf
 function JsonDocument.get(this: JsonDocument, v: i32, key: string): i32 -> @nish.JsonDocument.get [exported method]
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key v
@@ -899,13 +899,12 @@ function JsonDocument.readNumber(this: JsonDocument, x: i32): boolean -> @nish.J
   callee +5:12 JsonTokenizer.next -> @nish.JsonTokenizer.next
 function JsonDocument.textOf(this: JsonDocument, at: i32, n: i32): string -> @nish.JsonDocument.textOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: at n
-  calls: nish.jsonValueEnd nish_panic_slice nish_str_new
+  calls: nish_panic_slice nish_str_new
   pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 bytes: u8[] (const)
-  local +5:11 end: i32 (const)
-  callee +5:22 jsonValueEnd -> @nish.jsonValueEnd
+  local +2:11 sum: i64 (const)
+  local +3:11 end: i32 (const)
 function JsonDocument.bytesEqual(this: JsonDocument, at: i32, length: i32, s: string): boolean -> @nish.JsonDocument.bytesEqual [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at

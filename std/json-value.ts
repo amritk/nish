@@ -1287,11 +1287,18 @@ export class JsonDocument {
       return out
     }
     const start: i32 = jsonValueGet(this.first, x)
-    // The object's run of slots lies inside the slot arrays, as `slotAt` says;
-    // a `-1` end would read no key.
     const end: i32 = jsonValueEnd(start, jsonValueGet(this.count, x))
-    for (let s: i32 = start; s < end; s += 1) {
-      out.push(this.textOf(jsonValueGet(this.slotKeyAt, s), jsonValueGet(this.slotKeyLength, s)))
+    const keyAt: i32[] = this.slotKeyAt
+    const keyLength: i32[] = this.slotKeyLength
+    // The object's run of slots lies inside both slot arrays, as `slotAt`
+    // says, so the loop's last three tests never end it; they are what proves
+    // the two reads. A `-1` end reads no key.
+    for (
+      let s: i32 = start;
+      s < end && s >= 0 && s < toI32(keyAt.length) && s < toI32(keyLength.length);
+      s += 1
+    ) {
+      out.push(this.textOf(keyAt[s], keyLength[s]))
     }
     return out
   }
@@ -1501,12 +1508,10 @@ export class JsonDocument {
   /** `bytes[at, at + n)` as a string, in one allocation. */
   private textOf(at: i32, n: i32): string {
     const bytes: u8[] = this.bytes
-    // An end past 2^31 - 1 is `-1` and, like any end past `bytes`, names no text.
-    if (at < 0 || n <= 0) {
-      return ""
-    }
-    const end: i32 = jsonValueEnd(at, n)
-    if (end < at || end > toI32(bytes.length)) {
+    // Summed in `i64`, exact; an end past `bytes` is `-1` and names no text.
+    const sum: i64 = toI64(at) + toI64(n)
+    const end: i32 = sum > toI64(toI32(bytes.length)) ? -1 : toI32(sum)
+    if (at < 0 || n <= 0 || end < at || end > toI32(bytes.length)) {
       return ""
     }
     return String.fromBytes(bytes, at, end)
