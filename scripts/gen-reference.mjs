@@ -339,6 +339,9 @@ const slugOfHeading = (heading, site) => {
     : s.replace(/[^\p{L}\p{N}\p{M}\p{Pc}\- ]/gu, "").replace(/ /g, "-")
 }
 
+/** An explicit anchor on its own line, for a heading the two sites would give different IDs. */
+const anchorLine = (id) => `<a id="${id}" style="scroll-margin-top: 65px"></a>`
+
 /**
  * Each heading of a Markdown text, outside fences: its line index, level and
  * slugs on GitHub and the docs site (null below level 4, which gets no ID there),
@@ -1172,7 +1175,7 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fall
     return h.github
   })
   const anchored = lines.flatMap((line, i) =>
-    explicit.has(i) ? [`<a id="${explicit.get(i)}" style="scroll-margin-top: 65px"></a>`, "", line] : [line]
+    explicit.has(i) ? [anchorLine(explicit.get(i)), "", line] : [line]
   )
   let n = 0
   const text = codeGroups(anchored.join("\n").replaceAll(`href="#${CARD}"`, () => `href="#${anchors[n++]}"`))
@@ -1727,7 +1730,7 @@ const renderLanguage = (link) => {
         inFence = !inFence
       }
       if (anchors.has(i)) {
-        text.push(`<a id="${anchors.get(i)}" style="scroll-margin-top: 65px"></a>`, "")
+        text.push(anchorLine(anchors.get(i)), "")
       }
       if (inFence) {
         text.push(line)
