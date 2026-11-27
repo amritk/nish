@@ -23796,6 +23796,45 @@ const DECLARED = [
     changelog: WP91_S3,
     why: "std/sync/ring.ts holds a byte size or offset past the i32 range at its end instead of wrapping it, and spells its counter arithmetic with wrappingAdd and wrappingSub, so ring.ll and the shm.ll it inlines move",
   })),
+  ...["examples/prefork-jobs.ts", "bench/std-ring.ts", "tests/link/sync_ring_checked/main.ts"].flatMap(
+    (program) =>
+      ["ring.ll", "shm.ll"].map((file) => ({
+        program,
+        file,
+        changelog: WP91_S3,
+        why: "std/sync/ring.ts holds a byte size or offset past the i32 range at its end instead of wrapping it, keeps each ring's proven offsets in new i32 fields, and spells its counter arithmetic with wrappingAdd and wrappingSub, so ring.ll and the shm.ll it inlines move",
+      }))
+  ),
+  ...[
+    ["examples/prefork-jobs.ts", "prefork-jobs.ll"],
+    ["bench/std-ring.ts", "std-ring.ll"],
+    ["tests/link/sync_ring_checked/main.ts", "main.ll"],
+    ["tests/link/sync_ring_inplace/main.ts", "main.ll"],
+    ["tests/link/sync_ring_bytes_saturate/main.ts", "main.ll"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: WP91_S3,
+    why: "SpscRing and MpscRing gain i32 fields for the offsets std/sync/ring.ts proves once (SpscRing 96 to 112 bytes, MpscRing 32 to 64), so a module laying either out has a new struct type and wider dereferenceable bounds",
+  })),
+  ...["docs/cookbook/json-union.ts", "tests/link/json_tagged_union/main.ts"].map((program) => ({
+    program,
+    file: "json-tokenizer.ll",
+    changelog: WP91_S3,
+    why: "std/json-tokenizer.ts's jsonTokSigned takes a negative number's `u64` difference only from a magnitude of at least 1 instead of casting a wrapping one, so json-tokenizer.ll moves",
+  })),
+  {
+    program: "tests/link/std_sqlite_cursor_record/main.ts",
+    file: "sqlite.ll",
+    changelog: WP91_S3,
+    why: "std/sqlite.ts negates a result code through sqliteNegated, refuses a record index past the i32 range and sums its column offsets in i64, instead of wrapping each through `u32` or `u64`, so sqlite.ll moves",
+  },
+  {
+    program: "tests/link/std_temporal_hours_range/main.ts",
+    file: "temporal.ll",
+    changelog: WP91_S3,
+    why: "the case is new with this change; std/temporal.ts's sums, differences and products go through temporalAdd, temporalSub and temporalMul, which raise a RangeError where the result leaves the i64 range instead of wrapping, so temporal.ll moves",
+  },
   // WP91 S2: std/regex.ts drops its cast wraps for plain sums under guards
   // the prover reads, which moves regex.ll in every program importing nish/regex.
   ...[
