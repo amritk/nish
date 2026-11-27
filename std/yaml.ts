@@ -916,7 +916,9 @@ export class YamlStream {
    */
   comment(i: i32): string {
     const from: i32 = this.commentStart(i)
-    return from < 0 || from >= toI32(this.source.length) ? "" : this.source.substring(from + 1, this.commentEnd(i))
+    return from < 0 || from >= toI32(this.source.length)
+      ? ""
+      : this.source.substring(from + 1, this.commentEnd(i))
   }
 
   // ---- Building ----------------------------------------------------------------
@@ -2813,7 +2815,9 @@ class YamlParser {
   /** Reads an alias at the cursor and resolves it against the anchors defined so far. */
   private scanAlias(): i32 {
     const start: i32 = this.pos
-    let i: i32 = start + 1
+    // The `*` at the cursor is inside the text, so this is always `start + 1`.
+    const open: i32 = start < this.len ? start + 1 : start
+    let i: i32 = open
     while (i < this.len) {
       const c: i32 = this.at(i)
       if (yamlIsWs(c) || yamlIsFlowIndicator(c)) {
@@ -2824,21 +2828,20 @@ class YamlParser {
     this.checkAmbiguousName("Alias", start, i)
     this.pos = i
     const node: i32 = this.stream.newNode(YAML_ALIAS, YAML_PLAIN, start, i)
-    if (i === start + 1) {
+    if (i === open) {
       this.reportBadAnchorName("Alias", start, i)
       return node
     }
-    const entry: i32 = this.findAnchor(start + 1, i)
+    const entry: i32 = this.findAnchor(open, i)
     if (entry >= 0) {
       yamlPut(this.stream.firsts, node, yamlAt(this.anchorNodes, entry))
       return node
     }
-    const name: string = this.text.substring(start + 1, i)
-    let p: i32 = this.pendingTop - 1
-    while (p >= 0) {
-      if (
-        yamlSameBytes(this.text, yamlAt(this.pendingStarts, p), yamlAt(this.pendingEnds, p), start + 1, i)
-      ) {
+    const name: string = this.text.substring(open, i)
+    let p: i32 = this.pendingTop
+    while (p > 0) {
+      p -= 1
+      if (yamlSameBytes(this.text, yamlAt(this.pendingStarts, p), yamlAt(this.pendingEnds, p), open, i)) {
         this.error(
           YAML_ERR_RECURSIVE_ALIAS,
           `Alias "*${name}" refers to the node that contains it; recursive structures are not supported`,
@@ -2847,7 +2850,6 @@ class YamlParser {
         )
         return node
       }
-      p -= 1
     }
     this.error(YAML_ERR_UNRESOLVED_ALIAS, `Alias "*${name}" has no matching anchor`, start, i)
     return node
@@ -2893,12 +2895,17 @@ class YamlParser {
     if (this.lastErrStart <= pos && pos < this.lastErrEnd) {
       return
     }
+    // Callers found an indicator at `pos`, so it is inside the text and this never returns.
+    if (pos < 0 || pos >= this.len) {
+      return
+    }
+    const next: i32 = pos + 1
     const c: i32 = this.at(pos)
     if (this.plainStartClass(c) === 2) {
       if (c === YAML_COLON) {
         return
       }
-      if (flow ? !this.flowIndicatorBoundary(pos + 1) : !yamlIsWs(this.at(pos + 1))) {
+      if (flow ? !this.flowIndicatorBoundary(next) : !yamlIsWs(this.at(next))) {
         return
       }
       if (c === YAML_DASH) {
@@ -2907,14 +2914,14 @@ class YamlParser {
             YAML_ERR_BAD_SCALAR_START,
             'A "-" sequence indicator cannot start a flow collection entry',
             pos,
-            pos + 1
+            next
           )
         } else {
           this.error(
             YAML_ERR_UNEXPECTED_CONTENT,
             "A block sequence cannot start on the line of the key it belongs to",
             pos,
-            pos + 1
+            next
           )
         }
         return
@@ -2923,19 +2930,19 @@ class YamlParser {
         YAML_ERR_BAD_SCALAR_START,
         '"?" is an explicit-key indicator here and cannot start a plain scalar — quote the value',
         pos,
-        pos + 1
+        next
       )
       return
     }
     if (flow && yamlIsFlowIndicator(c)) {
       return
     }
-    const written: string = this.text.substring(pos, pos + 1)
+    const written: string = this.text.substring(pos, next)
     this.error(
       YAML_ERR_BAD_SCALAR_START,
       `Indicator "${written}" cannot start a plain scalar — quote the value`,
       pos,
-      pos + 1
+      next
     )
   }
 
@@ -2953,6 +2960,10 @@ class YamlParser {
 
   /** Reports the `: ` at `at` inside a plain scalar. */
   private reportPlainColon(at: i32): void {
+    // Callers found the `:` at `at`, so it is inside the text and this never returns.
+    if (at < 0 || at >= this.len) {
+      return
+    }
     this.error(
       YAML_ERR_BAD_SCALAR_CONTENT,
       'A plain scalar cannot contain ": " — quote the value, or indent it as a nested mapping',
@@ -2964,7 +2975,7 @@ class YamlParser {
   /** Whether only blanks and a comment follow `from` on its line. */
   private endsAtComment(from: i32): boolean {
     let i: i32 = from
-    while (yamlIsBlank(this.at(i))) {
+    while (i < this.len && yamlIsBlank(this.at(i))) {
       i += 1
     }
     return this.at(i) === YAML_HASH
@@ -2983,15 +2994,16 @@ class YamlParser {
       colonReported = true
     }
     let scan: i32 = this.nextLineStart(valueEnd)
-    while (scan < this.len) {
+    // A negative `scan` reads -1, which ends the scalar as the end of the text does.
+    while (scan >= 0 && scan < this.len) {
       let i: i32 = scan
-      while (this.at(i) === YAML_SPACE) {
+      while (i < this.len && this.at(i) === YAML_SPACE) {
         i += 1
       }
       const c: i32 = this.at(i)
       // A line of blanks is an empty line, tabs included, though a tab cannot indent.
       let blank: i32 = i
-      while (yamlIsBlank(this.at(blank))) {
+      while (blank < this.len && yamlIsBlank(this.at(blank))) {
         blank += 1
       }
       if (yamlIsBreak(this.at(blank))) {
@@ -3035,7 +3047,7 @@ class YamlParser {
   /** Reports anything but a comment after a block scalar's header. */
   private checkBlockHeaderEnd(): void {
     let i: i32 = this.pos
-    while (yamlIsBlank(this.at(i))) {
+    while (i < this.len && yamlIsBlank(this.at(i))) {
       i += 1
     }
     const c: i32 = this.at(i)
@@ -3056,28 +3068,31 @@ class YamlParser {
   private scanBlockScalar(parentIndent: i32): i32 {
     const start: i32 = this.pos
     const folded: boolean = this.at(start) === YAML_GT
-    this.pos += 1
+    // The `|` or `>` at the cursor is inside the text, so this is always `start + 1`.
+    let p: i32 = start < this.len ? start + 1 : start
     let chomp: i32 = YAML_CLIP
     let explicitIndent: i32 = 0
     let sawChomp: boolean = false
-    while (true) {
-      const c: i32 = this.at(this.pos)
+    while (p < this.len) {
+      const c: i32 = this.at(p)
       if (c === YAML_DASH || c === YAML_PLUS) {
         if (sawChomp) {
-          this.error(YAML_ERR_BAD_BLOCK_HEADER, "Repeated chomping indicator", this.pos, this.pos + 1)
+          this.error(YAML_ERR_BAD_BLOCK_HEADER, "Repeated chomping indicator", p, p + 1)
         }
         sawChomp = true
         chomp = c === YAML_DASH ? YAML_STRIP : YAML_KEEP
       } else if (c >= YAML_ONE && c <= YAML_NINE) {
         if (explicitIndent !== 0) {
-          this.error(YAML_ERR_BAD_BLOCK_HEADER, "Repeated indentation indicator", this.pos, this.pos + 1)
+          this.error(YAML_ERR_BAD_BLOCK_HEADER, "Repeated indentation indicator", p, p + 1)
         }
-        explicitIndent = c - YAML_ZERO
+        // "1" to "9" are 0x31 to 0x39, so the low four bits are the digit.
+        explicitIndent = c & 15
       } else {
         break
       }
-      this.pos += 1
+      p += 1
     }
+    this.pos = p
     // An empty scalar ends at its header, not at the line after it.
     let valueEnd: i32 = this.pos
     this.checkBlockHeaderEnd()
@@ -3088,13 +3103,22 @@ class YamlParser {
     let leadingBlank: i32 = -1
     while (this.pos < this.len) {
       const lineStart: i32 = this.pos
+      // The cursor never moves before the text, so this never fires.
+      if (lineStart < 0) {
+        break
+      }
       let i: i32 = lineStart
-      while (this.at(i) === YAML_SPACE) {
+      while (i < this.len && this.at(i) === YAML_SPACE) {
         i += 1
       }
       const c: i32 = this.at(i)
       const indent: i32 = i - lineStart
-      if (c === YAML_TAB && indent < (contentIndent === -1 ? parentIndent + 1 : contentIndent)) {
+      // A tab read is inside the text.
+      if (
+        c === YAML_TAB &&
+        i < this.len &&
+        (contentIndent === -1 ? indent <= parentIndent : indent < contentIndent)
+      ) {
         this.error(YAML_ERR_TAB_INDENT, "Tabs cannot be used for indentation", i, i + 1)
       }
       if (c < 0 || yamlIsBreak(c)) {
@@ -3124,7 +3148,8 @@ class YamlParser {
       if (indent < contentIndent) {
         break
       }
-      const lineEnd: i32 = yamlLineEnd(this.text, lineStart + contentIndent, this.len)
+      // The bytes from the content's indent to `i` are spaces, so the line ends where it would from there.
+      const lineEnd: i32 = yamlLineEnd(this.text, i, this.len)
       valueEnd = lineEnd
       this.pos = this.nextLineStart(lineEnd)
     }
