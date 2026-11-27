@@ -256,6 +256,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["std/gpu/sys.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
     }
   ]
 }

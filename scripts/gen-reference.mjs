@@ -1391,7 +1391,7 @@ const AREAS = [
     about: "Drawing into a frame of pixels and making short sounds",
     key: "/graphics/..",
     icon: "paint-brush",
-    names: ["raster", "synth"],
+    names: ["raster", "synth", "gpu"],
   },
   {
     title: "Concurrency",

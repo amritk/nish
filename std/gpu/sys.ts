@@ -3,36 +3,52 @@
 // Data model: LP64
 // Regenerate: nish c-import ../../runtime/gfx/nish-gfx.h --overrides ../../runtime/gfx/nish-gfx.overrides.json --target x86_64-unknown-linux-gnu -o sys.ts
 
-declare class NishGfxInstance {}
+/** A WebGPU instance: the root every surface, adapter and device is made from. */
+export declare class NishGfxInstance {}
 
-declare class NishGfxWindow {}
+/** An SDL3 window, with the ring its input and window events queue in. */
+export declare class NishGfxWindow {}
 
-declare class NishGfxSurface {}
+/** A WebGPU surface that presents frames into a window. */
+export declare class NishGfxSurface {}
 
-declare class NishGfxAdapter {}
+/** A WebGPU adapter: one GPU, or a software rasteriser, that devices are requested from. */
+export declare class NishGfxAdapter {}
 
-declare class NishGfxDevice {}
+/** A WebGPU device and its queue, with the ring its errors queue in. */
+export declare class NishGfxDevice {}
 
-declare class NishGfxBuffer {}
+/** A WebGPU buffer on a device. */
+export declare class NishGfxBuffer {}
 
-declare class NishGfxShader {}
+/** A WebGPU shader module compiled from WGSL. */
+export declare class NishGfxShader {}
 
-declare class NishGfxPipelineDesc {}
+/** A render pipeline builder, freed by nishgfx_pipeline_create(). */
+export declare class NishGfxPipelineDesc {}
 
-declare class NishGfxPipeline {}
+/** A render pipeline: a shader's two stages, its vertex layout and one color target. */
+export declare class NishGfxPipeline {}
 
-declare class NishGfxBindGroupDesc {}
+/** A bind group builder, freed by nishgfx_bind_group_create(). */
+export declare class NishGfxBindGroupDesc {}
 
-declare class NishGfxBindGroup {}
+/** A bind group: the buffers a pipeline's group of bindings reads. */
+export declare class NishGfxBindGroup {}
 
-declare class NishGfxEncoder {}
+/** A command encoder, freed when it is submitted. */
+export declare class NishGfxEncoder {}
 
-declare class NishGfxPass {}
+/** A render pass on one color view, freed when it ends. */
+export declare class NishGfxPass {}
 
-declare class NishGfxView {}
+/** A texture view a render pass draws into: a surface's frame or an offscreen target. */
+export declare class NishGfxView {}
 
-declare class NishGfxOffscreen {}
+/** A render target with no window, whose pixels can be read back. */
+export declare class NishGfxOffscreen {}
 
+/** One input or window event. Fields a kind does not use are zero. */
 declare class NishGfxEvent {
   kind: u32
   key: u32
@@ -46,75 +62,428 @@ declare class NishGfxEvent {
   height: u32
 }
 
+/** A buffer to create. `usage` is WGPUBufferUsage bits. */
 declare class NishGfxBufferDesc {
   size: u64
   usage: u32
   mapped_at_creation: u32
 }
 
+/** No error was queued. */
 export const NISHGFX_ERROR_NONE: i32 = 0
+/** A WebGPU validation error. */
 export const NISHGFX_ERROR_VALIDATION: i32 = 1
+/** A WebGPU out-of-memory error. */
 export const NISHGFX_ERROR_OUT_OF_MEMORY: i32 = 2
+/** A WebGPU internal error, or a failure of the shim's own. */
 export const NISHGFX_ERROR_INTERNAL: i32 = 3
+/** The device was lost. */
 export const NISHGFX_ERROR_DEVICE_LOST: i32 = 4
+/** The error ring's size, per instance and per device. */
 export const NISHGFX_ERROR_RING: i32 = 16
+/** The longest message an entry keeps, without its NUL. */
 export const NISHGFX_ERROR_MESSAGE_MAX: i32 = 255
+/** No event was queued. */
 export const NISHGFX_EVENT_NONE: i32 = 0
+/** The window was asked to close. */
 export const NISHGFX_EVENT_QUIT: i32 = 1
+/** A key went down. */
 export const NISHGFX_EVENT_KEY_DOWN: i32 = 2
+/** A key came up. */
 export const NISHGFX_EVENT_KEY_UP: i32 = 3
+/** The pointer moved. */
 export const NISHGFX_EVENT_MOUSE_MOVE: i32 = 4
+/** A mouse button went down. */
 export const NISHGFX_EVENT_MOUSE_DOWN: i32 = 5
+/** A mouse button came up. */
 export const NISHGFX_EVENT_MOUSE_UP: i32 = 6
+/** The wheel turned. */
 export const NISHGFX_EVENT_WHEEL: i32 = 7
+/** The window's pixel size changed. */
 export const NISHGFX_EVENT_RESIZED: i32 = 8
+/** The event ring's size, per window. */
 export const NISHGFX_EVENT_RING: i32 = 64
 
-declare function nishgfx_instance_create(): NishGfxInstance | null
-declare function nishgfx_instance_release(instance: NishGfxInstance): void
-declare function nishgfx_instance_error_next(instance: NishGfxInstance, msg: u8[], cap: u64): i32
-declare function nishgfx_window_create(title: string, width: u32, height: u32): NishGfxWindow | null
-declare function nishgfx_window_release(window: NishGfxWindow): void
-declare function nishgfx_events_poll(window: NishGfxWindow): u32
+/**
+ * A WebGPU instance.
+ *
+ * @returns the instance, or null if wgpu-native refuses one
+ */
+export declare function nishgfx_instance_create(): NishGfxInstance | null
+/**
+ * Release an instance. Release it last: every surface, adapter and device
+ * made from it keeps it, and a device's readback drives events through it.
+ *
+ * @param instance the instance to release
+ */
+export declare function nishgfx_instance_release(instance: NishGfxInstance): void
+/**
+ * Drain one queued instance error (an adapter or device refusal) into msg,
+ * NUL-terminated and cut to cap - 1 bytes.
+ *
+ * @param instance the instance whose ring is drained
+ * @param msg the buffer the message is copied into
+ * @param cap the bytes msg holds
+ * @returns the error's kind, a NISHGFX_ERROR_* value, or 0 when the ring is empty
+ */
+export declare function nishgfx_instance_error_next(instance: NishGfxInstance, msg: u8[], cap: u64): i32
+/**
+ * An SDL3 window of width x height pixels.
+ *
+ * @param title the window's title, NUL-terminated UTF-8
+ * @param width the width in pixels
+ * @param height the height in pixels
+ * @returns the window, or null for a 0 side or one past INT32_MAX, when SDL
+ * has no video driver, when memory or SDL's window properties run out, and
+ * when SDL refuses the window; SDL_GetError() says why for the SDL failures
+ */
+export declare function nishgfx_window_create(title: string, width: u32, height: u32): NishGfxWindow | null
+/**
+ * Release a window. Release a surface made on the window first: it reads the
+ * window's size.
+ *
+ * @param window the window to release
+ */
+export declare function nishgfx_window_release(window: NishGfxWindow): void
+/**
+ * Move every pending SDL event into the window's ring. Events past the ring's
+ * size are dropped and counted.
+ *
+ * @param window the window whose ring is filled
+ * @returns how many events were queued
+ */
+export declare function nishgfx_events_poll(window: NishGfxWindow): u32
+/**
+ * Take the oldest queued event.
+ *
+ * @param window the window whose ring is drained
+ * @param out where the event is written
+ * @returns the event's kind, a NISHGFX_EVENT_* value, or 0 when the ring is empty
+ */
 declare function nishgfx_event_next(window: NishGfxWindow, out: NishGfxEvent): u32
-declare function nishgfx_events_dropped(window: NishGfxWindow): u32
-declare function nishgfx_surface_create(instance: NishGfxInstance, window: NishGfxWindow): NishGfxSurface | null
-declare function nishgfx_surface_release(surface: NishGfxSurface): void
-declare function nishgfx_surface_configure(surface: NishGfxSurface, adapter: NishGfxAdapter, device: NishGfxDevice, width: u32, height: u32, vsync: u32): i32
-declare function nishgfx_surface_format(surface: NishGfxSurface): u32
-declare function nishgfx_surface_acquire(surface: NishGfxSurface): NishGfxView | null
-declare function nishgfx_surface_present(surface: NishGfxSurface): void
-declare function nishgfx_adapter_request(instance: NishGfxInstance, surface: NishGfxSurface | null, power: u32): NishGfxAdapter | null
-declare function nishgfx_adapter_release(adapter: NishGfxAdapter): void
-declare function nishgfx_device_request(instance: NishGfxInstance, adapter: NishGfxAdapter): NishGfxDevice | null
-declare function nishgfx_device_release(device: NishGfxDevice): void
-declare function nishgfx_error_next(device: NishGfxDevice, msg: u8[], cap: u64): i32
-declare function nishgfx_errors_dropped(device: NishGfxDevice): u32
+/**
+ * How many events found the window's ring full and were dropped.
+ *
+ * @param window the window to ask
+ * @returns the count since the window was made, or 0 for a null window
+ */
+export declare function nishgfx_events_dropped(window: NishGfxWindow): u32
+/**
+ * A surface on the window, through Metal, Wayland or X11 as SDL's current
+ * video driver says.
+ *
+ * @param instance the instance the surface is made from
+ * @param window the window it presents into
+ * @returns the surface, or null (and an instance error is queued) on any
+ * other video driver or failure
+ */
+export declare function nishgfx_surface_create(instance: NishGfxInstance, window: NishGfxWindow): NishGfxSurface | null
+/**
+ * Release a surface.
+ *
+ * @param surface the surface to release
+ */
+export declare function nishgfx_surface_release(surface: NishGfxSurface): void
+/**
+ * Configure a surface for width x height. vsync != 0 is Fifo; otherwise
+ * Mailbox, then Immediate, then Fifo, whichever the surface offers first.
+ *
+ * @param surface the surface to configure
+ * @param adapter the adapter the device came from
+ * @param device the device that draws into the surface
+ * @param width the width in pixels
+ * @param height the height in pixels
+ * @param vsync nonzero to wait for the display
+ * @returns 0, or -1 (and a device error is queued) for a 0 side or a surface
+ * with no format
+ */
+export declare function nishgfx_surface_configure(surface: NishGfxSurface, adapter: NishGfxAdapter, device: NishGfxDevice, width: u32, height: u32, vsync: u32): i32
+/**
+ * The texture format nishgfx_surface_configure() picked.
+ *
+ * @param surface the surface to ask
+ * @returns a WGPUTextureFormat, or 0 for a null surface
+ */
+export declare function nishgfx_surface_format(surface: NishGfxSurface): u32
+/**
+ * The next frame's view, which lives until nishgfx_surface_present().
+ *
+ * @param surface the configured surface
+ * @returns the view, or null to skip this frame: an outdated, lost or
+ * timed-out surface is reconfigured at the window's pixel size, or left
+ * until a frame where that size is above 0; any other failure queues a
+ * device error
+ */
+export declare function nishgfx_surface_acquire(surface: NishGfxSurface): NishGfxView | null
+/**
+ * Present the frame nishgfx_surface_acquire() answered.
+ *
+ * @param surface the surface to present
+ */
+export declare function nishgfx_surface_present(surface: NishGfxSurface): void
+/**
+ * Request an adapter.
+ *
+ * @param instance the instance to request it from
+ * @param surface a surface the adapter must be able to present to, or null
+ * @param power a WGPUPowerPreference
+ * @returns the adapter, or null (and an instance error is queued) on failure
+ */
+export declare function nishgfx_adapter_request(instance: NishGfxInstance, surface: NishGfxSurface | null, power: u32): NishGfxAdapter | null
+/**
+ * Release an adapter.
+ *
+ * @param adapter the adapter to release
+ */
+export declare function nishgfx_adapter_release(adapter: NishGfxAdapter): void
+/**
+ * Request a device with default limits. Its device-lost and uncaptured-error
+ * reports go to its ring.
+ *
+ * @param instance the instance the adapter came from
+ * @param adapter the adapter to request it from
+ * @returns the device, or null (and an instance error is queued) on failure
+ */
+export declare function nishgfx_device_request(instance: NishGfxInstance, adapter: NishGfxAdapter): NishGfxDevice | null
+/**
+ * Release a device. Release every buffer, shader, pipeline, bind group,
+ * offscreen target and surface made from the device first: one used after
+ * this can report an error into the freed device.
+ *
+ * @param device the device to release
+ */
+export declare function nishgfx_device_release(device: NishGfxDevice): void
+/**
+ * Drain one queued device error into msg, NUL-terminated and cut to cap - 1
+ * bytes.
+ *
+ * @param device the device whose ring is drained
+ * @param msg the buffer the message is copied into
+ * @param cap the bytes msg holds
+ * @returns the error's kind, a NISHGFX_ERROR_* value, or 0 when the ring is empty
+ */
+export declare function nishgfx_error_next(device: NishGfxDevice, msg: u8[], cap: u64): i32
+/**
+ * How many reports found the device's ring full.
+ *
+ * @param device the device to ask
+ * @returns the count since the device was made
+ */
+export declare function nishgfx_errors_dropped(device: NishGfxDevice): u32
+/**
+ * Create a buffer.
+ *
+ * @param device the device it lives on
+ * @param desc its size, usage and whether it starts mapped
+ * @param label a debug label, or null
+ * @returns the buffer, or null when wgpu-native answers none
+ */
 declare function nishgfx_buffer_create(device: NishGfxDevice, desc: NishGfxBufferDesc, label: string | null): NishGfxBuffer | null
-declare function nishgfx_buffer_release(buffer: NishGfxBuffer): void
-declare function nishgfx_queue_write(device: NishGfxDevice, buffer: NishGfxBuffer, offset: u64, data: readonly u8[], len: u64): void
-declare function nishgfx_shader_create(device: NishGfxDevice, wgsl: string): NishGfxShader | null
-declare function nishgfx_shader_release(shader: NishGfxShader): void
-declare function nishgfx_pipeline_desc_new(shader: NishGfxShader, vs_entry: string, fs_entry: string, color_format: u32, stride: u64): NishGfxPipelineDesc | null
-declare function nishgfx_pipeline_desc_attribute(desc: NishGfxPipelineDesc, format: u32, offset: u64, location: u32): i32
-declare function nishgfx_pipeline_create(device: NishGfxDevice, desc: NishGfxPipelineDesc): NishGfxPipeline | null
-declare function nishgfx_pipeline_release(pipeline: NishGfxPipeline): void
-declare function nishgfx_bind_group_desc_new(pipeline: NishGfxPipeline, index: u32): NishGfxBindGroupDesc | null
-declare function nishgfx_bind_group_desc_buffer(desc: NishGfxBindGroupDesc, binding: u32, buffer: NishGfxBuffer, offset: u64, size: u64): i32
-declare function nishgfx_bind_group_create(device: NishGfxDevice, desc: NishGfxBindGroupDesc): NishGfxBindGroup | null
-declare function nishgfx_bind_group_release(group: NishGfxBindGroup): void
-declare function nishgfx_encoder_create(device: NishGfxDevice): NishGfxEncoder | null
-declare function nishgfx_encoder_submit(device: NishGfxDevice, encoder: NishGfxEncoder): void
-declare function nishgfx_pass_begin(encoder: NishGfxEncoder, view: NishGfxView, load: u32, r: f64, g: f64, b: f64, a: f64): NishGfxPass | null
-declare function nishgfx_pass_set_pipeline(pass: NishGfxPass, pipeline: NishGfxPipeline): void
-declare function nishgfx_pass_set_bind_group(pass: NishGfxPass, index: u32, group: NishGfxBindGroup | null): void
-declare function nishgfx_pass_set_vertex_buffer(pass: NishGfxPass, slot: u32, buffer: NishGfxBuffer | null, offset: u64, size: u64): void
-declare function nishgfx_pass_draw(pass: NishGfxPass, vertices: u32, instances: u32, first_vertex: u32, first_instance: u32): void
-declare function nishgfx_pass_end(pass: NishGfxPass): void
-declare function nishgfx_offscreen_create(device: NishGfxDevice, width: u32, height: u32): NishGfxOffscreen | null
-declare function nishgfx_offscreen_release(offscreen: NishGfxOffscreen): void
-declare function nishgfx_offscreen_view(offscreen: NishGfxOffscreen): NishGfxView | null
-declare function nishgfx_offscreen_read(offscreen: NishGfxOffscreen, dst: u8[], cap: u64): i32
+/**
+ * Release a buffer.
+ *
+ * @param buffer the buffer to release
+ */
+export declare function nishgfx_buffer_release(buffer: NishGfxBuffer): void
+/**
+ * Copy len bytes of data into buffer at offset, on the device's queue.
+ *
+ * @param device the device whose queue writes
+ * @param buffer the buffer written
+ * @param offset the byte offset into buffer
+ * @param data the bytes to copy
+ * @param len how many bytes of data to copy
+ */
+export declare function nishgfx_queue_write(device: NishGfxDevice, buffer: NishGfxBuffer, offset: u64, data: readonly u8[], len: u64): void
+/**
+ * A shader module from WGSL. A compile error is queued on the device; the
+ * module answered is then invalid but safe to pass on.
+ *
+ * @param device the device it lives on
+ * @param wgsl the shader's source, NUL-terminated
+ * @returns the module, or null when wgpu-native answers none
+ */
+export declare function nishgfx_shader_create(device: NishGfxDevice, wgsl: string): NishGfxShader | null
+/**
+ * Release a shader module.
+ *
+ * @param shader the module to release
+ */
+export declare function nishgfx_shader_release(shader: NishGfxShader): void
+/**
+ * A render pipeline builder: one vertex buffer of `stride` bytes (0 for no
+ * vertex buffer), one color target of `color_format`, triangle list.
+ *
+ * @param shader the module both stages come from
+ * @param vs_entry the vertex stage's entry point, NUL-terminated
+ * @param fs_entry the fragment stage's entry point, NUL-terminated
+ * @param color_format the color target's WGPUTextureFormat
+ * @param stride the vertex buffer's stride in bytes, or 0 for none
+ * @returns the builder, or null when memory runs out
+ */
+export declare function nishgfx_pipeline_desc_new(shader: NishGfxShader, vs_entry: string, fs_entry: string, color_format: u32, stride: u64): NishGfxPipelineDesc | null
+/**
+ * Add a vertex attribute to a pipeline builder.
+ *
+ * @param desc the builder
+ * @param format the attribute's WGPUVertexFormat
+ * @param offset its byte offset in a vertex
+ * @param location its shader location
+ * @returns 0, or -1 once the builder holds 16
+ */
+export declare function nishgfx_pipeline_desc_attribute(desc: NishGfxPipelineDesc, format: u32, offset: u64, location: u32): i32
+/**
+ * Build the pipeline and free the builder, either way.
+ *
+ * @param device the device it lives on
+ * @param desc the builder, freed by this call
+ * @returns the pipeline, or null when it cannot be built
+ */
+export declare function nishgfx_pipeline_create(device: NishGfxDevice, desc: NishGfxPipelineDesc): NishGfxPipeline | null
+/**
+ * Release a pipeline.
+ *
+ * @param pipeline the pipeline to release
+ */
+export declare function nishgfx_pipeline_release(pipeline: NishGfxPipeline): void
+/**
+ * A bind group builder for group `index` of the pipeline's layout.
+ *
+ * @param pipeline the pipeline whose layout the group follows
+ * @param index the group's index in that layout
+ * @returns the builder, or null when memory runs out
+ */
+export declare function nishgfx_bind_group_desc_new(pipeline: NishGfxPipeline, index: u32): NishGfxBindGroupDesc | null
+/**
+ * Bind size bytes of buffer at offset to `binding`; size 0 binds the rest of
+ * the buffer from offset.
+ *
+ * @param desc the builder
+ * @param binding the binding number
+ * @param buffer the buffer bound
+ * @param offset the byte offset into buffer
+ * @param size the bytes bound, or 0 for the rest of the buffer
+ * @returns 0, or -1 once the builder holds 16
+ */
+export declare function nishgfx_bind_group_desc_buffer(desc: NishGfxBindGroupDesc, binding: u32, buffer: NishGfxBuffer, offset: u64, size: u64): i32
+/**
+ * Build the bind group and free the builder, either way.
+ *
+ * @param device the device it lives on
+ * @param desc the builder, freed by this call
+ * @returns the bind group, or null when it cannot be built
+ */
+export declare function nishgfx_bind_group_create(device: NishGfxDevice, desc: NishGfxBindGroupDesc): NishGfxBindGroup | null
+/**
+ * Release a bind group.
+ *
+ * @param group the bind group to release
+ */
+export declare function nishgfx_bind_group_release(group: NishGfxBindGroup): void
+/**
+ * A command encoder on the device.
+ *
+ * @param device the device whose commands it records
+ * @returns the encoder, or null when wgpu-native or memory answers none
+ */
+export declare function nishgfx_encoder_create(device: NishGfxDevice): NishGfxEncoder | null
+/**
+ * Finish the encoder, submit it on the device's queue, and free it.
+ *
+ * @param device the device whose queue runs it
+ * @param encoder the encoder, freed by this call
+ */
+export declare function nishgfx_encoder_submit(device: NishGfxDevice, encoder: NishGfxEncoder): void
+/**
+ * A render pass on one color view. load != 0 keeps the view's contents;
+ * otherwise it is cleared to (r, g, b, a).
+ *
+ * @param encoder the encoder that records it
+ * @param view the color view it draws into
+ * @param load nonzero to keep the view's contents
+ * @param r the clear color's red, 0 to 1
+ * @param g the clear color's green, 0 to 1
+ * @param b the clear color's blue, 0 to 1
+ * @param a the clear color's alpha, 0 to 1
+ * @returns the pass, or null for a null encoder or view or when it cannot begin
+ */
+export declare function nishgfx_pass_begin(encoder: NishGfxEncoder, view: NishGfxView, load: u32, r: f64, g: f64, b: f64, a: f64): NishGfxPass | null
+/**
+ * Set the pass's pipeline.
+ *
+ * @param pass the pass
+ * @param pipeline the pipeline the next draws use
+ */
+export declare function nishgfx_pass_set_pipeline(pass: NishGfxPass, pipeline: NishGfxPipeline): void
+/**
+ * Set a bind group of the pass.
+ *
+ * @param pass the pass
+ * @param index the group's index in the pipeline's layout
+ * @param group the bind group, or null
+ */
+export declare function nishgfx_pass_set_bind_group(pass: NishGfxPass, index: u32, group: NishGfxBindGroup | null): void
+/**
+ * Set a vertex buffer of the pass. size 0 binds the rest of the buffer from
+ * offset.
+ *
+ * @param pass the pass
+ * @param slot the vertex buffer slot
+ * @param buffer the buffer, or null
+ * @param offset the byte offset into buffer
+ * @param size the bytes bound, or 0 for the rest of the buffer
+ */
+export declare function nishgfx_pass_set_vertex_buffer(pass: NishGfxPass, slot: u32, buffer: NishGfxBuffer | null, offset: u64, size: u64): void
+/**
+ * Draw vertices with the pass's pipeline.
+ *
+ * @param pass the pass
+ * @param vertices how many vertices to draw
+ * @param instances how many instances to draw
+ * @param first_vertex the first vertex's index
+ * @param first_instance the first instance's index
+ */
+export declare function nishgfx_pass_draw(pass: NishGfxPass, vertices: u32, instances: u32, first_vertex: u32, first_instance: u32): void
+/**
+ * End the pass and free it.
+ *
+ * @param pass the pass, freed by this call
+ */
+export declare function nishgfx_pass_end(pass: NishGfxPass): void
+/**
+ * A width x height RGBA8Unorm render target with readback; needs no window
+ * and initialises no SDL video.
+ *
+ * @param device the device it lives on
+ * @param width the width in pixels, 1 to 16384
+ * @param height the height in pixels, 1 to 16384
+ * @returns the target, or null for a side outside 1 to 16384 or when the
+ * device answers none
+ */
+export declare function nishgfx_offscreen_create(device: NishGfxDevice, width: u32, height: u32): NishGfxOffscreen | null
+/**
+ * Release an offscreen target.
+ *
+ * @param offscreen the target to release
+ */
+export declare function nishgfx_offscreen_release(offscreen: NishGfxOffscreen): void
+/**
+ * The target's view, valid until the offscreen is released.
+ *
+ * @param offscreen the target
+ * @returns the view, or null for a null target
+ */
+export declare function nishgfx_offscreen_view(offscreen: NishGfxOffscreen): NishGfxView | null
+/**
+ * Copy the target's pixels, width * 4 bytes per row, top row first, into dst.
+ *
+ * @param offscreen the target to read
+ * @param dst the buffer the pixels are copied into
+ * @param cap the bytes dst holds
+ * @returns 0; -1 when cap < width * height * 4 (dst untouched); -2 when the
+ * map fails (an error is queued on the device)
+ */
+export declare function nishgfx_offscreen_read(offscreen: NishGfxOffscreen, dst: u8[], cap: u64): i32
 
 /* Not bound:
  *   NISH_GFX_H: an empty macro
