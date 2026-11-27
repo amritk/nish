@@ -54,7 +54,8 @@ Every figure here is from one box:
 
 - Intel Xeon Processor @ 2.10GHz (the CPU model the VM exposes), 4 vCPUs
 - a cloud VM (the CPU reports a hypervisor; `systemd-detect-virt` sees only
-  the container it runs in, and `--vm` prints `kvm`), kernel 6.18.44
+  the container it runs in; with `--vm` it prints `kvm`, which
+  `bench/syscall-cost/run.sh` records), kernel 6.18.44
 - vulnerabilities: every one "Not affected" except
   `spec_store_bypass` (prctl), `spectre_v1` (usercopy/swapgs barriers),
   `spectre_v2` (Enhanced IBRS, IBPB conditional, BHI vulnerable)
@@ -192,7 +193,7 @@ Line numbers are for v6.8 and v6.18 (`net/ipv4/` unless named).
 | `ip route ... quickack 1` | quick ACKs for a route, every socket on it | none in the process | measured below: the opposite direction, a pure ACK for every request; needs root and affects other programs |
 | `TCP_CONGESTION` | the congestion control, not the ACK policy | one call per connection | no lever on delayed ACKs |
 | sysctl `net.ipv4.tcp_pingpong_thresh` | how many quick sends enter pingpong | none in the process | measured below: system-wide; the default 1 is the lowest the kernel takes (a write of 0 gets `EINVAL`, and 3 doubles the slow client's ACKs), and no sysctl sets the delayed-ACK timeout (`tcp_comp_sack_*` batch SACKs, not ACKs) |
-| BPF sockops `TCP_BPF_DELACK_MAX` (`filter.c:5225-5230` / `5379-5384`) | the longest delayed-ACK timeout | none in the process | measured below: needs a loaded BPF program and `CAP_BPF`; it changes no ACK count here, and `bpf_setsockopt` refuses `TCP_QUICKACK` with `EINVAL` |
+| BPF sockops `TCP_BPF_DELACK_MAX` (`filter.c:5225-5230` / `5379-5384`) | the longest delayed-ACK timeout | none in the process | measured below: needs a loaded BPF program and `CAP_BPF`; it moves no segment count here, and `bpf_setsockopt` returned `EINVAL` for `TCP_QUICKACK` |
 | `TCP_DELACK_MAX_US` (6.18 only, `tcp.c:3910-3925`) | the longest delayed-ACK timeout, per socket | one call per connection | not on 6.8; tunes the timer, not whether ACKs wait |
 | `TCP_INFO` to skip the reset | reads `tcpi_ato` only (`tcp.c:3824` / `4237`); no pingpong bit | one getsockopt per request | cannot tell, and costs more than the call it skips |
 
@@ -232,25 +233,28 @@ noise band is each session's spread, and req/s compares only within a row):
   kernel scope host src 127.0.0.1 quickack 1`, which the kernel took) turns
   delayed ACKs off for every socket on it: a pure ACK for every request in
   every pattern, with or without `reset0`, and twice the segments per request
-  under load, 4.002 against 2.003 (the counter takes in both ends, and wrk's
-  end, on the same route, acks each response too).
+  under load, 4.002 against 2.003 (the counter takes in both ends, so wrk's
+  end, on the same route, likely acks each response too).
   It is `reset1` for the whole host, the opposite of what the reset asks for.
 - **The sysctl.** The kernel refuses the write of 0 to
   `net.ipv4.tcp_pingpong_thresh` with `EINVAL`, so the default 1 is the
   lowest it takes. At 3, `none` sends twice the slow client's ACKs (0.400
-  against 0.200) and three times the fast and idle ones (0.015 against
-  0.005); `reset0` is unchanged. Under load the segments per request do not
-  move (2.004 against 2.003). It can only make delayed ACKs start later.
+  against 0.200, 60 requests met out of delayed-ACK mode against 20 of 200);
+  the fast and idle ones, 3 of 200 against 1, are within noise. `reset0` is
+  unchanged. Under load the segments per request do not move (2.004 against
+  2.003). Raised, it makes delayed ACKs start later; it cannot go lower.
 - **BPF sockops, `TCP_BPF_DELACK_MAX` 8000 µs.** The kernel loaded and
-  attached the program, and `bpf_setsockopt` returned 0 on both ends of every
-  connection (6 calls each on the probe's connections, 7,170 each under
-  load). No ACK count moved: the probe table is the baseline's, and under
-  load 2.003 segments per request with 0.0002 timer ACKs per request. It caps
-  how long an ACK may wait; it does not choose whether it waits.
+  attached the program, and it ran on both ends of each connection (6 calls
+  each on the probe's connections, 7,170 each under load); the last call on
+  each end returned 0 (`sockops.c` keeps the last return value only). The
+  probe table is the baseline's, and under load the segments per request do
+  not move (2.003); the timer's ACKs go from 0.0000 to 0.0002 a request. Per
+  the kernel source (the table above), the option caps how long an ACK may
+  wait; it does not choose whether it waits.
 - **BPF sockops, `TCP_QUICKACK` 0.** The verifier accepted the program and the
-  helper ran on both ends (3 calls each), but it returned `EINVAL` (Invalid
-  argument) every time: this kernel does not let a sockops program set the
-  option. The probe table is the baseline's.
+  helper ran on both ends (3 calls each), and the last call on each end
+  returned `EINVAL` (Invalid argument): this kernel did not let the sockops
+  program set the option. The probe table is the baseline's.
 
 None of the three does what the per-response `reset0` does, so
 `netSetOption(conn, NET_TCP_QUICKACK, 0)` after each response stays where an

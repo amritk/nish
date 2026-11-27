@@ -1332,7 +1332,7 @@ server on CPU 0 and `wrk -t3` on CPUs 1 to 3; (a) is syscalls a request ×
 The copy's distance from `h1` (+0.7% to +3.6% in req/s, 0.05 to 0.47 µs in
 system time) reaches past all of (a) on post-json and is about half of it or less on
 the other two: taking every entry and exit away would move the system
-time by 3% to 4%.
+time by about 3% to 4%.
 
 **The split for the reported workload, an estimate for another box.** That
 workload ran on a Xeon Platinum 8260 VM on Linux 6.8, not here: 4 prefork
