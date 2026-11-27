@@ -21,6 +21,8 @@
  * - `base64EncodeInto(src, off, len, dst, at)` writes the encoding of
  *   `src[off..off+len)` into `dst` from `at` and allocates nothing, so a frame
  *   can be encoded chunk by chunk straight into its output buffer.
+ * - `base64EncodeIfFits(src, off, len, dst, at)` is the same write, answering
+ *   -1 with nothing written where `base64EncodeInto` panics on its range.
  * - `base64Encode(bytes)` is the whole array as a string.
  *
  * **This module only encodes**: what it is for writes base64 and never reads it

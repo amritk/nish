@@ -607,7 +607,7 @@ export class RateController {
       return false
     }
     if (this.unacked() >= this.maxUnacked || this.stale > 0) {
-      // Stops at 2^31 - 1, a count no session reaches at any frame rate.
+      // Stops at 2^31 - 1, about 103 days of refused frames at 240 a second.
       const dropped: i32 = this.dropped
       this.dropped = dropped < 2147483647 ? dropped + 1 : dropped
       return false
