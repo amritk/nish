@@ -333,8 +333,6 @@ export class SpscRing {
   private base: i32
   /** Data bytes, a power of two. */
   capacity: i32
-  /** Whether a push rings the consumer's doorbell. */
-  private doorbell: boolean
   /** The producer's position: bytes ever pushed (this object's, as a producer). */
   private tail: i64
   /** The consumer's position: bytes ever popped (this object's, as a consumer). */
@@ -373,6 +371,8 @@ export class SpscRing {
   private tailAt: i32 = 0
   /** The consumer's position's offset in the region. */
   private headAt: i32 = 0
+  /** Whether a push rings the consumer's doorbell. */
+  private doorbell: boolean
 
   /**
    * Reads the header of the ring at `base`: its capacity and doorbell, and

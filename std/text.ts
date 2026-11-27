@@ -621,7 +621,7 @@ export const replaceAll = (text: string, needle: string, replacement: string): s
     // A hit is a whole `needle` inside `rest`, so its end is never `-1`; the
     // test is what keeps the cut inside `rest`.
     const after: i32 = textSpanEnd(toI32(rest.length), at, needleLength)
-    if (after < 0) {
+    if (after < 0 || after > toI32(rest.length)) {
       return parts.join(replacement)
     }
     rest = rest.substring(after, toI32(rest.length))
