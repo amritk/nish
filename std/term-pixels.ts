@@ -804,7 +804,8 @@ const pixelsStringEnd = (out: PixelBytes): void => {
  *
  * `imageId` is 1 to 2^31 - 1, since 0 is the protocol's "no id"; anything
  * else panics. So does a framebuffer whose `pixels` does not hold
- * `width × height`. An empty framebuffer or rect writes nothing.
+ * `width × height`. An empty framebuffer or rect writes nothing. A frame that
+ * would grow `out` past 2^31 - 1 bytes stops where it is and sets `out.full`.
  *
  * @param fb The frame's pixels, at its own size.
  * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_KITTY`.

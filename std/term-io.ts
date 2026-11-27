@@ -853,6 +853,8 @@ export class Terminal {
       this.backend = backend
     }
     let withPixels: boolean = false
+    // A frame past what one buffer holds is not sent: the last one stays, and so does `pixelsShown`.
+    let skipped: boolean = false
     const fb: Framebuffer = this.framebuffer
     if (fb.width > 0) {
       this.fit(backend)
@@ -864,12 +866,13 @@ export class Terminal {
       if (backend === GRAPHICS_KITTY) {
         this.pixels.reset()
         kittyFrame(src, this.rect, TERM_IO_IMAGE_ID, this.pixels)
-        // A frame past what one buffer holds is not sent: the last one stays.
-        withPixels = !this.pixels.full
+        skipped = this.pixels.full
+        withPixels = !skipped
       } else if (backend === GRAPHICS_SIXEL) {
         this.pixels.reset()
         sixelFrame(src, this.rect, true, this.pixels)
-        withPixels = !this.pixels.full
+        skipped = this.pixels.full
+        withPixels = !skipped
       } else if (backend === GRAPHICS_HALFBLOCK) {
         drawHalfBlocks(src, this.canvas, this.rect)
       } else {
@@ -882,7 +885,9 @@ export class Terminal {
       }
       this.screen.invalidate()
     }
-    this.pixelsShown = withPixels
+    if (!skipped) {
+      this.pixelsShown = withPixels
+    }
     if (this.options.overlay >= 0) {
       drawStatsOverlay(this.screen, this.stats(), this.options.overlay)
     }

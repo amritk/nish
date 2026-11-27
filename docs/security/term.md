@@ -204,14 +204,20 @@ the stage changed in them, not an audit.
 | Change | What a caller sees | Evidence |
 | --- | --- | --- |
 | `tryFramebuffer(width, height)` and `Framebuffer.tryResize(width, height)` | an `Err` naming the problem for a negative side or more than 2^31 - 1 pixels, where the constructor and `resize` panic; a refused `tryResize` leaves the framebuffer's size and pixels as they were | "link/std_term_pixels_try: exits with 0 and stdout matches expected.out": -1 × 2, 2 × -1 and 65536 × 65536 through `tryFramebuffer`, -3 × 1 and 46341 × 46341 through `tryResize` |
-| `base64EncodeIfFits(src, off, len, dst, at)` | -1, with nothing written, for each range `base64EncodeInto` panics on; `kittyFrame` encodes through it and marks its `PixelBytes` `full` on -1 | "link/std_base64_if_fits: exits with 0 and stdout matches expected.out": a negative `off`, `len` and `at`, a source range past the array, and an encoding one byte too long |
-| `PixelBytes.full` | a frame that would grow the buffer past 2^31 - 1 bytes is cut short and marked `full`, and `Terminal` does not send it, where `reserve` panicked | untested: see **Open** |
+| `base64EncodeIfFits(src, off, len, dst, at)` | -1, with nothing written, for each range `base64EncodeInto` panics on | "link/std_base64_if_fits: exits with 0 and stdout matches expected.out": a negative `off`, `len` and `at`, a source range past the array, and an encoding one byte too long |
 
 **Open: untested bounds.** Read from the code, and pinned by no check that
 fails without them:
 - `PixelBytes.reserve` marks the buffer `full` rather than grow it past
-  2^31 - 1 bytes, and `sixelFrame` does the same for a frame whose working
-  arrays would pass that; no test builds a frame that large.
+  2^31 - 1 bytes, where it panicked, and `sixelFrame` does the same for a
+  frame whose working arrays would pass that; no test builds a frame that
+  large.
+- `kittyFrame` encodes through `base64EncodeIfFits` and marks its
+  `PixelBytes` `full` when that answers -1, which only a `reserve` that could
+  not grow the buffer leads to; no test reaches that branch.
+- `Terminal` does not send a frame marked `full`, so the last frame sent stays
+  on screen and is still taken off when the framebuffer is later emptied; no
+  test builds a frame that large.
 - `RateController`'s `dropped`, `lost` and `stale` counters stop at 2^31 - 1
   rather than overflow: at 240 frames a second a count reaches it after about
   103 days.
