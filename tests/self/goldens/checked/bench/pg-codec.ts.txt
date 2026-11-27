@@ -5495,7 +5495,6 @@ const URL_AT: i32 = 64
 const URL_OPEN_BRACKET: i32 = 91
 const URL_CLOSE_BRACKET: i32 = 93
 const URL_BACKSLASH: i32 = 92
-const URL_MAX_PORT: i32 = 65535
 struct UrlPathSegments (class) size=32 align=8 exported
   field bytes: u8[] index=0 offset=0
   field start: i32 index=1 offset=8 initialized
@@ -5896,9 +5895,10 @@ function urlPortOf(bytes: u8[], a: i32, b: i32): i32 -> @nish.urlPortOf
   escaping: a
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:7 port: i32 (let)
+  local +0:7 port: integer<0, 65535> (let)
   local +1:7 i: i32 (let)
   local +3:11 c: i32 (const)
+  local +8:11 next: i32 (const)
 function urlIsHostPort(bytes: u8[], a: i32, b: i32): boolean -> @nish.urlIsHostPort [exported]
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
