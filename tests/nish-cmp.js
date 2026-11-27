@@ -12109,17 +12109,44 @@ const RSA_PSS_SERVER_DECLARED = [
     ["tests/link/net_http_server_h1_tls_slots/main.ts", "http2-tls.ll tls.ll"],
     ["tests/link/net_http_server_h1_tls_twice/main.ts", "http2-tls.ll tls.ll"],
     ["tests/link/net_http_server_h1_tls_wait/main.ts", "http2-tls.ll tls.ll"],
-    ["tests/link/net_http_server_h2c_default_refused/main.ts", "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll"],
+    [
+      "tests/link/net_http_server_h2c_default_refused/main.ts",
+      "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll",
+    ],
     ["tests/link/net_http_server_h2c_preface/main.ts", "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll"],
-    ["tests/link/net_http_server_h2c_preface_drain/main.ts", "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll"],
-    ["tests/link/net_http_server_h2c_preface_ended/main.ts", "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll"],
-    ["tests/link/net_http_server_h2c_preface_full/main.ts", "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll"],
-    ["tests/link/net_http_server_h2c_preface_h1/main.ts", "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll"],
-    ["tests/link/net_http_server_h2c_preface_late/main.ts", "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll"],
-    ["tests/link/net_http_server_h2c_preface_partial/main.ts", "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll"],
-    ["tests/link/net_http_server_h2c_preface_pri/main.ts", "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll"],
+    [
+      "tests/link/net_http_server_h2c_preface_drain/main.ts",
+      "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll",
+    ],
+    [
+      "tests/link/net_http_server_h2c_preface_ended/main.ts",
+      "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll",
+    ],
+    [
+      "tests/link/net_http_server_h2c_preface_full/main.ts",
+      "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll",
+    ],
+    [
+      "tests/link/net_http_server_h2c_preface_h1/main.ts",
+      "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll",
+    ],
+    [
+      "tests/link/net_http_server_h2c_preface_late/main.ts",
+      "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll",
+    ],
+    [
+      "tests/link/net_http_server_h2c_preface_partial/main.ts",
+      "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll",
+    ],
+    [
+      "tests/link/net_http_server_h2c_preface_pri/main.ts",
+      "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll",
+    ],
     ["tests/link/net_http_server_h2c_preface_release/main.ts", "main.h tls.ll"],
-    ["tests/link/net_http_server_h2c_preface_silent/main.ts", "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll"],
+    [
+      "tests/link/net_http_server_h2c_preface_silent/main.ts",
+      "http2-tls.ll main.h main.ll rig.ll taken.ll tls.ll",
+    ],
   ].flatMap(([program, files]) =>
     files.split(" ").map((file) => ({
       program,
