@@ -227,7 +227,7 @@ const diagnosticRules = (): string[] => [
   "NL2733",
   "--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native",
   "NL4018",
-  "` = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there: any other write would drop a handle the object owns or own one twice",
+  " = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there: any other write would drop a handle the object owns or own one twice",
   "NL2825",
   ", and the array is older than the block: a `push` moves the array's storage into the arena, which the block releases when it ends (push only onto a `const` the block binds to a fresh array)",
   "NL2422",

@@ -461,7 +461,10 @@ const checkDispose = (
   // after the loop so that no pass keeps what its message allocates.
   let bad = -1
   for (let i = 0; i < steps.length; i++) {
-    if (closeStepFinding(program, table, info, steps[i], natives[natives.length - 1 - i]) !== null && bad < 0) {
+    if (
+      closeStepFinding(program, table, info, steps[i], natives[natives.length - 1 - i]) !== null &&
+      bad < 0
+    ) {
       bad = i
     }
   }
