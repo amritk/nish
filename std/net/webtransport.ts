@@ -1166,7 +1166,8 @@ export class WebTransport {
    * the stream is dropped unread, so no event will end the session later.
    */
   private finish(id: i64): boolean {
-    if (this.h3.writeData(id, this.capsuleOut, WT_ZERO, WT_ZERO, true) >= 0) {
+    const out: u8[] = this.capsuleOut
+    if (this.h3.writeData(id, out, 0, 0, true) >= 0) {
       return true
     }
     this.h3.reset(id, H3_NO_ERROR)
@@ -1431,7 +1432,11 @@ export class WebTransport {
     if (p < 0 || !tryCopyBytes(out, p, head, WT_ZERO, 4) || !tryCopyBytes(out, at, buf, off, len)) {
       return H3_TOO_LARGE
     }
-    const result: i32 = this.h3.writeDataWhole(id, out, WT_ZERO, wtAdd(at, len), true)
+    const stop: i32 = wtAdd(at, len)
+    if (stop < 0 || stop > toI32(out.length)) {
+      return H3_TOO_LARGE // never: both copies above fit inside `out`
+    }
+    const result: i32 = this.h3.writeDataWhole(id, out, 0, stop, true)
     if (result !== 0) {
       return result
     }
@@ -1454,7 +1459,10 @@ export class WebTransport {
     const out: u8[] = this.capsuleOut
     const end: i32 = toI32(out.length)
     const p: i32 = h3PutFrameHeader(out, WT_ZERO, end, WT_CAPSULE_DRAIN, toI64(0))
-    return this.h3.writeDataWhole(id, out, WT_ZERO, p, false)
+    if (p < 0 || p > toI32(out.length)) {
+      return H3_TOO_LARGE // never: the capsule buffer holds a DRAIN capsule's 2-byte header
+    }
+    return this.h3.writeDataWhole(id, out, 0, p, false)
   }
 
   /** Stamps the session of stream `t` as active now. */
@@ -1551,7 +1559,8 @@ export class WebTransport {
       this.answer(id, WT_STATUS_UNANSWERED)
       this.release(w)
     } else if (state === WT_OPEN) {
-      if (this.close(id, WT_ZERO64, this.capsuleOut, WT_ZERO, WT_ZERO) !== 0) {
+      const none: u8[] = this.capsuleOut
+      if (this.close(id, WT_ZERO64, none, 0, 0) !== 0) {
         // No room for the capsule: reset the CONNECT stream both ways, after which no event ends the session.
         this.h3.reset(id, H3_NO_ERROR)
         this.release(w)
@@ -1603,7 +1612,11 @@ export class WebTransport {
         head[have] = bytes[at]
         this.capAt = wtAdd(at, 1)
         w.capHeadLen = have + 1
-        if (h3ReadFrameHeader(this.header, head, WT_ZERO, have + 1) === 0) {
+        const filled: i32 = have + 1
+        if (filled > toI32(head.length)) {
+          return this.malformed(w, H3_DATAGRAM_ERROR) // never: `have` was below `head.length`
+        }
+        if (this.header.read(head, 0, filled) === 0) {
           continue
         }
         w.capHeadLen = 0
@@ -1861,12 +1874,14 @@ export class WebTransport {
    *   side here to write.
    */
   write(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
+    h3CheckWindow("WebTransport.write", buf, off, len)
+    const end: i32 = wtAdd(off, len)
     this.current()
     const t: WebTransportStream | null = this.streamOf(id)
-    if (t === null) {
+    if (t === null || off < 0 || end < off || end > toI32(buf.length)) {
       return H3_CLOSED
     }
-    const n: i32 = this.h3.writeStream(id, buf, off, len, fin)
+    const n: i32 = this.h3.writeStream(id, buf, off, end - off, fin)
     if (n >= 0) {
       this.touch(t)
     }

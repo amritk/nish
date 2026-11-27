@@ -194,6 +194,33 @@ export class Http3FrameHeader {
   type: i64 = 0
   /** The payload's length in bytes, 0 to 2^62 - 1, set with `type`; the payload itself is not read here. */
   length: i64 = 0
+
+  /**
+   * Reads a frame header from `buf[off, off + len)` into this one, as `h3ReadFrameHeader` does. Its first
+   * statement hands the window to `h3CheckWindow`, so a caller that proves the window inside `buf` reaches
+   * no panic.
+   * @param buf The bytes the stream delivered.
+   * @param off The window's first byte offset, where the header starts.
+   * @param len The window's length in bytes; the window must lie inside `buf`, or this panics.
+   * @returns The header's size, 2 to 16 bytes, or 0 when the window ends before both varints are whole.
+   */
+  read(buf: u8[], off: i32, len: i32): i32 {
+    h3CheckWindow("Http3FrameHeader.read", buf, off, len)
+    const end: i32 = toI32(toI64(off) + toI64(len))
+    const type: i64 = quicVarintRead(buf, off, end)
+    const at: i32 = h3VarintEnd(buf, off, end)
+    if (type < 0 || at < 0) {
+      return 0
+    }
+    const length: i64 = quicVarintRead(buf, at, end)
+    const past: i32 = h3VarintEnd(buf, at, end)
+    if (length < 0 || past < 0) {
+      return 0
+    }
+    this.type = type
+    this.length = length
+    return toI32(toI64(past) - toI64(off))
+  }
 }
 
 /**
@@ -347,14 +374,17 @@ export class Http3Settings {
 
 /**
  * Panics unless `[off, off + len)` lies inside `buf`: a window outside its buffer is the program's mistake.
+ * A window guard (`docs/LANGUAGE.md`, `window`), so a caller that proves the window in range removes the
+ * panic site, and a method whose first statement hands it its own window passes that proof to its callers.
  * @param what The caller's name, which starts the panic message.
  * @param buf The buffer the window is meant to lie in.
  * @param off The window's first byte offset; negative panics.
  * @param len The window's length in bytes; negative panics, and so does an end past `buf.length`.
  */
 export const h3CheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
-  if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(buf.length)) {
-    panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${buf.length} bytes`)
+  const size: i32 = toI32(buf.length)
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${size} bytes`)
   }
 }
 
@@ -451,22 +481,8 @@ export const h3FrameHeaderSize = (type: i64, length: i64): i32 => {
  * @param len The window's length in bytes; the window must lie inside `buf`, or this panics.
  * @returns The header's size, 2 to 16 bytes, or 0 when the window ends before both varints are whole.
  */
-export const h3ReadFrameHeader = (h: Http3FrameHeader, buf: u8[], off: i32, len: i32): i32 => {
-  const end: i32 = h3WindowEnd("h3ReadFrameHeader", buf, off, len)
-  const type: i64 = quicVarintRead(buf, off, end)
-  const at: i32 = h3VarintEnd(buf, off, end)
-  if (type < 0 || at < 0) {
-    return 0
-  }
-  const length: i64 = quicVarintRead(buf, at, end)
-  const past: i32 = h3VarintEnd(buf, at, end)
-  if (length < 0 || past < 0) {
-    return 0
-  }
-  h.type = type
-  h.length = length
-  return toI32(toI64(past) - toI64(off))
-}
+export const h3ReadFrameHeader = (h: Http3FrameHeader, buf: u8[], off: i32, len: i32): i32 =>
+  h.read(buf, off, len)
 
 /**
  * Writes a frame header of `type` and `length` at `buf[at]`, before `end`.
