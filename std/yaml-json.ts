@@ -134,7 +134,7 @@ export const YAML_JSON_ERR_NOT_FINITE: i32 = -42
 export const YAML_JSON_ERR_EXPANSION: i32 = -43
 /** Collections nest deeper than `maxDepth`, counting copies. */
 export const YAML_JSON_ERR_DEPTH: i32 = -44
-/** A `0x` or `0o` integer with more than `YAML_JSON_MAX_RADIX_DIGITS` digits. */
+/** A `0x` or `0o` integer with more than `YAML_JSON_MAX_RADIX_DIGITS` digits, or with a byte that is not a digit of its base. */
 export const YAML_JSON_ERR_NUMBER: i32 = -45
 /**
  * A merge key's value is not a mapping or a sequence of mappings; the range is
