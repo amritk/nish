@@ -7,7 +7,9 @@
 #   any test ran. apt fetches from a mirror list of our own instead and moves
 #   to the next entry when one fails. On arm64 that list holds ports mirrors
 #   besides ports.ubuntu.com, which stopped resolving on PR #1413 (run
-#   43058055859) while it was the arm64 runners' only host.
+#   43058055859) while it was the arm64 runners' only host. A runner that boots
+#   with no Ubuntu archive source at all (an AWS-hosted ubuntu-26.04 runner on
+#   PR #2353) gets one written, pointing at the same list.
 # - The cache: the .debs and apt's index (/var/lib/apt/lists) are kept in the
 #   Actions cache, keyed by runner image, architecture, package list and
 #   apt-mirror.sh (which names the sources the index was fetched under), so a
