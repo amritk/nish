@@ -3042,27 +3042,33 @@ function base64EncodedLength(n: i32): i32 -> @nish.base64EncodedLength [exported
   stackSites=0 stackLocals=0
   local +0:9 groups: i32 (const)
 function base64EncodeInto(src: u8[], off: i32, len: i32, dst: u8[], at: i32): i32 -> @nish.base64EncodeInto [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.base64EncodeIfFits
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
   escaping: at len off
-  calls: nish.base64EncodeIfFits nish_panic
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.base64EncodeIfFits#0
-  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.base64EncodeIfFits#3
+  calls: nish.base64EncodedLength nish_panic
+  pointer src: size=0 writesThrough=false captured=false
+  pointer dst: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +0:9 srcLength: i32 (const)
-  local +4:9 end: i32 (const)
-  callee +4:20 base64EncodeIfFits -> @nish.base64EncodeIfFits
+  local -19:9 srcLength: i32 (const)
+  local -18:9 dstLength: i32 (const)
+  local -14:9 need: i32 (const)
+  callee -14:21 base64EncodedLength -> @nish.base64EncodedLength
+  local -8:9 abc: string (const)
+  local -7:7 i: i32 (let)
+  local -6:7 o: i32 (let)
+  local -5:7 rest: i32 (let)
+  local -1:11 group: i32 (const)
+  local +13:7 group: i32 (let)
 function base64EncodeIfFits(src: u8[], off: i32, len: i32, dst: u8[], at: i32): i32 -> @nish.base64EncodeIfFits [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off
-  calls: nish_ceil
   pointer src: size=0 writesThrough=false captured=false
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -20:9 srcLength: i32 (const)
-  local -19:9 dstLength: i32 (const)
-  local -14:9 need: f64 (const)
+  local -24:9 srcLength: i32 (const)
+  local -23:9 dstLength: i32 (const)
+  local -14:9 need: i32 (const)
   local -8:9 abc: string (const)
   local -7:7 i: i32 (let)
   local -6:7 o: i32 (let)

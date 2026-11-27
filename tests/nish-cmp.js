@@ -24000,7 +24000,7 @@ const DECLARED = [
     }
   ),
   ...byFinding(TERM_TRY_FRAMEBUFFER)(
-    "std/term-pixels.ts's kittyFrame, sixelFrame and PixelBytes mark a frame too large for one buffer `full` instead of panicking (examples-strict S4b), so the program's copy of them moves",
+    "Framebuffer gains tryResize, which returns a Result<void, string>, and its constructor checks the size through the rule tryFramebuffer shares (examples-strict S4b), so a module that lays out or constructs a Framebuffer declares the Result struct and its calls into the class move",
     { "tests/link/std_term_pixels_negative_desync/main.ts": ["main.ll"] }
   ),
   // WP87 S2: std/math, base64, random, regex, release, sqlite, testing and

@@ -20,7 +20,7 @@
     "src/break-levels.ts": "596d20e2762a2663e01bd18a519caaad99f918d88262f410aafb7426e07f496a",
     "src/break-menu.ts": "f69563c0a7b57f4080c6f78cdaefd189ac4c7346cffc3b6c682473bb1d3f2f1c",
     "src/break-voices.ts": "f9224a3524cf7960cf68be61cd2be4c564fcad5c58f26991b6bb7f769ac65c76",
-    "std/base64.ts": "2f1d9e6e571f13fcfaec7b234c3d455170a736d9b138d49a0956fe76d12e7754",
+    "std/base64.ts": "6a771a5f581ea035b8ac6e1d1b2dbffbf088983e7ccd80abeee8e631fa2ae098",
     "std/host/game.ts": "7ca4568fb21913554e15e79cdbd59f467efc4226d6a4412740e12cb333ef32a4",
     "std/host/ring.ts": "62a49a15338588f0bc2ffe2c3298d01cbd888661b1e033fddcc7ee1de3f795ae",
     "std/input.ts": "3f8c9ab34f172ad387160339f8f2ce35b22f944f02e617c2d26982396563cdc7",
@@ -32,7 +32,7 @@
     "std/term.ts": "d676c66ab1c2c7e2205af5d7268b4b061238a64fc1e619cbb82511747eae0229"
   },
   "outputs": {
-    "game.wasm": "0ec7b700ac7a7e042eb8f22f314df4e486385c4fdb815161231fc744419aa216",
+    "game.wasm": "7bd8f26979260cff7936b95c6ddefc5635abad859dfadddfac085bf00c8d93a9",
     "game.mjs": "89afb35db565a760c7e8693506c6dd6c8a110d5f68d1bf895bcd917aaf140564",
     "break.mjs": "30b71116a94aced439fd9b8ee25e6a17f2d848e9180bc762495a087ed09bfcba",
     "shell.mjs": "9237a8a4aad34f5d01df662342a575693b75e1de51b06bb9c32f03e7f586323f",

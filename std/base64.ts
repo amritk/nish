@@ -87,14 +87,46 @@ export const base64EncodeInto = (src: u8[], off: i32, len: i32, dst: u8[], at: i
     panic("base64EncodeInto: an array longer than 2^31 - 1 bytes")
   }
   const srcLength: i32 = toI32(src.length)
+  const dstLength: i32 = toI32(dst.length)
   if (off < 0 || len < 0 || off > srcLength - len) {
     panic("base64EncodeInto: the source range is outside the array")
   }
-  const end: i32 = base64EncodeIfFits(src, off, len, dst, at)
-  if (end < 0) {
+  const need: i32 = base64EncodedLength(len)
+  if (at < 0 || need > dstLength - at) {
     panic("base64EncodeInto: the encoding does not fit in the destination")
   }
-  return end
+  // A local, so that `abc.length >= 64` below is a fact about the string each
+  // character is read from.
+  const abc: string = BASE64_ALPHABET
+  let i: i32 = off
+  let o: i32 = at
+  let rest: i32 = len
+  // The checks above make every term after the first true; they are written out
+  // because they are what proves the loop's accesses in range.
+  while (rest >= 3 && i >= 0 && i < srcLength - 2 && o >= 0 && o < dstLength - 3 && abc.length >= 64) {
+    const group: i32 = (toI32(src[i]) << 16) | (toI32(src[i + 1]) << 8) | toI32(src[i + 2])
+    dst[o] = toU8(abc.charCodeAt((group >> 18) & 63))
+    dst[o + 1] = toU8(abc.charCodeAt((group >> 12) & 63))
+    dst[o + 2] = toU8(abc.charCodeAt((group >> 6) & 63))
+    dst[o + 3] = toU8(abc.charCodeAt(group & 63))
+    i = i + 3
+    o = o + 4
+    rest = rest - 3
+  }
+  // A short final group of one or two bytes, padded. As in the loop, the
+  // checks above make every term after the first false.
+  if (rest === 0 || i < 0 || i >= srcLength || o < 0 || o >= dstLength - 3 || abc.length < 64) {
+    return o
+  }
+  let group: i32 = toI32(src[i]) << 16
+  if (rest === 2 && i < srcLength - 1) {
+    group = group | (toI32(src[i + 1]) << 8)
+  }
+  dst[o] = toU8(abc.charCodeAt((group >> 18) & 63))
+  dst[o + 1] = toU8(abc.charCodeAt((group >> 12) & 63))
+  dst[o + 2] = rest === 2 ? toU8(abc.charCodeAt((group >> 6) & 63)) : toU8(BASE64_PAD)
+  dst[o + 3] = toU8(BASE64_PAD)
+  return o + 4
 }
 
 /**
@@ -124,9 +156,13 @@ export const base64EncodeIfFits = (src: u8[], off: i32, len: i32, dst: u8[], at:
   if (off < 0 || len < 0 || off > srcLength - len) {
     return -1
   }
-  // Four characters for every three bytes, in f64, where no count overflows.
-  const need: f64 = Math.ceil(toF64(len) / 3.0) * 4.0
-  if (at < 0 || need > toF64(dstLength - at)) {
+  // Past this many bytes the encoding is longer than 2^31 - 1 characters, as
+  // in `base64EncodedLength`, which this restates without its panics.
+  if (len > 1610612733) {
+    return -1
+  }
+  const need: i32 = toI32((len + 2) / 3) * 4
+  if (at < 0 || need > dstLength - at) {
     return -1
   }
   // A local, so that `abc.length >= 64` below is a fact about the string each
