@@ -11768,6 +11768,8 @@ const STORAGE_INDEX_WHY = {
     "src/manifest.ts compares its nesting depth with a constant before it adds one, which now orders the two, so the manifest.ll module drops those overflow checks and renumbers its values",
   "proto-parse.ll":
     "src/proto-parse.ts compares its nesting depth with a constant before it adds one, which now orders the two, so the proto-parse.ll module drops those overflow checks and renumbers its values",
+  "bounds.ll":
+    "src/bounds.ts is the prover this change edits, so the bounds.ll module a program that compiles it writes moves with its source",
   "lexer.ll":
     "src/lexer.ts compares a character code with a folded module constant before it subtracts, which now orders the two, so the lexer.ll module drops those overflow checks and renumbers its values",
 }
@@ -11786,7 +11788,7 @@ const storageIndex = () => [
     "src/emit-ts-storage.ts": ["manifest.ll"],
     "src/emit-ts-strings.ts": ["manifest.ll"],
     "src/emit-ts.ts": ["manifest.ll"],
-    "src/fault-contract.ts": ["lexer.ll"],
+    "src/fault-contract.ts": ["bounds.ll", "lexer.ll"],
     "src/fix.ts": ["manifest.ll"],
     "src/interop-abi.ts": ["manifest.ll"],
     "src/interop-dts.ts": ["manifest.ll"],
@@ -11802,13 +11804,16 @@ const storageIndex = () => [
     "src/run-cache.ts": ["manifest.ll"],
     "src/upgrade.ts": ["manifest.ll"],
     "src/watch.ts": ["manifest.ll"],
-    "src/window-contract.ts": ["lexer.ll"],
+    "src/window-contract.ts": ["bounds.ll", "lexer.ll"],
     "tests/cases/const_array_numeric.ts": ["const_array_numeric.ll"],
     "tests/cases/storage_attributes.ts": ["storage_attributes.ll"],
     "tests/cases/storage_lend.ts": ["storage_lend.ll"],
     "tests/cases/storage_module.ts": ["storage_module.ll"],
     "tests/differential/corpus/const_module.ts": ["const_module.ll"],
     "tests/differential/corpus/const_modules/main.ts": ["main.ll"],
+    "tests/link/httparena_entry/main.ts": ["pg.ll"],
+    "tests/link/net_http2_stream/main.ts": ["main.ll"],
+    "tests/link/net_http_server_h1_tls/main.ts": ["net_quic_conn_replay_server.ll", "peer.ll"],
     "tests/link/module_target_std_twin/main.ts": ["lexer.ll", "manifest.ll"],
     "tests/link/module_target_twin/main.ts": ["lexer.ll"],
     "tests/link/storage_import_record/main.ts": ["cells.ll", "main.ll"],
@@ -11824,6 +11829,11 @@ const storageIndex = () => [
         `the program indexes module storage or compares with a constant, which src/bounds.ts now proves, so ${file} drops those index or overflow checks and renumbers its values`,
     }))
   ),
+  {
+    file: "chacha20poly1305.ll",
+    changelog: STORAGE_INDEX,
+    why: "chacha20Poly1305Open returns when the sealed length is below POLY1305_TAG_SIZE, a folded module constant the guard now orders, so `new Array<u8>(total - POLY1305_TAG_SIZE)` is proven non-negative and the module every importer writes drops that array-length check and its string",
+  },
   {
     program: "tests/cases/deny_panics_storage_index.ts",
     file: "exit",
