@@ -185,13 +185,15 @@ const wallRender = (run: WallRun, frame: Frame): void => {
   }
   d.small = screen.width < WALL_MIN_COLS || screen.height < WALL_MIN_ROWS
   if (d.small) {
-    if (fb.width !== 0) {
-      fb.resize(0, 0)
+    // `resize` refuses only a negative size or one past 2^31 - 1 pixels, so it
+    // always blanks to 0 × 0 and nothing else is needed when it does.
+    if (fb.pixelWidth() !== 0 && fb.resize(0, 0).isErr()) {
+      return
     }
     wallCentre(screen, screen.height / 2, "make me bigger")
     return
   }
-  adaptBreakResolution(d, frame.stats.tier, frame.stats.rttMs, fb.height, monotonicNanos())
+  adaptBreakResolution(d, frame.stats.tier, frame.stats.rttMs, fb.pixelHeight(), monotonicNanos())
   // The room is the cells' pixels under kitty and sixel, and a cell's two half-blocks otherwise.
   const backend: i32 = frame.stats.backend
   const pixels: boolean = backend === GRAPHICS_KITTY || backend === GRAPHICS_SIXEL

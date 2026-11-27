@@ -21,13 +21,13 @@
  * not hold, and everything is clipped to the frame, so no coordinate, however
  * wild, reads or writes outside it.
  *
- *     import { Framebuffer } from "nish/term-pixels";
+ *     import { tryFramebuffer } from "nish/term-pixels";
  *     import { rasterDisc, rasterGradient, rasterRgb } from "nish/raster";
  *
- *     const fb = new Framebuffer(320, 180);
- *     const px = rasterFrame(fb.pixels);
- *     rasterGradient(px, fb.width, fb.height, rasterRgb(10, 10, 40), 0);
- *     rasterDisc(px, fb.width, fb.height, 160.0, 90.0, 12.0, 0xffcc00, 1.0);
+ *     const fb = tryFramebuffer(320, 180).expect("a 320 × 180 framebuffer");
+ *     const px = rasterFrame(fb.pixelData());
+ *     rasterGradient(px, fb.pixelWidth(), fb.pixelHeight(), rasterRgb(10, 10, 40), 0);
+ *     rasterDisc(px, fb.pixelWidth(), fb.pixelHeight(), 160.0, 90.0, 12.0, 0xffcc00, 1.0);
  *
  * Shapes take pixel coordinates as `f64` where a fraction matters (a disc's
  * centre and radius) and as `i32` where it does not (a rectangle's edges).

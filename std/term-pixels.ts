@@ -53,7 +53,7 @@
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
-import { base64EncodeInto } from "nish/base64"
+import { base64EncodeIfFits } from "nish/base64"
 import { COLOR_DEFAULT, ATTR_NONE, Canvas, Screen } from "nish/term"
 
 /** Text cells, one luminance character each: the Linux console's backend. */
@@ -150,18 +150,6 @@ const pixelsHex = (text: string, at: i32, count: i32): i32 => {
     v = (v << 4) | (c >= 97 ? c - 87 : c - 48)
   }
   return v
-}
-
-/** `width × height`, after panicking, as `who`, unless it is a size an array of pixels can have. */
-const pixelsArea = (who: string, width: i32, height: i32): i32 => {
-  if (width < 0 || height < 0) {
-    panic(`${who}: a negative size`)
-  }
-  const area: i64 = toI64(width) * toI64(height)
-  if (area > toI64(2147483647)) {
-    panic(`${who}: more than 2^31 - 1 pixels`)
-  }
-  return toI32(area)
 }
 
 /** Why `width × height`, asked of `who`, is not a size an array of pixels can have, or "" when it is. */
@@ -509,6 +497,13 @@ export class PixelBytes {
   /** How many bytes are written. */
   length: i32
   /**
+   * True once a frame asked for more than one buffer holds: a `put` past
+   * 2^31 - 1 bytes, which was dropped, or a `sixelFrame` rect whose working
+   * arrays would pass 2^31 - 1 entries. `text()` is then not the whole escape
+   * and is not to be written. `reset()` clears it.
+   */
+  full: boolean
+  /**
    * One kitty chunk's RGB bytes.
    * @internal Used by `kittyFrame`.
    */
@@ -549,9 +544,10 @@ export class PixelBytes {
    * @param capacity The bytes to make room for at the start; a frame's worth saves growing.
    */
   constructor(capacity: i32) {
-    this.bytes = new Array<u8>(Math.max(capacity, 16))
+    this.bytes = capacity > 16 ? new Array<u8>(capacity) : new Array<u8>(16)
     this.bytes.fill(0)
     this.length = 0
+    this.full = false
     this.kittyRaw = new Array<u8>(PIXELS_KITTY_RAW)
     this.kittyRaw.fill(0)
     this.sampleXs = []
@@ -569,29 +565,38 @@ export class PixelBytes {
   /** Forget what was written. */
   reset(): void {
     this.length = 0
+    this.full = false
   }
 
   /**
    * Make room for `n` more bytes, doubling the array as often as that takes.
+   * Room past 2^31 - 1 bytes is not made: the buffer is marked `full` instead.
    *
    * @param n How many bytes the caller is about to `put`.
    */
   reserve(n: i32): void {
+    const had: u8[] = this.bytes
+    const have: i32 = toI32(had.length)
     // Summed and doubled in f64, which cannot overflow.
     const need: f64 = toF64(this.length) + toF64(n)
-    if (need <= toF64(this.bytes.length)) {
+    if (need <= toF64(have)) {
       return
     }
-    if (need > 2147483647.0) {
-      panic("PixelBytes.reserve: more than 2^31 - 1 bytes")
-    }
-    let size: f64 = toF64(this.bytes.length)
+    let size: f64 = toF64(have)
     while (size < need) {
       size = size * 2.0
     }
-    const grown: u8[] = new Array<u8>(toI32(Math.min(size, 2147483647.0)))
+    const room: i32 = need <= 2147483647.0 ? toI32(Math.min(size, 2147483647.0)) : -1
+    if (room < 0 || room < have) {
+      this.full = true
+      return
+    }
+    const length: integer<0, 2147483647> = room
+    const grown: u8[] = new Array<u8>(length)
     grown.fill(0)
-    grown.set(this.bytes, 0)
+    for (let i: i32 = 0; i < toI32(had.length) && i < toI32(grown.length); i++) {
+      grown[i] = had[i]
+    }
     this.bytes = grown
   }
 
@@ -647,7 +652,10 @@ export class PixelBytes {
    * @returns The bytes appended since it was made or last `reset`, to `write`.
    */
   text(): string {
-    return String.fromBytes(this.bytes, 0, this.length)
+    const bytes: u8[] = this.bytes
+    const n: i32 = this.length
+    // `put` keeps `length` within `bytes`; testing it proves the window.
+    return n >= 0 && n <= toI32(bytes.length) ? String.fromBytes(bytes, 0, n) : ""
   }
 }
 
@@ -657,7 +665,11 @@ export class PixelBytes {
  * computed once per frame rather than once per pixel.
  */
 const pixelsSampleMap = (n: i32, source: i32): i32[] => {
-  const map: i32[] = new Array<i32>(n)
+  if (n <= 0) {
+    return []
+  }
+  const length: integer<0, 2147483647> = n
+  const map: i32[] = new Array<i32>(length)
   pixelsSampleMapInto(map, n, source)
   return map
 }
@@ -680,7 +692,13 @@ const pixelsAtLeast = (a: i32[], n: i32): i32[] => {
     return a
   }
   const twice: f64 = Math.min(toF64(had) * 2.0, 2147483647.0)
-  const grown: i32[] = new Array<i32>(twice > toF64(n) ? toI32(twice) : n)
+  const size: i32 = twice > toF64(n) ? toI32(twice) : n
+  // Never taken: `n` is past `had`, which is 0 or more; it proves the length.
+  if (size < 0) {
+    return a
+  }
+  const length: integer<0, 2147483647> = size
+  const grown: i32[] = new Array<i32>(length)
   grown.fill(0)
   return grown
 }
@@ -741,28 +759,31 @@ const pixelsStringEnd = (out: PixelBytes): void => {
  * image for that whole time. `kittyDelete` removes the image when the program
  * is done with it.
  *
- * `imageId` is 1 to 2^31 - 1, since 0 is the protocol's "no id"; anything
- * else panics. So does a framebuffer whose `pixels` does not hold
- * `width × height`. An empty framebuffer or rect writes nothing.
+ * `imageId` is 1 to 2^31 - 1, since 0 is the protocol's "no id": its type
+ * refuses any other id at compile time. An empty framebuffer or rect writes
+ * nothing, and so does one whose `pixelData()` a caller pushed or popped, which
+ * no longer holds the `width × height` pixels the command's header gives.
  *
  * @param fb The frame's pixels, at its own size.
  * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_KITTY`.
- * @param imageId The image's id, 1 or more (below 1 panics), the same for every frame of one program.
+ * @param imageId The image's id, 1 to 2^31 - 1, the same for every frame of one program.
  * @param out Where the command bytes are appended.
  */
-export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: PixelBytes): void => {
-  pixelsCheckImageId("kittyFrame", imageId)
+export const kittyFrame = (
+  fb: Framebuffer,
+  rect: PixelRect,
+  imageId: integer<1, 2147483647>,
+  out: PixelBytes
+): void => {
   const pixels: i32[] = fb.pixelData()
   const count: i32 = toI32(pixels.length)
-  // The header gives `width` and `height`; pixels of another count are a
-  // framebuffer whose public fields a caller set out of step, not an image.
-  if (toI64(count) !== toI64(fb.pixelWidth()) * toI64(fb.pixelHeight())) {
-    panic("kittyFrame: pixels does not hold width × height")
-  }
   const raw: u8[] = out.kittyRaw
-  // A `kittyRaw` cut below one pixel's 3 bytes holds none: nothing is drawn,
-  // and the cursor is not moved for it.
-  if (count === 0 || rect.cols <= 0 || rect.rows <= 0 || toI32(raw.length) < 3) {
+  // The header gives `width` and `height`, so pixels of another count, which
+  // only a push or pop on `pixelData()` leaves, are no image. A `kittyRaw` cut
+  // below one pixel's 3 bytes holds none. Either way nothing is drawn, and the
+  // cursor is not moved for it.
+  const sized: boolean = toI64(count) === toI64(fb.pixelWidth()) * toI64(fb.pixelHeight())
+  if (!sized || count === 0 || rect.cols <= 0 || rect.rows <= 0 || toI32(raw.length) < 3) {
     return
   }
   pixelsMoveTo(out, rect.col, rect.row)
@@ -796,15 +817,14 @@ export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: 
     out.putText("q=2,")
     out.putText(pixel < count ? "m=1;" : "m=0;")
     out.reserve(PIXELS_KITTY_CHUNK)
-    out.length = base64EncodeInto(raw, 0, n, out.bytes, out.length)
+    // -1 only when `reserve` could not grow the buffer, which has set `full`.
+    const end: i32 = base64EncodeIfFits(raw, 0, n, out.bytes, out.length)
+    if (end < 0) {
+      out.full = true
+      return
+    }
+    out.length = end
     pixelsStringEnd(out)
-  }
-}
-
-/** Panic, as `who`, unless `imageId` is a kitty image id: 1 or more, 0 being "no id". */
-const pixelsCheckImageId = (who: string, imageId: i32): void => {
-  if (imageId < 1) {
-    panic(`${who}: an image id below 1`)
   }
 }
 
@@ -813,13 +833,12 @@ const pixelsCheckImageId = (who: string, imageId: i32): void => {
  * and its data (`a=d,d=I`, the uppercase freeing the data), with `q=2` so the
  * terminal does not answer. A program writes it when it stops drawing, and
  * puts it in its terminal restore string, so the last frame does not stay
- * behind. Panics, like `kittyFrame`, on an id below 1.
+ * behind. Its type, like `kittyFrame`'s, refuses an id below 1.
  *
  * @param imageId The id `kittyFrame` drew with.
  * @returns The command, to `write`.
  */
-export const kittyDelete = (imageId: i32): string => {
-  pixelsCheckImageId("kittyDelete", imageId)
+export const kittyDelete = (imageId: integer<1, 2147483647>): string => {
   return `\x1b_Ga=d,d=I,i=${imageId},q=2\x1b\\`
 }
 
@@ -895,7 +914,8 @@ const pixelsSixelRun = (out: PixelBytes, bits: i32, count: i32): void => {
  * With `dither`, each pixel's components are offset by the 4×4 Bayer
  * matrix's threshold before they are quantised (ordered dithering), so a
  * gradient becomes a fine, stable pattern rather than steps. An empty rect
- * writes nothing.
+ * writes nothing; a rect wider than 2^31 - 1 / 252 pixels, or of more than
+ * 2^31 - 1, is more than one buffer holds and marks `out` `full` instead.
  *
  * @param fb The frame's pixels; shrunk or grown to the rect by nearest neighbour.
  * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_SIXEL`.
@@ -908,8 +928,16 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   if (w <= 0 || h <= 0 || fb.pixelWidth() <= 0 || fb.pixelHeight() <= 0) {
     return
   }
-  const area: i32 = pixelsArea("sixelFrame", w, h)
-  const bitsArea: i32 = pixelsArea("sixelFrame", w, SIXEL_REGISTERS)
+  // A rect whose working arrays would pass 2^31 - 1 entries is not a frame one
+  // buffer can hold, as one whose bytes would not be.
+  const wideArea: i64 = toI64(w) * toI64(h)
+  const wideBits: i64 = toI64(w) * toI64(SIXEL_REGISTERS)
+  const area: i32 = wideArea <= toI64(2147483647) ? toI32(wideArea) : -1
+  const bitsArea: i32 = wideBits <= toI64(2147483647) ? toI32(wideBits) : -1
+  if (area < 0 || bitsArea < 0) {
+    out.full = true
+    return
+  }
   // The working arrays live on `out`, grown once to the largest frame.
   out.sampleXs = pixelsAtLeast(out.sampleXs, w)
   out.sampleYs = pixelsAtLeast(out.sampleYs, h)
@@ -944,13 +972,12 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
         pixelsLevel((c >> 8) & 255, bg, 7),
         pixelsLevel(c & 255, bb, 6)
       )
-      // Never taken: `reg` holds at least `w * h`, from `pixelsAtLeast`, which
-      // the prover cannot see past.
+      // Always true: `reg` holds at least `w * h`, from `pixelsAtLeast`, which
+      // the prover cannot see past; it proves the store in range.
       const at: i32 = pixelsIndex(x, y, w, toI32(reg.length))
-      if (at < 0 || at >= toI32(reg.length)) {
-        panic("sixelFrame: the register array is shorter than the frame")
+      if (at >= 0 && at < toI32(reg.length)) {
+        reg[at] = n
       }
-      reg[at] = n
       // Always true (a register is 0 to 251, or -1); it proves the store in range.
       if (n >= 0 && n < toI32(used.length)) {
         used[n] = 1
@@ -996,9 +1023,9 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
       nextBit = nextBit << 1
       for (let x: i32 = 0; x < w; x++) {
         const at: i32 = pixelsIndex(x, y, w, toI32(reg.length))
-        // Never taken, as where `reg` was written.
+        // Never taken, as where `reg` was written; it proves the read in range.
         if (at < 0 || at >= toI32(reg.length)) {
-          panic("sixelFrame: the register array is shorter than the frame")
+          continue
         }
         const n: i32 = reg[at]
         // `bits` holds a row of `w` for each register.
@@ -1124,11 +1151,10 @@ export const drawHalfBlocks = (fb: Framebuffer, canvas: Canvas, rect: PixelRect)
       }
       const at: i32 = pixelsIndex(px, py, cw, toI32(cpixels.length))
       // In range while the canvas's `pixels` holds `width * height`. Its fields
-      // are public, and one set out of step with the others is a broken
-      // canvas, which panics as indexing past `pixels` did, rather than skip
-      // the pixel.
+      // are public, and past a `pixels` set shorter than that the canvas has no
+      // cell to draw in, so the rest of the frame is not drawn.
       if (at < 0 || at >= toI32(cpixels.length)) {
-        panic("drawHalfBlocks: the canvas's pixels does not hold width × height")
+        return
       }
       // Never taken: `px` starts at `left` or past it, and `x` is below
       // `xs.length` from the test above; it proves the read in range.

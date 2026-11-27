@@ -66,7 +66,8 @@ export const base64EncodedLength = (n: i32): i32 => {
  * answer the index just past the last character written, which is
  * `at + base64EncodedLength(len)`. Nothing is allocated. Panics when the source
  * range is not inside `src` or the encoding does not fit in `dst` from `at`;
- * both are checked before anything is written.
+ * both are checked before anything is written. `base64EncodeIfFits` answers -1
+ * for those instead.
  *
  * @param src The bytes to encode from; only `src[off..off+len)` is read.
  * @param off Where in `src` the bytes to encode start.
@@ -84,13 +85,47 @@ export const base64EncodeInto = (src: u8[], off: i32, len: i32, dst: u8[], at: i
     panic("base64EncodeInto: an array longer than 2^31 - 1 bytes")
   }
   const srcLength: i32 = toI32(src.length)
-  const dstLength: i32 = toI32(dst.length)
   if (off < 0 || len < 0 || off > srcLength - len) {
     panic("base64EncodeInto: the source range is outside the array")
   }
-  const need: i32 = base64EncodedLength(len)
-  if (at < 0 || need > dstLength - at) {
+  const end: i32 = base64EncodeIfFits(src, off, len, dst, at)
+  if (end < 0) {
     panic("base64EncodeInto: the encoding does not fit in the destination")
+  }
+  return end
+}
+
+/**
+ * `base64EncodeInto` for a caller that has an answer for a range that does not
+ * fit: the same bytes written to the same place, or -1, with nothing written,
+ * when `src[off..off+len)` is not inside `src`, the encoding does not fit in
+ * `dst` from `at`, or either array is longer than 2^31 - 1 bytes. It never
+ * panics.
+ *
+ * @param src The bytes to encode from; only `src[off..off+len)` is read.
+ * @param off Where in `src` the bytes to encode start.
+ * @param len How many bytes of `src` to encode; zero writes nothing and
+ *   answers `at` when `at` is inside `dst` or just past it.
+ * @param dst The buffer the characters are written into, one ASCII byte per
+ *   character; bytes outside the written range are left as they were.
+ * @param at Where in `dst` the first character goes.
+ * @returns The index in `dst` just past the last character written, or -1
+ *   when the range does not fit.
+ */
+export const base64EncodeIfFits = (src: u8[], off: i32, len: i32, dst: u8[], at: i32): i32 => {
+  // Refused before `toI32`, as in `base64EncodeInto`.
+  if (src.length > 2147483647 || dst.length > 2147483647) {
+    return -1
+  }
+  const srcLength: i32 = toI32(src.length)
+  const dstLength: i32 = toI32(dst.length)
+  if (off < 0 || len < 0 || off > srcLength - len) {
+    return -1
+  }
+  // Four characters for every three bytes, in i64, where no count overflows.
+  const need: i64 = ((toI64(len) + toI64(2)) / toI64(3)) * toI64(4)
+  if (at < 0 || need > toI64(dstLength - at)) {
+    return -1
   }
   // A local, so that `abc.length >= 64` below is a fact about the string each
   // character is read from.

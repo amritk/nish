@@ -5,9 +5,6 @@
 //   keeps no length for a module's array, so even a constant index under a
 //   `K < BREAK_LINK.length` test stays unproven (#2316);
 // - the `slice` in `String.fromBytes` in `startHelp`;
-// - `new Framebuffer(1, 1)`, which reaches `pixelsArea`'s size panic in
-//   std/term-pixels.ts: a call reaches every site of the function it calls,
-//   whatever constants it passes;
 // - 292 sites in the director and the libraries it uses: src/break-game.ts,
 //   break-intro.ts, break-menu.ts, break-gfx.ts, break-director.ts,
 //   break-levels.ts, break-voices.ts and std/raster.ts's 12 array lengths.
@@ -123,7 +120,7 @@ class BreakPage {
   constructor(director: BreakDirector) {
     this.director = director
     this.input = new StepInput(new KeyState())
-    this.fb = new Framebuffer(1, 1)
+    this.fb = new Framebuffer()
     this.stats = new TermStats()
     this.clockNs = 0.0
     this.frameMs = FIRST_FRAME_MS
@@ -241,7 +238,7 @@ const frameX = (run: BreakPage, x: i32, y: i32): f64 => toF64(run.turned ? y : x
 
 /** The frame row under the shown frame's pixel `x`, `y`; turned, its top is the shown frame's right. */
 const frameY = (run: BreakPage, x: i32, y: i32): f64 =>
-  run.turned ? toF64(run.fb.height) - 1.0 - toF64(x) : toF64(y)
+  run.turned ? toF64(run.fb.pixelHeight()) - 1.0 - toF64(x) : toF64(y)
 
 /**
  * What the page's touch asks this step. Its menu button is Escape, which
@@ -315,7 +312,7 @@ export const draw = (alpha: f64, frameMs: f64): void => {
   run.stats.tier = fps
   run.stats.frameCostMs = run.frameMs
   // A page has no link: a frame is on the screen when it is drawn.
-  adaptBreakResolution(d, fps, 0.0, fb.height, toI64(run.clockNs))
+  adaptBreakResolution(d, fps, 0.0, fb.pixelHeight(), toI64(run.clockNs))
   // A portrait screen touched: the frame turned, so a phone held sideways shows it upright and large.
   const turn: boolean = BREAK_LINK[LINK_TOUCH] === 1 && BOX[1] > BOX[0]
   sizeBreakFramebuffer(
@@ -325,20 +322,21 @@ export const draw = (alpha: f64, frameMs: f64): void => {
     turn ? GAME_MAX_WIDTH : GAME_MAX_HEIGHT
   )
   drawBreakDirector(d, fb, alpha, run.stats)
-  const w: i32 = fb.width
-  const h: i32 = fb.height
+  const w: i32 = fb.pixelWidth()
+  const h: i32 = fb.pixelHeight()
   if (!turn) {
     // `pixels` holds the frame's `w * h`.
-    const n: i32 = toI32(fb.pixels.length)
+    const frame: i32[] = fb.pixelData()
+    const n: i32 = toI32(frame.length)
     for (let i: i32 = 0; i < n; i++) {
-      GAME_FRAME[i] = fb.pixels[i]
+      GAME_FRAME[i] = frame[i]
     }
     gameSetSize(w, h)
   } else {
     // A quarter turn clockwise: fb's row y becomes the shown frame's column
     // h - 1 - y. `src` walks `pixels` row by row; the shown frame's index is
     // in f64, which no frame's size overflows.
-    const pixels: i32[] = fb.pixels
+    const pixels: i32[] = fb.pixelData()
     let src: i32 = 0
     for (let y: i32 = 0; y < h; y++) {
       const column: f64 = toF64(h) - 1.0 - toF64(y)
