@@ -24341,14 +24341,16 @@ const DECLARED = [
     changelog: MULTIPART_BODIES,
     why: "the case is new with this change and imports nish/net/multipart, which the seed does not ship, so the reference refuses it",
   },
-  ...["tests/link/window_contract_arrow_literal/main.ts", "tests/link/window_contract_value_forward/main.ts"].map(
-    (program) => ({
-      program,
-      file: "main.ll",
-      changelog: WINDOW_FORWARD,
-      why: "the case is new with this change: its reader calls a window guard with a literal count, so the candidate proves the reads `b[off]` to `b[off + count - 1]` after the call and drops their bounds checks, which the seed keeps",
-    })
-  ),
+  ...[
+    "tests/link/window_contract_arrow_literal/main.ts",
+    "tests/link/window_contract_statement_forward/main.ts",
+    "tests/link/window_contract_value_forward/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: WINDOW_FORWARD,
+    why: "the case is new with this change: its reader calls a window guard with a literal count, so the candidate proves the reads `b[off]` to `b[off + count - 1]` after the call and drops their bounds checks, which the seed keeps",
+  })),
 ]
 
 /**

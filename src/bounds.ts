@@ -3503,12 +3503,17 @@ const noteGuardedWindow = (walk: BoundsWalk, state: State, expr: Node): void => 
     return
   }
   addFact(state, new Fact(FACT_NON_NEGATIVE, off, null, 0))
-  const count = constantValue(walk, args[at[2]])
+  // A literal count is the forward's own (`windowCount`), not an argument.
+  const literal = at[2] < 0
+  const count = literal ? target.windowCount : constantValue(walk, args[at[2]])
   if (count > 0) {
     addFact(state, new Fact(FACT_BELOW, off, w, count - 1))
     return
   }
   addFact(state, new Fact(FACT_AT_MOST, off, w, 0))
+  if (literal) {
+    return
+  }
   const len = indexLocal(ctx, args[at[2]])
   if (len !== null) {
     addFact(state, new Fact(FACT_NON_NEGATIVE, len, null, 0))

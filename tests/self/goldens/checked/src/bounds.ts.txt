@@ -2081,18 +2081,19 @@ function noteGuardedWindow(walk: BoundsWalk, state: State, expr: Node): void -> 
   callee +19:15 indexLocal -> @indexLocal
   callee +23:3 addFact -> @addFact
   callee +23:18 new Fact -> @Fact.constructor
-  local +24:9 count: i32 (const)
-  callee +24:17 constantValue -> @constantValue
-  callee +26:5 addFact -> @addFact
-  callee +26:20 new Fact -> @Fact.constructor
-  callee +29:3 addFact -> @addFact
-  callee +29:18 new Fact -> @Fact.constructor
-  local +30:9 len: Local | null (const)
-  callee +30:15 indexLocal -> @indexLocal
-  callee +32:5 addFact -> @addFact
-  callee +32:20 new Fact -> @Fact.constructor
-  callee +33:5 addFact -> @addFact
-  callee +33:20 new Fact -> @Fact.constructor
+  local +25:9 literal: boolean (const)
+  local +26:9 count: i32 (const)
+  callee +26:48 constantValue -> @constantValue
+  callee +28:5 addFact -> @addFact
+  callee +28:20 new Fact -> @Fact.constructor
+  callee +31:3 addFact -> @addFact
+  callee +31:18 new Fact -> @Fact.constructor
+  local +35:9 len: Local | null (const)
+  callee +35:15 indexLocal -> @indexLocal
+  callee +37:5 addFact -> @addFact
+  callee +37:20 new Fact -> @Fact.constructor
+  callee +38:5 addFact -> @addFact
+  callee +38:20 new Fact -> @Fact.constructor
 function judgeRangeCheck(walk: BoundsWalk, state: State, call: Node): void -> @judgeRangeCheck
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holderOf

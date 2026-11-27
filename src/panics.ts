@@ -1198,7 +1198,8 @@ const windowAdvice = (program: CheckedProgram, call: Node): string => {
   }
   if (literal >= 0) {
     // The count is the callee's: only the offset and the buffer are the caller's to bound.
-    const test = start === 0 ? `${buf}.length >= ${literal}` : `${off} >= 0 && ${off} + ${literal} <= ${buf}.length`
+    const test =
+      start === 0 ? `${buf}.length >= ${literal}` : `${off} >= 0 && ${off} + ${literal} <= ${buf}.length`
     return (
       `${what} panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it inside here: ` +
       `guard the call with \`if (${test})\``

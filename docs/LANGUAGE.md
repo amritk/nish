@@ -16910,7 +16910,9 @@ call's is
   because each of its callers holds the window
   (`window_contract_late_forward` is a method that writes first and forwards
   nothing). After a guard's call returns, an index inside the window it
-  checked is proven: `buf[off]` to `buf[off + 3]` after a literal count of 4.
+  checked is proven: `buf[off]` to `buf[off + 3]` after a literal count of 4,
+  also after a forwarder's call that passes it
+  (`window_contract_statement_forward`).
   After any other count, `off` and `len` are known to be at least 0 and at
   most `buf.length`. A guard or forwarder passed as a value is judged
   in each instance it is passed into, whose call is to it
