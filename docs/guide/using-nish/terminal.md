@@ -37,7 +37,7 @@ moves or draws one, and the size example tests `size.length` before it reads
 a pair; the library calls build under the default once the standard library
 is made panic-free.
 
-<!-- allow-panics: negates and subtracts a step read from a field, whose lower bound no guard the checker reads proves yet; calls `std/term-pixels.ts` and `std/term.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: negates and subtracts a step read from a field, whose lower bound no guard the checker reads proves yet; calls `std/term-pixels.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { ACTION_PRESS, ATTR_NONE, COLOR_DEFAULT, EVENT_KEY, KEY_CHAR } from "nish/term";
