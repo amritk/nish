@@ -1166,7 +1166,8 @@ export class WebTransport {
    */
   private finish(id: i64): boolean {
     const out: u8[] = this.capsuleOut
-    if (this.h3.writeData(id, out, 0, 0, true) >= 0) {
+    const start: i32 = 0
+    if (this.h3.writeData(id, out, start, start, true) >= 0) {
       return true
     }
     this.h3.reset(id, H3_NO_ERROR)
@@ -1435,7 +1436,8 @@ export class WebTransport {
     if (stop < 0 || stop > toI32(out.length)) {
       return H3_TOO_LARGE // never: both copies above fit inside `out`
     }
-    const result: i32 = this.h3.writeDataWhole(id, out, 0, stop, true)
+    const start: i32 = 0
+    const result: i32 = this.h3.writeDataWhole(id, out, start, stop, true)
     if (result !== 0) {
       return result
     }
@@ -1461,7 +1463,8 @@ export class WebTransport {
     if (p < 0 || p > toI32(out.length)) {
       return H3_TOO_LARGE // never: the capsule buffer holds a DRAIN capsule's 2-byte header
     }
-    return this.h3.writeDataWhole(id, out, 0, p, false)
+    const start: i32 = 0
+    return this.h3.writeDataWhole(id, out, start, p, false)
   }
 
   /** Stamps the session of stream `t` as active now. */
@@ -1559,7 +1562,8 @@ export class WebTransport {
       this.release(w)
     } else if (state === WT_OPEN) {
       const none: u8[] = this.capsuleOut
-      if (this.close(id, WT_ZERO64, none, 0, 0) !== 0) {
+      const start: i32 = 0
+      if (this.close(id, WT_ZERO64, none, start, start) !== 0) {
         // No room for the capsule: reset the CONNECT stream both ways, after which no event ends the session.
         this.h3.reset(id, H3_NO_ERROR)
         this.release(w)
@@ -1615,7 +1619,8 @@ export class WebTransport {
         if (filled > toI32(head.length)) {
           return this.malformed(w, H3_DATAGRAM_ERROR) // never: `have` was below `head.length`
         }
-        if (this.header.read(head, 0, filled) === 0) {
+        const start: i32 = 0
+        if (this.header.read(head, start, filled) === 0) {
           continue
         }
         w.capHeadLen = 0
