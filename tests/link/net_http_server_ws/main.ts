@@ -5,8 +5,8 @@
 // 300000-byte binary message larger than the output, close from either side,
 // close a malformed frame with 1002 and a dropped connection with 1006,
 // reuse the one request a pool of one holds, keep the arena flat over warmed
-// round trips, refuse the upgrade on h2c, and leave a socket to `idleTimeout`
-// alone when `bodyTimeout` has long passed.
+// round trips, refuse the upgrade on h2c, leave a socket alone when
+// `bodyTimeout` has long passed, and close one quiet past `idleTimeout`.
 import { Suite } from "nish/testing"
 import { netClose } from "nish:net"
 import { H2_FLAG_END_STREAM } from "nish/net/http2-frame"
@@ -239,6 +239,22 @@ const quiet = (t: Suite): void => {
   t.ok("and still echoes", c.next() === WS_MESSAGE && holds(c, hello))
 }
 
+/** The slot's `idleTimeout` does apply: a WebSocket quiet for longer is closed, and the program sees 1006. */
+const idle = (t: Suite): void => {
+  const config = new Http1Config()
+  config.idleTimeout = 300
+  const rig = new Rig(rigLimits(4, 30000), 4, config, 0)
+  const c = new WsClient(rig)
+  c.open(rig.port, "/ws")
+  const start: i64 = monotonicNanos()
+  while (monotonicNanos() - start < 3000000000 && !c.peer.closed) {
+    c.peer.turn()
+  }
+  t.ok("idleTimeout 300: a quiet WebSocket's connection is closed", c.peer.closed && settles(rig))
+  t.ok("and the program saw it closed with 1006", toI32(rig.codes.length) === 1 && rig.codes[0] === 1006)
+  t.eqI32("and handed it back", toI32(rig.sockets.length), 0)
+}
+
 export const main = (): i32 => {
   const t = new Suite("net_http_server_ws")
   echoes(t)
@@ -248,5 +264,6 @@ export const main = (): i32 => {
   flat(t)
   refused(t)
   quiet(t)
+  idle(t)
   return t.done()
 }

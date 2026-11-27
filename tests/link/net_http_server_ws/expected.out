@@ -31,4 +31,7 @@ PASS  and the program answers it 400
 PASS  no request was upgraded
 PASS  bodyTimeout 1: a WebSocket quiet for 1.5 s is still open
 PASS  and still echoes
-net_http_server_ws: 33 passed, 0 failed, 0 skipped
+PASS  idleTimeout 300: a quiet WebSocket's connection is closed
+PASS  and the program saw it closed with 1006
+PASS  and handed it back
+net_http_server_ws: 36 passed, 0 failed, 0 skipped
