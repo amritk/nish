@@ -1402,3 +1402,13 @@ export const preforkSupervise = <S>(
  *   `PREFORK_STOPPED` or `PREFORK_SPAWN_FAILED`
  */
 export const preforkWorkers = (args: string[]): i32 => preforkWith(args, new PreforkConfig())
+
+/**
+ * `preforkWorkers` for a caller built without `--allow-panics`: the
+ * supervisor's refusal of its config is an `Err` here, where
+ * `preforkWorkers` panics.
+ *
+ * @param args the process's arguments, `process.argv`
+ * @returns `Ok` with what `preforkWorkers` answers, or `Err` with why the config was refused
+ */
+export const tryPreforkWorkers = (args: string[]): Result<i32, string> => tryPreforkWith(args, new PreforkConfig())

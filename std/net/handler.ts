@@ -1125,15 +1125,24 @@ export class HttpHandler {
         isOpen &&
         this.server.holds(s) &&
         idle &&
-        (this.server.resting(s) || !this.server.connection(s).wantsWrite())
+        (this.server.resting(s) || !this.owesOutput(s))
       ) {
         this.closeSlot(s)
       } else if (isOpen && this.server.holds(s)) {
         // Its exchange is its last: the answer says `Connection: close` if
         // it is not yet started, and no pipelined request is read behind it.
-        this.server.connection(s).closeAfter = true
+        const conn: Http1Connection | null = this.server.tryConnection(s)
+        if (conn !== null) {
+          conn.closeAfter = true
+        }
       }
     }
+  }
+
+  /** Whether `slot`'s connection has output waiting for its socket; false when the server gives it none. */
+  private owesOutput(slot: i32): boolean {
+    const conn: Http1Connection | null = this.server.tryConnection(slot)
+    return conn !== null && conn.wantsWrite()
   }
 
   /** Takes every waiting connection. */
@@ -1179,8 +1188,10 @@ export class HttpHandler {
         continue
       }
       owing[slot] = false
-      if (open[slot] && this.server.holds(slot)) {
-        this.settle(slot, this.server.connection(slot))
+      const conn: Http1Connection | null =
+        open[slot] && this.server.holds(slot) ? this.server.tryConnection(slot) : null
+      if (conn !== null) {
+        this.settle(slot, conn)
       }
     }
   }
@@ -1200,7 +1211,12 @@ export class HttpHandler {
    * the send waits for `flush`, so the answers behind this one go out with it.
    */
   private drive(slot: i32): void {
-    const conn: Http1Connection = this.server.connection(slot)
+    const conn: Http1Connection | null = this.server.tryConnection(slot)
+    if (conn === null) {
+      // The server could build no connection for it: nothing to drive.
+      this.closeSlot(slot)
+      return
+    }
     let event: i32 = this.unended(slot) ? H1_NEED_MORE : this.server.next(slot)
     while (event !== H1_NEED_MORE && event !== H1_ERROR) {
       if (event === H1_REQUEST) {
@@ -1854,7 +1870,11 @@ export class HttpHandler {
    * @returns true once `r`'s connection is closed or reused, or its peer's stream has ended
    */
   hungUp(r: HttpRequest): boolean {
-    return !this.live(r) || this.server.connection(r.slot).ended()
+    if (!this.live(r)) {
+      return true
+    }
+    const conn: Http1Connection | null = this.server.tryConnection(r.slot)
+    return conn === null || conn.ended()
   }
 
   /** Whether `r`'s connection is the one it was read on, still open. */
@@ -1941,10 +1961,10 @@ export class HttpHandler {
       return this.refused(`HttpHandler.start: body length ${bodyLength}`)
     }
     r.state = HANDLER_STREAMING
-    if (!this.live(r)) {
+    const conn: Http1Connection | null = this.live(r) ? this.server.tryConnection(r.slot) : null
+    if (conn === null) {
       return HANDLER_DROPPED
     }
-    const conn: Http1Connection = this.server.connection(r.slot)
     const framing: i32 = status === 204 || status === 304 ? HTTP1_NO_BODY : bodyLength
     let outNames: u8[][] = names
     let outValues: u8[][] = values
@@ -2029,10 +2049,10 @@ export class HttpHandler {
       this.abandon(r)
       return this.refused(`HttpHandler.write: the window ${off} + ${len} is outside its ${buf.length} bytes`)
     }
-    if (!this.live(r)) {
+    const conn: Http1Connection | null = this.live(r) ? this.server.tryConnection(r.slot) : null
+    if (conn === null) {
       return HANDLER_DROPPED
     }
-    const conn: Http1Connection = this.server.connection(r.slot)
     // The carrier checks the length of what it takes; what is pending it has
     // not seen, so the check counts it here.
     const owed: i32 = handlerSub(conn.responseLeft, handlerSub(r.pendingEnd, r.pendingStart))
@@ -2112,12 +2132,12 @@ export class HttpHandler {
     if (r.state !== HANDLER_STREAMING) {
       return this.refused(`HttpHandler.end: the response is not started (state ${r.state})`)
     }
-    if (!this.live(r)) {
+    const slot: i32 = r.slot
+    const conn: Http1Connection | null = this.live(r) ? this.server.tryConnection(slot) : null
+    if (conn === null) {
       this.release(r)
       return HANDLER_DROPPED
     }
-    const slot: i32 = r.slot
-    const conn: Http1Connection = this.server.connection(slot)
     const short: i32 = handlerSub(conn.responseLeft, handlerSub(r.pendingEnd, r.pendingStart))
     if (conn.responseFraming >= 0 && short > 0 && !conn.responseEmpty) {
       this.abandon(r)

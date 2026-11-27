@@ -13248,7 +13248,7 @@ if (dealtHere("fileServer")) {
     fs.mkdirSync(fsDir, { recursive: true })
     const exe = path.join(fsDir, "file-server")
     const built = spawnNish(
-      [path.join(root, "examples", "file-server.ts"), ALLOW_PANICS, "-o", fsDir + path.sep, "--link", exe, "--profile", "speed"],
+      [path.join(root, "examples", "file-server.ts"), "-o", fsDir + path.sep, "--link", exe, "--profile", "speed"],
       { cwd: root, encoding: "utf8", timeout: 300_000, killSignal: "SIGKILL" }
     )
     // One fetch from a fresh server: the response head, the body's length and
@@ -13606,7 +13606,7 @@ if (dealtHere("unboundedPass")) {
       calleeHits[2].includes("(the string built on line 72, in `Handler.constructor`) piles up"),
     shown(callees)
   )
-  const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [ALLOW_PANICS])
+  const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [])
   check(
     "nl9018: examples/file-server.ts, which allocates nothing per request, compiles with no NL9018",
     fileServer.status === 0 && nl9018Lines(fileServer.stderr).length === 0,
