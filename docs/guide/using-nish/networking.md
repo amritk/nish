@@ -379,7 +379,7 @@ for descriptors, until a connection closes or 100 ms pass, so a full server
 waits rather than spin. `h.resting()` is true while it does, for a server
 that wants to log or count the times it is full:
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/net/handler.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/net/handler.ts` code that reaches `std/net/http-compress.ts` panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";
