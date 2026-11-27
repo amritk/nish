@@ -7,7 +7,7 @@
   ],
   "total": 1048,
   "explicit": {
-    "kept": 360,
+    "kept": 359,
     "toFix": 7
   },
   "modules": {
@@ -122,7 +122,8 @@
       "panic": 8
     },
     "std/net/http-compress.ts": {
-      "panic": 9
+      "fault": 1,
+      "panic": 8
     },
     "std/net/http-server.ts": {
       "array-length": 3,
@@ -875,11 +876,6 @@
       "module": "std/net/http-compress.ts",
       "function": "httpSegments",
       "reason": "segment size must be above 0, as documented; the caller picks it"
-    },
-    {
-      "module": "std/net/http-compress.ts",
-      "function": "HttpBodyDecoder.constructor",
-      "reason": "limit must be at least 1, as documented; static configuration"
     },
     {
       "module": "std/net/http-compress.ts",

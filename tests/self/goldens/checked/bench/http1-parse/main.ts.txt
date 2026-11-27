@@ -939,7 +939,7 @@ function http1TryWriteChunk(out: u8[], at: i32, data: readonly u8[], off: i32, l
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off
-  calls: nish.http1HexDigits nish.http1Past nish.http1PutCrlf nish.tryCopyBytes
+  calls: nish.http1HexDigits nish.http1Less nish.http1Past nish.http1PutCrlf nish.tryCopyBytes
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tryCopyBytes#0 nish.http1PutCrlf#0 nish.http1PutCrlf#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
@@ -954,7 +954,8 @@ function http1TryWriteChunk(out: u8[], at: i32, data: readonly u8[], off: i32, l
   callee -10:24 http1Past -> @nish.http1Past
   callee -7:8 tryCopyBytes -> @nish.tryCopyBytes
   local -4:7 v: i32 (let)
-  local -2:12 k: i32 (let)
+  local -2:12 j: i32 (let)
+  callee -2:21 http1Less -> @nish.http1Less
   local -1:11 d: i32 (const)
   callee +3:3 http1PutCrlf -> @nish.http1PutCrlf
   callee +4:10 http1PutCrlf -> @nish.http1PutCrlf
