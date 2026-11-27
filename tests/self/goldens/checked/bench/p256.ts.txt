@@ -3206,12 +3206,13 @@ function p256BaseSelect(out: P256ProjectivePoint, table: u32[], c: i32, digit: u
   local +3:9 u: u32 (const)
   callee +4:3 p256SetZero -> @nish.p256SetZero
   callee +5:3 p256SetZero -> @nish.p256SetZero
-  local +6:12 j: i32 (let)
-  local +8:11 at: i32 (const)
-  callee +9:5 p256BaseMove -> @nish.p256BaseMove
-  callee +11:3 p256SetZero -> @nish.p256SetZero
-  callee +12:3 p256FiatSub -> @nish.p256FiatSub
-  callee +13:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
+  local +9:9 first: i32 (const)
+  local +10:12 j: i32 (let)
+  local +11:11 at: i32 (const)
+  callee +12:5 p256BaseMove -> @nish.p256BaseMove
+  callee +14:3 p256SetZero -> @nish.p256SetZero
+  callee +15:3 p256FiatSub -> @nish.p256FiatSub
+  callee +16:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
 function p256PointAddMixed(p: P256ProjectivePoint, q: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256PointAddMixed
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256FiatMul
@@ -4617,7 +4618,8 @@ function Sha256.update(this: Sha256, data: u8[], off: i32, len: i32): void -> @n
   pointer this: size=40 writesThrough=true captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256Compress#2
   stackSites=0 stackLocals=0
-  local -5:11 size: i32 (const)
+  local -7:11 size: i32 (const)
+  local -1:11 count: u64 (const)
   local +1:11 state: u32[] (const)
   local +2:11 schedule: u32[] (const)
   local +3:11 block: u8[] (const)
@@ -4634,9 +4636,10 @@ function Sha256.updateAll(this: Sha256, data: u8[]): void -> @nish.Sha256.update
   pointer this: size=40 writesThrough=true captured=false passedTo=nish.Sha256.update#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
   stackSites=0 stackLocals=0
-  local -8:11 n: i32 (const)
-  local -4:13 from: i32 (const)
-  callee -3:7 Sha256.update -> @nish.Sha256.update
+  local -10:11 n: i32 (const)
+  local -6:13 from: i32 (const)
+  callee -5:7 Sha256.update -> @nish.Sha256.update
+  local -1:11 count: u64 (const)
   local +1:11 state: u32[] (const)
   local +2:11 schedule: u32[] (const)
   local +3:11 block: u8[] (const)
