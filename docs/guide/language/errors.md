@@ -291,7 +291,7 @@ certain succeeded, and it insists on a reason, which is why there is no
 compiler refuses both, and the program builds only with `--allow-panics`;
 return a `Result` instead where the program should build under the default.
 
-<!-- allow-panics: calls `panic` -->
+<!-- allow-panics: shows a function that ends the program with `panic` -->
 <!-- nish:ok --allow-panics -->
 ```ts
 const daysIn = (month: i32): i32 => {

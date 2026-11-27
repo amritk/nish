@@ -31,11 +31,16 @@ class Tree implements Compact {
   }
 }
 
-const count = (t: Tree | null): f64 => {
+const count = (t: Tree | null): i32 => {
   if (t === null) {
     return 0;
   }
-  return 1 + count(t.left) + count(t.right);
+  const l = count(t.left);
+  const r = count(t.right);
+  if (l < 0 || l > 1000000000 || r < 0 || r > 1000000000) {
+    return -1;
+  }
+  return 1 + l + r;
 };
 
 export const main = (): i32 => {
@@ -165,16 +170,18 @@ export class Cell implements Compact {
 
 export const push = (value: i32, head: Cell | null): Cell => new Cell(value, head);
 
-export const largest = (head: Cell): i32 => {
-  let most = head.value;
-  let at = head.next;
+export const total = (head: Cell | null): i32 => {
+  let sum = 0;
+  let at = head;
   while (at !== null) {
-    if (at.value > most) {
-      most = at.value;
+    const v = at.value;
+    if (v < 0 || v > 1000000 || sum > 1000000000) {
+      return -1;
     }
+    sum = sum + v;
     at = at.next;
   }
-  return most;
+  return sum;
 };
 ```
 
@@ -189,7 +196,7 @@ The header declares `typedef struct Cell Cell;` and
 int main(void) {
   struct Cell *head = NULL;
   for (int32_t i = 1; i <= 4; i++) head = push(i, head);
-  printf("%d\n", largest(head)); /* 4 */
+  printf("%d\n", total(head)); /* 10 */
   return 0;
 }
 ```
