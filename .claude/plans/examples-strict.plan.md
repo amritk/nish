@@ -167,7 +167,7 @@ builds add with the flag), `.github/workflows/release.yml` (the multi build) and
 `package.json` (`example`, `size-report`); S10 edits `AGENTS.md`. Both are built
 and reviewed, then left green for the owner to merge.
 
-- **S1** `src/bounds.ts`, `src/attributes.ts`, new `tests/cases/*storage*`, new `tests/link/*storage*`
+- **S1** `src/bounds.ts`, `src/attributes.ts`, new `tests/cases/*storage*`, new `tests/link/*storage*`; widened in review: the module-storage opt-out in `docs/AI.md`, `docs/security/crypto-aead.md` (AEAD-5) and its `docs/security/README.md` row
 - **S2** `src/bounds.ts`, `src/attributes.ts` (after S1), new `tests/cases/*caller*`, new `tests/link/*caller*`
 - **S3** `examples/add.ts`, `examples/main.c`, `examples/multi/**`, `examples/arrays.ts`, `examples/node-addon.mjs`, `scripts/size-report.sh`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `package.json`, `docs/guide/using-nish/interop.md`, `docs/wp50-wasm-host.md`
 - **S4** `std/term.ts`
@@ -175,7 +175,7 @@ and reviewed, then left green for the owner to merge.
 - **S5** `examples/wasm-arena/**`, `tests/interop/chrome-arena.py`, `tests/runtime-budgets.js` (arena rows), any `std/math.ts` site that surfaces
 - **S6** `examples/break-web/**`, `src/break-*.ts`, `std/raster.ts`, `std/random.ts`, `docs/site/break/**`, `tests/break-web/**`
 - **S7** `std/net/fetch.ts`, `std/net/url.ts`, `std/bytes.ts`, `std/net/http-compress.ts`, `examples/http-get-json.ts`, `examples/http-app/**`, `tests/link/net_http_app/**`, `docs/security/{handler,router,static}.md`, `docs/guide/using-nish/api-server.md`
-- **S8** `std/net/http3-*.ts`, `std/net/qpack.ts`, `std/net/websocket.ts`, `std/net/webtransport.ts`, `std/crypto/{hmac,sha256,base64url}.ts`, `docs/security/http3.md` and the crypto/websocket records whose counts change, `contracts/**` and `test/spec/**` for those modules
+- **S8** `std/net/http3-*.ts`, `std/net/qpack.ts`, `std/net/websocket.ts`, `std/net/webtransport.ts`, `std/crypto/{hmac,sha256,base64url}.ts`, `docs/security/http3.md` and the crypto/websocket records whose counts change, `contracts/**` and `test/spec/**` for those modules; widened in review (owned by no other stage): `std/net/http3.ts`, `std/net/quic.ts`, `std/crypto/p256.ts`, `std/net/buffer-pool.ts`, `std/net/http-server.ts`, their `tests/link` cases, security records and specs. Left to S2's caller-proof rule (S9 rechecks): the constructor config checks at `http3-server.ts` ~831 and `webtransport.ts` ~757; `websocket.ts` ~287 goes to S9
 - **S9** `examples/relay/**`, `tests/link/net_relay*/**`, `docs/guide/using-nish/networking.md`
 - **S10** the stale opt-out block of `tests/run.js` (~6577), `AGENTS.md`
 
