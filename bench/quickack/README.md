@@ -19,12 +19,15 @@ bash bench/quickack/run.sh --quick    # 1 round of 2 s, to try the script
 ```
 
 `run.sh` prints the box first, then `probe.c` (the per-call cost and an
-ACK count per mode on one connection), then `bench/http.mjs --acks` over the
+ACK count per mode on one connection), then the per-host alternatives to the
+option (a route, a sysctl, a BPF sockops program; see
+[The alternatives, measured](#the-alternatives-measured)), then `bench/http.mjs --acks` over the
 keep-alive scenarios with every mode in one interleaved session, then
 `--syscalls`. Every mode is a wrapper that runs the same build with
 `BENCH_QUICKACK` set; `copy` is a byte-identical copy of that build, and its
 distance from `none` is the noise band. It needs Linux, `wrk`, `strace` and a
-C compiler.
+C compiler; the alternatives also need root and `ip` (iproute2), and print the
+refusal in their place where the box will not run one.
 
 ## The answer
 
@@ -50,8 +53,8 @@ C compiler.
 Every figure here is from one box:
 
 - Intel Xeon Processor @ 2.10GHz (the CPU model the VM exposes), 4 vCPUs
-- a Firecracker VM (the CPU reports a hypervisor; `systemd-detect-virt` sees
-  only the container it runs in), kernel 6.18.44
+- a cloud VM (the CPU reports a hypervisor; `systemd-detect-virt` sees only
+  the container it runs in, and `--vm` prints `kvm`), kernel 6.18.44
 - vulnerabilities: every one "Not affected" except
   `spec_store_bypass` (prctl), `spectre_v1` (usercopy/swapgs barriers),
   `spectre_v2` (Enhanced IBRS, IBPB conditional, BHI vulnerable)
@@ -186,12 +189,73 @@ Line numbers are for v6.8 and v6.18 (`net/ipv4/` unless named).
 | `TCP_QUICKACK` 0 after each response | pingpong back after a late response | one call per request (≈170 ns) | saves one ACK per late response; not worth the call |
 | `TCP_QUICKACK` 1 after each response | pingpong off for good | one call and one segment per request | the trade the guide now spells out |
 | check with `getsockopt` first, set only when off | as above, fewer setsockopts | one getsockopt per request (≈204 ns, or 294 for `TCP_INFO`) | costs more than the setsockopt it skips |
-| `ip route ... quickack 1` | quick ACKs for a route, every socket on it | none in the process | the opposite direction; needs root and affects other programs |
+| `ip route ... quickack 1` | quick ACKs for a route, every socket on it | none in the process | measured below: the opposite direction, a pure ACK for every request; needs root and affects other programs |
 | `TCP_CONGESTION` | the congestion control, not the ACK policy | one call per connection | no lever on delayed ACKs |
-| sysctl `net.ipv4.tcp_pingpong_thresh` | how many quick sends enter pingpong | none in the process | system-wide; the default 1 is already the most eager, and no sysctl sets the delayed-ACK timeout (`tcp_comp_sack_*` batch SACKs, not ACKs) |
-| BPF sockops `TCP_BPF_DELACK_MAX` (`filter.c:5225-5230` / `5379-5384`) | the longest delayed-ACK timeout | none in the process | needs a loaded BPF program and `CAP_BPF`; `bpf_setsockopt` has no `TCP_QUICKACK` |
+| sysctl `net.ipv4.tcp_pingpong_thresh` | how many quick sends enter pingpong | none in the process | measured below: system-wide; the default 1 is the lowest the kernel takes (a write of 0 gets `EINVAL`, and 3 doubles the slow client's ACKs), and no sysctl sets the delayed-ACK timeout (`tcp_comp_sack_*` batch SACKs, not ACKs) |
+| BPF sockops `TCP_BPF_DELACK_MAX` (`filter.c:5225-5230` / `5379-5384`) | the longest delayed-ACK timeout | none in the process | measured below: needs a loaded BPF program and `CAP_BPF`; it changes no ACK count here, and `bpf_setsockopt` refuses `TCP_QUICKACK` with `EINVAL` |
 | `TCP_DELACK_MAX_US` (6.18 only, `tcp.c:3910-3925`) | the longest delayed-ACK timeout, per socket | one call per connection | not on 6.8; tunes the timer, not whether ACKs wait |
 | `TCP_INFO` to skip the reset | reads `tcpi_ato` only (`tcp.c:3824` / `4237`); no pingpong bit | one getsockopt per request | cannot tell, and costs more than the call it skips |
+
+## The alternatives, measured
+
+The three per-host rows above, run rather than read. **Measured on 2026-11-27
+on a cloud VM** (the box above: the CPU reports a hypervisor), by one
+`bash bench/quickack/run.sh`; the bench code is that of this section's commit,
+the squash commit of the pull request that added it, and the server was built
+by `build/nish` from `src/` at `9533b5d5`, that pull request's base. Each
+alternative is set, measured with `probe.c` on one connection (`none` and
+`reset0`, 200 requests per pattern) and with `bench/http.mjs --acks` on
+plaintext keep-alive c=256 (7 interleaved rounds of 5 s, `none` and
+`reset0`), then put back; an exit trap puts it back if the run stops partway.
+
+Pure ACKs the server sends per request on one connection:
+
+| host setting | `none` fast / slow / idle | `reset0` fast / slow / idle |
+| --- | ---: | ---: |
+| as it is (the baseline) | 0.005 / 0.200 / 0.005 | 0.005 / 0.105 / 0.005 |
+| route `quickack 1` | 1.000 / 1.000 / 1.000 | 1.000 / 1.000 / 1.000 |
+| `tcp_pingpong_thresh` 3 | 0.015 / 0.400 / 0.015 | 0.005 / 0.105 / 0.005 |
+| sockops `TCP_BPF_DELACK_MAX` 8000 µs | 0.005 / 0.200 / 0.005 | 0.005 / 0.105 / 0.005 |
+| sockops `TCP_QUICKACK` 0 | 0.005 / 0.200 / 0.005 | not run |
+
+Under load, plaintext keep-alive c=256, each setting its own session (so the
+noise band is each session's spread, and req/s compares only within a row):
+
+| host setting | `none` req/s (spread) | `reset0` req/s | sys µs/req, `none` / `reset0` | segments/req, `none` / `reset0` |
+| --- | ---: | ---: | ---: | ---: |
+| as it is (the baseline) | 189,351 (169,815–199,581) | 186,588 (-1.5%) | 4.40 / 4.39 | 2.003 / 2.002 |
+| route `quickack 1` | 174,728 (145,299–185,142) | 173,144 (-0.9%) | 4.80 / 4.80 | 4.002 / 4.002 |
+| `tcp_pingpong_thresh` 3 | 182,747 (174,419–200,000) | 189,193 (+3.5%) | 4.52 / 4.30 | 2.004 / 2.003 |
+| sockops `TCP_BPF_DELACK_MAX` 8000 µs | 190,878 (142,798–198,849) | 185,039 (-3.1%) | 4.25 / 4.47 | 2.003 / 2.003 |
+
+- **The route** (`ip route replace table local local 127.0.0.1 dev lo proto
+  kernel scope host src 127.0.0.1 quickack 1`, which the kernel took) turns
+  delayed ACKs off for every socket on it: a pure ACK for every request in
+  every pattern, with or without `reset0`, and twice the segments per request
+  under load, 4.002 against 2.003 (the counter takes in both ends, and wrk's
+  end, on the same route, acks each response too).
+  It is `reset1` for the whole host, the opposite of what the reset asks for.
+- **The sysctl.** The kernel refuses the write of 0 to
+  `net.ipv4.tcp_pingpong_thresh` with `EINVAL`, so the default 1 is the
+  lowest it takes. At 3, `none` sends twice the slow client's ACKs (0.400
+  against 0.200) and three times the fast and idle ones (0.015 against
+  0.005); `reset0` is unchanged. Under load the segments per request do not
+  move (2.004 against 2.003). It can only make delayed ACKs start later.
+- **BPF sockops, `TCP_BPF_DELACK_MAX` 8000 µs.** The kernel loaded and
+  attached the program, and `bpf_setsockopt` returned 0 on both ends of every
+  connection (6 calls each on the probe's connections, 7,170 each under
+  load). No ACK count moved: the probe table is the baseline's, and under
+  load 2.003 segments per request with 0.0002 timer ACKs per request. It caps
+  how long an ACK may wait; it does not choose whether it waits.
+- **BPF sockops, `TCP_QUICKACK` 0.** The verifier accepted the program and the
+  helper ran on both ends (3 calls each), but it returned `EINVAL` (Invalid
+  argument) every time: this kernel does not let a sockops program set the
+  option. The probe table is the baseline's.
+
+None of the three does what the per-response `reset0` does, so
+`netSetOption(conn, NET_TCP_QUICKACK, 0)` after each response stays where an
+app makes it. The figures are from this cloud VM, not the Xeon Platinum 8260
+the cost was reported on.
 
 ## A getter, recorded rather than built
 
