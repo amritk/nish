@@ -304,7 +304,7 @@ export class Http2TlsServer {
    * Signs `slot`'s CertificateVerify with `key`, as `TlsTcpServer.signP256` does.
    *
    * @param slot The slot whose interest says `TLS_RECORD_SIGN`.
-   * @param key The certificate's P-256 private key; borrowed for the call, still the caller's to wipe.
+   * @param key The certificate's private key, P-256 or RSA as `signatureScheme` says; borrowed for the call, still the caller's to wipe.
    * @returns The slot's interest, as `flush` answers it; `TLS_RECORD_DONE` for a free slot.
    */
   signP256(slot: i32, key: Secret<u8[]>): i32 {
