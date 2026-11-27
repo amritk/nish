@@ -257,24 +257,6 @@ export const trim = (text: string): string => trimEnd(trimStart(text))
 export const contains = (haystack: string, needle: string): boolean => toI32(haystack.indexOf(needle)) >= 0
 
 /**
- * Where the `count` bytes from `at` end, `at + count`, when they end by
- * `length`; `-1` when any of the three is negative or they run past it. Written as
- * differences, each of which `src/bounds.ts` proves, so the end needs no
- * overflow check and no cast through `u32`.
- */
-const textSpanEnd = (length: i32, at: i32, count: i32): i32 => {
-  if (length < 0 || at < 0 || count < 0) {
-    return -1
-  }
-  const room: i32 = length - at
-  if (room < 0) {
-    return -1
-  }
-  const gap: i32 = room - count
-  return gap < 0 ? -1 : length - gap
-}
-
-/**
  * The pieces of `text` between the occurrences of `sep`: JavaScript's
  * `text.split(sep)` for a separator that is not empty. A separator at the
  * start, at the end or next to another gives an empty piece, so
@@ -313,7 +295,7 @@ export const split = (text: string, sep: string): string[] => {
   const length: i32 = toI32(text.length)
   const parts: string[] = []
   let start: i32 = 0
-  while (true) {
+  while (start >= 0) {
     // Searching from `start` rather than cutting `text` down after each match
     // copies nothing until the piece is taken.
     const at: i32 = toI32(text.indexOf(sep, start))
@@ -330,13 +312,10 @@ export const split = (text: string, sep: string): string[] => {
     if (start >= 0 && start < length && at >= 0 && at < length) {
       parts.push(text.substring(start, at))
     }
-    // A hit is a whole separator that ends by `length`, so its end is never
-    // `-1`; the test is what keeps `start` a position in `text`.
+    // A hit is a whole separator ending by `length`: never the `-1` that ends the loop.
     start = textSpanEnd(length, at, sepLength)
-    if (start < 0) {
-      return parts
-    }
   }
+  return parts
 }
 
 /**
@@ -373,7 +352,7 @@ export const splitLimit = (text: string, sep: string, limit: i32): string[] => {
   const length: i32 = toI32(text.length)
   const parts: string[] = []
   let start: i32 = 0
-  while (true) {
+  while (start >= 0) {
     // Searching from `start` rather than cutting `text` down after each match
     // copies nothing until the piece is taken.
     const at: i32 = toI32(text.indexOf(sep, start))
@@ -393,13 +372,10 @@ export const splitLimit = (text: string, sep: string, limit: i32): string[] => {
     if (toI32(parts.length) === limit) {
       return parts
     }
-    // A hit is a whole separator that ends by `length`, so its end is never
-    // `-1`; the test is what keeps `start` a position in `text`.
+    // A hit is a whole separator ending by `length`: never the `-1` that ends the loop.
     start = textSpanEnd(length, at, sepLength)
-    if (start < 0) {
-      return parts
-    }
   }
+  return parts
 }
 
 /** The most digits `toFixed` takes after the point; JavaScript throws a `RangeError` past it. */
@@ -588,6 +564,24 @@ export const toFixed = (x: f64, digits: i32): string => {
     at -= 1
   }
   return String.fromBytes(bytes, 0, toI32(bytes.length))
+}
+
+/**
+ * Where the `count` bytes from `at` end, `at + count`, when they end by
+ * `length`; `-1` when any of the three is negative or they run past it. Written as
+ * differences, each of which `src/bounds.ts` proves, so the end needs no
+ * overflow check and no cast through `u32`.
+ */
+const textSpanEnd = (length: i32, at: i32, count: i32): i32 => {
+  if (length < 0 || at < 0 || count < 0) {
+    return -1
+  }
+  const room: i32 = length - at
+  if (room < 0) {
+    return -1
+  }
+  const gap: i32 = room - count
+  return gap < 0 ? -1 : length - gap
 }
 
 /**

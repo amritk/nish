@@ -178,20 +178,6 @@ export const SQLITE_ROW: i32 = 100
 /** `step` has finished. */
 export const SQLITE_DONE: i32 = 101
 
-/**
- * The SQLite result code the adapter answered as `n`, minus that code: `-n`,
- * spelled `~n + 1`. The adapter only answers small codes; a stray
- * `-2147483648`, whose negation is past an `i32`, answers `2147483647` rather
- * than overflow, and the test with the literal is what proves the sum.
- */
-const sqliteNegated = (n: i32): i32 => {
-  const m: i32 = ~n
-  if (m < 0 || m > 2147483646) {
-    return 2147483647
-  }
-  return m + 1
-}
-
 /** `columnType` of an integer. */
 export const SQLITE_INTEGER: i32 = 1
 /** `columnType` of a floating-point value. */
@@ -800,6 +786,20 @@ declare function nishsqlite_cursor_count_range(h: i32, lo: i64, hi: i64, n: u64)
 declare function nishsqlite_cursor_count_at(h: i32, i: u64): i64
 declare function nishsqlite_cursor_read_row(h: i32, io: u8[], n: u64, text: u8[], ntext: u64): i32
 declare function nishsqlite_cursor_record(h: i32, buf: u8[], n: u64): i32
+
+/**
+ * The SQLite result code the adapter answered as `n`, minus that code: `-n`,
+ * spelled `~n + 1`. The adapter only answers small codes; a stray
+ * `-2147483648`, whose negation is past an `i32`, answers `2147483647` rather
+ * than overflow, and the test with the literal is what proves the sum.
+ */
+const sqliteNegated = (n: i32): i32 => {
+  const m: i32 = ~n
+  if (m < 0 || m > 2147483646) {
+    return 2147483647
+  }
+  return m + 1
+}
 
 /**
  * A B-tree cursor on a table or index, which reads rows without a statement.
