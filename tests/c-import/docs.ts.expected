@@ -4,7 +4,7 @@
 // Regenerate: nish c-import docs.h --target x86_64-unknown-linux-gnu -o docs.ts
 
 /** A window the library owns. */
-declare class doc_window {}
+export declare class doc_window {}
 
 /**
  * A point on the window.
@@ -33,8 +33,8 @@ export const DOC_FPS: i32 = 60
  * @param height the height in pixels
  * @returns the window, or null when it cannot open
  */
-declare function doc_open(width: i32, height: i32): doc_window | null
+export declare function doc_open(width: i32, height: i32): doc_window | null
 /** Closes `w`. */
-declare function doc_close(w: doc_window): void
-declare function doc_count(): i32
-declare function doc_plain(): i32
+export declare function doc_close(w: doc_window): void
+export declare function doc_count(): i32
+export declare function doc_plain(): i32

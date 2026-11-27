@@ -32,7 +32,7 @@ export const WIDTH: i32 = 4
 declare function digest_init(d: digest): void
 declare function mixed_sum(m: mixed): f64
 declare function by_macro_fill(b: by_macro): void
-declare function use_all(a: CPtr, b: CPtr, c: CPtr, d: CPtr, e: CPtr, f: CPtr, g: CPtr, i: CPtr, j: CPtr, k: CPtr): void
+export declare function use_all(a: CPtr, b: CPtr, c: CPtr, d: CPtr, e: CPtr, f: CPtr, g: CPtr, i: CPtr, j: CPtr, k: CPtr): void
 declare function use_fnptrs(a: CPtr, b: CPtr, c: CPtr, d: CPtr, e: one_fnptr, f: CPtr, g: CPtr): void
 
 /* Not bound:

@@ -987,6 +987,11 @@ class Importer {
   usedOut: StringSet
   /** The out classes the function being declared needs, kept only if it is bound. */
   pendingOut: string[]
+  /**
+   * Whether the function being declared names a class with fields, whose
+   * layout stays in this module (NL2756), so the function is not exported.
+   */
+  pendingLayout: boolean
   /** The class names `decideNames` gave out, which an opaque class may not take. */
   classNames: StringSet
   /** The functions that may claim their name in the module. */
@@ -1028,6 +1033,7 @@ class Importer {
     this.classNames = new StringSet()
     this.fnNames = new StringSet()
     this.pendingOut = []
+    this.pendingLayout = false
     this.doc = new CJson()
     this.triple = triple
     this.lp64 = dataModelOf(triple) === "LP64"
@@ -2246,6 +2252,9 @@ class Importer {
     if (t.base === BASE_RECORD) {
       const index = this.recordOf(t.tag)
       if (this.fits(index) || (index >= 0 && this.records[index].opaque)) {
+        if (!this.records[index].opaque) {
+          this.pendingLayout = true
+        }
         return `${this.word(this.records[index].className, AS_IDENT)}${orNull}`
       }
       return `CPtr${orNull}`
@@ -3441,6 +3450,7 @@ class Importer {
       const f = this.funcs[i]
       if (this.selected(f)) {
         this.pendingOut = []
+        this.pendingLayout = false
         let decl = this.functionDecl(f, true)
         if (!decl.startsWith("!") && (isNameReserved(f.name) || isOutName(f.name))) {
           decl = "!its name is a word or type Nish reserves"
@@ -3449,7 +3459,12 @@ class Importer {
           report.push(reportLine(f.name, decl.slice(1)))
           reportLines.push(f.inHeader ? f.line : 1000000000 + i)
         } else {
-          functions.add(`${this.docComment(f.doc)}${decl}\n`)
+          // Another module may import a function whose types are all its
+          // own to pass: an out class or a class with fields stays here.
+          const exported = this.pendingOut.length === 0 && !this.pendingLayout
+          const at = decl.indexOf("declare function ")
+          const shown = exported && at >= 0 ? `${decl.substring(0, at)}export ${decl.slice(at)}` : decl
+          functions.add(`${this.docComment(f.doc)}${shown}\n`)
           names.set(f.name, owners.length)
           owners.push(`the function \`${f.name}\``)
           for (let j = 0; j < this.pendingOut.length; j++) {
@@ -3501,7 +3516,7 @@ class Importer {
           reportLines.push(r.line)
         }
       } else if (r.opaque) {
-        out.add(`${this.docComment(this.recordDoc(r))}declare class ${this.word(r.className, AS_IDENT)} {}\n\n`)
+        out.add(`${this.docComment(this.recordDoc(r))}export declare class ${this.word(r.className, AS_IDENT)} {}\n\n`)
         names.set(r.className, owners.length)
         owners.push(`the struct \`${r.key}\``)
       } else if (r.opaqueWhy.length > 0) {

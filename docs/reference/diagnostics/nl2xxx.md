@@ -4484,6 +4484,8 @@ The message of an error contains:
 ` cannot be exported: it is a C function this program calls, not one it defines
 ```
 
+**Retired**: `... cannot be exported: it is a C function this program calls`, the refusal WP89 S3b lifted; an exported `declare function` is imported and called now (tests/link/export_declare_handle), and a C struct layout in its signature keeps its own refusal (tests/link/export_declare_layout_param)
+
 ## NL2307
 
 The message of an error contains:
@@ -14149,7 +14151,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` cannot be exported: a C struct layout is used in the module that declares it
+` cannot be exported: it has fields, and a C struct layout is built and read only in the module that declares it
 ```
 
 ## NL2747

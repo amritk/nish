@@ -6,10 +6,10 @@
 export const ok_value: i32 = 2
 export const FINE: i32 = 4
 
-declare function stat(path: string, buf: CPtr): i32
-declare function width(): i32
-declare function two_in(in_1: i32, in_: i32): i32
-declare function two_in_rev(in_: i32, in_1: i32): i32
+export declare function stat(path: string, buf: CPtr): i32
+export declare function width(): i32
+export declare function two_in(in_1: i32, in_: i32): i32
+export declare function two_in_rev(in_: i32, in_1: i32): i32
 
 /* Not bound:
  *   struct stat: the module gives `stat` to the function `stat`
