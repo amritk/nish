@@ -1224,7 +1224,7 @@ function emitMapRoute(emitter: Emitter, sig: FunctionSig, values: string[]): str
 function routeOwnerOf(table: TypeTable, sig: FunctionSig): StructInfo | null -> @routeOwnerOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf nish_panic_index
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   pointer sig: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
@@ -1236,7 +1236,7 @@ function fusedCalleesOf(program: CheckedProgram, table: TypeTable, call: Node): 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FusionTable.roleOf TypeTable.isMaybe isMapRoute methodsNamed nish_array_grow nish_panic_index routeCalleesOf valueReaderOf
   pointer program: size=928 writesThrough=false captured=false
-  pointer table: size=168 writesThrough=false captured=false passedTo=routeCalleesOf#0 TypeTable.isMaybe#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=routeCalleesOf#0 TypeTable.isMaybe#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=3 stackLocals=0
   local +0:9 sig: FunctionSig | null (const)
@@ -1262,7 +1262,7 @@ function isMapRoute(sig: FunctionSig): boolean -> @isMapRoute [exported]
 function routeCalleesOf(table: TypeTable, sig: FunctionSig): FunctionSig[] -> @routeCalleesOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: mapIntrinsicOf methodsNamed routeOwnerOf
-  pointer table: size=168 writesThrough=false captured=false passedTo=routeOwnerOf#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=routeOwnerOf#0
   pointer sig: size=296 writesThrough=false captured=false passedTo=routeOwnerOf#1 mapIntrinsicOf#0
   stackSites=2 stackLocals=0
   callee +0:3 methodsNamed -> @methodsNamed

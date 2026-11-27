@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 817 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 819 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15777,4 +15777,20 @@ The message of an error contains:
 
 ```text
 ` = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there: any other write would drop a handle the object owns or own one twice
+```
+
+## NL2826
+
+The message of an error contains:
+
+```text
+` opened as an argument of a `new` that takes ownership of it cannot be followed by an argument that may leave the function, as `.orReturn()` does: the handle is open by then and the object that would close it is never built; compute that argument first, into a `const`
+```
+
+## NL2827
+
+The message of an error contains:
+
+```text
+` cannot cross an export of the entry module: the entry's exports are C symbols, and a foreign caller that is given or lent a handle runs no close; export the class and the functions that take it from a module the entry imports
 ```

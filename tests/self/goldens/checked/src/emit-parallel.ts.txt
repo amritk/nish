@@ -651,10 +651,10 @@ function closeHandle(emitter: Emitter, info: StructInfo, object: string, nullabl
   local +13:11 child: StructInfo | null (const)
   local +14:11 close: FunctionSig | null (const)
   callee +16:7 closeHandle -> @closeHandle
-  callee +18:20 internalErrorFor -> @internalErrorFor
-  callee +20:7 closeNative -> @closeNative
-  callee +24:5 IRFunction.emit -> @IRFunction.emit
-  callee +25:5 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +19:9 internalErrorFor -> @internalErrorFor
+  callee +25:7 closeNative -> @closeNative
+  callee +29:5 IRFunction.emit -> @IRFunction.emit
+  callee +30:5 IRFunction.placeBlock -> @IRFunction.placeBlock
 function closeNative(emitter: Emitter, close: FunctionSig, type: i32, value: string, tested: boolean): void -> @closeNative
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvmAbi

@@ -61,6 +61,14 @@ function handleValueMessage(cls: string): string -> @handleValueMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
+function leaveAfterMessage(cls: string): string -> @leaveAfterMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function entryExportMessage(cls: string): string -> @entryExportMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
 function handleTypeMessage(cls: string): string -> @handleTypeMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -94,15 +102,15 @@ function stepShapes(field: string): string -> @stepShapes
   calls: nish_str_concat
   stackSites=0 stackLocals=0
 function disposeShapeMessage(cls: string, natives: string[]): string -> @disposeShapeMessage
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat stepShapes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct nish_array_grow nish_str_concat stepShapes
   pointer natives: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
   local +0:7 body: string (let)
   callee +2:26 stepShapes -> @stepShapes
   local +4:11 order: string[] (const)
   local +5:14 i: i32 (let)
-  callee +8:89 stepShapes -> @stepShapes
+  callee +10:89 stepShapes -> @stepShapes
 function closeUnknownMessage(name: string, cls: string): string -> @closeUnknownMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -124,7 +132,7 @@ function handleOf(program: CheckedProgram, table: TypeTable, type: i32): StructI
   escaping: type
   calls: CheckedProgram.structByType TypeTable.isStruct TypeTable.stripNull
   pointer program: size=928 writesThrough=false captured=false passedTo=CheckedProgram.structByType#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isStruct#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isStruct#0
   stackSites=0 stackLocals=0
   local +0:9 bare: i32 (const)
   callee +0:16 TypeTable.stripNull -> @TypeTable.stripNull
@@ -136,7 +144,7 @@ function resultHandleOf(program: CheckedProgram, table: TypeTable, type: i32): S
   escaping: type
   calls: TypeTable.isResult TypeTable.okOf handleOf
   pointer program: size=928 writesThrough=false captured=false passedTo=handleOf#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isResult#0 handleOf#1 TypeTable.okOf#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.isResult#0 handleOf#1 TypeTable.okOf#0
   stackSites=0 stackLocals=0
   callee +0:16 TypeTable.isResult -> @TypeTable.isResult
   callee +0:39 handleOf -> @handleOf
@@ -145,7 +153,7 @@ function openedHandle(program: CheckedProgram, table: TypeTable, init: Node): St
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: handleOf nish_panic_index unwrapParens
   pointer program: size=928 writesThrough=false captured=false passedTo=handleOf#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=handleOf#1
+  pointer table: size=176 writesThrough=false captured=false passedTo=handleOf#1
   pointer init: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 at: Node (const)
@@ -276,13 +284,41 @@ function foreignNamed(program: CheckedProgram, name: string): FunctionSig | null
   callee +0:13 functionNamed -> @functionNamed
   local +2:16 binding: ImportBinding (const)
   callee +8:26 FunctionSig.foreign -> @FunctionSig.foreign
+function closeStepFinding(program: CheckedProgram, table: TypeTable, info: StructInfo, step: DisposeStep, owned: OwnedField): HandleFinding | null -> @closeStepFinding
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: HandleFinding.constructor StructInfo.field TypeTable.assignable TypeTable.stripNull TypeTable.typeName closeArityMessage closeTypeMessage closeUnknownMessage foreignNamed nish_alloc_struct nish_panic_index nish_str_concat
+  pointer program: size=928 writesThrough=false captured=false passedTo=foreignNamed#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.assignable#0 TypeTable.typeName#0 TypeTable.typeName#0
+  pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.field#0
+  pointer step: size=24 writesThrough=false captured=false
+  pointer owned: size=40 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -29:9 call: Node (const)
+  local -28:9 name: string (const)
+  local -27:9 sig: FunctionSig | null (const)
+  callee -27:15 foreignNamed -> @foreignNamed
+  callee -25:12 new HandleFinding -> @HandleFinding.constructor
+  callee -25:48 closeUnknownMessage -> @closeUnknownMessage
+  callee -22:12 new HandleFinding -> @HandleFinding.constructor
+  callee -22:36 closeArityMessage -> @closeArityMessage
+  local -20:9 field: FieldInfo | null (const)
+  callee -20:17 StructInfo.field -> @StructInfo.field
+  local -15:9 arg: i32 (const)
+  callee -15:29 TypeTable.stripNull -> @TypeTable.stripNull
+  callee -14:8 TypeTable.assignable -> @TypeTable.assignable
+  local -13:11 shown: string (const)
+  callee -12:12 new HandleFinding -> @HandleFinding.constructor
+  callee -10:7 closeTypeMessage -> @closeTypeMessage
+  callee -6:9 TypeTable.typeName -> @TypeTable.typeName
+  callee -4:9 TypeTable.typeName -> @TypeTable.typeName
 function checkDispose(program: CheckedProgram, table: TypeTable, info: StructInfo, out: HandleFinding[]): void -> @checkDispose
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: HandleFinding.constructor StructInfo.field TypeTable.assignable TypeTable.stripNull TypeTable.typeName closeArityMessage closeTypeMessage closeUnknownMessage disposeMethod disposeShapeMessage disposeSteps foreignNamed nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noDisposeMessage
-  pointer program: size=928 writesThrough=false captured=false passedTo=foreignNamed#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.assignable#0 TypeTable.typeName#0 TypeTable.typeName#0
-  pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.field#0
+  calls: HandleFinding.constructor closeStepFinding disposeMethod disposeShapeMessage disposeSteps nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq noDisposeMessage
+  pointer program: size=928 writesThrough=false captured=false passedTo=closeStepFinding#0 closeStepFinding#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=closeStepFinding#1 closeStepFinding#1
+  pointer info: size=176 writesThrough=false captured=false passedTo=closeStepFinding#2 closeStepFinding#2
   pointer out: size=0 writesThrough=true captured=false
   stackSites=2 stackLocals=2
   local -12:9 cls: string (const)
@@ -301,27 +337,11 @@ function checkDispose(program: CheckedProgram, table: TypeTable, info: StructInf
   local +10:14 i: i32 (let)
   callee +17:14 new HandleFinding -> @HandleFinding.constructor
   callee +17:52 disposeShapeMessage -> @disposeShapeMessage
-  local +20:12 i: i32 (let)
-  local +21:11 step: DisposeStep (const)
-  local +22:11 owned: OwnedField (const)
-  local +23:11 call: Node (const)
-  local +24:11 name: string (const)
-  local +25:11 sig: FunctionSig | null (const)
-  callee +25:17 foreignNamed -> @foreignNamed
-  callee +27:16 new HandleFinding -> @HandleFinding.constructor
-  callee +27:52 closeUnknownMessage -> @closeUnknownMessage
-  callee +31:16 new HandleFinding -> @HandleFinding.constructor
-  callee +31:40 closeArityMessage -> @closeArityMessage
-  local +34:11 field: FieldInfo | null (const)
-  callee +34:19 StructInfo.field -> @StructInfo.field
-  local +39:11 arg: i32 (const)
-  callee +39:31 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +40:10 TypeTable.assignable -> @TypeTable.assignable
-  local +41:13 shown: string (const)
-  callee +43:9 new HandleFinding -> @HandleFinding.constructor
-  callee +45:11 closeTypeMessage -> @closeTypeMessage
-  callee +49:13 TypeTable.typeName -> @TypeTable.typeName
-  callee +51:13 TypeTable.typeName -> @TypeTable.typeName
+  local +22:7 bad: i32 (let)
+  local +23:12 i: i32 (let)
+  callee +24:9 closeStepFinding -> @closeStepFinding
+  local +29:11 finding: HandleFinding | null (const)
+  callee +29:21 closeStepFinding -> @closeStepFinding
 function ownerReaches(info: StructInfo, at: StructInfo, depth: i32): boolean -> @ownerReaches
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ownerReaches
@@ -357,7 +377,7 @@ function handleDisposes(program: CheckedProgram, table: TypeTable): HandleFindin
   sharedWrite: +0:9
   calls: HandleFinding.constructor StructInfo.field TypeTable.isNullable checkDispose findSinks handleFieldMessage handleOf nish_alloc_struct nish_array_grow nish_panic_index ownerReaches
   pointer program: size=928 writesThrough=false captured=false passedTo=handleOf#0 handleOf#0 checkDispose#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=handleOf#1 TypeTable.isNullable#0 handleOf#1 checkDispose#1
+  pointer table: size=176 writesThrough=false captured=false passedTo=handleOf#1 TypeTable.isNullable#0 handleOf#1 checkDispose#1
   stackSites=1 stackLocals=1
   local -7:9 out: HandleFinding[] (const)
   local -6:9 local: StructInfo[] (const)
@@ -371,14 +391,14 @@ function handleDisposes(program: CheckedProgram, table: TypeTable): HandleFindin
   callee +6:9 ownerReaches -> @ownerReaches
   local +7:18 member: Node (const)
   local +8:15 field: FieldInfo | null (const)
-  callee +8:74 StructInfo.field -> @StructInfo.field
-  local +9:15 child: StructInfo | null (const)
-  callee +9:66 handleOf -> @handleOf
-  callee +10:50 ownerReaches -> @ownerReaches
-  callee +11:20 new HandleFinding -> @HandleFinding.constructor
-  callee +11:58 handleFieldMessage -> @handleFieldMessage
-  callee +16:5 findSinks -> @findSinks
-  callee +17:5 checkDispose -> @checkDispose
+  callee +9:44 StructInfo.field -> @StructInfo.field
+  local +10:15 child: StructInfo | null (const)
+  callee +10:66 handleOf -> @handleOf
+  callee +11:50 ownerReaches -> @ownerReaches
+  callee +12:20 new HandleFinding -> @HandleFinding.constructor
+  callee +12:58 handleFieldMessage -> @handleFieldMessage
+  callee +17:5 findSinks -> @findSinks
+  callee +18:5 checkDispose -> @checkDispose
 function generic(decl: Node): boolean -> @generic
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer decl: size=40 writesThrough=false captured=false
@@ -452,7 +472,7 @@ function HandleWalk.constructor(this: HandleWalk, program: CheckedProgram, table
   calls: StringSet.constructor nish_alloc_struct
   pointer this: size=104 writesThrough=true captured=false
   pointer program: size=928 writesThrough=true captured=true
-  pointer table: size=168 writesThrough=true captured=true
+  pointer table: size=176 writesThrough=true captured=true
   pointer closes: size=0 writesThrough=true captured=true
   pointer closeOwners: size=0 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=true
@@ -542,20 +562,22 @@ function topWrite(walk: HandleWalk, member: Node, name: string): boolean -> @top
 function checkOwnedWrite(walk: HandleWalk, assign: Node, member: Node, owner: StructInfo, field: OwnedField): void -> @checkOwnedWrite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: HandleFinding.constructor HandleWalk.parent StringSet.add childWriteMessage handleWriteMessage nish_alloc_struct nish_array_grow nish_panic_index topWrite unwrapParens
+  calls: FunctionSig.foreign HandleFinding.constructor HandleWalk.parent StringSet.add childWriteMessage handleWriteMessage nish_alloc_struct nish_array_grow nish_panic_index topWrite unwrapParens
   pointer walk: size=104 writesThrough=false captured=false passedTo=topWrite#0 HandleWalk.parent#0
   pointer assign: size=40 writesThrough=true captured=true passedTo=HandleFinding.constructor#1
   pointer member: size=40 writesThrough=false captured=false passedTo=topWrite#1
   pointer owner: size=176 writesThrough=false captured=false
   pointer field: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -18:9 value: Node (const)
-  local -17:9 bare: Node (const)
-  callee -17:16 unwrapParens -> @unwrapParens
-  local -16:9 cls: StructInfo | null (const)
-  local -15:7 sound: boolean (let)
-  callee -15:48 topWrite -> @topWrite
-  local -11:11 fresh: boolean (const)
+  local -25:9 value: Node (const)
+  local -24:9 bare: Node (const)
+  callee -24:16 unwrapParens -> @unwrapParens
+  local -23:9 cls: StructInfo | null (const)
+  local -22:7 sound: boolean (let)
+  callee -22:48 topWrite -> @topWrite
+  local -18:11 sig: FunctionSig | null (const)
+  callee -17:29 FunctionSig.foreign -> @FunctionSig.foreign
+  local -14:11 fresh: boolean (const)
   local -9:11 stmt: Node | null (const)
   callee -9:18 HandleWalk.parent -> @HandleWalk.parent
   local -8:11 moved: Node | null (const)
@@ -623,26 +645,55 @@ function isOkCall(walk: HandleWalk, call: Node): boolean -> @isOkCall
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 TypeTable.isResult -> @TypeTable.isResult
-function freshAdmitted(walk: HandleWalk, node: Node, depth: i32): boolean -> @freshAdmitted
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: node
-  calls: HandleWalk.isAdmitted HandleWalk.parent handles$.indexIn isOkCall nish_panic_index nish_panic_overflow sinkAt
-  pointer walk: size=104 writesThrough=false captured=false passedTo=HandleWalk.isAdmitted#0 HandleWalk.parent#0 HandleWalk.parent#0 isOkCall#0 HandleWalk.parent#0 sinkAt#0
-  pointer node: size=40 writesThrough=true captured=true
+function argLeaves(walk: HandleWalk, node: Node): boolean -> @argLeaves
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.isResult argLeaves isTypeNode nish_panic_index nish_str_eq unwrapParens
+  pointer walk: size=104 writesThrough=false captured=false passedTo=argLeaves#0
+  pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:7 child: Node (let)
-  local +1:7 up: i32 (let)
-  local +2:7 wrapped: boolean (let)
-  callee +4:9 HandleWalk.isAdmitted -> @HandleWalk.isAdmitted
-  local +7:11 parent: Node | null (const)
-  callee +7:20 HandleWalk.parent -> @HandleWalk.parent
-  local +20:11 above: Node | null (const)
-  callee +20:19 HandleWalk.parent -> @HandleWalk.parent
-  callee +21:60 isOkCall -> @isOkCall
-  local +30:13 stmt: Node | null (const)
-  callee +30:20 HandleWalk.parent -> @HandleWalk.parent
-  callee +39:26 sinkAt -> @sinkAt
-  callee +39:73 indexIn -> @handles$.indexIn
+  callee +0:78 isTypeNode -> @isTypeNode
+  local +4:11 callee: Node (const)
+  local +5:11 receiver: i32 (const)
+  callee +5:45 unwrapParens -> @unwrapParens
+  callee +6:39 TypeTable.isResult -> @TypeTable.isResult
+  local +10:14 child: Node (const)
+  callee +11:9 argLeaves -> @argLeaves
+function leavesAfter(walk: HandleWalk, list: Node, at: i32): boolean -> @leavesAfter
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: argLeaves nish_panic_index nish_panic_overflow
+  pointer walk: size=104 writesThrough=false captured=false passedTo=argLeaves#0
+  pointer list: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:12 i: i32 (let)
+  callee +1:9 argLeaves -> @argLeaves
+function freshAdmitted(walk: HandleWalk, node: Node, depth: i32): boolean -> @freshAdmitted
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: node
+  calls: HandleFinding.constructor HandleWalk.isAdmitted HandleWalk.parent handleOf handles$.indexIn isOkCall leaveAfterMessage leavesAfter nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow sinkAt
+  pointer walk: size=104 writesThrough=false captured=false passedTo=HandleWalk.isAdmitted#0 HandleWalk.parent#0 HandleWalk.parent#0 isOkCall#0 HandleWalk.parent#0 sinkAt#0 leavesAfter#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=HandleFinding.constructor#1
+  stackSites=0 stackLocals=0
+  local -43:7 child: Node (let)
+  local -42:7 up: i32 (let)
+  local -41:7 wrapped: boolean (let)
+  callee -39:9 HandleWalk.isAdmitted -> @HandleWalk.isAdmitted
+  local -36:11 parent: Node | null (const)
+  callee -36:20 HandleWalk.parent -> @HandleWalk.parent
+  local -23:11 above: Node | null (const)
+  callee -23:19 HandleWalk.parent -> @HandleWalk.parent
+  callee -22:60 isOkCall -> @isOkCall
+  local -13:13 stmt: Node | null (const)
+  callee -13:20 HandleWalk.parent -> @HandleWalk.parent
+  local -4:13 at: i32 (const)
+  callee -4:18 indexIn -> @handles$.indexIn
+  local -3:13 owned: boolean (const)
+  callee -3:33 sinkAt -> @sinkAt
+  local -2:13 info: StructInfo | null (const)
+  callee -2:20 handleOf -> @handleOf
+  callee -1:37 leavesAfter -> @leavesAfter
+  callee +0:23 new HandleFinding -> @HandleFinding.constructor
+  callee +0:47 leaveAfterMessage -> @leaveAfterMessage
 function resultAdmitted(walk: HandleWalk, node: Node, depth: i32): boolean -> @resultAdmitted
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: node
@@ -659,28 +710,30 @@ function resultAdmitted(walk: HandleWalk, node: Node, depth: i32): boolean -> @r
 function namedAdmitted(walk: HandleWalk, node: Node, type: i32, depth: i32): boolean -> @namedAdmitted
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.structByType HandleWalk.isAdmitted HandleWalk.parent TypeTable.stripNull climbParens handles$.indexIn nish_panic_index nish_panic_overflow nish_str_eq outermost sinkAt unwrapParens
-  pointer walk: size=104 writesThrough=false captured=false passedTo=climbParens#0 HandleWalk.parent#0 outermost#0 HandleWalk.isAdmitted#0 HandleWalk.parent#0 sinkAt#0
+  pointer walk: size=104 writesThrough=false captured=false passedTo=climbParens#0 HandleWalk.parent#0 HandleWalk.parent#0 outermost#0 HandleWalk.isAdmitted#0 HandleWalk.parent#0 sinkAt#0
   pointer node: size=40 writesThrough=true captured=true passedTo=outermost#1
   stackSites=0 stackLocals=0
   local +0:9 up: i32 (const)
   callee +0:14 climbParens -> @climbParens
   local +1:9 parent: Node | null (const)
   callee +1:18 HandleWalk.parent -> @HandleWalk.parent
-  local +11:9 arg: Node (const)
-  callee +11:15 outermost -> @outermost
-  callee +12:7 HandleWalk.isAdmitted -> @HandleWalk.isAdmitted
-  callee +21:42 unwrapParens -> @unwrapParens
-  local +26:9 call: Node | null (const)
-  callee +26:16 HandleWalk.parent -> @HandleWalk.parent
-  local +30:7 sig: FunctionSig | null (let)
-  local +34:11 built: StructInfo | null (const)
-  callee +34:19 CheckedProgram.structByType -> @CheckedProgram.structByType
-  callee +34:45 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +35:27 sinkAt -> @sinkAt
-  callee +35:73 indexIn -> @handles$.indexIn
-  local +44:9 at: i32 (const)
-  callee +44:14 indexIn -> @handles$.indexIn
-  local +45:9 index: i32 (const)
+  local +10:11 write: Node | null (const)
+  callee +10:19 HandleWalk.parent -> @HandleWalk.parent
+  local +19:9 arg: Node (const)
+  callee +19:15 outermost -> @outermost
+  callee +20:7 HandleWalk.isAdmitted -> @HandleWalk.isAdmitted
+  callee +29:42 unwrapParens -> @unwrapParens
+  local +34:9 call: Node | null (const)
+  callee +34:16 HandleWalk.parent -> @HandleWalk.parent
+  local +38:7 sig: FunctionSig | null (let)
+  local +42:11 built: StructInfo | null (const)
+  callee +42:19 CheckedProgram.structByType -> @CheckedProgram.structByType
+  callee +42:45 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +43:27 sinkAt -> @sinkAt
+  callee +43:73 indexIn -> @handles$.indexIn
+  local +52:9 at: i32 (const)
+  callee +52:14 indexIn -> @handles$.indexIn
+  local +53:9 index: i32 (const)
 function ownedMember(walk: HandleWalk, member: Node): OwnedField | null -> @ownedMember
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: handleOf nish_panic_index nish_str_eq unwrapParens
@@ -708,8 +761,8 @@ function childWrite(walk: HandleWalk, node: Node): boolean -> @childWrite
   stackSites=0 stackLocals=0
   local +0:9 stmt: Node | null (const)
   callee +0:16 HandleWalk.parent -> @HandleWalk.parent
-  local +4:9 target: Node (const)
-  callee +5:45 ownedMember -> @ownedMember
+  local +9:9 target: Node (const)
+  callee +10:45 ownedMember -> @ownedMember
 function walkValues(walk: HandleWalk, node: Node, depth: i32): void -> @walkValues
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -718,32 +771,32 @@ function walkValues(walk: HandleWalk, node: Node, depth: i32): void -> @walkValu
   pointer walk: size=104 writesThrough=false captured=false passedTo=ownedMember#0 assignedTo#0 checkOwnedWrite#0 checkFieldRead#0 HandleWalk.derivedField#0 checkDerivedUse#0 freshAdmitted#0 namedAdmitted#0 childWrite#0 resultAdmitted#0 walkValues#0 walkValues#0
   pointer node: size=40 writesThrough=true captured=true passedTo=ownedMember#1 assignedTo#1 checkOwnedWrite#2 checkFieldRead#1 checkDerivedUse#1 freshAdmitted#1 namedAdmitted#1 childWrite#1 resultAdmitted#1 HandleFinding.constructor#1
   stackSites=0 stackLocals=0
-  callee -51:7 isTypeNode -> @isTypeNode
-  local -48:9 program: CheckedProgram (const)
-  local -46:11 field: OwnedField | null (const)
-  callee -46:19 ownedMember -> @ownedMember
-  local -45:11 owner: StructInfo | null (const)
-  callee -45:19 handleOf -> @handleOf
-  callee -45:67 unwrapParens -> @unwrapParens
-  local -43:13 assign: Node | null (const)
-  callee -43:22 assignedTo -> @assignedTo
-  callee -41:9 checkOwnedWrite -> @checkOwnedWrite
-  callee -37:9 checkFieldRead -> @checkFieldRead
-  local -30:11 field: string (const)
-  callee -30:19 HandleWalk.derivedField -> @HandleWalk.derivedField
-  callee -30:37 sourceLocal -> @sourceLocal
-  callee -28:7 checkDerivedUse -> @checkDerivedUse
-  local -23:11 type: i32 (const)
-  local -22:11 info: StructInfo | null (const)
-  callee -22:18 handleOf -> @handleOf
-  local -21:11 result: StructInfo | null (const)
-  callee -21:55 resultHandleOf -> @resultHandleOf
-  local -20:9 admitted: boolean (let)
-  local -18:13 fresh: boolean (const)
-  local -16:13 named: boolean (const)
-  callee -9:13 freshAdmitted -> @freshAdmitted
-  callee -7:15 namedAdmitted -> @namedAdmitted
-  callee -6:15 childWrite -> @childWrite
+  callee -53:7 isTypeNode -> @isTypeNode
+  local -50:9 program: CheckedProgram (const)
+  local -48:11 field: OwnedField | null (const)
+  callee -48:19 ownedMember -> @ownedMember
+  local -47:11 owner: StructInfo | null (const)
+  callee -47:19 handleOf -> @handleOf
+  callee -47:67 unwrapParens -> @unwrapParens
+  local -45:13 assign: Node | null (const)
+  callee -45:22 assignedTo -> @assignedTo
+  callee -43:9 checkOwnedWrite -> @checkOwnedWrite
+  callee -39:9 checkFieldRead -> @checkFieldRead
+  local -32:11 field: string (const)
+  callee -32:19 HandleWalk.derivedField -> @HandleWalk.derivedField
+  callee -32:37 sourceLocal -> @sourceLocal
+  callee -30:7 checkDerivedUse -> @checkDerivedUse
+  local -25:11 type: i32 (const)
+  local -24:11 info: StructInfo | null (const)
+  callee -24:18 handleOf -> @handleOf
+  local -23:11 result: StructInfo | null (const)
+  callee -23:55 resultHandleOf -> @resultHandleOf
+  local -22:9 admitted: boolean (let)
+  local -20:13 fresh: boolean (const)
+  local -18:13 named: boolean (const)
+  callee -11:20 freshAdmitted -> @freshAdmitted
+  callee -9:20 namedAdmitted -> @namedAdmitted
+  callee -7:20 childWrite -> @childWrite
   callee -4:18 resultAdmitted -> @resultAdmitted
   local -2:11 shown: StructInfo | null (const)
   callee +0:21 new HandleFinding -> @HandleFinding.constructor
@@ -752,6 +805,37 @@ function walkValues(walk: HandleWalk, node: Node, depth: i32): void -> @walkValu
   local +11:9 inner: boolean (const)
   local +13:14 child: Node (const)
   callee +14:5 walkValues -> @walkValues
+function signatureHandle(program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null -> @signatureHandle
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: handleOf resultHandleOf
+  pointer program: size=928 writesThrough=false captured=false passedTo=handleOf#0 resultHandleOf#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=handleOf#1 resultHandleOf#1
+  stackSites=0 stackLocals=0
+  local +0:9 info: StructInfo | null (const)
+  callee +0:16 handleOf -> @handleOf
+  callee +1:33 resultHandleOf -> @resultHandleOf
+function refuseEntryExports(program: CheckedProgram, table: TypeTable, found: HandleFinding[]): void -> @refuseEntryExports
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: FunctionSig.definedIn HandleFinding.constructor entryExportMessage nish_alloc_struct nish_array_grow nish_panic_index signatureHandle
+  pointer program: size=928 writesThrough=false captured=false passedTo=signatureHandle#0 signatureHandle#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=signatureHandle#1 signatureHandle#1
+  pointer found: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -2:14 info: StructInfo (const)
+  callee +0:18 new HandleFinding -> @HandleFinding.constructor
+  callee +0:59 entryExportMessage -> @entryExportMessage
+  local +3:14 sig: FunctionSig (const)
+  local +4:11 owner: StructInfo | null (const)
+  local +5:11 exported: boolean (const)
+  callee +6:48 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +9:9 info: StructInfo | null (let)
+  callee +9:16 signatureHandle -> @signatureHandle
+  local +10:16 type: i32 (const)
+  callee +12:16 signatureHandle -> @signatureHandle
+  callee +16:18 new HandleFinding -> @HandleFinding.constructor
+  callee +16:46 entryExportMessage -> @entryExportMessage
 function namesHandle(program: CheckedProgram): boolean -> @namesHandle
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer program: size=928 writesThrough=false captured=false
@@ -760,9 +844,9 @@ function namesHandle(program: CheckedProgram): boolean -> @namesHandle
 function handleFindings(program: CheckedProgram, table: TypeTable): HandleFinding[] -> @handleFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
-  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FunctionSig.body FunctionSig.definedIn HandleWalk.constructor StringSet.add StringSet.constructor StringSet.has namesHandle nish_array_grow nish_str_concat nish_str_from_i32 walkTypes walkValues
-  pointer program: size=928 writesThrough=true captured=true passedTo=namesHandle#0 walkTypes#0 CheckedProgram.enterInstance#0 HandleWalk.constructor#1 CheckedProgram.leaveInstance#0
-  pointer table: size=168 writesThrough=true captured=true passedTo=HandleWalk.constructor#2
+  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FunctionSig.body FunctionSig.definedIn HandleWalk.constructor StringSet.add StringSet.constructor StringSet.has namesHandle nish_array_grow nish_str_concat nish_str_from_i32 refuseEntryExports walkTypes walkValues
+  pointer program: size=928 writesThrough=true captured=true passedTo=namesHandle#0 walkTypes#0 refuseEntryExports#0 CheckedProgram.enterInstance#0 HandleWalk.constructor#1 CheckedProgram.leaveInstance#0
+  pointer table: size=176 writesThrough=true captured=true passedTo=refuseEntryExports#1 HandleWalk.constructor#2
   stackSites=3 stackLocals=2
   local -11:9 found: HandleFinding[] (const)
   callee -10:8 namesHandle -> @namesHandle
@@ -772,21 +856,22 @@ function handleFindings(program: CheckedProgram, table: TypeTable): HandleFindin
   local -3:18 owned: OwnedField (const)
   local -2:15 close: FunctionSig | null (const)
   callee +6:3 walkTypes -> @walkTypes
-  local +7:14 sig: FunctionSig (const)
-  local +8:11 body: Node | null (const)
-  callee +8:18 FunctionSig.body -> @FunctionSig.body
-  callee +9:41 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local +12:11 instance: Instantiation | null (const)
-  callee +14:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  local +16:11 walk: HandleWalk (const)
-  callee +16:18 new HandleWalk -> @HandleWalk.constructor
-  local +17:11 owner: StructInfo | null (const)
-  callee +21:5 walkValues -> @walkValues
-  callee +23:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  local +26:9 out: HandleFinding[] (const)
-  local +27:9 seen: StringSet (const)
-  callee +27:16 new StringSet -> @StringSet.constructor
-  local +28:14 finding: HandleFinding (const)
-  local +29:11 key: string (const)
-  callee +30:10 StringSet.has -> @StringSet.has
-  callee +31:7 StringSet.add -> @StringSet.add
+  callee +8:5 refuseEntryExports -> @refuseEntryExports
+  local +10:14 sig: FunctionSig (const)
+  local +11:11 body: Node | null (const)
+  callee +11:18 FunctionSig.body -> @FunctionSig.body
+  callee +12:41 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +15:11 instance: Instantiation | null (const)
+  callee +17:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  local +19:11 walk: HandleWalk (const)
+  callee +19:18 new HandleWalk -> @HandleWalk.constructor
+  local +20:11 owner: StructInfo | null (const)
+  callee +24:5 walkValues -> @walkValues
+  callee +26:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local +29:9 out: HandleFinding[] (const)
+  local +30:9 seen: StringSet (const)
+  callee +30:16 new StringSet -> @StringSet.constructor
+  local +31:14 finding: HandleFinding (const)
+  local +32:11 key: string (const)
+  callee +33:10 StringSet.has -> @StringSet.has
+  callee +34:7 StringSet.add -> @StringSet.add

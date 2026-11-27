@@ -78,7 +78,7 @@ function namesParam(sig: FunctionSig, name: string): boolean -> @namesParam
 function paramAt(table: TypeTable, sig: FunctionSig, name: string, type: i32): i32 -> @paramAt
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray nish_str_eq
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isArray#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.isArray#0
   pointer sig: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 k: i32 (let)
@@ -94,7 +94,7 @@ function noteWindowGuard(program: CheckedProgram, table: TypeTable, sig: Functio
   sharedWrite: +0:3
   calls: FunctionSig.body FunctionSig.definedIn isLengthOf isPanicBlock isWindowTest namesParam nish_panic_index nish_str_eq paramAt takesArgumentsAsWritten
   pointer program: size=928 writesThrough=true captured=false passedTo=isPanicBlock#0 isLengthOf#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=paramAt#0 paramAt#0 paramAt#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=paramAt#0 paramAt#0 paramAt#0
   pointer sig: size=296 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0 takesArgumentsAsWritten#0 FunctionSig.body#0 namesParam#0 paramAt#1 paramAt#1 paramAt#1
   stackSites=0 stackLocals=0
   callee -78:6 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -142,7 +142,7 @@ function noteWindowForward(program: CheckedProgram, table: TypeTable, sig: Funct
   sharedWrite: +0:3
   calls: FunctionSig.body FunctionSig.definedIn namesParam nish_array_grow nish_panic_index nish_str_eq paramAt takesArgumentsAsWritten windowGuardNamed
   pointer program: size=928 writesThrough=false captured=false passedTo=windowGuardNamed#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=paramAt#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=paramAt#0
   pointer sig: size=296 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0 takesArgumentsAsWritten#0 FunctionSig.body#0 namesParam#0 paramAt#1 namesParam#0
   stackSites=0 stackLocals=0
   callee -61:6 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -169,7 +169,7 @@ function noteWindowContracts(programs: CheckedProgram[], table: TypeTable): void
   sharedWrite: via noteWindowGuard
   calls: noteWindowForward noteWindowGuard
   pointer programs: size=0 writesThrough=false captured=false
-  pointer table: size=168 writesThrough=false captured=false passedTo=noteWindowGuard#1 noteWindowForward#1
+  pointer table: size=176 writesThrough=false captured=false passedTo=noteWindowGuard#1 noteWindowForward#1
   stackSites=0 stackLocals=0
   local +0:14 program: CheckedProgram (const)
   local +1:16 sig: FunctionSig (const)

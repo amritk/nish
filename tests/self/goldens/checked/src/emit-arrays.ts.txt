@@ -991,7 +991,7 @@ function newArrayLengthChecked(length: Node, type: i32, constant: ConstInfo | nu
   calls: TypeTable.isRanged TypeTable.rangeLo intBits isFloat isInteger numericLiteralValue unwrapParens
   pointer length: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer constant: size=112 writesThrough=false captured=false
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.rangeLo#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.rangeLo#0
   stackSites=0 stackLocals=0
   local +0:9 literal: Node (const)
   callee +0:19 unwrapParens -> @unwrapParens

@@ -107,7 +107,7 @@ function fieldAlign(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @f
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: pointer
   calls: FieldInfo.inline TypeTable.alignWithPointer TypeTable.refOf
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0 TypeTable.refOf#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0 TypeTable.refOf#0
   pointer field: size=104 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
@@ -121,7 +121,7 @@ function fieldWidth(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @f
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: pointer
   calls: FieldInfo.inline TypeTable.alignWithPointer TypeTable.refOf fieldAlign nish_panic_overflow roundUpTo
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0 fieldAlign#0 TypeTable.alignWithPointer#0 TypeTable.refOf#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0 fieldAlign#0 TypeTable.alignWithPointer#0 TypeTable.refOf#0
   pointer field: size=104 writesThrough=false captured=false passedTo=FieldInfo.inline#0 fieldAlign#1
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
@@ -180,7 +180,7 @@ function narrowedSize(table: TypeTable, info: StructInfo, target: i32, wasm: boo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: target
   calls: fieldAlign fieldWidth isLinkTo nish_panic_overflow roundUpTo
-  pointer table: size=168 writesThrough=false captured=false passedTo=isLinkTo#0 fieldAlign#0 fieldWidth#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=isLinkTo#0 fieldAlign#0 fieldWidth#0
   pointer info: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 pointer: i32 (const)
@@ -197,7 +197,7 @@ function narrowedSize(table: TypeTable, info: StructInfo, target: i32, wasm: boo
 function isLinkTo(table: TypeTable, field: FieldInfo, target: i32): boolean -> @isLinkTo [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FieldInfo.inline TypeTable.stripNull
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.stripNull#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.stripNull#0
   pointer field: size=104 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   callee +0:45 FieldInfo.inline -> @FieldInfo.inline
@@ -336,7 +336,7 @@ function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructInfo | n
 function declareHandle(ctx: CheckContext, info: StructInfo, decl: Node): void -> @declareHandle
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CheckContext.error handleHeaderMessage isHandleFieldAnnotation isThreadsSource nish_panic_index nish_str_eq
+  calls: CheckContext.error TypeTable.setHandle handleHeaderMessage isHandleFieldAnnotation isThreadsSource nish_panic_index nish_str_eq
   pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=176 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=false captured=false
@@ -345,35 +345,37 @@ function declareHandle(ctx: CheckContext, info: StructInfo, decl: Node): void ->
   callee -8:19 isThreadsSource -> @isThreadsSource
   local -7:14 member: Node (const)
   callee -3:9 isHandleFieldAnnotation -> @isHandleFieldAnnotation
-  callee +5:5 CheckContext.error -> @CheckContext.error
-  callee +5:33 handleHeaderMessage -> @handleHeaderMessage
+  callee +1:7 TypeTable.setHandle -> @TypeTable.setHandle
+  callee +6:5 CheckContext.error -> @CheckContext.error
+  callee +6:33 handleHeaderMessage -> @handleHeaderMessage
 function rejectEmptyHandle(ctx: CheckContext, info: StructInfo, decl: Node): void -> @rejectEmptyHandle
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error disposeElsewhereMessage isHandleFieldAnnotation nish_panic_index nish_str_eq spelled
-  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 spelled#0
+  calls: CheckContext.error TypeTable.setHandle disposeElsewhereMessage isHandleFieldAnnotation nish_panic_index nish_str_eq spelled
+  pointer ctx: size=448 writesThrough=true captured=false passedTo=spelled#0 CheckContext.error#0
   pointer info: size=176 writesThrough=true captured=false passedTo=spelled#1
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +2:14 member: Node (const)
-  callee +3:43 isHandleFieldAnnotation -> @isHandleFieldAnnotation
-  local +7:14 member: Node (const)
-  callee +9:7 CheckContext.error -> @CheckContext.error
-  callee +9:37 disposeElsewhereMessage -> @disposeElsewhereMessage
-  callee +9:61 spelled -> @spelled
+  callee +1:3 TypeTable.setHandle -> @TypeTable.setHandle
+  local +3:14 member: Node (const)
+  callee +4:43 isHandleFieldAnnotation -> @isHandleFieldAnnotation
+  local +8:9 message: string (const)
+  callee +8:19 disposeElsewhereMessage -> @disposeElsewhereMessage
+  callee +8:43 spelled -> @spelled
+  local +9:14 member: Node (const)
+  callee +11:7 CheckContext.error -> @CheckContext.error
 function ownedFieldType(ctx: CheckContext, type: i32): boolean -> @ownedFieldType
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: CheckedProgram.structByType TypeTable.isHostHandle TypeTable.isOpaque TypeTable.isStruct TypeTable.stripNull
+  calls: TypeTable.isHandleClass TypeTable.isHostHandle TypeTable.isOpaque TypeTable.isStruct TypeTable.stripNull
   pointer ctx: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 bare: i32 (const)
   callee +0:16 TypeTable.stripNull -> @TypeTable.stripNull
   callee +1:26 TypeTable.isOpaque -> @TypeTable.isOpaque
   callee +1:54 TypeTable.isHostHandle -> @TypeTable.isHostHandle
-  local +4:9 held: StructInfo | null (const)
-  callee +4:35 TypeTable.isStruct -> @TypeTable.isStruct
-  callee +4:62 CheckedProgram.structByType -> @CheckedProgram.structByType
+  callee +4:10 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +4:38 TypeTable.isHandleClass -> @TypeTable.isHandleClass
 function literalInitializerType(ctx: CheckContext, expr: Node, want: i32): i32 -> @literalInitializerType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: want
@@ -735,7 +737,7 @@ function layoutClass(program: CheckedProgram, table: TypeTable, type: i32): Stru
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf
   pointer program: size=928 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:20 TypeTable.isStruct -> @TypeTable.isStruct
   local +3:9 info: StructInfo | null (const)
@@ -767,7 +769,7 @@ function foreignCountWidth(program: CheckedProgram, table: TypeTable, type: i32)
   escaping: type
   calls: isUnsignedScalar layoutClass nish_panic_index
   pointer program: size=928 writesThrough=false captured=false passedTo=layoutClass#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=layoutClass#1
+  pointer table: size=176 writesThrough=false captured=false passedTo=layoutClass#1
   stackSites=0 stackLocals=0
   callee +0:7 isUnsignedScalar -> @isUnsignedScalar
   local +3:9 info: StructInfo | null (const)
@@ -1016,7 +1018,7 @@ function noteStructTypes(table: TypeTable, type: i32, out: i32[]): void -> @note
   sharedWrite: via addStructType
   escaping: type
   calls: TypeTable.errOf TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.okOf TypeTable.refOf TypeTable.variantsOf addStructType noteStructTypes
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.isResult#0 noteStructTypes#0 TypeTable.okOf#0 noteStructTypes#0 TypeTable.errOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 noteStructTypes#0 TypeTable.refOf#0 noteStructTypes#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.isResult#0 noteStructTypes#0 TypeTable.okOf#0 noteStructTypes#0 TypeTable.errOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 noteStructTypes#0 TypeTable.refOf#0 noteStructTypes#0
   pointer out: size=0 writesThrough=true captured=false passedTo=addStructType#0 noteStructTypes#2 noteStructTypes#2 noteStructTypes#2 noteStructTypes#2
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isStruct -> @TypeTable.isStruct
@@ -1037,7 +1039,7 @@ function signatureStructTypes(table: TypeTable, sig: FunctionSig, out: i32[]): v
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteStructTypes
   calls: nish_panic_index noteStructTypes
-  pointer table: size=168 writesThrough=false captured=false passedTo=noteStructTypes#0 noteStructTypes#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=noteStructTypes#0 noteStructTypes#0
   pointer sig: size=296 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=noteStructTypes#2 noteStructTypes#2
   stackSites=0 stackLocals=0
@@ -1048,7 +1050,7 @@ function referencedStructTypes(table: TypeTable, info: StructInfo, out: i32[]): 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteStructTypes
   calls: noteStructTypes signatureStructTypes
-  pointer table: size=168 writesThrough=false captured=false passedTo=noteStructTypes#0 signatureStructTypes#0 signatureStructTypes#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=noteStructTypes#0 signatureStructTypes#0 signatureStructTypes#0
   pointer info: size=176 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=noteStructTypes#2 signatureStructTypes#2 signatureStructTypes#2
   stackSites=0 stackLocals=0

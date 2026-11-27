@@ -461,7 +461,7 @@ function reportDeniedPanics(units: AnalysisUnit[], inScope: boolean[], listed: b
   pointer inScope: size=0 writesThrough=false captured=false
   pointer listed: size=0 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=listedFacts#1 refuseSite#2
-  pointer table: size=168 writesThrough=false captured=false passedTo=refuseSite#3
+  pointer table: size=176 writesThrough=false captured=false passedTo=refuseSite#3
   pointer sink: size=48 writesThrough=false captured=false passedTo=refuseSite#6
   stackSites=3 stackLocals=3
   local +0:9 refused: PanicSite[] (const)
@@ -487,7 +487,7 @@ function refuseSite(program: CheckedProgram, listed: boolean, facts: FactsTable,
   calls: DiagnosticSink.report FactsTable.get SourceFile.columnOf SourceFile.lineOf StringSet.has isAllowed nish_str_concat nish_str_from_i32 panicKindName scopeReason siteAdvice
   pointer program: size=928 writesThrough=true captured=false passedTo=siteAdvice#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=siteAdvice#1
+  pointer table: size=176 writesThrough=false captured=false passedTo=siteAdvice#1
   pointer scoped: size=8 writesThrough=false captured=false passedTo=StringSet.has#0 StringSet.has#0
   pointer site: size=56 writesThrough=false captured=false passedTo=isAllowed#0 siteAdvice#2
   pointer sink: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.report#0 DiagnosticSink.report#0
@@ -536,7 +536,7 @@ function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite):
   sharedWrite: via indexAdvice
   calls: arrayLengthAdvice calledName divideAdvice faultAdvice indexAdvice ioExitAdvice nish_panic_index nish_str_concat nish_str_eq overflowAdvice rangeAdvice siteLocalName sliceAdvice spawnSlotAdvice unwrapBoundsParens windowAdvice
   pointer program: size=928 writesThrough=true captured=false passedTo=indexAdvice#0 siteLocalName#0 sliceAdvice#0 divideAdvice#0 rangeAdvice#0 arrayLengthAdvice#0 ioExitAdvice#0 overflowAdvice#0 calledName#0 spawnSlotAdvice#0 windowAdvice#0 faultAdvice#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=indexAdvice#1 divideAdvice#1 rangeAdvice#1 arrayLengthAdvice#1 overflowAdvice#1 spawnSlotAdvice#1 faultAdvice#1
+  pointer table: size=176 writesThrough=false captured=false passedTo=indexAdvice#1 divideAdvice#1 rangeAdvice#1 arrayLengthAdvice#1 overflowAdvice#1 spawnSlotAdvice#1 faultAdvice#1
   pointer site: size=56 writesThrough=false captured=false passedTo=rangeAdvice#2
   stackSites=0 stackLocals=0
   local +0:9 node: Node (const)
@@ -561,7 +561,7 @@ function arrayLengthAdvice(program: CheckedProgram, table: TypeTable, node: Node
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf TypeTable.typeName nish_panic_index nish_str_concat unwrapBoundsParens
   pointer program: size=928 writesThrough=false captured=false
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.baseOf#0 TypeTable.typeName#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.baseOf#0 TypeTable.typeName#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 length: Node (const)
@@ -578,7 +578,7 @@ function indexAdvice(program: CheckedProgram, table: TypeTable, node: Node): str
   escaping: node
   calls: indexGuardAdvice nish_panic_index nish_str_concat siteLocalName unwrapBoundsParens vectorAccessLanes vectorAdvice
   pointer program: size=928 writesThrough=true captured=false passedTo=vectorAccessLanes#0 vectorAdvice#0 siteLocalName#0 siteLocalName#0 indexGuardAdvice#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=vectorAccessLanes#1 indexGuardAdvice#1
+  pointer table: size=176 writesThrough=false captured=false passedTo=vectorAccessLanes#1 indexGuardAdvice#1
   pointer node: size=40 writesThrough=true captured=true passedTo=vectorAccessLanes#2 vectorAdvice#1
   stackSites=0 stackLocals=0
   local +0:9 lanes: i32 (const)
@@ -600,7 +600,7 @@ function spawnSlotAdvice(program: CheckedProgram, table: TypeTable, call: Node):
   sharedWrite: via indexGuardAdvice
   calls: indexGuardAdvice nish_panic_index nish_str_concat siteLocalName
   pointer program: size=928 writesThrough=true captured=false passedTo=siteLocalName#0 siteLocalName#0 indexGuardAdvice#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=indexGuardAdvice#1
+  pointer table: size=176 writesThrough=false captured=false passedTo=indexGuardAdvice#1
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
@@ -616,7 +616,7 @@ function faultAdvice(program: CheckedProgram, table: TypeTable, call: Node): str
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: calledName constructorOf intrinsicType nish_panic_index nish_str_concat
   pointer program: size=928 writesThrough=false captured=false passedTo=constructorOf#0 intrinsicType#0 calledName#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=constructorOf#1
+  pointer table: size=176 writesThrough=false captured=false passedTo=constructorOf#1
   pointer call: size=40 writesThrough=false captured=false passedTo=intrinsicType#1 calledName#1
   stackSites=0 stackLocals=0
   local +0:9 target: FunctionSig | null (const)
@@ -753,7 +753,7 @@ function overflowAdvice(program: CheckedProgram, table: TypeTable, node: Node): 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq wrappingForm
   pointer program: size=928 writesThrough=false captured=false
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.baseOf#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.baseOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=wrappingForm#0
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)
@@ -774,7 +774,7 @@ function divideAdvice(program: CheckedProgram, table: TypeTable, node: Node): st
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf isUnsigned nish_panic_index nish_str_concat siteLocalName
   pointer program: size=928 writesThrough=false captured=false passedTo=siteLocalName#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
@@ -790,7 +790,7 @@ function rangeAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite)
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.rangeHi TypeTable.rangeLo TypeTable.typeName isPrologueSite nish_panic_index nish_str_concat nish_str_from_i32 siteLocalName
   pointer program: size=928 writesThrough=false captured=false passedTo=isPrologueSite#0 siteLocalName#0 siteLocalName#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.rangeLo#0 TypeTable.rangeHi#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.rangeLo#0 TypeTable.rangeHi#0
   pointer site: size=56 writesThrough=false captured=false passedTo=isPrologueSite#1
   stackSites=0 stackLocals=0
   local +0:9 node: Node (const)

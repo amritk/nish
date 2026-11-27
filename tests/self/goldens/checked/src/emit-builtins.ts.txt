@@ -81,7 +81,7 @@ function conversionIntrinsic(table: TypeTable, from: i32, to: i32): string -> @c
   sharedWrite: via TypeTable.llvmType
   escaping: from to
   calls: TypeTable.llvmType isFloat isInteger isUnsigned nish_str_concat
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.llvmType#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.llvmType#0
   stackSites=0 stackLocals=0
   callee +0:8 isFloat -> @isFloat
   callee +0:26 isInteger -> @isInteger
@@ -156,7 +156,7 @@ function absIntrinsic(table: TypeTable, type: i32): string -> @absIntrinsic
   sharedWrite: via TypeTable.llvmType
   escaping: type
   calls: TypeTable.llvmType isInteger isUnsigned nish_str_concat
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.llvmType#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.llvmType#0
   stackSites=0 stackLocals=0
   callee +0:7 isUnsigned -> @isUnsigned
   callee +3:10 isInteger -> @isInteger
@@ -170,7 +170,7 @@ function minMaxIntrinsic(table: TypeTable, which: string, type: i32): string -> 
   sharedWrite: via TypeTable.llvmType
   escaping: type
   calls: TypeTable.llvmType isInteger isUnsigned nish_str_concat
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.llvmType#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.llvmType#0
   stackSites=0 stackLocals=0
   callee +0:8 isInteger -> @isInteger
   callee +3:18 isUnsigned -> @isUnsigned
@@ -574,7 +574,7 @@ function emitRangeEntry(emitter: Emitter, value: string, from: i32, to: i32): vo
 function checksRangesInPrologue(table: TypeTable, opts: Options, sig: FunctionSig): boolean -> @checksRangesInPrologue [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.visibleOutside privateAbi takesRange
-  pointer table: size=168 writesThrough=false captured=false passedTo=takesRange#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=takesRange#0
   pointer opts: size=256 writesThrough=false captured=false passedTo=privateAbi#0
   pointer sig: size=296 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0 takesRange#1
   stackSites=0 stackLocals=0
@@ -584,7 +584,7 @@ function checksRangesInPrologue(table: TypeTable, opts: Options, sig: FunctionSi
 function takesRange(table: TypeTable, sig: FunctionSig): boolean -> @takesRange [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRanged#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=TypeTable.isRanged#0
   pointer sig: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 type: i32 (const)
@@ -679,7 +679,7 @@ function builtinCalleesNamed(program: CheckedProgram, table: TypeTable, opts: Op
   sharedWrite: via absIntrinsic
   calls: TypeTable.baseOf absIntrinsic copysignIntrinsic f64UnaryIntrinsic isFloat minMaxIntrinsic nish_array_grow nish_panic_index nish_str_at nish_str_eq nish_str_new roundingCallee stringifyCallee
   pointer program: size=928 writesThrough=false captured=false
-  pointer table: size=168 writesThrough=false captured=false passedTo=absIntrinsic#0 TypeTable.baseOf#0 minMaxIntrinsic#0 minMaxIntrinsic#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=absIntrinsic#0 TypeTable.baseOf#0 minMaxIntrinsic#0 minMaxIntrinsic#0
   pointer opts: size=256 writesThrough=false captured=false passedTo=roundingCallee#0 roundingCallee#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1005,7 +1005,7 @@ function identifierBuiltinCallees(program: CheckedProgram, table: TypeTable, cal
   sharedWrite: via identifierBuiltinCalleesNamed
   calls: identifierBuiltinCalleesNamed nish_panic_index
   pointer program: size=928 writesThrough=false captured=false passedTo=identifierBuiltinCalleesNamed#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=identifierBuiltinCalleesNamed#1
+  pointer table: size=176 writesThrough=false captured=false passedTo=identifierBuiltinCalleesNamed#1
   pointer call: size=40 writesThrough=false captured=false passedTo=identifierBuiltinCalleesNamed#2
   stackSites=0 stackLocals=0
   callee +0:3 identifierBuiltinCalleesNamed -> @identifierBuiltinCalleesNamed
@@ -1015,7 +1015,7 @@ function identifierBuiltinCalleesNamed(program: CheckedProgram, table: TypeTable
   escaping: name
   calls: builtinConversionTarget conversionIntrinsic isBuiltinFunction isNetExport isSimdAccess isSimdExport netRangeBuffer netSymbol nish_array_grow nish_panic_index nish_str_eq panicTailCallees
   pointer program: size=928 writesThrough=false captured=false
-  pointer table: size=168 writesThrough=false captured=false passedTo=conversionIntrinsic#0
+  pointer table: size=176 writesThrough=false captured=false passedTo=conversionIntrinsic#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
