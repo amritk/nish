@@ -373,16 +373,16 @@ function termBytesText(bytes: u8[], n: i32): string -> @nish.termBytesText
   stackSites=1 stackLocals=1
   local +0:9 held: i32 (const)
   local +1:7 end: i32 (let)
-  callee +8:7 termNativeStrings -> @nish.termNativeStrings
-  local +11:9 pieces: string[] (const)
-  local +12:7 i: i32 (let)
-  local +14:11 c: i32 (const)
-  local +20:11 width: i32 (const)
-  callee +20:24 termLeadWidth -> @nish.termLeadWidth
-  local +21:9 cp: i32 (let)
-  callee +21:52 termLeadBits -> @nish.termLeadBits
-  local +23:9 left: i32 (let)
-  local +33:13 v: i32 (const)
+  callee +7:7 termNativeStrings -> @nish.termNativeStrings
+  local +10:9 pieces: string[] (const)
+  local +11:7 i: i32 (let)
+  local +13:11 c: i32 (const)
+  local +19:11 width: i32 (const)
+  callee +19:24 termLeadWidth -> @nish.termLeadWidth
+  local +20:9 cp: i32 (let)
+  callee +20:52 termLeadBits -> @nish.termLeadBits
+  local +22:9 left: i32 (let)
+  local +32:13 v: i32 (const)
 function Screen.constructor(this: Screen, width: i32, height: i32, palette256: boolean): void -> @nish.Screen.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: height palette256 width
@@ -2247,7 +2247,7 @@ function contains(haystack: string, needle: string): boolean -> @nish.contains [
 function split(text: string, sep: string): string[] -> @nish.split [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: nish.splitCodePoints nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish.splitCodePoints nish.textSpanEnd nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 sepLength: i32 (const)
   callee +2:12 splitCodePoints -> @nish.splitCodePoints
@@ -2255,10 +2255,11 @@ function split(text: string, sep: string): string[] -> @nish.split [exported]
   local +5:9 parts: string[] (const)
   local +6:7 start: i32 (let)
   local +10:11 at: i32 (const)
+  callee +25:13 textSpanEnd -> @nish.textSpanEnd
 function splitLimit(text: string, sep: string, limit: i32): string[] -> @nish.splitLimit [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: limit text
-  calls: nish.splitCodePoints nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish.splitCodePoints nish.textSpanEnd nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 sepLength: i32 (const)
   callee +2:12 splitCodePoints -> @nish.splitCodePoints
@@ -2266,6 +2267,7 @@ function splitLimit(text: string, sep: string, limit: i32): string[] -> @nish.sp
   local +5:9 parts: string[] (const)
   local +6:7 start: i32 (let)
   local +10:11 at: i32 (const)
+  callee +28:13 textSpanEnd -> @nish.textSpanEnd
 function fixedDigitsHalve(digits: u8[], count: i32): i32 -> @nish.fixedDigitsHalve
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -2307,15 +2309,22 @@ function toFixed(x: f64, digits: i32): string -> @nish.toFixed [exported]
   local +60:7 at: i32 (let)
   local +64:9 bytes: u8[] (const)
   local +70:11 digit: i32 (const)
+function textSpanEnd(length: i32, at: i32, count: i32): i32 -> @nish.textSpanEnd
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 room: i32 (const)
+  local +4:9 gap: i32 (const)
 function replaceAll(text: string, needle: string, replacement: string): string -> @nish.replaceAll [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: nish_alloc_struct nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish.textSpanEnd nish_alloc_struct nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=1 stackLocals=1
   local +0:9 needleLength: i32 (const)
   local +4:9 parts: string[] (const)
   local +5:7 rest: string (let)
   local +7:11 at: i32 (const)
+  local +18:11 after: i32 (const)
+  callee +18:24 textSpanEnd -> @nish.textSpanEnd
 function firstDifference(left: string[], right: string[]): i32 -> @nish.firstDifference [exported]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq

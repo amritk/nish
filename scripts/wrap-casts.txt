@@ -22,12 +22,6 @@
 2 std/crypto/sha256.ts
 3 std/crypto/x25519.ts
 14 std/crypto/x509.ts
-5 std/json-format.ts
-2 std/json-number.ts
-1 std/json-tokenizer.ts
-1 std/json-typed.ts
-29 std/json-value.ts
-16 std/json.ts
 1 std/net/dns.ts
 17 std/net/postgres-async.ts
 2 std/net/postgres-carrier.ts
@@ -44,8 +38,3 @@
 16 std/net/tls.ts
 2 std/net/tls/record.ts
 3 std/net/tls/ticket.ts
-6 std/sqlite.ts
-9 std/sync/ring.ts
-1 std/sync/shm.ts
-22 std/temporal.ts
-3 std/text.ts

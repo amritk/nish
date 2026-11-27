@@ -10698,6 +10698,8 @@ const wirePanicFreeDeclared = () => [
 // DECLARED: each names the program and the file this change moves, listed
 // from a nish-cmp run against the 0.44.0 seed with those files undeclared.
 const HASH_MAC_KDF = "hashes, MACs and key derivation"
+/** WP91 S3's release-note words: the squash subject carries them verbatim. */
+const WP91_S3 = "json, text, temporal, sqlite and sync"
 /** Why each module of WP83 S1 writes different IR. */
 const HASH_MAC_KDF_WHY = Object.fromEntries([
   ...["base64url", "hkdf", "hmac", "scram", "sha1", "sha256", "sha512"].map((name) => [
@@ -24389,6 +24391,67 @@ const DECLARED = [
     changelog: WP91_S4_NET_HTTP,
     why: "std/net/http-fields.ts's `httpDateWrite`, which `HttpDate.current` calls, spells its sums for the prover with this stage, so the module's declaration of `HttpDate.current` carries a different attribute group",
   })),
+  // WP91 S3: the cast wraps of std/json*, text, temporal, sqlite and sync
+  // become proven sums, refusals or spelled wraps.
+  ...["bench/httparena/main.ts", "tests/link/httparena_entry/main.ts"].map((program) => ({
+    program,
+    file: "json-tokenizer.ll",
+    changelog: WP91_S3,
+    why: "std/json-tokenizer.ts's jsonTokSigned takes a negative number's `u64` difference only from a magnitude of at least 1 instead of casting a wrapping one, so json-tokenizer.ll moves",
+  })),
+  {
+    program: "tests/link/std_temporal_result/main.ts",
+    file: "temporal.ll",
+    changelog: WP91_S3,
+    why: "std/temporal.ts's sums, differences and products go through temporalAdd, temporalSub and temporalMul, which raise a RangeError where the result leaves the i64 range instead of wrapping, so temporal.ll moves",
+  },
+  // Compared only under `--no-sidecars`: a default run reports this program
+  // refused by both, as WP80 S2's other ring programs.
+  ...["ring.ll", "shm.ll"].map((file) => ({
+    program: "tests/link/sync_ring_bytes_saturate/main.ts",
+    file,
+    changelog: WP91_S3,
+    why: "std/sync/ring.ts holds a byte size or offset past the i32 range at its end instead of wrapping it, and spells its counter arithmetic with wrappingAdd and wrappingSub, so ring.ll and the shm.ll it inlines move",
+  })),
+  ...["examples/prefork-jobs.ts", "bench/std-ring.ts", "tests/link/sync_ring_checked/main.ts"].flatMap(
+    (program) =>
+      ["ring.ll", "shm.ll"].map((file) => ({
+        program,
+        file,
+        changelog: WP91_S3,
+        why: "std/sync/ring.ts holds a byte size or offset past the i32 range at its end instead of wrapping it, keeps each ring's proven offsets in new i32 fields, and spells its counter arithmetic with wrappingAdd and wrappingSub, so ring.ll and the shm.ll it inlines move",
+      }))
+  ),
+  ...[
+    ["examples/prefork-jobs.ts", "prefork-jobs.ll"],
+    ["bench/std-ring.ts", "std-ring.ll"],
+    ["tests/link/sync_ring_checked/main.ts", "main.ll"],
+    ["tests/link/sync_ring_inplace/main.ts", "main.ll"],
+    ["tests/link/sync_ring_bytes_saturate/main.ts", "main.ll"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: WP91_S3,
+    why: "SpscRing and MpscRing gain i32 fields for the offsets std/sync/ring.ts proves once (SpscRing 96 to 112 bytes, MpscRing 32 to 64), so a module laying either out has a new struct type and wider dereferenceable bounds",
+  })),
+  ...["docs/cookbook/json-union.ts", "tests/link/json_tagged_union/main.ts"].map((program) => ({
+    program,
+    file: "json-tokenizer.ll",
+    changelog: WP91_S3,
+    why: "std/json-tokenizer.ts's jsonTokSigned takes a negative number's `u64` difference only from a magnitude of at least 1 instead of casting a wrapping one, so json-tokenizer.ll moves",
+  })),
+  {
+    program: "tests/link/std_sqlite_cursor_record/main.ts",
+    file: "sqlite.ll",
+    changelog: WP91_S3,
+    why: "std/sqlite.ts negates a result code through sqliteNegated, refuses a record index past the i32 range and sums its column offsets in i64, instead of wrapping each through `u32` or `u64`, so sqlite.ll moves",
+  },
+  {
+    program: "tests/link/std_temporal_hours_range/main.ts",
+    file: "temporal.ll",
+    changelog: WP91_S3,
+    why: "the case is new with this change; std/temporal.ts's sums, differences and products go through temporalAdd, temporalSub and temporalMul, which raise a RangeError where the result leaves the i64 range instead of wrapping, so temporal.ll moves",
+  },
   // WP91 S2: std/regex.ts drops its cast wraps for plain sums under guards
   // the prover reads, which moves regex.ll in every program importing nish/regex.
   ...[

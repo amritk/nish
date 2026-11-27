@@ -788,6 +788,20 @@ declare function nishsqlite_cursor_read_row(h: i32, io: u8[], n: u64, text: u8[]
 declare function nishsqlite_cursor_record(h: i32, buf: u8[], n: u64): i32
 
 /**
+ * The SQLite result code the adapter answered as `n`, minus that code: `-n`,
+ * spelled `~n + 1`. The adapter only answers small codes; a stray
+ * `-2147483648`, whose negation is past an `i32`, answers `2147483647` rather
+ * than overflow, and the test with the literal is what proves the sum.
+ */
+const sqliteNegated = (n: i32): i32 => {
+  const m: i32 = ~n
+  if (m < 0 || m > 2147483646) {
+    return 2147483647
+  }
+  return m + 1
+}
+
+/**
  * A B-tree cursor on a table or index, which reads rows without a statement.
  * Columns count from 0 in the order `openCursor` named them. A call on a
  * closed or invalidated cursor answers `SQLITE_MISUSE` (0 from `rowid` and
@@ -963,9 +977,8 @@ export class Cursor {
   countRange(lo: i64, hi: i64, out: i64[]): Result<i32, i32> {
     const n: i32 = nishsqlite_cursor_count_range(this.handle, lo, hi, toU64(out.length))
     if (n < 0) {
-      // The adapter answers minus a SQLite result code: `~n + 1` is `-n`,
-      // spelled in u32 so no negation of an i32 can overflow.
-      return Err(toI32(toU32(~n) + toU32(1)))
+      // The adapter answers minus a SQLite result code.
+      return Err(sqliteNegated(n))
     }
     for (let i = 0; i < out.length; i++) {
       const c: i64 = nishsqlite_cursor_count_at(this.handle, toU64(i))
@@ -1000,9 +1013,8 @@ export class Cursor {
   record(buf: u8[]): Result<i32, i32> {
     const n: i32 = nishsqlite_cursor_record(this.handle, buf, toU64(buf.length))
     if (n < 0) {
-      // The adapter answers minus a SQLite result code: `~n + 1` is `-n`,
-      // spelled in u32 so no negation of an i32 can overflow.
-      return Err(toI32(toU32(~n) + toU32(1)))
+      // The adapter answers minus a SQLite result code.
+      return Err(sqliteNegated(n))
     }
     return Ok(n)
   }
@@ -1136,9 +1148,8 @@ export class Cursor {
     const io: u8[] = this.rowIo
     const n: i32 = nishsqlite_cursor_read_row(this.handle, io, toU64(io.length), text, toU64(text.length))
     if (n < 0) {
-      // The adapter answers minus a SQLite result code: `~n + 1` is `-n`,
-      // spelled in u32 so no negation of an i32 can overflow.
-      return Err(toI32(toU32(~n) + toU32(1)))
+      // The adapter answers minus a SQLite result code.
+      return Err(sqliteNegated(n))
     }
     if (n > toI32(text.length)) {
       return Ok(n)
@@ -1341,21 +1352,27 @@ export class RowRecord {
       if (t < toI64(0)) {
         return false
       }
-      // A varint is at most 5 bytes, so the mask keeps its length.
-      // In u32: idx is below hdr, so the sum is at most 2^31 + 4, and one
-      // that wraps negative ends the walk at the next varint, which refuses it.
-      idx = toI32(toU32(idx) + toU32(this.vlen & 7))
+      // A varint is at most 5 bytes, so the mask keeps its length. `idx` is
+      // below `hdr`, so only a header within 7 bytes of 2^31 could pass the
+      // literal, which no record buffer reaches; the test is what proves the
+      // sum, and a header that did would be refused: the walk answers false.
+      if (idx > 2147483640) {
+        return false
+      }
+      idx = idx + (this.vlen & 7)
       const ty: i32 = toI32(t)
       types[k] = ty
-      offs[k] = toI32(d)
+      // At most the record's length, checked above, so it is exact in an i32.
+      const at: i32 = toI32(d)
+      offs[k] = at
       let sz: i32 = 0
       if (ty >= 12) {
         sz = (ty - 12) >> 1
       } else if (ty >= 0 && ty < toI32(sizes.length)) {
         sz = sizes[ty] & 15
       }
-      // In u64, which cannot wrap: d is at most the record's length here.
-      d = toI64(toU64(d) + toU64(sz))
+      // Two i32s summed in i64, which cannot overflow.
+      d = toI64(at) + toI64(sz)
       u = k + 1
     }
     if (d > toI64(this.length) && u > 0 && u <= toI32(types.length)) {
@@ -1462,9 +1479,10 @@ export class RowRecord {
     }
     const first: i32 = toI32(b[at])
     let v: i64 = signed && first >= 128 ? toI64(first - 256) : toI64(first)
-    // In u32, which cannot wrap: the window was checked to lie inside `buf`.
-    const stop: i32 = toI32(toU32(at) + toU32(n))
-    for (let i: i32 = at + 1; i >= 0 && i < stop && i < toI32(b.length); i += 1) {
+    // Two i32s summed in i64, which cannot overflow; the window was checked
+    // to lie inside `buf`.
+    const stop: i64 = toI64(at) + toI64(n)
+    for (let i: i32 = at + 1; i >= 0 && toI64(i) < stop && i < toI32(b.length); i += 1) {
       v = (v << toI64(8)) | toI64(b[i])
     }
     return v

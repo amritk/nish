@@ -670,6 +670,10 @@ function nishsqlite_cursor_record(h: i32, buf: u8[], n: u64): i32 -> @nishsqlite
   sharedWrite: foreign
   pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+function sqliteNegated(n: i32): i32 -> @nish.sqliteNegated
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 m: i32 (const)
 function Cursor.constructor(this: Cursor, handle: i32): void -> @nish.Cursor.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: handle
@@ -771,24 +775,26 @@ function Cursor.countRange(this: Cursor, lo: i64, hi: i64, out: i64[]): Result<i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=12
   sharedWrite: +0:9
   escaping: hi lo
-  calls: nishsqlite_cursor_count_at nishsqlite_cursor_count_range
+  calls: nish.sqliteNegated nishsqlite_cursor_count_at nishsqlite_cursor_count_range
   pointer this: size=16 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=2 stackLocals=0
-  local -13:11 n: i32 (const)
-  callee -13:20 nishsqlite_cursor_count_range -> @nishsqlite_cursor_count_range
+  local -12:11 n: i32 (const)
+  callee -12:20 nishsqlite_cursor_count_range -> @nishsqlite_cursor_count_range
+  callee -9:18 sqliteNegated -> @nish.sqliteNegated
   local -7:14 i: i32 (let)
   local -6:13 c: i64 (const)
   callee -6:22 nishsqlite_cursor_count_at -> @nishsqlite_cursor_count_at
 function Cursor.record(this: Cursor, buf: u8[]): Result<i32, i32> -> @nish.Cursor.record [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=12
   sharedWrite: +0:20
-  calls: nishsqlite_cursor_record
+  calls: nish.sqliteNegated nishsqlite_cursor_record
   pointer this: size=16 writesThrough=false captured=false
   pointer buf: size=0 writesThrough=true captured=false passedTo=nishsqlite_cursor_record#1
   stackSites=2 stackLocals=0
   local +0:11 n: i32 (const)
   callee +0:20 nishsqlite_cursor_record -> @nishsqlite_cursor_record
+  callee +3:18 sqliteNegated -> @nish.sqliteNegated
 function Cursor.rowid(this: Cursor): i64 -> @nish.Cursor.rowid [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nishsqlite_cursor_rowid
@@ -839,7 +845,7 @@ function Cursor.selectRow(this: Cursor, cols: readonly i32[]): Result<void, i32>
 function Cursor.readRow(this: Cursor, ints: i64[], spans: i32[], text: u8[]): Result<i32, i32> -> @nish.Cursor.readRow [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=12
   sharedWrite: +0:20
-  calls: nishsqlite_cursor_read_row
+  calls: nish.sqliteNegated nishsqlite_cursor_read_row
   pointer this: size=16 writesThrough=false captured=false
   pointer ints: size=0 writesThrough=true captured=false
   pointer spans: size=0 writesThrough=true captured=false
@@ -851,14 +857,15 @@ function Cursor.readRow(this: Cursor, ints: i64[], spans: i32[], text: u8[]): Re
   local -1:11 io: u8[] (const)
   local +0:11 n: i32 (const)
   callee +0:20 nishsqlite_cursor_read_row -> @nishsqlite_cursor_read_row
-  local +13:11 nio: i32 (const)
-  local +14:9 at: i32 (let)
-  local +15:9 s: i32 (let)
-  local +16:9 off: i32 (let)
-  local +18:11 i: i32 (let)
-  local +22:13 ty: i32 (const)
-  local +25:15 len: i32 (const)
-  local +30:15 end: i64 (const)
+  callee +3:18 sqliteNegated -> @nish.sqliteNegated
+  local +12:11 nio: i32 (const)
+  local +13:9 at: i32 (let)
+  local +14:9 s: i32 (let)
+  local +15:9 off: i32 (let)
+  local +17:11 i: i32 (let)
+  local +21:13 ty: i32 (const)
+  local +24:15 len: i32 (const)
+  local +29:15 end: i64 (const)
 function Cursor.close(this: Cursor): Result<void, i32> -> @nish.Cursor.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nishsqlite_cursor_close
@@ -910,20 +917,21 @@ function RowRecord.header(this: RowRecord): boolean -> @nish.RowRecord.header [e
   calls: nish.RowRecord.varint
   pointer this: size=40 writesThrough=true captured=false passedTo=nish.RowRecord.varint#0 nish.RowRecord.varint#0
   stackSites=0 stackLocals=0
-  local -26:11 h: i64 (const)
-  callee -26:20 RowRecord.varint -> @nish.RowRecord.varint
-  local -22:11 hdr: i32 (const)
-  local -21:9 idx: i32 (let)
-  local -18:9 d: i64 (let)
-  local -17:9 u: i32 (let)
-  local -16:11 types: i32[] (const)
-  local -15:11 offs: i32[] (const)
-  local -14:11 sizes: readonly i32[] (const)
-  local -13:14 k: i32 (let)
-  local -9:13 t: i64 (const)
-  callee -9:22 RowRecord.varint -> @nish.RowRecord.varint
+  local -30:11 h: i64 (const)
+  callee -30:20 RowRecord.varint -> @nish.RowRecord.varint
+  local -26:11 hdr: i32 (const)
+  local -25:9 idx: i32 (let)
+  local -22:9 d: i64 (let)
+  local -21:9 u: i32 (let)
+  local -20:11 types: i32[] (const)
+  local -19:11 offs: i32[] (const)
+  local -18:11 sizes: readonly i32[] (const)
+  local -17:14 k: i32 (let)
+  local -13:13 t: i64 (const)
+  callee -13:22 RowRecord.varint -> @nish.RowRecord.varint
   local -1:13 ty: i32 (const)
-  local +2:11 sz: i32 (let)
+  local +2:13 at: i32 (const)
+  local +4:11 sz: i32 (let)
 function RowRecord.serial(this: RowRecord, k: i32): i32 -> @nish.RowRecord.serial [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
@@ -978,8 +986,8 @@ function RowRecord.bigEndian(this: RowRecord, at: i32, n: i32, signed: boolean):
   local +0:11 b: u8[] (const)
   local +10:11 first: i32 (const)
   local +11:9 v: i64 (let)
-  local +13:11 stop: i32 (const)
-  local +14:14 i: i32 (let)
+  local +14:11 stop: i64 (const)
+  local +15:14 i: i32 (let)
 import OPEN_READWRITE from "nish/sqlite" -> const OPEN_READWRITE
 import OPEN_URI from "nish/sqlite" -> const OPEN_URI
 import SEEK_GE from "nish/sqlite" -> const SEEK_GE

@@ -409,8 +409,8 @@ Text that is not one JSON number, for `newNumber`, or an `f64` that is NaN or an
 `JSON_VALUE_ERR_VALUES: i32`
 
 One value more than `JsonDocument.maxValues`, by a parse (with `errorAt` at
-its first byte) or a builder; or, from a builder, text that would take the
-document's stored bytes past 2^31 - 1.
+its first byte) or a builder; or text that would take the document's
+stored bytes past 2^31 - 1, which a parse never stores.
 
 </scalar-card>
 
