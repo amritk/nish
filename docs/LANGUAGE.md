@@ -7930,10 +7930,9 @@ declare void @counter_free(i8*)
   module that wants the binding imports it from the module that declares it.
 - **It is a binding between modules of one program, and the program links the
   C library** as it would for a declaration of its own. The symbol stays C's:
-  no module defines it. An `--emit-header` of a program whose root package
-  exports one still lists it, as the C prototype it is
-  (`int32_t abs(int32_t n);`), because the header takes every export of the root
-  package; that list is not yet narrowed to the functions the program defines.
+  no module defines it, so `--emit-header`, `--emit-dts` and `--emit-napi`,
+  which describe the functions the program defines for a host, leave it out
+  however it is exported (`tests/link/export_declare_header`).
 
 #### `readStruct`: a struct out of memory C owns
 

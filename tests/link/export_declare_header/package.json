@@ -1,0 +1,7 @@
+{
+  "name": "export-declare-header",
+  "private": true,
+  "nish": {
+    "link": { "sources": ["c/meter.c"] }
+  }
+}
