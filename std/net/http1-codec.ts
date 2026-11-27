@@ -1710,7 +1710,13 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, shift: integer<0, 2147483
   const end: i32 = at + length
   const head: u8[] = p.head
   const nameEnd: i32 = http1LowerName(head, at, end)
-  if (nameEnd === at || nameEnd >= end || nameEnd < 0 || nameEnd >= toI32(head.length) || head[nameEnd] !== 58) {
+  if (
+    nameEnd === at ||
+    nameEnd >= end ||
+    nameEnd < 0 ||
+    nameEnd >= toI32(head.length) ||
+    head[nameEnd] !== 58
+  ) {
     return http1NameRefused(p, nameEnd === at)
   }
   const counted: i32 = http1FieldCounted(p)
@@ -2424,7 +2430,11 @@ const http1Next = (p: Http1Parser): i32 => {
         // `maxTarget` is clamped to 2^30, and one moved past it by hand is held
         // there, so the sum is an i32.
         const target: i32 = p.maxTarget
-        const got: i32 = http1TakeLine(p, target < 1073741824 ? target + (HTTP1_MAX_METHOD + 10) : 1073741824, 414)
+        const got: i32 = http1TakeLine(
+          p,
+          target < 1073741824 ? target + (HTTP1_MAX_METHOD + 10) : 1073741824,
+          414
+        )
         if (got !== HTTP1_LINE) {
           return got
         }

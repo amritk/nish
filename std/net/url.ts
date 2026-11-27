@@ -784,8 +784,6 @@ const URL_AT: i32 = 64
 const URL_OPEN_BRACKET: i32 = 91
 const URL_CLOSE_BRACKET: i32 = 93
 const URL_BACKSLASH: i32 = 92
-/** The largest port a URL may name (RFC 6335 §6: a port is 16 bits). */
-const URL_MAX_PORT: i32 = 65535
 
 /**
  * A URL split into its parts (RFC 3986 §3). Each part is held as it was
@@ -1084,8 +1082,9 @@ const urlHostEnd = (bytes: u8[], h: i32, b: i32): i32 => {
 
 /** The port `bytes[a, b)` names, digits up to 65535, or -1 when it is not one. */
 const urlPortOf = (bytes: u8[], a: i32, b: i32): i32 => {
-  // At most 65535 (`URL_MAX_PORT`, spelled as the range so the proof reads
-  // it), so with a digit added the sum is at most 655359.
+  // At most 65535, the largest port (RFC 6335 §6: a port is 16 bits), held
+  // as a range the proof reads, so with a digit added the sum is at most
+  // 655359.
   let port: integer<0, 65535> = 0
   let i: i32 = a
   while (i >= 0 && i < b && i < toI32(bytes.length)) {
