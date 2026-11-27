@@ -93,13 +93,16 @@ export const main = (): number => {
     console.error("clear: no instance")
     return 1
   }
-  const window: NishGfxWindow | null = offscreen ? null : nishgfx_window_create("clear", toU32(WIDTH * 32), toU32(HEIGHT * 32))
+  const window: NishGfxWindow | null = offscreen
+    ? null
+    : nishgfx_window_create("clear", toU32(WIDTH * 32), toU32(HEIGHT * 32))
   const surface: NishGfxSurface | null = window === null ? null : nishgfx_surface_create(instance, window)
-  const adapter: NishGfxAdapter | null = offscreen
-    ? nishgfx_adapter_request(instance, null, 0)
-    : surface !== null
-      ? nishgfx_adapter_request(instance, surface, 0)
-      : null
+  let adapter: NishGfxAdapter | null = null
+  if (offscreen) {
+    adapter = nishgfx_adapter_request(instance, null, 0)
+  } else if (surface !== null) {
+    adapter = nishgfx_adapter_request(instance, surface, 0)
+  }
   const device: NishGfxDevice | null = adapter === null ? null : nishgfx_device_request(instance, adapter)
   const msg = new Array<u8>(MESSAGE_CAP)
   let status = 0
@@ -128,7 +131,11 @@ export const main = (): number => {
       if (encoder !== null) {
         nishgfx_encoder_submit(device, encoder)
       }
-      if (pass === null || target === null || nishgfx_offscreen_read(target, pixels, toU64(pixels.length)) !== 0) {
+      if (
+        pass === null ||
+        target === null ||
+        nishgfx_offscreen_read(target, pixels, toU64(pixels.length)) !== 0
+      ) {
         console.error(`clear: frame ${frame} was not drawn and read back`)
         status = 1
       } else {
