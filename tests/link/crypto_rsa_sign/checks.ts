@@ -255,6 +255,79 @@ const refusals = (k: SignKey): i32 => {
   return count;
 };
 
+/** The content of the DER INTEGER at `der[at]` as `[start, end]`, or `[-1, -1]` for another tag. */
+const integerAt = (der: u8[], at: i32): i32[] => {
+  if (at + toI32(4) > toI32(der.length) || der[at] !== 0x02) {
+    return [-1, -1];
+  }
+  const first: i32 = toI32(der[at + toI32(1)]);
+  if (first < 0x80) {
+    return [at + toI32(2), at + toI32(2) + first];
+  }
+  if (first === 0x81) {
+    return [at + toI32(3), at + toI32(3) + toI32(der[at + toI32(2)])];
+  }
+  if (first === 0x82) {
+    const len: i32 = (toI32(der[at + toI32(2)]) << toI32(8)) | toI32(der[at + toI32(3)]);
+    return [at + toI32(4), at + toI32(4) + len];
+  }
+  return [-1, -1];
+};
+
+/** `key` with the last byte of `span`'s content XORed with `bit`. */
+const flipped = (key: u8[], span: i32[], bit: i32): u8[] => {
+  const out: u8[] = slice(key, 0, toI32(key.length));
+  const last: i32 = span[1] - toI32(1);
+  out[last] = toU8(toI32(out[last]) ^ bit);
+  return out;
+};
+
+/**
+ * The first 2048-bit key's RSAPrivateKey with one CRT value changed at a
+ * time, each still a well-formed key that `rsaParsePrivateKey` must refuse:
+ * `p` made even, `q` with bit 1 flipped (odd, but `p q` is not `n`), the last
+ * bit of `dP`, of `dQ` and of `qInv` flipped, and `p` and `q` swapped. Answers
+ * how many of the six are refused, or -1 when the key does not load unchanged
+ * or its primes differ in length.
+ */
+const crtRefusals = (k: SignKey): i32 => {
+  const key: u8[] = slice(fromHex(k.pkcs8), toI32(k.start), toI32(k.end));
+  const n: i32 = toI32(key.length);
+  if (refused(key, n)) {
+    return -1;
+  }
+  // version, n, e and d, then p, q, dP, dQ and qInv.
+  let at: i32 = 4;
+  const spans: i32[][] = [];
+  for (let i: i32 = 0; i < 9; i++) {
+    const span: i32[] = integerAt(key, at);
+    if (span[0] < 0 || span[1] > n) {
+      return -1;
+    }
+    spans.push(span);
+    at = span[1];
+  }
+  const sp: i32[] = spans[4];
+  const sq: i32[] = spans[5];
+  if (sp[1] - sp[0] !== sq[1] - sq[0]) {
+    return -1;
+  }
+  let count: i32 = 0;
+  count = count + toI32(refused(flipped(key, sp, 1), n) ? 1 : 0);
+  count = count + toI32(refused(flipped(key, sq, 2), n) ? 1 : 0);
+  for (let i: i32 = 6; i < 9; i++) {
+    count = count + toI32(refused(flipped(key, spans[i], 1), n) ? 1 : 0);
+  }
+  const swapped: u8[] = slice(key, 0, n);
+  const len: i32 = sp[1] - sp[0];
+  for (let j: i32 = 0; j < len; j++) {
+    swapped[sp[0] + j] = key[sq[0] + j];
+    swapped[sq[0] + j] = key[sp[0] + j];
+  }
+  count = count + toI32(refused(swapped, n) ? 1 : 0);
+  return count;
+};
+
 /** Runs every check and prints the summary; 0 when all pass. */
 export const rsaSignChecks = (): i32 => {
   const t = new Tally();
@@ -272,6 +345,7 @@ export const rsaSignChecks = (): i32 => {
   t.check(`under each of the ${n} keys, rsaSignPssSha256Salted signs under an empty and a 32-byte salt, each verifying at its own length only, the same twice, and unlike the derived salt`, t.saltedKeys === n);
   t.check("a signature under one 2048-bit key fails under the other", crossKey(keys));
   t.check("rsaParsePrivateKey refuses each of 9 changes to a key: empty, a byte short, a byte after, version 1, an even modulus, a negative modulus, an even public exponent, a private exponent one bit off, an outer length one long", refusals(keys[0]) === 9);
+  t.check("rsaParsePrivateKey refuses each of 6 changes to a key's CRT values: p made even, q with bit 1 flipped, the last bit of dP, of dQ and of qInv flipped, and p and q swapped", crtRefusals(keys[0]) === 6);
   console.log(`rsa sign: ${t.passed} passed, ${t.failed} failed, 0 skipped`);
   return t.failed === 0 ? 0 : 1;
 };

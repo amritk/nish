@@ -14578,8 +14578,15 @@ if (dealtHere("cryptoChecks")) {
   // The wipes of RSA signing (`std/crypto/rsa-sign.ts`) and of RSA key loading
   // (`std/crypto/x509.ts`) survive `-O2`, counted in each function's own
   // optimised body as a volatile `llvm.memset` (`i1 true`): `rsaSignPrivateOp`
-  // wipes the window table, the accumulator, the selected entry, the product
-  // scratch, the two powers and the exponent's limbs (seven);
+  // wipes the two primes, the two half exponents, `qInv`, the four Montgomery
+  // constants made from the primes, the product scratch, the window table, the
+  // selected entry, the power of `m`, the selection scratch, the two halves'
+  // results and the joined signature (seventeen); `rsaSignKeySound` the CRT
+  // check's primes, half exponents, `qInv`, R^2 mod `p`, product and scratch
+  // (eight, `rsaSignCrtSound` inlined) and the full-exponent check's `d`,
+  // scratch, table, entry, power, selection and accumulator (seven,
+  // `rsaSignFullOpens` inlined); `rsaSignPrecompute` the prime, its two
+  // constants and the scratch (four);
   // `RsaSignScratch.saltInto` its hasher's state, block and schedule (three);
   // `rsaSignPssSha256` and `rsaSignPssSha256Into`, the one the TLS and QUIC
   // servers' `TlsRsaSigner` calls, each the exponent copy the salt derivation
@@ -14594,7 +14601,7 @@ if (dealtHere("cryptoChecks")) {
   // `wipe`, `x509`, `crypto_rsa_sign` and `net_tls_rsa_server` filters all run it.
   {
     const name =
-      "crypto: the wipes survive opt -O2 (rsaSignPrivateOp seven, RsaSignScratch.saltInto three, rsaSignPssSha256 one, rsaSignPssSha256Into one, rsaParsePrivateKey one, x509ParseRsaPrivateKey two)"
+      "crypto: the wipes survive opt -O2 (rsaSignPrivateOp seventeen, rsaSignKeySound fifteen, rsaSignPrecompute four, RsaSignScratch.saltInto three, rsaSignPssSha256 one, rsaSignPssSha256Into one, rsaParsePrivateKey one, x509ParseRsaPrivateKey two)"
     if (!only || [name, "crypto_rsa_sign", "net_tls_rsa_server"].some((selector) => selector.includes(only))) {
       if (!has("opt")) {
         skip("crypto: no opt to show RSA signing's and RSA key loading's wipes survive -O2")
@@ -14615,7 +14622,9 @@ if (dealtHere("cryptoChecks")) {
             : c
         const modules = { "rsa-sign": optimise("rsa-sign"), x509: optimise("x509") }
         const want = [
-          ["rsa-sign", "rsaSignPrivateOp", 7],
+          ["rsa-sign", "rsaSignPrivateOp", 17],
+          ["rsa-sign", "rsaSignKeySound", 15],
+          ["rsa-sign", "rsaSignPrecompute", 4],
           ["rsa-sign", "RsaSignScratch.saltInto", 3],
           ["rsa-sign", "rsaSignPssSha256", 1],
           ["rsa-sign", "rsaSignPssSha256Into", 1],
@@ -15332,7 +15341,15 @@ if (dealtHere("cryptoChecks")) {
       const rsaFixture = fs
         .readFileSync(path.join(casesDir, "ct_asm_rsa.ts"), "utf8")
         .replace(/\nexport const /g, "\nconst ")
-      const rsaDrifted = ["rsaSignReduce", "rsaSignMontMul", "rsaSignWindowStep"].filter((name) => {
+      const rsaDrifted = [
+        "rsaSignReduce",
+        "rsaSignMontMul",
+        "rsaSignWindowStep",
+        "rsaSignModAdd",
+        "rsaSignModSub",
+        "rsaSignLess",
+        "rsaSignMul",
+      ].filter((name) => {
         const copy = rsaBody(rsaFixture, name)
         return copy === undefined || copy !== rsaBody(rsaSource, name)
       })

@@ -25,19 +25,23 @@
  * INTEGER positive and minimal, nothing after the last. The modulus is odd and
  * `RSA_SIGN_MIN_BITS` to `RSA_SIGN_MAX_BITS` bits, the public exponent odd, at
  * least 3 and below 2^32, and the private exponent nonzero and below the
- * modulus. One value is then signed: 2 raised to the private exponent, and
- * that raised to the public exponent, must give 2 back, so a private exponent
- * that does not undo the public one is refused at load, not at the first
- * handshake. Only that one value is checked: the CRT values (`p`, `q`, `dP`,
- * `dQ`, `qInv`) are read only for their DER form, never compared with the
- * modulus or the exponents, and not kept: signing does not use them (below).
- * The key's bytes lie in the first 4096 of the array it is read from: the
+ * modulus. The CRT values must hold together (RFC 8017 §3.2): `p` and `q`
+ * odd, `dP` below `p`, `dQ` below `q` and `qInv` below `p`, `p q` equal to the
+ * modulus and `q qInv` 1 modulo `p`. Then one value is signed twice: 2 by the
+ * CRT, opened again under the public exponent, and 2 raised to the private
+ * exponent and then to the public one, each of which must give 2 back, so a
+ * key whose exponents do not undo each other is refused at load, not at the
+ * first handshake. The key's bytes lie in the first 4096 of the array it is read from: the
  * reader bounds absolute indexes, not the key's length, so a key past index
  * 4096 of a larger buffer is refused (a 4096-bit PKCS#1 key is about 2350
  * bytes, and `nish/crypto/x509` hands it the PEM block's own DER, where a
- * PKCS#8 wrapper puts the key a few dozen bytes in). The `Secret` holds the modulus,
- * the private exponent and the public exponent, each as many big-endian bytes
- * as the modulus has (`k`), in that order: `3 k` bytes.
+ * PKCS#8 wrapper puts the key a few dozen bytes in). The `Secret` holds the
+ * modulus, the private exponent and the public exponent, each as many
+ * big-endian bytes as the modulus has (`k`); then `p`, `q`, `dP`, `dQ` and
+ * `qInv`, then R^2 and R^3 modulo `p` and modulo `q`, each in `w` bytes, for
+ * `w` four times half the modulus's 32-bit limbs, rounded up; then R^2 modulo
+ * the modulus in `k` bytes: `4 k + 9 w` bytes, the constants computed once at
+ * load.
  *
  * **The salt is derived, not drawn.** `rsaSignPssSha256` and
  * `rsaSignPssSha256Into` take as the salt the SHA-256 of a fixed label, the
@@ -51,28 +55,32 @@
  * other source, and the module compiles for wasm32. `rsaSignPssSha256Salted`
  * signs with a salt the caller gives, for known-answer tests.
  *
- * **Constant time.** The private exponent is applied in a fixed 4-bit window
- * over every nibble of its `⌈k / 4⌉` limbs, leading zeros included: four Montgomery
+ * **Constant time.** Each half exponent is applied in a fixed 4-bit window
+ * over every nibble of its limbs, leading zeros included: four Montgomery
  * squarings, a read of the whole 16-entry table that keeps one entry under an
  * `ctEq` mask, and one Montgomery multiplication, for every nibble. The
  * Montgomery multiplication (CIOS, as in `nish/crypto/rsa`) ends in a
  * subtraction whose result is kept or dropped by `ctSelect`, never a branch.
- * So the sequence of operations and the addresses read depend on the modulus's
+ * Recombining the halves (Garner's `h = (s1 - s2) qInv mod p`, then
+ * `s = s2 + q h`) is masked arithmetic of the same fixed shape. So the
+ * sequence of operations and the addresses read depend on the modulus's
  * length alone. The modulus, the message and the public exponent are public,
- * and the code that touches only them (R^2 mod n, the check after signing)
- * may branch on them. The salt's hash reads the private exponent through
- * SHA-256, whose work depends on the length alone.
+ * and the code that touches only them (the check after signing) may branch on
+ * them. The salt's hash reads the private exponent through SHA-256, whose
+ * work depends on the length alone.
  *
- * **No CRT, no blinding.** Signing is one exponentiation by `d` modulo `n`,
- * about four times the work of the CRT form, so no secret prime is ever a
- * modulus and the Bellcore fault (one faulty half-exponentiation factors `n`)
- * has nothing to strike. Every signature is still raised to `e` and compared
- * with the encoded message before it is returned, and one that does not
- * match answers `null`. The exponent is not blinded; the fixed window is the
- * defence against timing (RSA-S2 in docs/security/crypto-rsa.md).
+ * **CRT, checked; no blinding.** Signing works modulo `p` and `q`, about a
+ * quarter of the work of one exponentiation by `d` modulo `n`. A fault in one
+ * half gives a value right modulo one prime and wrong modulo the other, which
+ * factors `n` (Bellcore), so every signature is raised to `e` and compared
+ * with the encoded message, and its limbs checked below `n`, before any byte
+ * of it is returned; one that does not match answers `null`. The exponents
+ * are not blinded; the fixed window is the defence against timing (RSA-S2 in
+ * docs/security/crypto-rsa.md).
  *
- * **Wiping.** Every limb array the exponentiation computes in, the window
- * table and the product, is wiped before the exposing function returns, and
+ * **Wiping.** Every limb array that held a prime, an exponent, a constant
+ * made from a prime or a power of the message, the window table and the
+ * product among them, is wiped before the exposing function returns, and
  * so is the hasher that derives the salt. The parse builds the `Secret`
  * straight from the DER without a copy that outlives it. The DER itself is
  * the caller's to wipe.
@@ -206,18 +214,35 @@ const rsaSignOdd = (der: u8[], end: i32): boolean => {
 }
 
 /**
- * The `3 k` key bytes: `n`, `d` and `e`, each right-aligned in `k` bytes, out
- * of the spans the parse found, which fit `k`; empty for a `k` out of range.
+ * The bytes each CRT value of a key with a `k`-byte modulus takes: `4 c`, for
+ * the `c = ⌈⌈k / 4⌉ / 2⌉` limbs of half the modulus; 0 for a `k` out of range.
  */
-const rsaSignKeyBytes = (der: u8[], k: i32, n: RsaSignSpan, d: RsaSignSpan, e: RsaSignSpan): u8[] => {
+const rsaSignHalfWidth = (k: i32): i32 => {
   if (k < 256 || k > 512) {
+    return 0
+  }
+  const count: i32 = toI32((k + 3) / 4)
+  return toI32((count + 1) / 2) * 4
+}
+
+/**
+ * The key bytes for a `k`-byte modulus, `4 k + 9 w` of them with `w` from
+ * `rsaSignHalfWidth`: `n`, `d` and `e` in `k` bytes each, then `p`, `q`,
+ * `dP`, `dQ` and `qInv` in `w` bytes each, each right-aligned, out of the spans
+ * the parse found, which fit; the four Montgomery constants after them and
+ * R^2 mod n in the last `k` bytes stay zero for `rsaSignPrecompute`. Empty for
+ * a `k` out of range.
+ */
+const rsaSignKeyBytes = (der: u8[], k: i32, spans: RsaSignSpan[]): u8[] => {
+  const w: i32 = rsaSignHalfWidth(k)
+  if (w === 0 || toI32(spans.length) !== 8) {
     return []
   }
-  const total: i32 = k * 3
-  const out: u8[] = new Array<u8>(total)
-  rsaSignPlace(out, 0, k, der, n)
-  rsaSignPlace(out, k, k, der, d)
-  rsaSignPlace(out, 2 * k, k, der, e)
+  const out: u8[] = new Array<u8>(4 * k + 9 * w)
+  for (let i: i32 = 0; i < 8; i++) {
+    const at: i32 = i < 3 ? i * k : 3 * k + (i - 3) * w
+    rsaSignPlace(out, at, i < 3 ? k : w, der, spans[i])
+  }
   return out
 }
 
@@ -235,7 +260,7 @@ const rsaSignPlace = (out: u8[], at: i32, width: i32, der: u8[], span: RsaSignSp
     stop < start ||
     stop > 4096 ||
     at < 0 ||
-    at > 1024 ||
+    at > 4096 ||
     width < 0 ||
     width > 512
   ) {
@@ -263,8 +288,11 @@ const rsaSignPlace = (out: u8[], at: i32, width: i32, der: u8[], span: RsaSignSp
  * lengths and nothing after them; for a modulus that is even or outside
  * `RSA_SIGN_MIN_BITS` to `RSA_SIGN_MAX_BITS` bits; for a public exponent that is
  * even, below 3 or not below 2^32; for a private exponent of zero or not below
- * the modulus; and for a private exponent that does not undo the public one
- * (2 signed and opened again is not 2). `der` is not changed and not kept: the
+ * the modulus; for CRT values that do not hold together (`p` or `q` even,
+ * `dP`, `dQ` or `qInv` out of range, `p q` not the modulus, `q qInv` not 1
+ * modulo `p`); and for exponents that do not undo each other (2 signed by the
+ * CRT, or raised to the private exponent, and opened again is not 2). `der`
+ * is not changed and not kept: the
  * caller wipes it. A key whose `end` is past 4096 is refused, whatever its
  * length: the limit is on the index, not on `end - start`.
  *
@@ -298,13 +326,15 @@ export const rsaParsePrivateKey = (der: u8[], start: i32, end: i32): Secret<u8[]
   if (d === null) {
     return null
   }
-  // p, q, dP, dQ and qInv: read for their form, not kept.
+  // p, q, dP, dQ and qInv, each no wider than half the modulus's limbs.
+  const spans: RsaSignSpan[] = [n, d, e]
   let at: i32 = d.end
   for (let i: i32 = 0; i < 5; i++) {
     const v: RsaSignSpan | null = rsaSignInteger(der, at, seq.end)
     if (v === null) {
       return null
     }
+    spans.push(v)
     at = v.end
   }
   if (at !== seq.end) {
@@ -343,7 +373,15 @@ export const rsaParsePrivateKey = (der: u8[], start: i32, end: i32): Secret<u8[]
   ) {
     return null
   }
-  const key: Secret<u8[]> = secret(rsaSignKeyBytes(der, ne - ns, n, d, e))
+  const w: i32 = rsaSignHalfWidth(ne - ns)
+  for (let i: i32 = 3; i < 8; i++) {
+    if (spans[i].end - spans[i].start > w) {
+      return null
+    }
+  }
+  const bytes: u8[] = rsaSignKeyBytes(der, ne - ns, spans)
+  rsaSignPrecompute(bytes)
+  const key: Secret<u8[]> = secret(bytes)
   if (!expose(key, rsaSignKeySound)) {
     wipe(key)
     return null
@@ -353,7 +391,7 @@ export const rsaParsePrivateKey = (der: u8[], start: i32, end: i32): Secret<u8[]
 
 /**
  * The modulus bits of a key from `rsaParsePrivateKey`, or 0 for a `Secret`
- * that is not one (its length is not `3 k` for a `k` of 256 to 512).
+ * that is not one (its length is not `4 k + 9 w` for a `k` of 256 to 512).
  *
  * @param priv The key.
  * @returns The modulus's bit length, which is public.
@@ -737,14 +775,18 @@ const rsaSignPssEncode = (
 // The key's shape
 // ---------------------------------------------------------------------------
 
-/** `k` for a key value of `3 k` bytes with `k` 256 to 512, else 0. */
+/**
+ * `k` for a key value of `4 k + 9 w` bytes (`rsaSignKeyBytes`) with `k` 256
+ * to 512, else 0. The length grows with `k`, so one `k` at most has it.
+ */
 const rsaSignKeySize = (key: u8[]): i32 => {
   const total: i32 = toI32(key.length)
-  const k: i32 = toI32(total / 3)
-  if (k * 3 !== total || k < 256 || k > 512) {
-    return 0
+  for (let k: i32 = 256; k <= 512; k++) {
+    if (4 * k + 9 * rsaSignHalfWidth(k) === total) {
+      return k
+    }
   }
-  return k
+  return 0
 }
 
 /** The modulus bits of the key value, or 0 for one of the wrong shape or a leading zero byte. */
@@ -787,9 +829,12 @@ const rsaSignKeyModulus = (key: u8[]): u8[] => rsaSignKeyPart(key, 0)
 const rsaSignKeyExponent = (key: u8[]): u8[] => rsaSignKeyPart(key, 2)
 
 /**
- * Whether the parsed key value holds together: `d` below `n` (compared over
- * all `k` bytes, without an early exit) and RSASP1 of 2 opening to 2 under
- * `e`, which `rsaSignPrivateOp`'s own check does.
+ * Whether the parsed key value holds together, without a branch on a secret
+ * until the answer: `d` below `n`; `p` and `q` odd; `dP` below `p`, `dQ` below
+ * `q` and `qInv` below `p` (RFC 8017 §3.2); `p q = n`; `q qInv = 1 mod p`,
+ * which also refuses `p = q`; then RSASP1 of 2 by the CRT, opened again under
+ * `e` by `rsaSignPrivateOp`'s own check, and 2 raised to `d` and then to `e`
+ * giving 2, since `d` itself still derives the salt.
  */
 const rsaSignKeySound = (key: u8[]): boolean => {
   const k: i32 = rsaSignKeySize(key)
@@ -805,13 +850,15 @@ const rsaSignKeySound = (key: u8[]): boolean => {
       borrow = (diff >> 8) & 1
     }
   }
+  const crt: u32 = rsaSignCrtSound(key, k)
   const two: u8[] = new Array<u8>(k)
   const last: i32 = k - 1
   if (last >= 0 && last < toI32(two.length)) {
     two[last] = 2
   }
   const s: u8[] | null = rsaSignPrivateOp(key, two)
-  return borrow === 1 && s !== null
+  const full: boolean = rsaSignFullOpens(key, two)
+  return borrow === 1 && crt === 0 && s !== null && full
 }
 
 // ---------------------------------------------------------------------------
@@ -828,7 +875,7 @@ const rsaSignKeySound = (key: u8[]): boolean => {
  * limbs in `out`.
  */
 const rsaSignLimbs = (out: u32[], src: u8[], off: i32, len: i32, count: i32): void => {
-  if (count < 0 || count > 128 || off < 0 || off > 1024 || len < 0 || len > 512) {
+  if (count < 0 || count > 128 || off < 0 || off > 4096 || len < 0 || len > 512) {
     return
   }
   for (let limb: i32 = 0; limb < count; limb++) {
@@ -975,7 +1022,7 @@ const rsaSignWindowStep = (
 
 /**
  * R^2 mod n into `r`, by doubling 1 modulo `n` 64 count times; `t` is
- * scratch. Public: it reads `n` only.
+ * scratch. The reduction is masked, so it may run on a secret prime.
  */
 const rsaSignR2 = (r: u32[], n: u32[], t: u32[], count: i32): void => {
   if (toI32(n.length) < 128 || count > 128 || count < 1 || toI32(r.length) < 128 || toI32(t.length) < 130) {
@@ -997,18 +1044,373 @@ const rsaSignR2 = (r: u32[], n: u32[], t: u32[], count: i32): void => {
 }
 
 /**
- * RSASP1 under the key value `key` (`n || d || e`): `m^d mod n` for the
- * `k`-byte `m` below `n`, by the fixed 4-bit window, then checked by raising
- * the answer to `e`. `null` for a key of the wrong shape, an `m` of the wrong
- * length or not below `n`, and a failed check. Every limb array that held
- * `d` or a power of `m` is wiped.
+ * `out = a + b mod n` for `a` and `b` below `n`: the sum into `t`, then the
+ * masked subtraction of `rsaSignReduce`. `out` may be `a` or `b`; `t` is
+ * neither.
+ */
+const rsaSignModAdd = (out: u32[], a: u32[], b: u32[], n: u32[], t: u32[], count: i32): void => {
+  if (count < 1 || count > 128 || toI32(a.length) < 128 || toI32(b.length) < 128 || toI32(t.length) < 128) {
+    return
+  }
+  let carry: u64 = 0
+  for (let i: i32 = 0; i < count; i++) {
+    const s: u64 = toU64(a[i]) + toU64(b[i]) + carry
+    t[i] = toU32(s)
+    carry = s >> 32
+  }
+  rsaSignReduce(out, t, toU32(carry), n, count)
+}
+
+/**
+ * `out = a - b mod n` for `a` and `b` below `n`: the difference into `t`, then
+ * `n` added back under a `ctEq` mask of the borrow, never a branch. `out` may
+ * be `a` or `b`; `t` is neither.
+ */
+const rsaSignModSub = (out: u32[], a: u32[], b: u32[], n: u32[], t: u32[], count: i32): void => {
+  if (
+    count < 1 ||
+    count > 128 ||
+    toI32(out.length) < 128 ||
+    toI32(a.length) < 128 ||
+    toI32(b.length) < 128 ||
+    toI32(n.length) < 128 ||
+    toI32(t.length) < 128
+  ) {
+    return
+  }
+  let borrow: u64 = 0
+  for (let i: i32 = 0; i < count; i++) {
+    const d: u64 = toU64(a[i]) - toU64(b[i]) - borrow
+    t[i] = toU32(d)
+    borrow = (d >> 32) & 1
+  }
+  const back: u32 = ctEq(toU32(borrow), 1)
+  let carry: u64 = 0
+  for (let i: i32 = 0; i < count; i++) {
+    const s: u64 = toU64(t[i]) + toU64(n[i] & back) + carry
+    out[i] = toU32(s)
+    carry = s >> 32
+  }
+}
+
+/** 1 when the `count`-limb `a` is below `b`, else 0: the borrow out of `a - b`, with no early exit. */
+const rsaSignLess = (a: u32[], b: u32[], count: i32): u32 => {
+  if (count < 1 || count > 128 || toI32(a.length) < 128 || toI32(b.length) < 128) {
+    return 0
+  }
+  let borrow: u64 = 0
+  for (let i: i32 = 0; i < count; i++) {
+    const d: u64 = toU64(a[i]) - toU64(b[i]) - borrow
+    borrow = (d >> 32) & 1
+  }
+  return toU32(borrow)
+}
+
+/**
+ * `out = a b`, `2 count` limbs from two of `count`, by schoolbook rows of a
+ * fixed length: the work depends on `count` alone. Each sum is at most
+ * 2^64 - 1, as in `rsaSignMontMul`. `out` is neither `a` nor `b`.
+ */
+const rsaSignMul = (out: u32[], a: u32[], b: u32[], count: i32): void => {
+  if (count < 1 || count > 64 || toI32(out.length) < 128 || toI32(a.length) < 128 || toI32(b.length) < 128) {
+    return
+  }
+  for (let i: i32 = 0; i < 2 * count; i++) {
+    out[i] = 0
+  }
+  for (let i: i32 = 0; i < count; i++) {
+    const ai: u64 = toU64(a[i])
+    let carry: u64 = 0
+    for (let j: i32 = 0; j < count; j++) {
+      const s: u64 = toU64(out[i + j]) + ai * toU64(b[j]) + carry
+      out[i + j] = toU32(s)
+      carry = s >> 32
+    }
+    out[i + count] = toU32(carry)
+  }
+}
+
+/** The low `len` bytes of the limbs `a`, big-endian, written into `out` at `at`. */
+const rsaSignStore = (out: u8[], at: i32, len: i32, a: u32[]): void => {
+  if (at < 0 || len < 0 || len > 512 || toI32(a.length) < 128) {
+    return
+  }
+  for (let j: i32 = 0; j < len; j++) {
+    const o: i32 = at + len - 1 - j
+    if (o >= 0 && o < toI32(out.length)) {
+      out[o] = toU8(a[toI32(j / 4)] >> toU32((j & 3) << 3))
+    }
+  }
+}
+
+/**
+ * Fills the Montgomery constants of the key bytes `key` (`rsaSignKeyBytes`)
+ * from its own `n`, `p` and `q`, so that signing computes none of them: R^2
+ * and R^3 mod `p` and mod `q` for R = 2^(32 c), and R^2 mod `n` for
+ * R = 2^(32 ⌈k / 4⌉). R^2 is 1 doubled modulo the prime under `rsaSignReduce`'s
+ * mask and R^3 one Montgomery product of R^2 with itself, so nothing branches
+ * on `p` or `q`. Every limb array is wiped. A key of the wrong shape is left
+ * as it is.
+ */
+const rsaSignPrecompute = (key: u8[]): void => {
+  const k: i32 = rsaSignKeySize(key)
+  const w: i32 = rsaSignHalfWidth(k)
+  if (k < 256 || k > 512 || w < 4 || w > 256) {
+    return
+  }
+  const count: i32 = toI32((k + 3) / 4)
+  const c: i32 = toI32(w / 4)
+  const x: u32[] = new Array<u32>(128)
+  const r2: u32[] = new Array<u32>(128)
+  const r3: u32[] = new Array<u32>(128)
+  const t: u32[] = new Array<u32>(130)
+  for (let half: i32 = 0; half < 2; half++) {
+    rsaSignLimbs(x, key, 3 * k + half * w, w, c)
+    rsaSignR2(r2, x, t, c)
+    rsaSignMontMul(r3, r2, r2, x, rsaSignMontInverse(x[0]), t, c)
+    rsaSignStore(key, 3 * k + (2 * half + 5) * w, w, r2)
+    rsaSignStore(key, 3 * k + (2 * half + 6) * w, w, r3)
+  }
+  rsaSignLimbs(x, key, 0, k, count)
+  rsaSignR2(r2, x, t, count)
+  rsaSignStore(key, 3 * k + 9 * w, k, r2)
+  wipe(x)
+  wipe(r2)
+  wipe(r3)
+  wipe(t)
+}
+
+/**
+ * 0 when the CRT values of the key bytes `key` hold together, nonzero
+ * otherwise, with no branch on them: `p` and `q` odd, `dP` below `p`, `dQ`
+ * below `q`, `qInv` below `p`, `p q = n` over every limb of the product, and
+ * `q qInv = 1 mod p` (two Montgomery products: `q qInv R^-1`, then by R^2).
+ * Every limb array is wiped.
+ */
+const rsaSignCrtSound = (key: u8[], k: i32): u32 => {
+  const w: i32 = rsaSignHalfWidth(k)
+  if (k < 256 || k > 512 || w < 4 || w > 256 || toI32(key.length) !== 4 * k + 9 * w) {
+    return 1
+  }
+  const count: i32 = toI32((k + 3) / 4)
+  const c: i32 = toI32(w / 4)
+  const base: i32 = 3 * k
+  const n: u32[] = new Array<u32>(128)
+  rsaSignLimbs(n, key, 0, k, count)
+  const p: u32[] = new Array<u32>(128)
+  rsaSignLimbs(p, key, base, w, c)
+  const q: u32[] = new Array<u32>(128)
+  rsaSignLimbs(q, key, base + w, w, c)
+  const dp: u32[] = new Array<u32>(128)
+  rsaSignLimbs(dp, key, base + 2 * w, w, c)
+  const dq: u32[] = new Array<u32>(128)
+  rsaSignLimbs(dq, key, base + 3 * w, w, c)
+  const qinv: u32[] = new Array<u32>(128)
+  rsaSignLimbs(qinv, key, base + 4 * w, w, c)
+  const r2p: u32[] = new Array<u32>(128)
+  rsaSignLimbs(r2p, key, base + 5 * w, w, c)
+  let bad: u32 = ((p[0] & 1) ^ 1) | ((q[0] & 1) ^ 1)
+  bad = bad | (rsaSignLess(dp, p, c) ^ 1) | (rsaSignLess(dq, q, c) ^ 1) | (rsaSignLess(qinv, p, c) ^ 1)
+  const prod: u32[] = new Array<u32>(128)
+  rsaSignMul(prod, p, q, c)
+  for (let l: i32 = 0; l < 2 * c; l++) {
+    bad = bad | (prod[l] ^ (l < count ? n[l] : 0))
+  }
+  const t: u32[] = new Array<u32>(130)
+  const p0inv: u32 = rsaSignMontInverse(p[0])
+  rsaSignMontMul(prod, q, qinv, p, p0inv, t, c)
+  rsaSignMontMul(prod, prod, r2p, p, p0inv, t, c)
+  bad = bad | (prod[0] ^ 1)
+  for (let l: i32 = 1; l < c; l++) {
+    bad = bad | prod[l]
+  }
+  wipe(p)
+  wipe(q)
+  wipe(dp)
+  wipe(dq)
+  wipe(qinv)
+  wipe(r2p)
+  wipe(prod)
+  wipe(t)
+  return bad
+}
+
+/**
+ * `acc = b^x R mod n` for `mm = b R mod n`, R = 2^(32 count): the 16 powers
+ * `b^j R` into `table`, then the fixed 4-bit window over every nibble of the
+ * `count` limbs of `x`, leading zeros included. `one` holds 1, `r2` R^2 mod n;
+ * `entry` and `sel` are scratch.
+ */
+const rsaSignPow = (
+  acc: u32[],
+  mm: u32[],
+  x: u32[],
+  n: u32[],
+  n0inv: u32,
+  r2: u32[],
+  one: u32[],
+  table: u32[],
+  entry: u32[],
+  sel: u32[],
+  t: u32[],
+  count: i32
+): void => {
+  if (
+    count < 1 ||
+    count > 128 ||
+    toI32(table.length) < 16 * count ||
+    toI32(acc.length) < 128 ||
+    toI32(x.length) < 128 ||
+    toI32(entry.length) < 128
+  ) {
+    return
+  }
+  rsaSignMontMul(entry, one, r2, n, n0inv, t, count)
+  for (let j: i32 = 0; j < 16; j++) {
+    for (let l: i32 = 0; l < count; l++) {
+      table[j * count + l] = entry[l]
+    }
+    rsaSignMontMul(entry, entry, mm, n, n0inv, t, count)
+  }
+  for (let l: i32 = 0; l < count; l++) {
+    acc[l] = table[l]
+  }
+  for (let nib: i32 = 8 * count - 1; nib >= 0; nib--) {
+    const nibble: u32 = (x[toI32(nib / 8)] >> toU32((nib & 7) * 4)) & 15
+    rsaSignWindowStep(acc, table, sel, nibble, n, n0inv, t, count)
+  }
+}
+
+/**
+ * One half of the CRT: `acc = m^dx R mod x` for the prime `x` of `c` limbs,
+ * its exponent `dx`, its R^2 and R^3 (R = 2^(32 c)), and the `count`-limb
+ * `m`. `m R mod x` is `mh R^3 + ml R^2`, each Montgomery-multiplied by R^-1,
+ * for m = mh R + ml with both halves below R: no division by the secret
+ * prime. `table`, `entry`, `mm` and `sel` are scratch.
+ */
+const rsaSignHalf = (
+  acc: u32[],
+  m: u32[],
+  x: u32[],
+  r2: u32[],
+  r3: u32[],
+  dx: u32[],
+  one: u32[],
+  table: u32[],
+  entry: u32[],
+  mm: u32[],
+  sel: u32[],
+  t: u32[],
+  count: i32,
+  c: i32
+): void => {
+  if (
+    c < 1 ||
+    c > 64 ||
+    count < c ||
+    count > 2 * c ||
+    toI32(m.length) < 128 ||
+    toI32(entry.length) < 128 ||
+    toI32(sel.length) < 128 ||
+    toI32(x.length) < 128
+  ) {
+    return
+  }
+  const x0inv: u32 = rsaSignMontInverse(x[0])
+  for (let l: i32 = 0; l < c; l++) {
+    sel[l] = m[l]
+    const h: i32 = c + l
+    entry[l] = h < count ? m[h] : 0
+  }
+  rsaSignMontMul(mm, entry, r3, x, x0inv, t, c)
+  rsaSignMontMul(acc, sel, r2, x, x0inv, t, c)
+  rsaSignModAdd(mm, mm, acc, x, t, c)
+  rsaSignPow(acc, mm, dx, x, x0inv, r2, one, table, entry, sel, t, c)
+}
+
+/**
+ * 0 when `s^e mod n` is `m`, nonzero otherwise, for the plain `s` below R and
+ * the `count`-limb `e`. `e`, `s` and `m` are public, so square and multiply
+ * may branch on the exponent's bits. `entry` and `mm` are scratch.
+ */
+const rsaSignOpens = (
+  s: u32[],
+  m: u32[],
+  el: u32[],
+  n: u32[],
+  n0inv: u32,
+  r2: u32[],
+  one: u32[],
+  entry: u32[],
+  mm: u32[],
+  t: u32[],
+  count: i32
+): u32 => {
+  if (
+    count < 1 ||
+    count > 128 ||
+    toI32(m.length) < 128 ||
+    toI32(el.length) < 128 ||
+    toI32(entry.length) < 128 ||
+    toI32(mm.length) < 128
+  ) {
+    return 1
+  }
+  rsaSignMontMul(mm, s, r2, n, n0inv, t, count)
+  for (let l: i32 = 0; l < count; l++) {
+    entry[l] = mm[l]
+  }
+  let started: boolean = false
+  for (let bit: i32 = 32 * count - 1; bit >= 0; bit--) {
+    const set: u32 = (el[toI32(bit / 32)] >> toU32(bit & 31)) & 1
+    if (started) {
+      rsaSignMontMul(entry, entry, entry, n, n0inv, t, count)
+      if (set === 1) {
+        rsaSignMontMul(entry, entry, mm, n, n0inv, t, count)
+      }
+    } else if (set === 1) {
+      started = true
+    }
+  }
+  rsaSignMontMul(entry, entry, one, n, n0inv, t, count)
+  let differ: u32 = started ? 0 : 1
+  for (let l: i32 = 0; l < count; l++) {
+    differ = differ | (entry[l] ^ m[l])
+  }
+  return differ
+}
+
+/**
+ * RSASP1 under the key bytes `key` (`rsaSignKeyBytes`) by the CRT (RFC 8017
+ * §5.2.1, step 2b): `s1 = m^dP mod p` and `s2 = m^dQ mod q`, each a fixed
+ * 4-bit window over every nibble of a half-length exponent modulo a
+ * half-length prime, then `h = (s1 - s2) qInv mod p` and `s = s2 + q h`, for
+ * the `k`-byte `m` below `n`. The answer is raised to `e` and compared with
+ * `m`, its limbs past `n`'s and its value against `n` checked too, before any
+ * byte of it is returned, so a fault in either half, which would give a value
+ * right modulo one prime and wrong modulo the other and so factor `n`
+ * (Bellcore), answers `null`. `null` too for a key of the wrong shape and an
+ * `m` of the wrong length or not below `n`. Every limb array that held a
+ * prime, an exponent, a constant made from a prime or a power of `m` is
+ * wiped.
  */
 const rsaSignPrivateOp = (key: u8[], m: u8[]): u8[] | null => {
   const k: i32 = rsaSignKeySize(key)
-  if (k < 256 || k > 512 || toI32(m.length) !== k || toI32(key.length) < k || (toI32(key[k - 1]) & 1) === 0) {
+  const w: i32 = rsaSignHalfWidth(k)
+  if (
+    k < 256 ||
+    k > 512 ||
+    w < 4 ||
+    w > 256 ||
+    toI32(m.length) !== k ||
+    toI32(key.length) < k ||
+    (toI32(key[k - 1]) & 1) === 0
+  ) {
     return null
   }
   const count: i32 = toI32((k + 3) / 4)
+  const c: i32 = toI32(w / 4)
+  const base: i32 = 3 * k
   const n: u32[] = new Array<u32>(128)
   rsaSignLimbs(n, key, 0, k, count)
   const ml: u32[] = new Array<u32>(128)
@@ -1023,74 +1425,130 @@ const rsaSignPrivateOp = (key: u8[], m: u8[]): u8[] | null => {
   if (below !== 1) {
     return null
   }
-  const n0inv: u32 = rsaSignMontInverse(n[0])
-  const t: u32[] = new Array<u32>(130)
-  const r2: u32[] = new Array<u32>(128)
-  rsaSignR2(r2, n, t, count)
+  const p: u32[] = new Array<u32>(128)
+  rsaSignLimbs(p, key, base, w, c)
+  const q: u32[] = new Array<u32>(128)
+  rsaSignLimbs(q, key, base + w, w, c)
+  const dp: u32[] = new Array<u32>(128)
+  rsaSignLimbs(dp, key, base + 2 * w, w, c)
+  const dq: u32[] = new Array<u32>(128)
+  rsaSignLimbs(dq, key, base + 3 * w, w, c)
+  const qinv: u32[] = new Array<u32>(128)
+  rsaSignLimbs(qinv, key, base + 4 * w, w, c)
+  const r2p: u32[] = new Array<u32>(128)
+  rsaSignLimbs(r2p, key, base + 5 * w, w, c)
+  const r3p: u32[] = new Array<u32>(128)
+  rsaSignLimbs(r3p, key, base + 6 * w, w, c)
+  const r2q: u32[] = new Array<u32>(128)
+  rsaSignLimbs(r2q, key, base + 7 * w, w, c)
+  const r3q: u32[] = new Array<u32>(128)
+  rsaSignLimbs(r3q, key, base + 8 * w, w, c)
+  const r2n: u32[] = new Array<u32>(128)
+  rsaSignLimbs(r2n, key, base + 9 * w, k, count)
   const one: u32[] = new Array<u32>(128)
   one[0] = 1
-  // table[j] = m^j R mod n, j = 0 to 15, one after another in one array.
-  const table: u32[] = new Array<u32>(2048)
+  const t: u32[] = new Array<u32>(130)
+  // table[j] = m^j R mod p (then mod q), j = 0 to 15, one after another.
+  const table: u32[] = new Array<u32>(1024)
   const entry: u32[] = new Array<u32>(128)
   const mm: u32[] = new Array<u32>(128)
-  rsaSignMontMul(entry, one, r2, n, n0inv, t, count)
-  rsaSignMontMul(mm, ml, r2, n, n0inv, t, count)
-  for (let j: i32 = 0; j < 16; j++) {
-    for (let l: i32 = 0; l < count; l++) {
-      table[j * count + l] = entry[l]
-    }
-    rsaSignMontMul(entry, entry, mm, n, n0inv, t, count)
-  }
-  const acc: u32[] = new Array<u32>(128)
-  for (let l: i32 = 0; l < count; l++) {
-    acc[l] = table[l]
-  }
-  const dl: u32[] = new Array<u32>(128)
-  rsaSignLimbs(dl, key, k, k, count)
   const sel: u32[] = new Array<u32>(128)
-  // Every nibble of d's limbs, from the top, leading zeros included.
-  for (let nib: i32 = 8 * count - 1; nib >= 0; nib--) {
-    const limb: i32 = toI32(nib / 8)
-    const nibble: u32 = (dl[limb] >> toU32((nib & 7) * 4)) & 15
-    rsaSignWindowStep(acc, table, sel, nibble, n, n0inv, t, count)
+  const sp: u32[] = new Array<u32>(128)
+  const sq: u32[] = new Array<u32>(128)
+  rsaSignHalf(sp, ml, p, r2p, r3p, dp, one, table, entry, mm, sel, t, count, c)
+  rsaSignHalf(sq, ml, q, r2q, r3q, dq, one, table, entry, mm, sel, t, count, c)
+  const p0inv: u32 = rsaSignMontInverse(p[0])
+  // s2 out of Montgomery form mod q, then into it mod p (s2 < q < R).
+  rsaSignMontMul(sq, sq, one, q, rsaSignMontInverse(q[0]), t, c)
+  rsaSignMontMul(entry, sq, r2p, p, p0inv, t, c)
+  // h = (s1 - s2) qInv mod p: the R of s1 R - s2 R cancels in the product.
+  rsaSignModSub(entry, sp, entry, p, t, c)
+  rsaSignMontMul(entry, entry, qinv, p, p0inv, t, c)
+  // s = s2 + q h, below n, in at most 2 c limbs.
+  const s: u32[] = new Array<u32>(128)
+  rsaSignMul(s, entry, q, c)
+  let carry: u64 = 0
+  for (let l: i32 = 0; l < 2 * c; l++) {
+    const v: u64 = toU64(s[l]) + toU64(l < c ? sq[l] : toU32(0)) + carry
+    s[l] = toU32(v)
+    carry = v >> 32
   }
-  rsaSignMontMul(acc, acc, one, n, n0inv, t, count)
-  const signature: u8[] = rsaSignBytes(acc, k)
-  // The check: signature^e mod n is m. `e` and the signature are public, so
-  // square and multiply may branch on the exponent's bits.
+  // The check: no limb past n's, s below n, and s^e mod n is m.
+  let differ: u32 = toU32(carry) | (rsaSignLess(s, n, count) ^ 1)
+  for (let l: i32 = count; l < 2 * c; l++) {
+    differ = differ | s[l]
+  }
   const el: u32[] = new Array<u32>(128)
   rsaSignLimbs(el, key, 2 * k, k, count)
-  rsaSignMontMul(mm, acc, r2, n, n0inv, t, count)
-  for (let l: i32 = 0; l < count; l++) {
-    entry[l] = mm[l]
-  }
-  let started: boolean = false
-  for (let bit: i32 = 32 * count - 1; bit >= 0; bit--) {
-    const limb: i32 = toI32(bit / 32)
-    const set: u32 = (el[limb] >> toU32(bit & 31)) & 1
-    if (started) {
-      rsaSignMontMul(entry, entry, entry, n, n0inv, t, count)
-      if (set === 1) {
-        rsaSignMontMul(entry, entry, mm, n, n0inv, t, count)
-      }
-    } else if (set === 1) {
-      started = true
-    }
-  }
-  rsaSignMontMul(entry, entry, one, n, n0inv, t, count)
-  let differ: u32 = 0
-  for (let l: i32 = 0; l < count; l++) {
-    differ = differ | (entry[l] ^ ml[l])
-  }
-  wipe(table)
-  wipe(acc)
-  wipe(sel)
+  differ = differ | rsaSignOpens(s, ml, el, n, rsaSignMontInverse(n[0]), r2n, one, entry, mm, t, count)
+  const ok: boolean = differ === 0
+  const signature: u8[] = ok ? rsaSignBytes(s, k) : []
+  wipe(p)
+  wipe(q)
+  wipe(dp)
+  wipe(dq)
+  wipe(qinv)
+  wipe(r2p)
+  wipe(r3p)
+  wipe(r2q)
+  wipe(r3q)
   wipe(t)
+  wipe(table)
   wipe(entry)
   wipe(mm)
-  wipe(dl)
-  if (differ !== 0 || !started) {
+  wipe(sel)
+  wipe(sp)
+  wipe(sq)
+  wipe(s)
+  if (!ok) {
     return null
   }
   return signature
+}
+
+/**
+ * Whether `m^d mod n`, by the fixed 4-bit window over every nibble of the
+ * `⌈k / 4⌉` limbs of `d`, opens to `m` under `e`: the load's check that `d`,
+ * which signing no longer reads but the salt does, is `e`'s inverse. It is
+ * run once per key, never per signature. Every limb array that held `d` or a
+ * power of `m` is wiped.
+ */
+const rsaSignFullOpens = (key: u8[], m: u8[]): boolean => {
+  const k: i32 = rsaSignKeySize(key)
+  const w: i32 = rsaSignHalfWidth(k)
+  if (k < 256 || k > 512 || w < 4 || w > 256 || toI32(m.length) !== k) {
+    return false
+  }
+  const count: i32 = toI32((k + 3) / 4)
+  const n: u32[] = new Array<u32>(128)
+  rsaSignLimbs(n, key, 0, k, count)
+  const ml: u32[] = new Array<u32>(128)
+  rsaSignLimbs(ml, m, 0, k, count)
+  const dl: u32[] = new Array<u32>(128)
+  rsaSignLimbs(dl, key, k, k, count)
+  const el: u32[] = new Array<u32>(128)
+  rsaSignLimbs(el, key, 2 * k, k, count)
+  const r2n: u32[] = new Array<u32>(128)
+  rsaSignLimbs(r2n, key, 3 * k + 9 * w, k, count)
+  const one: u32[] = new Array<u32>(128)
+  one[0] = 1
+  const n0inv: u32 = rsaSignMontInverse(n[0])
+  const t: u32[] = new Array<u32>(130)
+  const table: u32[] = new Array<u32>(2048)
+  const entry: u32[] = new Array<u32>(128)
+  const mm: u32[] = new Array<u32>(128)
+  const sel: u32[] = new Array<u32>(128)
+  const acc: u32[] = new Array<u32>(128)
+  rsaSignMontMul(mm, ml, r2n, n, n0inv, t, count)
+  rsaSignPow(acc, mm, dl, n, n0inv, r2n, one, table, entry, sel, t, count)
+  rsaSignMontMul(acc, acc, one, n, n0inv, t, count)
+  const differ: u32 = rsaSignOpens(acc, ml, el, n, n0inv, r2n, one, entry, mm, t, count)
+  wipe(dl)
+  wipe(t)
+  wipe(table)
+  wipe(entry)
+  wipe(mm)
+  wipe(sel)
+  wipe(acc)
+  return differ === 0
 }

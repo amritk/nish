@@ -52,7 +52,7 @@ Reads the DER of a PKCS#1 `RSAPrivateKey` (RFC 8017 §A.1.2) filling `der[start 
 
 <scalar-card title="rsa​Private​Key​Bits" icon="phosphor/regular/function" href="#rsaprivatekeybits">
 
-The modulus bits of a key from `rsaParsePrivateKey`, or 0 for a `Secret` that is not one (its length is not `3 k` for a `k` of 256 to 512).
+The modulus bits of a key from `rsaParsePrivateKey`, or 0 for a `Secret` that is not one (its length is not `4 k + 9 w` for a `k` of 256 to 512).
 
 </scalar-card>
 
@@ -120,19 +120,23 @@ primes), read strictly: definite lengths in their shortest form, every
 INTEGER positive and minimal, nothing after the last. The modulus is odd and
 `RSA_SIGN_MIN_BITS` to `RSA_SIGN_MAX_BITS` bits, the public exponent odd, at
 least 3 and below 2^32, and the private exponent nonzero and below the
-modulus. One value is then signed: 2 raised to the private exponent, and
-that raised to the public exponent, must give 2 back, so a private exponent
-that does not undo the public one is refused at load, not at the first
-handshake. Only that one value is checked: the CRT values (`p`, `q`, `dP`,
-`dQ`, `qInv`) are read only for their DER form, never compared with the
-modulus or the exponents, and not kept: signing does not use them (below).
-The key's bytes lie in the first 4096 of the array it is read from: the
+modulus. The CRT values must hold together (RFC 8017 §3.2): `p` and `q`
+odd, `dP` below `p`, `dQ` below `q` and `qInv` below `p`, `p q` equal to the
+modulus and `q qInv` 1 modulo `p`. Then one value is signed twice: 2 by the
+CRT, opened again under the public exponent, and 2 raised to the private
+exponent and then to the public one, each of which must give 2 back, so a
+key whose exponents do not undo each other is refused at load, not at the
+first handshake. The key's bytes lie in the first 4096 of the array it is read from: the
 reader bounds absolute indexes, not the key's length, so a key past index
 4096 of a larger buffer is refused (a 4096-bit PKCS#1 key is about 2350
 bytes, and `nish/crypto/x509` hands it the PEM block's own DER, where a
-PKCS#8 wrapper puts the key a few dozen bytes in). The `Secret` holds the modulus,
-the private exponent and the public exponent, each as many big-endian bytes
-as the modulus has (`k`), in that order: `3 k` bytes.
+PKCS#8 wrapper puts the key a few dozen bytes in). The `Secret` holds the
+modulus, the private exponent and the public exponent, each as many
+big-endian bytes as the modulus has (`k`); then `p`, `q`, `dP`, `dQ` and
+`qInv`, then R^2 and R^3 modulo `p` and modulo `q`, each in `w` bytes, for
+`w` four times half the modulus's 32-bit limbs, rounded up; then R^2 modulo
+the modulus in `k` bytes: `4 k + 9 w` bytes, the constants computed once at
+load.
 
 </scalar-detail>
 
@@ -154,36 +158,40 @@ signs with a salt the caller gives, for known-answer tests.
 
 <scalar-detail title="Constant time">
 
-The private exponent is applied in a fixed 4-bit window
-over every nibble of its `⌈k / 4⌉` limbs, leading zeros included: four Montgomery
+Each half exponent is applied in a fixed 4-bit window
+over every nibble of its limbs, leading zeros included: four Montgomery
 squarings, a read of the whole 16-entry table that keeps one entry under an
 `ctEq` mask, and one Montgomery multiplication, for every nibble. The
 Montgomery multiplication (CIOS, as in `nish/crypto/rsa`) ends in a
 subtraction whose result is kept or dropped by `ctSelect`, never a branch.
-So the sequence of operations and the addresses read depend on the modulus's
+Recombining the halves (Garner's `h = (s1 - s2) qInv mod p`, then
+`s = s2 + q h`) is masked arithmetic of the same fixed shape. So the
+sequence of operations and the addresses read depend on the modulus's
 length alone. The modulus, the message and the public exponent are public,
-and the code that touches only them (R^2 mod n, the check after signing)
-may branch on them. The salt's hash reads the private exponent through
-SHA-256, whose work depends on the length alone.
+and the code that touches only them (the check after signing) may branch on
+them. The salt's hash reads the private exponent through SHA-256, whose
+work depends on the length alone.
 
 </scalar-detail>
 
-<scalar-detail title="No CRT, no blinding">
+<scalar-detail title="CRT, checked; no blinding">
 
-Signing is one exponentiation by `d` modulo `n`,
-about four times the work of the CRT form, so no secret prime is ever a
-modulus and the Bellcore fault (one faulty half-exponentiation factors `n`)
-has nothing to strike. Every signature is still raised to `e` and compared
-with the encoded message before it is returned, and one that does not
-match answers `null`. The exponent is not blinded; the fixed window is the
-defence against timing (RSA-S2 in docs/security/crypto-rsa.md).
+Signing works modulo `p` and `q`, about a
+quarter of the work of one exponentiation by `d` modulo `n`. A fault in one
+half gives a value right modulo one prime and wrong modulo the other, which
+factors `n` (Bellcore), so every signature is raised to `e` and compared
+with the encoded message, and its limbs checked below `n`, before any byte
+of it is returned; one that does not match answers `null`. The exponents
+are not blinded; the fixed window is the defence against timing (RSA-S2 in
+docs/security/crypto-rsa.md).
 
 </scalar-detail>
 
 <scalar-detail title="Wiping">
 
-Every limb array the exponentiation computes in, the window
-table and the product, is wiped before the exposing function returns, and
+Every limb array that held a prime, an exponent, a constant
+made from a prime or a power of the message, the window table and the
+product among them, is wiped before the exposing function returns, and
 so is the hasher that derives the salt. The parse builds the `Secret`
 straight from the DER without a copy that outlives it. The DER itself is
 the caller's to wipe.
@@ -204,8 +212,11 @@ version 0 and its nine positive, minimal INTEGERs with definite, minimal
 lengths and nothing after them; for a modulus that is even or outside
 `RSA_SIGN_MIN_BITS` to `RSA_SIGN_MAX_BITS` bits; for a public exponent that is
 even, below 3 or not below 2^32; for a private exponent of zero or not below
-the modulus; and for a private exponent that does not undo the public one
-(2 signed and opened again is not 2). `der` is not changed and not kept: the
+the modulus; for CRT values that do not hold together (`p` or `q` even,
+`dP`, `dQ` or `qInv` out of range, `p q` not the modulus, `q qInv` not 1
+modulo `p`); and for exponents that do not undo each other (2 signed by the
+CRT, or raised to the private exponent, and opened again is not 2). `der`
+is not changed and not kept: the
 caller wipes it. A key whose `end` is past 4096 is refused, whatever its
 length: the limit is on the index, not on `end - start`.
 
@@ -244,7 +255,7 @@ The key as a fresh `Secret` the caller wipes, or `null`.
 ### rsaPrivateKeyBits
 
 The modulus bits of a key from `rsaParsePrivateKey`, or 0 for a `Secret`
-that is not one (its length is not `3 k` for a `k` of 256 to 512).
+that is not one (its length is not `4 k + 9 w` for a `k` of 256 to 512).
 
 ```ts
 const rsaPrivateKeyBits: (priv: Secret<u8[]>) => i32

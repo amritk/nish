@@ -602,7 +602,8 @@ Copied from vector (https://github.com/amritk/vector), specs/rfc5869-hkdf-sha256
 `rfcs/rfc4231.txt`, `rfcs/rfc4648.txt`, `rfcs/rfc5802.txt`,
 `rfcs/rfc5869.txt`, `rfcs/rfc6234.txt`, `rfcs/rfc6979.txt`,
 `rfcs/rfc7677.txt`, `rfcs/rfc7748.txt`, `rfcs/rfc7914.txt`,
-`rfcs/rfc8032.txt` and `rfcs/rfc8439.txt` are complete,
+`rfcs/rfc8017.txt`, `rfcs/rfc8032.txt`, `rfcs/rfc8439.txt` and
+`rfcs/rfc8446.txt` are complete,
 unmodified copies of the RFC Editor's plain-text publications, byte-identical
 to <https://www.rfc-editor.org/rfc/rfc4231.txt>,
 <https://www.rfc-editor.org/rfc/rfc4648.txt>,
@@ -613,8 +614,10 @@ to <https://www.rfc-editor.org/rfc/rfc4231.txt>,
 <https://www.rfc-editor.org/rfc/rfc7677.txt>,
 <https://www.rfc-editor.org/rfc/rfc7748.txt>,
 <https://www.rfc-editor.org/rfc/rfc7914.txt>,
-<https://www.rfc-editor.org/rfc/rfc8032.txt> and
-<https://www.rfc-editor.org/rfc/rfc8439.txt>, with their copyright notices,
+<https://www.rfc-editor.org/rfc/rfc8017.txt>,
+<https://www.rfc-editor.org/rfc/rfc8032.txt>,
+<https://www.rfc-editor.org/rfc/rfc8439.txt> and
+<https://www.rfc-editor.org/rfc/rfc8446.txt>, with their copyright notices,
 legends and authors' addresses intact. vector's `spec check` reads them, and
 every contract in `contracts/` records the SHA-256 of the RFC it was checked
 against, so a modified copy is caught.
@@ -630,8 +633,10 @@ against, so a modified copy is caught.
 | 7677 | SCRAM-SHA-256 and SCRAM-SHA-256-PLUS Simple Authentication and Security Layer (SASL) Mechanisms | IETF | © 2015 IETF Trust and the persons identified as the document authors |
 | 7748 | Elliptic Curves for Security | IRTF | © 2016 IETF Trust and the persons identified as the document authors |
 | 7914 | The scrypt Password-Based Key Derivation Function | IETF | © 2016 IETF Trust and the persons identified as the document authors |
+| 8017 | PKCS #1: RSA Cryptography Specifications Version 2.2 | IETF | © 2016 IETF Trust and the persons identified as the document authors |
 | 8032 | Edwards-Curve Digital Signature Algorithm (EdDSA) | IRTF | © 2017 IETF Trust and the persons identified as the document authors |
 | 8439 | ChaCha20 and Poly1305 for IETF Protocols | IRTF | © 2018 IETF Trust and the persons identified as the document authors |
+| 8446 | The Transport Layer Security (TLS) Protocol Version 1.3 | IETF | © 2018 IETF Trust and the persons identified as the document authors |
 
 They are redistributed under BCP 78 and the IETF Trust's Legal Provisions
 Relating to IETF Documents (<https://trustee.ietf.org/license-info>), §3.c.i:

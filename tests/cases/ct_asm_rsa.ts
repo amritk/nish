@@ -18,10 +18,17 @@
 // limbs, a 2048-bit modulus; the check follows each call into the copy.
 // `rsaSignTableLoad` is the window step the module does not write: it indexes
 // the table by the nibble, and the check must refuse its secret-addressed load.
+// `rsaSignModAdd`, `rsaSignModSub`, `rsaSignLess` and `rsaSignMul` are the CRT
+// form's own arithmetic: the half's Montgomery form of `m`, Garner's
+// difference, the load's and the check's comparisons, and `q h`.
 // ct-check: rsaSignReduce secret=contents,top loops
 // ct-check: rsaSignMontMulAt secret=contents loops
 // ct-check: rsaSignWindowStepAt secret=contents,nibble loops
 // ct-check: rsaSignTableLoad secret=contents,nibble loops expect=load
+// ct-check: rsaSignModAdd secret=contents loops
+// ct-check: rsaSignModSub secret=contents loops
+// ct-check: rsaSignLess secret=contents loops
+// ct-check: rsaSignMul secret=contents loops
 
 export const rsaSignReduce = (out: u32[], t: u32[], top: u32, n: u32[], count: i32): void => {
   if (count < 1 || count > 128 || toI32(out.length) < 128 || toI32(t.length) < 128 || toI32(n.length) < 128) {
@@ -128,5 +135,76 @@ export const rsaSignTableLoad = (acc: u32[], table: u32[], sel: u32[], nibble: u
   }
   for (let l: i32 = 0; l < count; l++) {
     sel[l] = table[toI32(nibble) * count + l]
+  }
+}
+
+export const rsaSignModAdd = (out: u32[], a: u32[], b: u32[], n: u32[], t: u32[], count: i32): void => {
+  if (count < 1 || count > 128 || toI32(a.length) < 128 || toI32(b.length) < 128 || toI32(t.length) < 128) {
+    return
+  }
+  let carry: u64 = 0
+  for (let i: i32 = 0; i < count; i++) {
+    const s: u64 = toU64(a[i]) + toU64(b[i]) + carry
+    t[i] = toU32(s)
+    carry = s >> 32
+  }
+  rsaSignReduce(out, t, toU32(carry), n, count)
+}
+
+export const rsaSignModSub = (out: u32[], a: u32[], b: u32[], n: u32[], t: u32[], count: i32): void => {
+  if (
+    count < 1 ||
+    count > 128 ||
+    toI32(out.length) < 128 ||
+    toI32(a.length) < 128 ||
+    toI32(b.length) < 128 ||
+    toI32(n.length) < 128 ||
+    toI32(t.length) < 128
+  ) {
+    return
+  }
+  let borrow: u64 = 0
+  for (let i: i32 = 0; i < count; i++) {
+    const d: u64 = toU64(a[i]) - toU64(b[i]) - borrow
+    t[i] = toU32(d)
+    borrow = (d >> 32) & 1
+  }
+  const back: u32 = ctEq(toU32(borrow), 1)
+  let carry: u64 = 0
+  for (let i: i32 = 0; i < count; i++) {
+    const s: u64 = toU64(t[i]) + toU64(n[i] & back) + carry
+    out[i] = toU32(s)
+    carry = s >> 32
+  }
+}
+
+export const rsaSignLess = (a: u32[], b: u32[], count: i32): u32 => {
+  if (count < 1 || count > 128 || toI32(a.length) < 128 || toI32(b.length) < 128) {
+    return 0
+  }
+  let borrow: u64 = 0
+  for (let i: i32 = 0; i < count; i++) {
+    const d: u64 = toU64(a[i]) - toU64(b[i]) - borrow
+    borrow = (d >> 32) & 1
+  }
+  return toU32(borrow)
+}
+
+export const rsaSignMul = (out: u32[], a: u32[], b: u32[], count: i32): void => {
+  if (count < 1 || count > 64 || toI32(out.length) < 128 || toI32(a.length) < 128 || toI32(b.length) < 128) {
+    return
+  }
+  for (let i: i32 = 0; i < 2 * count; i++) {
+    out[i] = 0
+  }
+  for (let i: i32 = 0; i < count; i++) {
+    const ai: u64 = toU64(a[i])
+    let carry: u64 = 0
+    for (let j: i32 = 0; j < count; j++) {
+      const s: u64 = toU64(out[i + j]) + ai * toU64(b[j]) + carry
+      out[i + j] = toU32(s)
+      carry = s >> 32
+    }
+    out[i + count] = toU32(carry)
   }
 }

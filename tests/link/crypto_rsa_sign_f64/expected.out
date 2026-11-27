@@ -6,4 +6,5 @@ PASS  rsaSignPssSha256Into writes the same signature at an offset, from a messag
 PASS  under each of the 6 keys, rsaSignPssSha256Salted signs under an empty and a 32-byte salt, each verifying at its own length only, the same twice, and unlike the derived salt
 PASS  a signature under one 2048-bit key fails under the other
 PASS  rsaParsePrivateKey refuses each of 9 changes to a key: empty, a byte short, a byte after, version 1, an even modulus, a negative modulus, an even public exponent, a private exponent one bit off, an outer length one long
-rsa sign: 8 passed, 0 failed, 0 skipped
+PASS  rsaParsePrivateKey refuses each of 6 changes to a key's CRT values: p made even, q with bit 1 flipped, the last bit of dP, of dQ and of qInv flipped, and p and q swapped
+rsa sign: 9 passed, 0 failed, 0 skipped
