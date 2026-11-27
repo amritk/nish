@@ -23530,7 +23530,8 @@ if (dealtHere("cliChecks")) {
         '#include "add.h"',
         '#include "export_fn.h"',
         "int main(void) {",
-        "  nish_str *s = nish_str_from_i32(add(40, 2));",
+        "  nish_result_i32_i32_word r = add(40, 2);",
+        "  nish_str *s = nish_str_from_i32(r.ok ? r.as.value : r.as.error);",
         '  printf("add(40, 2) = %s; double_(21) = %d; next(20) = %d\\n", s->data, double_(21), next(20));',
         "  nish_free_arena();",
         "  return 0;",
@@ -23568,8 +23569,8 @@ if (dealtHere("cliChecks")) {
       : ""
     // nish-function: the wasm interop's .d.ts text, not a Nish program
     check(
-      "add.d.ts declares `add(a: number, b: number): number` and `load(bytes: BufferSource): Promise<Exports>`",
-      addDts.includes("  add(a: number, b: number): number;") &&
+      "add.d.ts declares `add` answering `{ ok, value } | { ok, error }` and `load(bytes: BufferSource): Promise<Exports>`",
+      addDts.includes("  add(a: number, b: number): { ok: true; value: number } | { ok: false; error: number };") &&
         addDts.includes("export function load(bytes: BufferSource): Promise<Exports>;"),
       addDts
     )
@@ -25148,7 +25149,7 @@ if (dealtHere("cliChecks")) {
           sumI32Err.status === 0 &&
           sumI32Err.stdout === "ok 0 error 1\n" &&
           squaresErr.status === 1 &&
-          squaresErr.stderr === "squares: n must be in 0..46341, got -1\n" &&
+          squaresErr.stderr === "squares: n must be in 0..46341\n" &&
           sumI64Err.status === 1 &&
           sumI64Err.stderr === "sumI64: the sum overflows i64\n",
         refusals.map((r) => `${r.status}: ${r.stdout}${r.stderr}`).join("\n")
@@ -39522,8 +39523,8 @@ if (!only || "host-import".includes(only)) {
       ],
       [
         "examples/arrays.ts",
-        "40109143fedb6bcbd02b4f9bfef1874c247b5dafb2bdfee3c8cb8811f30056a1",
-        "edf2d5730be5813751d30005110e7b7e4e7debaf0f43994c68fa6a0b4a583fb3",
+        "30d8f5e35963681637d3f1aa9e4d69e6a7eb8928b13dac898a95a8a9241c6ae6",
+        "709fb6dd012b5f9ccb67a757f795175ba0fada94d13a9825bbd6097b66336703",
       ],
     ]) {
       const stem = path.basename(src, ".ts")

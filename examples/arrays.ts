@@ -72,7 +72,7 @@ export const scale = (xs: Float64Array, k: f64): Float64Array => {
 /** `[0, 1, 4, ...]`, `n` long. 46341 is the longest whose last square, 46340², fits i32. */
 export const squares = (n: i32): Int32Array => {
   if (n < 0 || n > 46341) {
-    console.error(`squares: n must be in 0..46341, got ${n}`)
+    console.error("squares: n must be in 0..46341")
     exit(1)
   }
   const len: integer<0, 46341> = n

@@ -29,7 +29,7 @@ function squares(n: i32): i32[] -> @squares [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   escaping: n
-  calls: nish_exit nish_str_concat nish_str_from_i32 nish_write
+  calls: nish_exit nish_write
   stackSites=0 stackLocals=0
   local +0:9 len: integer<0, 46341> (const)
   local +1:9 out: i32[] (const)

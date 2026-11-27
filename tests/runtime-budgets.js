@@ -1361,7 +1361,7 @@ export const RUNTIME_BUDGETS = [
  * does not always shrink the module (#1257): clang 18 runs one itself after the link
  * and keeps the `target_features` section for it, which took add.wasm to 150 bytes.
  * build.sh's own pass drops that section again; with binaryen 132 it gives add.wasm
- * 106 / 115 / 99, arrays.wasm 2,146 / 1,246 / 1,154, results.wasm 72 / 90 / 69 and
+ * 106 / 115 / 99, arrays.wasm 1,851 / 1,074 / 987, results.wasm 72 / 90 / 69 and
  * label.wasm 12,464 / 11,710 / 11,207, which these ceilings do not pin.
  *
  * add.ts and arrays.ts answer their overflows (examples-strict S3, #2385, measured
@@ -1370,8 +1370,9 @@ export const RUNTIME_BUDGETS = [
  * Result word's decoder `resultOut`, 361 its encoder `resultIn`, which only a `Result`
  * parameter calls and the loader emits whenever a signature has a `Result`, and the
  * rest the call's wrapper; arrays' loader grows by the same three. add.wasm's 20 bytes
- * are the two range checks; arrays.wasm's 622 are code (545: the checks, the stderr
- * writes and the exits), the two messages (48) and their signatures (29).
+ * are the two range checks. arrays.wasm grows 210 bytes over main's build (2,039; its
+ * ceiling of 2,091 predates #2207): code 164 (the checks, the stderr writes and the
+ * exits), the two messages 40, a signature 6.
  *
  * label.ts is the string row (WP50 stage 4, measured 2026-11-08): a template with an
  * `i32` and an `f64` links runtime-text.c beside runtime-wasm.c. Of its 13,046 bytes,
@@ -1405,11 +1406,11 @@ export const WASM_HOST_SIZE_BUDGETS = [
     src: "examples/arrays.ts",
     runtime: true,
     // Raised for the Result answer (examples-strict S3): wasm 2091/1092/970 to
-    // 2661/1413/1306, loader 4560/1602/1399 to 5372/1909/1679, inline 6163/1468/1267
-    // to 7860/1865/1639.
-    wasm: [2661, 1413, 1306],
+    // 2249/1182/1077, loader 4560/1602/1399 to 5372/1909/1679, inline 6163/1468/1267
+    // to 6666/1578/1391.
+    wasm: [2249, 1182, 1077],
     loader: [5372, 1909, 1679],
-    inline: [7860, 1865, 1639],
+    inline: [6666, 1578, 1391],
   },
   {
     src: "examples/results.ts",
@@ -1486,8 +1487,8 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/arrays.ts",
     dts: "e395d58a260c322bd8aa0a0aed484d5d23a1d1d52edda43a234c8783b629a48d",
     loader: "aade9a0e4c6e1788f274c90bd1b0bf4c5c2ff5cac0e6a14f17dffa3193cfee91",
-    wasm: "86aa0d37439b778e888fd054a9e81d23b616d01483fb2910ecc1db4bd4f4a09e",
-    host: "e4a896da500f728d15bc18bdaf529426ba1cf2320ee9d8a4d78954dfcd0a20a7",
+    wasm: "b679e8a9fbf0a32220b4e5bcfb4c722dc3effaa69bf884d78c3a04e9f3999746",
+    host: "0912699b41391eb55e60e13b5fbc560b01019fa95b79ad273163d0121b5cf29d",
   },
   {
     src: "examples/results.ts",
