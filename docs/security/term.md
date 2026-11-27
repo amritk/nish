@@ -219,9 +219,12 @@ fails without them:
 **Left for step 2.** term-probe still reaches the `std/term-pixels.ts` sites
 its header lists: `set`'s and `get`'s out-of-step store, the size checks the
 constructor and `resize` keep, `scaleFramebuffer`'s, `kittyFrame`'s and
-`drawHalfBlocks`' out-of-step checks, the divisor and image-id checks and
-`PixelBytes.text`'s slice. They go when `Framebuffer`'s fields are private,
-after the next release ships `tryFramebuffer` and `tryResize` to the seed.
+`drawHalfBlocks`' out-of-step checks, the divisor and image-id checks,
+`PixelBytes.text`'s slice and `sixelFrame`'s check of the register array it
+sizes itself. They go when `Framebuffer`'s fields are private, after the next
+release ships `tryFramebuffer` and `tryResize` to the seed; `sixelFrame`'s goes
+when the prover can follow `pixelsAtLeast`'s length, and stays a kept panic
+until then.
 
 Tests:
 - `link/std_term_buffers_disagree: exits with 0 and stdout matches expected.out` (WP85 S3)

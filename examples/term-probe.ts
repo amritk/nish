@@ -5,11 +5,13 @@
 // of step with its size, and `runTerminal` reaches the framebuffer's size
 // checks (`pixelsArea`, through its constructor and `resize`), the
 // out-of-step checks of `scaleFramebuffer`, `kittyFrame` and
-// `drawHalfBlocks`, the divisor and image-id checks, and `PixelBytes.text`'s
-// slice. They wait on `Framebuffer`'s fields going private after the next
-// release (#2385), when `tryFramebuffer` and `tryResize` become its only
-// constructor and resize and these calls can take their answers; then this
-// file builds without `--allow-panics`.
+// `drawHalfBlocks`, the divisor and image-id checks, `PixelBytes.text`'s
+// slice, and `sixelFrame`'s check of the register array it sizes itself.
+// They wait on `Framebuffer`'s fields going private after the next release
+// (#2385), when `tryFramebuffer` and `tryResize` become its only constructor
+// and resize and these calls can take their answers, and `sixelFrame`'s on a
+// length the prover can follow; then this file builds without
+// `--allow-panics`.
 //
 // What `nish/term-io` found out about this terminal, and how its frame loop
 // settled: attach the output to a bug report about a terminal that draws

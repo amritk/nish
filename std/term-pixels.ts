@@ -1020,12 +1020,13 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
         pixelsLevel((c >> 8) & 255, bg, 7),
         pixelsLevel(c & 255, bb, 6)
       )
-      // Always true: `reg` holds at least `w * h`, from `pixelsAtLeast`, which
-      // the prover cannot see past; it proves the store in range.
+      // Never taken: `reg` holds at least `w * h`, from `pixelsAtLeast`, which
+      // the prover cannot see past.
       const at: i32 = pixelsIndex(x, y, w, toI32(reg.length))
-      if (at >= 0 && at < toI32(reg.length)) {
-        reg[at] = n
+      if (at < 0 || at >= toI32(reg.length)) {
+        panic("sixelFrame: the register array is shorter than the frame")
       }
+      reg[at] = n
       // Always true (a register is 0 to 251, or -1); it proves the store in range.
       if (n >= 0 && n < toI32(used.length)) {
         used[n] = 1
@@ -1071,9 +1072,9 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
       nextBit = nextBit << 1
       for (let x: i32 = 0; x < w; x++) {
         const at: i32 = pixelsIndex(x, y, w, toI32(reg.length))
-        // Never taken, as where `reg` was written; it proves the read in range.
+        // Never taken, as where `reg` was written.
         if (at < 0 || at >= toI32(reg.length)) {
-          continue
+          panic("sixelFrame: the register array is shorter than the frame")
         }
         const n: i32 = reg[at]
         // `bits` holds a row of `w` for each register.
