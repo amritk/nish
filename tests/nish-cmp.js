@@ -11747,8 +11747,80 @@ const JSON_PUT_STRING = "jsonPutString"
 const HTTP1_TICK = "Http1Server.tick"
 /** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
+/** The changelog words of WP80 S7, which frees the merge-patch example. The change's commit subject carries them verbatim. */
+const WP80_MERGE_PATCH_FREED = "merge-patch example without --allow-panics"
+/** WP80 S7's moves: `bytesUtf8End` takes the lead byte its caller already read, so std/bytes.ts's module renumbers from it on. */
+const wp80MergePatchFreed = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: WP80_MERGE_PATCH_FREED, why }))
+  )
 
 const DECLARED = [
+  // WP80 S7: `bytesUtf8End` takes the lead byte `skipJsonTextWalk` read under
+  // its loop test instead of reading `b[i]` again, so its index check leaves
+  // the IR and the values after it renumber.
+  ...wp80MergePatchFreed(
+    "bytesUtf8End takes the lead byte its caller read under the loop test, so its own read of b[i] and that read's bounds check leave the IR, and the values after it in std/bytes.ts's module renumber (WP80 S7)",
+    {
+      "bench/httparena/main.ts": ["bytes.ll"],
+      "bench/postgres/main.ts": ["bytes.ll"],
+      "docs/cookbook/json-union.ts": ["bytes.ll"],
+      "examples/prefork-jobs.ts": ["bytes.ll"],
+      "tests/link/compact_json/main.ts": ["bytes.ll"],
+      "tests/link/httparena_entry/main.ts": ["std_bytes.ll"],
+      "tests/link/json_tagged_union/main.ts": ["bytes.ll"],
+      "tests/link/net_grpc/main.ts": ["std_bytes.ll"],
+      "tests/link/net_grpc_interop/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_batch_limits/main.ts": ["bytes.ll"],
+      "tests/link/net_handler_bomb/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_open/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_pipelined_stream/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_refused/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_steps/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_steps_split/main.ts": ["std_bytes.ll"],
+      "tests/link/net_handler_try_answers/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http1_server_lend_park/main.ts": ["bytes.ll"],
+      "tests/link/net_http1_wire_refusals/main.ts": ["bytes.ll"],
+      "tests/link/net_http2_stream/main.ts": ["bytes.ll"],
+      "tests/link/net_http_server_h1_tls/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h1_tls_slots/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h1_tls_twice/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h1_tls_wait/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_default_refused/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_preface/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_preface_drain/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_preface_ended/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_preface_full/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_preface_h1/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_preface_late/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_preface_partial/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_preface_pri/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_preface_release/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_h2c_preface_silent/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_steps/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_steps_full/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_steps_split/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_stream/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_trailers_h3/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_trailers_short/main.ts": ["std_bytes.ll"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["std_bytes.ll"],
+      "tests/link/net_serve_idle_record/main.ts": ["bytes.ll"],
+      "tests/link/net_serve_rss_flat/main.ts": ["bytes.ll"],
+      "tests/link/net_serve_try/main.ts": ["bytes.ll"],
+      "tests/link/net_static/main.ts": ["std_bytes.ll"],
+      "tests/link/std_compress_checked_sums/main.ts": ["bytes.ll"],
+      "tests/link/std_compress_gzip_errors/main.ts": ["bytes.ll"],
+      "tests/link/std_compress_sweep/main.ts": ["bytes.ll"],
+      "tests/link/std_http1_config_checked/main.ts": ["bytes.ll"],
+      "tests/link/sync_ring/main.ts": ["bytes.ll"],
+      "tests/link/sync_ring_inplace_memmove/main.ts": ["bytes.ll"],
+      "tests/link/sync_shm_window/main.ts": ["bytes.ll"],
+    }
+  ),
   // #2297: the bounds walk proves `end - start` of two index locals with
   // `0 <= start <= end` cannot overflow, so `hasTwinWord`'s `i - from` and
   // the type table's `to - from` drop their overflow checks.
