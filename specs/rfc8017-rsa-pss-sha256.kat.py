@@ -3,10 +3,14 @@
 specs/rfc8017-rsa-pss-sha256.md and independent of nish/crypto/rsa-sign.
 
 Usage: python3 -I rfc8017-rsa-pss-sha256.kat.py KEY MSG SALT
+       python3 -I rfc8017-rsa-pss-sha256.kat.py --raw KEY M
 
 KEY is n || d || e as hex, each k octets, the layout rsaParsePrivateKey
-returns; MSG and SALT are hex (an empty argument is the empty string).
-Prints the signature, k octets, as lowercase hex. Standard library only.
+returns; MSG, SALT and M are hex (an empty argument is the empty string).
+The first form prints the RSASSA-PSS signature, k octets, as lowercase hex,
+or null on the encoding error of Section 9.1.1 step 3. The second, --raw,
+prints RSASP1 of M (Section 5.2.1), k octets, or null when M is not k
+octets or its integer is not below n. Standard library only.
 """
 
 import hashlib
@@ -44,24 +48,50 @@ def emsa_pss_encode(m: bytes, em_bits: int, salt: bytes) -> bytes:
     return bytes(masked_db) + h + b"\xbc"
 
 
-def sign(key: bytes, m: bytes, salt: bytes) -> bytes:
-    """RSASSA-PSS-SIGN, Section 8.1.1, with RSASP1 of Section 5.2.1."""
+def split_key(key: bytes) -> tuple[int, int, int]:
+    """The octet length k of n, and n and d, from n || d || e."""
     if len(key) % 3 != 0:
         raise ValueError("KEY is not three k-octet fields")
     k = len(key) // 3
-    n = int.from_bytes(key[:k], "big")
-    d = int.from_bytes(key[k : 2 * k], "big")
-    mod_bits = n.bit_length()
-    em = emsa_pss_encode(m, mod_bits - 1, salt)
-    s = pow(int.from_bytes(em, "big"), d, n)
-    return s.to_bytes(k, "big")
+    return k, int.from_bytes(key[:k], "big"), int.from_bytes(key[k : 2 * k], "big")
+
+
+def rsasp1(key: bytes, m: bytes) -> bytes | None:
+    """RSASP1, Section 5.2.1, in the first form (n, d); None when m is out
+    of range, as an integer or as k octets."""
+    k, n, d = split_key(key)
+    if len(m) != k:
+        return None
+    r = int.from_bytes(m, "big")
+    if r >= n:
+        return None
+    return pow(r, d, n).to_bytes(k, "big")
+
+
+def sign(key: bytes, m: bytes, salt: bytes) -> bytes | None:
+    """RSASSA-PSS-SIGN, Section 8.1.1, with RSASP1 of Section 5.2.1; None on
+    the encoding error."""
+    k, n, _ = split_key(key)
+    try:
+        em = emsa_pss_encode(m, n.bit_length() - 1, salt)
+    except ValueError:
+        return None
+    s = rsasp1(key, em.rjust(k, b"\x00"))
+    if s is None:
+        raise ValueError("EM is not below n")
+    return s
 
 
 def main() -> None:
-    if len(sys.argv) != 4:
-        sys.exit("usage: rfc8017-rsa-pss-sha256.kat.py KEY MSG SALT")
-    key, msg, salt = (bytes.fromhex(a) for a in sys.argv[1:])
-    print(sign(key, msg, salt).hex())
+    args = sys.argv[1:]
+    if len(args) == 3 and args[0] == "--raw":
+        out = rsasp1(bytes.fromhex(args[1]), bytes.fromhex(args[2]))
+    elif len(args) == 3:
+        key, msg, salt = (bytes.fromhex(a) for a in args)
+        out = sign(key, msg, salt)
+    else:
+        sys.exit("usage: rfc8017-rsa-pss-sha256.kat.py [--raw] KEY MSG SALT | KEY M")
+    print("null" if out is None else out.hex())
 
 
 main()
