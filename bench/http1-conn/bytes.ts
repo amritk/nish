@@ -8,7 +8,14 @@
 // connection serves the same GETs first, so what the pools keep is not
 // counted against the second. Each object is stored into a slot made before
 // its count starts, so it leaves main and is not put on the stack; every
-// count is printed after the last, so no printed string lands in one. Prints
+// count is printed after the last, so no printed string lands in one. Then
+// slot 0 reads a fifth GET and holds its unsent response, which takes every
+// buffer the pools kept, and the second connection does the same with the
+// pools empty, so its buffers are made fresh in the arena, as on a server
+// whose every connection holds a response at once: what it makes once the request is read and parsed is `pooled-holding-read`, and
+// once the response is written `pooled-holding-answered` (a 64 KiB output
+// buffer is bigger than an arena chunk, so that one reads `chunk`), beside
+// the lengths it holds then. Prints
 // `<name> <bytes>` lines; `chunk` in place of a count says the arena moved to
 // a new chunk during it, which `Arena.used()` cannot see across.
 //
@@ -32,9 +39,9 @@ const ascii = (text: string): u8[] => {
 }
 
 /** How many counts `main` takes. */
-const COUNTS: i32 = 9
-/** The buffer lengths kept: four while the first request is served, four once idle. */
-const LENGTHS: i32 = 8
+const COUNTS: i32 = 11
+/** The buffer lengths kept: four while the first request is served, four once idle, four while holding the fifth. */
+const LENGTHS: i32 = 12
 
 /** Bytes since `before`, or -1 when the arena moved to a new chunk since `mark`. */
 const since = (mark: i64, before: i64): i64 => {
@@ -50,7 +57,13 @@ const keep = (conn: Http1Connection, lengths: i64[], at: i32): void => {
   lengths[at + 3] = toI64(conn.parser.spans.length)
 }
 
-/** One request fed, answered and sent at once, as startup.ts serves it; keeps the held buffers' lengths at `at` when `at` is not negative. */
+/**
+ * One request fed, answered and sent at once, as startup.ts serves it; keeps
+ * the held buffers' lengths at `at` when `at` is not negative. With `holding`
+ * the response is written and not sent, and the connection keeps its buffers;
+ * with `at` not negative too, the counts since `mark` go to `counts[9]` and
+ * `counts[10]`.
+ */
 const serve = (
   conn: Http1Connection,
   req: u8[],
@@ -58,7 +71,11 @@ const serve = (
   values: u8[][],
   body: u8[],
   lengths: i64[],
-  at: i32
+  at: i32,
+  holding: boolean,
+  counts: i64[],
+  mark: i64,
+  before: i64
 ): boolean => {
   const len: i32 = toI32(req.length)
   if (conn.inputRoom() < len || conn.feed(req, 0, len) !== len) {
@@ -68,6 +85,10 @@ const serve = (
   let answered: boolean = false
   let event: i32 = conn.next()
   while (event !== H1_NEED_MORE) {
+    if (event === H1_END && holding && at >= 0) {
+      // What the read and the parse took, before the output is made.
+      counts[9] = since(mark, before)
+    }
     if (event === H1_END) {
       const n: i32 = toI32(body.length)
       if (conn.respond(200, names, values, n) !== 0 || conn.write(body, 0, n) !== n) {
@@ -80,6 +101,12 @@ const serve = (
   }
   if (at >= 0) {
     keep(conn, lengths, at)
+  }
+  if (holding && at >= 0) {
+    counts[10] = since(mark, before)
+  }
+  if (holding) {
+    return answered && conn.wantsWrite()
   }
   conn.consume(conn.outputEnd - conn.outputStart)
   conn.release()
@@ -133,7 +160,7 @@ export const main = (): i32 => {
   const first: Http1Connection = server.connection(toI32(0))
   let served: boolean = true
   for (let i: i32 = 0; i < 4; i += 1) {
-    served = served && serve(first, req, names, values, body, lengths, -1)
+    served = served && serve(first, req, names, values, body, lengths, -1, false, counts, 0, 0)
   }
   mark = Arena.mark()
   before = Arena.used()
@@ -144,10 +171,14 @@ export const main = (): i32 => {
   conn.heads = server.heads
   counts[4] = since(mark, before)
   for (let i: i32 = 0; i < 4; i += 1) {
-    served = served && serve(conn, req, names, values, body, lengths, i === 0 ? 0 : -1)
+    served = served && serve(conn, req, names, values, body, lengths, i === 0 ? 0 : -1, false, counts, 0, 0)
     counts[5 + i] = since(mark, before)
   }
   keep(conn, lengths, 4)
+  served = served && serve(first, req, names, values, body, lengths, -1, true, counts, 0, 0)
+  mark = Arena.mark()
+  before = Arena.used()
+  served = served && serve(conn, req, names, values, body, lengths, 8, true, counts, mark, before)
 
   const what: string[] = [
     "empty-array",
@@ -159,13 +190,16 @@ export const main = (): i32 => {
     "pooled-after-2",
     "pooled-after-3",
     "pooled-after-4",
+    "pooled-holding-read",
+    "pooled-holding-answered",
   ]
   for (let i: i32 = 0; i < COUNTS; i += 1) {
     console.log(`${what[i]} ${counts[i] < 0 ? "chunk" : `${counts[i]}`}`)
   }
   const held: string[] = ["input", "head", "output", "spans"]
+  const when: string[] = ["serving", "idle", "holding"]
   for (let i: i32 = 0; i < LENGTHS; i += 1) {
-    console.log(`${i < 4 ? "serving" : "idle"}.${held[i % 4]} ${lengths[i]}`)
+    console.log(`${when[i / 4]}.${held[i % 4]} ${lengths[i]}`)
   }
   return served && arrays[0].length === 0 && parsers[0].resting() ? 0 : 1
 }

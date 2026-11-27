@@ -210,10 +210,11 @@ check(
 // the lazy shell: site.js may grow by under 500 B gzipped for it (the input,
 // and the prompt the hero's run ends on). The baseline is site.js on main
 // before the terminal took keys (71c41439), plus 300 B for keeping the hero
-// across the client app's swap of the page on a first load, and 150 B for
-// wiring the hero's static markup in docs/guide/index.md, neither of which is
-// part of the terminal.
-const SITE_GZIP_BEFORE = 3480 + 300 + 150
+// across the client app's swap of the page on a first load, 150 B for
+// wiring the hero's static markup in docs/guide/index.md, and 42 B for the
+// hero loop's bound on its input and total, so the hero is the strict code
+// the guide teaches; none of these is part of the terminal.
+const SITE_GZIP_BEFORE = 3480 + 300 + 150 + 42
 const SITE_GZIP_GROWTH = 500
 const gzipped = zlib.gzipSync(site, { level: 9 }).length
 check(

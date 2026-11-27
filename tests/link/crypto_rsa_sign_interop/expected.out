@@ -1,0 +1,11 @@
+PASS  each of NIST's 3 keys loads from PKCS #1 DER and from PKCS #8 PEM, each load with its bit length, public exponent and modulus
+PASS  rsaSignPssSha256Salted gives each of NIST CAVP's 30 FIPS 186-2 SHA-256 signatures, under its 20-byte salt, byte for byte
+PASS  the key loaded from PKCS #8 PEM gives each of them too
+PASS  each of them verifies under rsaVerifyPss at a salt of 20 bytes
+PASS  each of the 10 keys OpenSSL, Go and pyca made (OpenSSL 2048; OpenSSL 2050; OpenSSL 4094; OpenSSL 3072, e = 4294967295; Go 2049; Go 3071; Go 4096; pyca 2048, e = 3; pyca 2054; pyca 3072) loads from the library's PKCS #1 DER and from its PKCS #8 PEM, each load with its bit length, public exponent and modulus
+PASS  rsaSignPssSha256 gives each of the 20 derived-salt signatures byte for byte, each signed by Go where Go loads the key and verified by OpenSSL, pyca and, where it loads the key, Go
+PASS  rsaSignPssSha256Salted gives each of the 30 signatures under a 32-byte salt, the longest salt the key takes or an empty salt byte for byte, Go signing the salted ones where it loads the key and OpenSSL and pyca the empty-salt ones
+PASS  the key loaded from PKCS #8 PEM gives each of them too
+PASS  each of them verifies under rsaVerifyPss at its salt length
+PASS  rsaParsePrivateKey and x509ParseRsaPrivateKey each refuse every one of the 5 keys outside 2048 to 4096 bits or with e of 2^32 or more (NIST 1024; NIST 1536; OpenSSL 2047; OpenSSL 2048, e = 4294967297; Go 4097)
+rsa sign interop: 10 passed, 0 failed, 0 skipped

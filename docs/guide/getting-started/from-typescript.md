@@ -9,14 +9,9 @@ write instead.
 
 ## What carries over
 
-Most everyday TypeScript compiles as it is. Nothing bounds the counter and
-the sums below, so the compiler cannot prove they fit an `i32` and this example
-builds with [`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do);
-bounding the operands, as the compile error suggests, builds it under the
-default:
+Most everyday TypeScript compiles as it is:
 
-<!-- allow-panics: its counter and sums are not bounded, which the text below explains -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 interface Point {
   x: i32;
@@ -32,13 +27,20 @@ class Counter {
   count: i32 = 0;
 
   add(n: i32): void {
-    this.count = this.count + n;
+    const count = this.count;
+    if (n < 0 || n > 1000000 || count > 1000000000) {
+      return;
+    }
+    this.count = count + n;
   }
 }
 
 const manhattan = (p: Point): i32 => {
-  const ax = p.x < 0 ? -p.x : p.x;
-  const ay = p.y < 0 ? -p.y : p.y;
+  const ax = Math.abs(p.x);
+  const ay = Math.abs(p.y);
+  if (ax < 0 || ax > 1000000 || ay < 0 || ay > 1000000) {
+    return -1;
+  }
   return ax + ay;
 };
 
@@ -67,9 +69,11 @@ export const main = (): i32 => {
 };
 ```
 
-That program prints `total: 11`. It uses `const` and `let`, arrow functions,
+That program prints `total: 11`. It uses `const`, arrow functions,
 interfaces, classes with fields and methods, enums, object and array
-literals, `for...of`, `switch`, the ternary operator and template literals.
+literals, `for...of`, `switch` and template literals. The `if` tests in `add`
+and `manhattan` are what let the compiler prove each sum fits an `i32`
+([below](#number-is-an-integer)).
 Some come with limits: `for...of` walks an array (or a `Map` or `Set`), a
 `switch` is on an integer or an enum (a clause without `break` falls through
 into the next, as in TypeScript; see
@@ -79,8 +83,8 @@ enum's value is not a `string`, so `String(r)` gives its text
 ([Enums](../language/types.md#enums)). The [language
 pages](../language/control-flow.md) give the details.
 
-`if`, `while`, `do...while`, `break`, `continue`, `===` and named `import` and
-`export` work too. The package ships type declarations for `i32`, `Result` and
+`let`, `if`, `while`, `do...while`, `break`, `continue`, `===` and named
+`import` and `export` work too. The package ships type declarations for `i32`, `Result` and
 the other built-in names (`runtime/nish.d.ts`), so `tsc` and your editor
 understand a Nish file. The reverse does not hold: `nish` is the authority, as
 the reference's [It is still
@@ -150,7 +154,8 @@ an `i32` or `i64` result fits, and it refuses the program where it cannot;
 with `--allow-panics` it builds a check instead, and an overflow stops the
 program rather than wrap round, as
 [Your first program](first-program.md#exit-codes) shows. The first example on
-this page adds up a counter nothing bounds, so it builds with that flag. `--number-mode f64`
+this page bounds its counter and sums with `if` tests for that reason, and
+widening is a proof too: `toI64(a) * toI64(b)` always fits an `i64`. `--number-mode f64`
 makes `number` mean `f64` for a whole program, as in JavaScript; an explicit
 `i32` or `f64` means the same in either mode. See
 [Types](../language/types.md), and the reference's

@@ -24,28 +24,37 @@ unchanged.
 
 `createRegion(name, bytes)` makes a region of `bytes` zero bytes and maps it;
 `openRegion(name)` maps one that exists, in any process of the same user;
-`unlinkRegion(name)` removes the name. Each answers a `Result`, which the
-examples on this page unwrap with `expect`. They build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): `expect` stops the
-program on an error, and `nish/sync/ring` keeps panic sites no proof removes
-yet. `nish/sync/shm` keeps none: test `r.isErr()` before reading `r.value`,
-and put a guard such as `i < xs.length` before an index, and a program that
-uses only it builds under the default:
+`unlinkRegion(name)` removes the name. Each answers a `Result`: test
+`r.isErr()` before reading `r.value`, as the examples on this page do.
+`nish/sync/shm` keeps no panic site, so a program that uses only it builds
+under the default, which refuses a program that could panic. The ring
+examples further down build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/sync/ring`
+keeps panic sites no proof removes yet.
 
-<!-- allow-panics: unwraps a `Result` with `expect` -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { ACQUIRE, createRegion, openRegion, RELEASE, unlinkRegion } from "nish/sync/shm";
 
 export const main = (): i32 => {
   const name = "guide-region";
-  const a = createRegion(name, 4096).expect("create");
-  const b = openRegion(name).expect("open"); // another process would do this
+  const made = createRegion(name, 4096);
+  if (made.isErr()) {
+    console.error(`create: ${made.error.message}`);
+    return 1;
+  }
+  const a = made.value;
+  const opened = openRegion(name); // another process would do this
+  if (opened.isErr()) {
+    console.error(`open: ${opened.error.message}`);
+    return 1;
+  }
+  const b = opened.value;
   a.storeI32(0, 42, RELEASE);
   console.log(`${b.loadI32(0, ACQUIRE)}`); // 42
-  unlinkRegion(name).expect("unlink");
-  b.close().expect("close");
-  a.close().expect("close");
+  if (unlinkRegion(name).isErr() || b.close().isErr() || a.close().isErr()) {
+    return 1;
+  }
   return 0;
 };
 ```
@@ -74,21 +83,24 @@ A region is read and written through **slots** at byte offsets: `loadI32`,
 five for `I64`. Each is one atomic access, with the ordering you name:
 `RELAXED`, `ACQUIRE`, `RELEASE`, `ACQ_REL` or `SEQ_CST`.
 
-<!-- allow-panics: unwraps a `Result` with `expect` -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { ACQ_REL, createRegion, SEQ_CST, unlinkRegion } from "nish/sync/shm";
 
 export const main = (): i32 => {
-  const region = createRegion("guide-counter", 64).expect("create");
+  const made = createRegion("guide-counter", 64);
+  if (made.isErr()) {
+    console.error(`create: ${made.error.message}`);
+    return 1;
+  }
+  const region = made.value;
   for (let i = 0; i < 1000; i++) {
     region.addI64(8, toI64(1), ACQ_REL); // every worker can do this at once
   }
   // Set a flag only if nobody has: the answer is the value found.
   const was = region.compareExchangeI32(0, 0, 1, SEQ_CST);
   console.log(`${region.loadI64(8, SEQ_CST)} ${was === 0}`); // 1000 true
-  unlinkRegion("guide-counter").expect("unlink");
-  return 0;
+  return unlinkRegion("guide-counter").isErr() ? 1 : 0;
 };
 ```
 
@@ -115,25 +127,36 @@ consumer, in slots of a fixed size. The process that makes the region writes
 the ring's header with `initSpscRing` or `initMpscRing`; every other process
 finds it with `attachSpscRing` or `attachMpscRing`:
 
-<!-- allow-panics: unwraps a `Result` with `expect`; indexes an array without a guard the checker reads; calls `std/sync/ring.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sync/ring.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { createRegion, unlinkRegion } from "nish/sync/shm";
 import { attachSpscRing, initSpscRing, RING_EMPTY, spscRingBytes } from "nish/sync/ring";
 
 export const main = (): i32 => {
-  const region = createRegion("guide-ring", spscRingBytes(4096)).expect("create");
+  const made = createRegion("guide-ring", spscRingBytes(4096));
+  if (made.isErr()) {
+    return 1;
+  }
+  const region = made.value;
   const producer = initSpscRing(region, 0, 4096, true);
-  const consumer = attachSpscRing(region, 0).expect("attach"); // in the other process
+  const attached = attachSpscRing(region, 0); // in the other process
+  if (attached.isErr()) {
+    return 1;
+  }
+  const consumer = attached.value;
   const job: u8[] = [7, 8, 9];
   if (!producer.tryPush(job, 0, job.length)) {
     console.log("full");
   }
   const buf: u8[] = new Array<u8>(64);
   const n = consumer.tryPop(buf, 0);
-  console.log(n === RING_EMPTY ? "empty" : `${n} bytes, the first ${buf[0]}`); // 3 bytes, the first 7
-  unlinkRegion("guide-ring").expect("unlink");
-  return 0;
+  if (n === RING_EMPTY) {
+    console.log("empty");
+  } else if (buf.length > 0) {
+    console.log(`${n} bytes, the first ${buf[0]}`); // 3 bytes, the first 7
+  }
+  return unlinkRegion("guide-ring").isErr() ? 1 : 0;
 };
 ```
 
@@ -177,19 +200,27 @@ record's bytes where they lie in the ring, as `lend` does a region's.
 and `commit(len)` publishes its first `len`; `peek()` answers the next record
 as a `readonly u8[]`, and `release()` frees it:
 
-<!-- allow-panics: unwraps a `Result` with `expect`; indexes an array without a guard the checker reads; calls `std/sync/ring.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sync/ring.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { createRegion, unlinkRegion } from "nish/sync/shm";
 import { attachSpscRing, initSpscRing, spscRingBytes } from "nish/sync/ring";
 
 export const main = (): i32 => {
-  const region = createRegion("guide-inplace", spscRingBytes(4096)).expect("create");
+  const made = createRegion("guide-inplace", spscRingBytes(4096));
+  if (made.isErr()) {
+    return 1;
+  }
+  const region = made.value;
   const producer = initSpscRing(region, 0, 4096, false);
-  const consumer = attachSpscRing(region, 0).expect("attach"); // in the other process
+  const attached = attachSpscRing(region, 0); // in the other process
+  if (attached.isErr()) {
+    return 1;
+  }
+  const consumer = attached.value;
   const w: u8[] = producer.reserve(64); // empty when there is no room now
   if (w.length > 0) {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3 && i < w.length; i++) {
       w[i] = toU8(7 + i); // writes the ring, no copy
     }
     producer.commit(3); // publishes 3 of the 64 bytes
@@ -199,8 +230,7 @@ export const main = (): i32 => {
     console.log(`${r.length} bytes, the first ${r[0]}`); // 3 bytes, the first 7
     consumer.release();
   }
-  unlinkRegion("guide-inplace").expect("unlink");
-  return 0;
+  return unlinkRegion("guide-inplace").isErr() ? 1 : 0;
 };
 ```
 
@@ -252,7 +282,7 @@ a push rings the doorbell only when the consumer is asleep, so a busy ring
 makes no system call at all. On Linux, that is. Elsewhere `popWait` answers
 `SHM_UNSUPPORTED`, so a portable consumer falls back to polling:
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sync/ring.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sync/ring.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { createRegion, SHM_UNSUPPORTED, unlinkRegion } from "nish/sync/shm";
@@ -264,12 +294,14 @@ const take = (ring: MpscRing, buf: u8[]): i32 => {
 };
 
 export const main = (): i32 => {
-  const region = createRegion("guide-bell", mpscRingBytes(8, 16)).expect("create");
-  const ring = initMpscRing(region, 0, 8, 16, true);
+  const made = createRegion("guide-bell", mpscRingBytes(8, 16));
+  if (made.isErr()) {
+    return 1;
+  }
+  const ring = initMpscRing(made.value, 0, 8, 16, true);
   const buf: u8[] = new Array<u8>(16);
   console.log(`${take(ring, buf) === RING_EMPTY}`); // true, after 100 ms
-  unlinkRegion("guide-bell").expect("unlink");
-  return 0;
+  return unlinkRegion("guide-bell").isErr() ? 1 : 0;
 };
 ```
 

@@ -12,18 +12,18 @@ one as a pair of offsets into the target, in an `i32[]` you made once.
 
 ## A first table
 
-The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/router`
-keeps panic sites no proof removes yet, so those calls are refused by default
-for now. The indexes, the `String.fromBytes` ranges and the `panic` call in
-your own code build under the default once a guard such as `i < xs.length`
-proves each index, one such as `start >= 0 && start <= end && end <= buf.length`
-each range, and the `panic` becomes an error answer.
+A program held to [no panics](cli.md#asking-what-a-program-can-do), the
+default, builds its table with `routerChecked(limits)`, which answers `Err` for
+a limit outside its range where `new Router` panics, and routes with
+`tryMatch`, which answers `ROUTER_NOT_FOUND` for a range outside its buffer
+where `match` panics. Every other answer is the same, so the rest of this page
+says `match` for both. `routerDecode` and `use` still panic on a range or a
+route the table does not hold, so the two examples that call them build with
+`--allow-panics` for now.
 
-<!-- allow-panics: calls `panic`; slices with bounds it does not test; indexes an array without a guard the checker reads; calls `std/net/router.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-import { ROUTER_METHOD_NOT_ALLOWED, ROUTER_NOT_FOUND, Router, RouterLimits } from "nish/net/router";
+import { ROUTER_METHOD_NOT_ALLOWED, ROUTER_NOT_FOUND, Router, RouterLimits, routerChecked } from "nish/net/router";
 
 // The routes, in the order they are added: `add` answers 0, 1, 2.
 const HOME: i32 = 0;
@@ -39,25 +39,47 @@ const bytesOf = (text: string): u8[] => {
   return out;
 };
 
-const route = (router: Router, index: i32, method: string, pattern: string): void => {
+const route = (router: Router, index: i32, method: string, pattern: string): Result<void, string> => {
   const answer: i32 = router.add(method, pattern);
   if (answer !== index) {
-    panic(`${method} ${pattern} is refused with ${answer}`);
+    return Err(`${method} ${pattern} is refused with ${answer}`);
   }
+  return Ok();
+};
+
+const table = (): Result<Router, string> => {
+  const router = routerChecked(new RouterLimits()).orReturn();
+  route(router, HOME, "GET", "/").orReturn();
+  route(router, USER, "GET", "/users/:id").orReturn();
+  route(router, FILES, "GET", "/static/*").orReturn();
+  return Ok(router);
+};
+
+// The first parameter `match` wrote, as text.
+const firstParam = (t: u8[], params: i32[]): string => {
+  if (params.length < 2) {
+    return "";
+  }
+  const start: i32 = params[0];
+  const end: i32 = params[1];
+  if (start < 0 || start > end || end > t.length) {
+    return "";
+  }
+  return String.fromBytes(t, start, end);
 };
 
 const answer = (router: Router, method: string, target: string, params: i32[]): void => {
   const m = bytesOf(method);
   const t = bytesOf(target);
-  switch (router.match(m, 0, toI32(m.length), t, 0, toI32(t.length), params)) {
+  switch (router.tryMatch(m, 0, toI32(m.length), t, 0, toI32(t.length), params)) {
     case HOME:
       console.log(`${method} ${target}: the home page`);
       break;
     case USER:
-      console.log(`${method} ${target}: user ${String.fromBytes(t, params[0], params[1])}`);
+      console.log(`${method} ${target}: user ${firstParam(t, params)}`);
       break;
     case FILES:
-      console.log(`${method} ${target}: the file ${String.fromBytes(t, params[0], params[1])}`);
+      console.log(`${method} ${target}: the file ${firstParam(t, params)}`);
       break;
     case ROUTER_METHOD_NOT_ALLOWED:
       console.log(`${method} ${target}: 405`);
@@ -71,10 +93,12 @@ const answer = (router: Router, method: string, target: string, params: i32[]): 
 };
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
-  route(router, HOME, "GET", "/");
-  route(router, USER, "GET", "/users/:id");
-  route(router, FILES, "GET", "/static/*");
+  const built = table();
+  if (built.isErr()) {
+    console.error(built.error);
+    return 1;
+  }
+  const router = built.value;
   const params: i32[] = [0, 0, 0, 0];
   answer(router, "GET", "/", params);
   answer(router, "GET", "/users/42?tab=keys", params);
@@ -163,13 +187,17 @@ does not depend on the order you added routes in.
 A route table is part of your program, so a refusal is usually a bug to fix
 before the server starts. Check every index, and stop there:
 
-<!-- allow-panics: calls `std/net/router.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-import { ROUTER_DUPLICATE, Router, RouterLimits } from "nish/net/router";
+import { ROUTER_DUPLICATE, RouterLimits, routerChecked } from "nish/net/router";
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const made = routerChecked(new RouterLimits());
+  if (made.isErr()) {
+    console.error(made.error);
+    return 1;
+  }
+  const router = made.value;
   const first: i32 = router.add("GET", "/users/:id");
   const second: i32 = router.add("GET", "/users/:name");
   console.log(`${first} ${second === ROUTER_DUPLICATE ? "duplicate" : "added"}`);
@@ -206,10 +234,10 @@ own and answers its length, or `ROUTER_BAD_ESCAPE` for a `%` not followed by
 two hex digits, or `ROUTER_NO_ROOM` when `out` is too small. `+` stays `+`:
 it means a space only in a query.
 
-<!-- allow-panics: slices with bounds it does not test; calls `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/router.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { Router, RouterLimits, routerDecode } from "nish/net/router";
+import { RouterLimits, routerChecked, routerDecode } from "nish/net/router";
 
 const bytesOf = (text: string): u8[] => {
   const out: u8[] = [];
@@ -221,17 +249,21 @@ const bytesOf = (text: string): u8[] => {
 };
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const made = routerChecked(new RouterLimits());
+  if (made.isErr()) {
+    return 1;
+  }
+  const router = made.value;
   const file: i32 = router.add("GET", "/files/:name");
   const method = bytesOf("GET");
   const target = bytesOf("/files/a%2Fb.txt");
   const params: i32[] = [0, 0];
-  if (router.match(method, 0, 3, target, 0, toI32(target.length), params) !== file) {
+  if (router.tryMatch(method, 0, 3, target, 0, toI32(target.length), params) !== file || params.length < 2) {
     return 1;
   }
   const name: u8[] = new Array<u8>(64);
   const length: i32 = routerDecode(target, params[0], params[1], name);
-  if (length < 0) {
+  if (length < 0 || length > name.length) {
     return 1;
   }
   const text = String.fromBytes(name, 0, length);
@@ -261,10 +293,14 @@ step the table does not hold panics.
 <!-- allow-panics: calls `std/net/router.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { ROUTER_NOT_FOUND, Router, RouterLimits } from "nish/net/router";
+import { ROUTER_NOT_FOUND, RouterLimits, routerChecked } from "nish/net/router";
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const made = routerChecked(new RouterLimits());
+  if (made.isErr()) {
+    return 1;
+  }
+  const router = made.value;
   const home: i32 = router.add("GET", "/");
   const admin: i32 = router.add("GET", "/admin");
   const auth: i32 = router.step();
