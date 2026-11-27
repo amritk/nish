@@ -2274,8 +2274,7 @@ and slowing the frame rate when the link cannot keep up — use
 walks through. This section is the layer underneath, for a program that
 wants its own loop.
 
-<!-- allow-panics: calls `std/term.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { ATTR_BOLD, COLOR_DEFAULT, Canvas, Screen, hideCursor, rgb, showCursor } from "nish/term";
 import { write } from "nish:io";
@@ -2405,8 +2404,7 @@ time, so `delivered(sentAtMs)` tells it that the answer to a query sent at
 `releaseGapMs` after its last repeat is in, since a key still held would have
 repeated ahead of it.
 
-<!-- allow-panics: calls `std/term.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { EVENT_KEY, EVENT_REPLY, KeyDecoder } from "nish/term";
 
@@ -2444,8 +2442,7 @@ behind, after a stall, drops the backlog instead of trying to catch up. The
 same clock with `maxSteps` 1 paces the drawing: it answers 1 when a frame is
 due. The first `advance` only starts the clock, and answers 0.
 
-<!-- allow-panics: calls `std/term.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { COLOR_DEFAULT, Canvas, FixedStep, Screen, rgb } from "nish/term";
 import { write } from "nish:io";
