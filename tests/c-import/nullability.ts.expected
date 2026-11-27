@@ -3,13 +3,13 @@
 // Data model: LP64
 // Regenerate: nish c-import nullability.h --target x86_64-unknown-linux-gnu -o nullability.ts
 
-declare function get_names(): CPtr | null
-declare function nn_list(): CPtr | null
-declare function nn_one(): CPtr
-declare function may_name(): CPtr | null
-declare function must_name(): CPtr
-declare function grid(): CPtr
-declare function first_int(values: CPtr | null): CPtr | null
-declare function weights(w: CPtr): CPtr | null
-declare function later_rn(): CPtr
-declare function later_nn(): CPtr | null
+export declare function get_names(): CPtr | null
+export declare function nn_list(): CPtr | null
+export declare function nn_one(): CPtr
+export declare function may_name(): CPtr | null
+export declare function must_name(): CPtr
+export declare function grid(): CPtr
+export declare function first_int(values: CPtr | null): CPtr | null
+export declare function weights(w: CPtr): CPtr | null
+export declare function later_rn(): CPtr
+export declare function later_nn(): CPtr | null

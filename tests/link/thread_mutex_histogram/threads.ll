@@ -7,6 +7,8 @@
 %struct.Mutex$$Hist = type { %struct.MutexGuard$$Hist* }
 %struct.MutexGuard$$Hist = type { %struct.Hist*, i32 }
 %struct.Shard = type { %struct.nish_array*, %struct.Mutex$$Hist* }
+%struct.nish_result.$AtomicI32Array.str = type { i1, %struct.AtomicI32Array*, i8* }
+%struct.nish_result.$AtomicI64Array.str = type { i1, %struct.AtomicI64Array*, i8* }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
@@ -19,6 +21,7 @@
 @.str.5 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"scopeWithStack: a stack of \00" }, align 8
 @.str.6 = private unnamed_addr constant { i64, [32 x i8] } { i64 31, [32 x i8] c" bytes is below the minimum of \00" }, align 8
 @.str.7 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
+@.str.8 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare double @floor(double)
@@ -308,15 +311,47 @@ entry:
   ret i64 %2
 }
 
-define internal void @nish.negativeAtomicLength() #1 {
+define noundef nonnull align 8 i8* @nish.atomicArrayLengthFault(i32 noundef %length) #0 {
 entry:
-  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.7 to i8*))
+  %0 = icmp slt i32 %length, 0
+  br i1 %0, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %1 = phi i8* [ bitcast ({ i64, [26 x i8] }* @.str.7 to i8*), %cond.true ], [ bitcast ({ i64, [1 x i8] }* @.str.8 to i8*), %cond.false ]
+  ret i8* %1
+}
+
+define internal void @nish.atomicArrayCheckLength(i32 noundef %length) #1 {
+entry:
+  %fault.addr = alloca i8*, align 8
+  %0 = call i8* @nish.atomicArrayLengthFault(i32 %length)
+  store i8* %0, i8** %fault.addr, align 8
+  %1 = load i8*, i8** %fault.addr, align 8
+  %2 = bitcast i8* %1 to i64*
+  %3 = load i64, i64* %2, align 8
+  %4 = trunc i64 %3 to i32
+  %5 = icmp sgt i32 %4, 0
+  br i1 %5, label %if.then, label %if.end
+
+if.then:
+  %6 = load i8*, i8** %fault.addr, align 8
+  call void @nish_panic(i8* %6)
   unreachable
+
+if.end:
+  ret void
 }
 
 define void @nish.AtomicI32Array.constructor(%struct.AtomicI32Array* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %length) #1 {
 entry:
   %fill.at = alloca i64, align 8
+  call void @nish.atomicArrayCheckLength(i32 %length)
   %0 = getelementptr inbounds %struct.AtomicI32Array, %struct.AtomicI32Array* %this, i32 0, i32 0
   store i32 %length, i32* %0, align 4, !tbaa !12
   %1 = icmp sge i32 %length, 0
@@ -346,7 +381,6 @@ if.then:
   br label %if.end
 
 if.else:
-  call void @nish.negativeAtomicLength()
   %17 = call i8* @nish_alloc_struct(i64 24)
   %18 = bitcast i8* %17 to %struct.nish_array*
   %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 0
@@ -574,6 +608,7 @@ bounds.ok:
 define void @nish.AtomicI64Array.constructor(%struct.AtomicI64Array* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %length) #1 {
 entry:
   %fill.at = alloca i64, align 8
+  call void @nish.atomicArrayCheckLength(i32 %length)
   %0 = getelementptr inbounds %struct.AtomicI64Array, %struct.AtomicI64Array* %this, i32 0, i32 0
   store i32 %length, i32* %0, align 4, !tbaa !28
   %1 = icmp sge i32 %length, 0
@@ -603,7 +638,6 @@ if.then:
   br label %if.end
 
 if.else:
-  call void @nish.negativeAtomicLength()
   %17 = call i8* @nish_alloc_struct(i64 24)
   %18 = bitcast i8* %17 to %struct.nish_array*
   %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 0
@@ -826,6 +860,76 @@ bounds.ok:
   %10 = cmpxchg i64* %9, i64 %expected, i64 %desired seq_cst seq_cst, align 8
   %11 = extractvalue { i64, i1 } %10, 0
   ret i64 %11
+}
+
+define noundef nonnull align 8 dereferenceable(24) %struct.nish_result.$AtomicI32Array.str* @nish.atomicI32ArrayChecked(i32 noundef %length) #1 {
+entry:
+  %fault.addr = alloca i8*, align 8
+  %0 = call i8* @nish.atomicArrayLengthFault(i32 %length)
+  store i8* %0, i8** %fault.addr, align 8
+  %1 = load i8*, i8** %fault.addr, align 8
+  %2 = bitcast i8* %1 to i64*
+  %3 = load i64, i64* %2, align 8
+  %4 = trunc i64 %3 to i32
+  %5 = icmp sgt i32 %4, 0
+  br i1 %5, label %if.then, label %if.end
+
+if.then:
+  %6 = load i8*, i8** %fault.addr, align 8
+  %7 = call i8* @nish_alloc_struct(i64 24)
+  %8 = bitcast i8* %7 to %struct.nish_result.$AtomicI32Array.str*
+  %9 = getelementptr inbounds %struct.nish_result.$AtomicI32Array.str, %struct.nish_result.$AtomicI32Array.str* %8, i32 0, i32 0
+  store i1 false, i1* %9, align 1
+  %10 = getelementptr inbounds %struct.nish_result.$AtomicI32Array.str, %struct.nish_result.$AtomicI32Array.str* %8, i32 0, i32 2
+  store i8* %6, i8** %10, align 8
+  ret %struct.nish_result.$AtomicI32Array.str* %8
+
+if.end:
+  %11 = call i8* @nish_alloc_struct(i64 16)
+  %12 = bitcast i8* %11 to %struct.AtomicI32Array*
+  call void @nish.AtomicI32Array.constructor(%struct.AtomicI32Array* %12, i32 %length)
+  %13 = call i8* @nish_alloc_struct(i64 24)
+  %14 = bitcast i8* %13 to %struct.nish_result.$AtomicI32Array.str*
+  %15 = getelementptr inbounds %struct.nish_result.$AtomicI32Array.str, %struct.nish_result.$AtomicI32Array.str* %14, i32 0, i32 0
+  store i1 true, i1* %15, align 1
+  %16 = getelementptr inbounds %struct.nish_result.$AtomicI32Array.str, %struct.nish_result.$AtomicI32Array.str* %14, i32 0, i32 1
+  store %struct.AtomicI32Array* %12, %struct.AtomicI32Array** %16, align 8
+  ret %struct.nish_result.$AtomicI32Array.str* %14
+}
+
+define noundef nonnull align 8 dereferenceable(24) %struct.nish_result.$AtomicI64Array.str* @nish.atomicI64ArrayChecked(i32 noundef %length) #1 {
+entry:
+  %fault.addr = alloca i8*, align 8
+  %0 = call i8* @nish.atomicArrayLengthFault(i32 %length)
+  store i8* %0, i8** %fault.addr, align 8
+  %1 = load i8*, i8** %fault.addr, align 8
+  %2 = bitcast i8* %1 to i64*
+  %3 = load i64, i64* %2, align 8
+  %4 = trunc i64 %3 to i32
+  %5 = icmp sgt i32 %4, 0
+  br i1 %5, label %if.then, label %if.end
+
+if.then:
+  %6 = load i8*, i8** %fault.addr, align 8
+  %7 = call i8* @nish_alloc_struct(i64 24)
+  %8 = bitcast i8* %7 to %struct.nish_result.$AtomicI64Array.str*
+  %9 = getelementptr inbounds %struct.nish_result.$AtomicI64Array.str, %struct.nish_result.$AtomicI64Array.str* %8, i32 0, i32 0
+  store i1 false, i1* %9, align 1
+  %10 = getelementptr inbounds %struct.nish_result.$AtomicI64Array.str, %struct.nish_result.$AtomicI64Array.str* %8, i32 0, i32 2
+  store i8* %6, i8** %10, align 8
+  ret %struct.nish_result.$AtomicI64Array.str* %8
+
+if.end:
+  %11 = call i8* @nish_alloc_struct(i64 16)
+  %12 = bitcast i8* %11 to %struct.AtomicI64Array*
+  call void @nish.AtomicI64Array.constructor(%struct.AtomicI64Array* %12, i32 %length)
+  %13 = call i8* @nish_alloc_struct(i64 24)
+  %14 = bitcast i8* %13 to %struct.nish_result.$AtomicI64Array.str*
+  %15 = getelementptr inbounds %struct.nish_result.$AtomicI64Array.str, %struct.nish_result.$AtomicI64Array.str* %14, i32 0, i32 0
+  store i1 true, i1* %15, align 1
+  %16 = getelementptr inbounds %struct.nish_result.$AtomicI64Array.str, %struct.nish_result.$AtomicI64Array.str* %14, i32 0, i32 1
+  store %struct.AtomicI64Array* %12, %struct.AtomicI64Array** %16, align 8
+  ret %struct.nish_result.$AtomicI64Array.str* %14
 }
 
 define void @nish.MutexGuard$$Hist.constructor(%struct.MutexGuard$$Hist* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, %struct.Hist* noundef nonnull align 8 dereferenceable(56) %value) #2 {

@@ -64,6 +64,13 @@ What nish adds to the skill:
   summary of what shipped. Nothing else under `docs/` records a package's state.
 - **A new package** gets its design note and plan file (with a `priority`) in
   one PR, then `/plan-issues`.
+- **A stage that implements an RFC** in a `std/` module lands spec-first: one
+  PR for its vector spec, contract and emitted test, then the PR that adds the
+  code ([`contracts/README.md`](contracts/README.md)). A plan with such a stage
+  puts the spec stage before it. A stage that changes a module with a spec
+  reruns vector's `check` and `mutate` on its contract and records what they
+  printed in the PR body. `npm run lint` fails on an RFC a module cites with
+  no spec of that module and no `scripts/rfc-unspecified.txt` line.
 
 The workflow skills and agents (`feature`, `plan-issues`, `pickup`, `decide`,
 the review agents) are not in this repo. They come from the `ai` plugin in the

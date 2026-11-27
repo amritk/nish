@@ -929,10 +929,7 @@ export class HttpHandler {
    *   `openHttpHandler` for a `Result`.
    */
   constructor(limits: HandlerLimits, listener: i32, router: Router, loop: i32 = -1) {
-    const fault: string = handlerLimitsFault(limits)
-    if (fault.length > 0) {
-      panic(fault)
-    }
+    handlerCheckLimits(limits)
     this.maxDecoded = limits.maxDecoded
     this.decoder = new HttpBodyDecoder(limits.maxDecoded > 0 ? limits.maxDecoded : 1)
     this.bodyTimeout = toI64(limits.bodyTimeout) * HANDLER_NANOS_PER_MS
@@ -1204,7 +1201,7 @@ export class HttpHandler {
    */
   private drive(slot: i32): void {
     const conn: Http1Connection = this.server.connection(slot)
-    let event: i32 = this.server.next(slot)
+    let event: i32 = this.unended(slot) ? H1_NEED_MORE : this.server.next(slot)
     while (event !== H1_NEED_MORE && event !== H1_ERROR) {
       if (event === H1_REQUEST) {
         this.begin(slot, conn)
@@ -1215,7 +1212,7 @@ export class HttpHandler {
       } else if (event === H1_WRITE) {
         this.resume(slot, conn)
       }
-      event = this.server.next(slot)
+      event = this.unended(slot) ? H1_NEED_MORE : this.server.next(slot)
     }
     if (event === H1_ERROR) {
       // The carrier has written its refusal and ends the connection; a
@@ -1235,6 +1232,19 @@ export class HttpHandler {
       }
     }
     this.settle(slot, conn)
+  }
+
+  /**
+   * Whether `slot`'s response is under way with every byte handed over but
+   * not yet ended. The carrier finishes a `Content-Length` response once its
+   * last byte is written and would read the next request on the next `next`,
+   * so `drive` does not ask the slot again until the program's `end`: until
+   * then the response is the program's, and a pipelined request behind it
+   * waits (#1556).
+   */
+  private unended(slot: i32): boolean {
+    const r: HttpRequest | null = this.requestAt(this.currentOf(slot))
+    return r !== null && r.state === HANDLER_STREAMING && r.pendingEnd === r.pendingStart
   }
 
   /**
@@ -2657,6 +2667,14 @@ export const openHttpHandler = (
     return Err(`HttpHandler: pollCreate failed: ${loop}`)
   }
   return Ok(new HttpHandler(limits, listener, router, loop))
+}
+
+/** Panics unless `limits` can make a handler: a limit below its least is the program's mistake. */
+const handlerCheckLimits = (limits: HandlerLimits): void => {
+  const fault: string = handlerLimitsFault(limits)
+  if (fault.length > 0) {
+    panic(fault)
+  }
 }
 
 /** Why `limits` cannot make a handler, or `""` when it can. */

@@ -2,7 +2,7 @@
 
 # nish/net/http2-cleartext
 
-HTTP/2 over plain TCP with prior knowledge (h2c, RFC 9113 §3.3): a pool of `Http2Connection`s, one per accepted socket, for a program that owns its readiness loop. The client starts with the 24-byte connection preface; there is no `Upgrade: h2c` (RFC 9113 §3.1 deprecates it) and no fallback to HTTP/1.1 on the same port.
+HTTP/2 over plain TCP with prior knowledge (h2c, RFC 9113 §3.3): a pool of `Http2Connection`s, one per accepted socket, for a program that owns its readiness loop. The client starts with the 24-byte connection preface; there is no `Upgrade: h2c` (RFC 9113 §3.1 deprecates it), and the pool serves no HTTP/1.1 on its own port. One port for both is `nish/net/http-server`'s `listenHttp1` with `h2c`: the façade reads the preface itself and hands a matching socket over with `adopt`.
 
 ```ts
 import {
@@ -122,6 +122,7 @@ class Http2CleartextServer
 | `date: HttpDate` | The `date` every slot's responses carry, formatted once a second for all of them: each slot's `Http2Connection.date` is its bytes, refreshed by `connection` and `next`. `date.pin` fixes its clock. |
 | `readonly pools: Http2Pools` | The frame buffers every slot's connection borrows: one of each per slot at most, none made up front. |
 | `accept(): i32` | Accepts the next waiting connection into a free slot and gives it a fresh HTTP/2 connection, which sends nothing until the peer's preface is whole: the slot's own, restarted, or one made now if this is the first accept into it. A slot closed before is taken first, then the next never used. |
+| `adopt(fd: i32, preface: u8[]): i32` | Takes `fd`, a connection the program accepted and has read the whole 24-byte preface from, into a free slot, as `accept` does, and feeds `preface` to its connection: the slot starts past its preface, so `expire` never closes it for one. The bytes are the connection's to check, which refuses any other 24 as a bad preface (RFC 9113 §3.4). |
 | `busy(): i32` | How many slots hold a connection. |
 | `close(slot: i32): void` | Ends `slot`'s connection and frees the slot at once: the socket is closed with nothing more sent, and the connection gives back every buffer it holds. |
 | `connection(slot: i32): Http2Connection` | The HTTP/2 connection of `slot`, its `date` brought up to now. A slot never accepted into, or out of range, names slot 0's, which may be live. |

@@ -101,8 +101,11 @@ test skipped, such as a slow iterated vector, is a SKIP line too, and a run
 that passed no clause fails. The rest are run by hand: `build-spec`,
 `extract`, `check`, `frozen` and `mutate`, with the vector that
 `.vector-version` pins (`bash scripts/fetch-vector.sh`); `contracts/README.md`
-has the commands and the `vector-spec` skill is the walkthrough. Knip takes
-`test/spec/*.ts` as entries, because the module it imports does not exist until
+has the commands and the `vector-spec` skill is the walkthrough. Which modules
+must land this way is `node scripts/rfc-specs.mjs`'s, in `npm run lint`: an RFC
+a `std/` file cites needs a spec of that module (its contract, spec and pinned test)
+or a line in `scripts/rfc-unspecified.txt`, whose lines from before the rule
+only shrink. Knip takes `test/spec/*.ts` as entries, because the module it imports does not exist until
 the second PR.
 
 ## Commands

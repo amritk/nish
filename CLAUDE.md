@@ -111,6 +111,17 @@ trip with expected stdout, at least one negative test, its
 every TypeScript snippet a PR adds to the tests. Copied code keeps its upstream
 notice and is listed in `THIRD_PARTY_NOTICES.md`.
 
+**A `std/` module that implements an RFC lands spec-first**, its vector spec
+before its code ([`contracts/README.md`](contracts/README.md)), and a change to
+a module with a spec reruns vector's `check` and `mutate` on its contract.
+`node scripts/rfc-specs.mjs` (in `npm run lint`) fails on an RFC a `std/` file
+cites that no spec of that module covers (its contract, `specs/<n>.md`, and a
+`test/spec/<n>.ts` pinning the contract's hash) and no line of
+`scripts/rfc-unspecified.txt` lists. That list's lines
+from before the rule are pinned by `PRE_RULE_SHA256` and only go, with
+`--update-baseline`; a `cites:` line there, with its reason, is for an RFC the
+file cites and does not implement.
+
 **Attacker-facing code ships with its security record.** A new `std/net` or
 `std/crypto` module, `runtime/*.c` file, or builtin or `nish:` module that reads
 the network, the terminal or another process lands with its `docs/security/`

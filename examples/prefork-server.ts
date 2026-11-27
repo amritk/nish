@@ -1,18 +1,15 @@
-// Opt-out (`--allow-panics`), for sites in `std/net/http1-server` and
-// `std/net/prefork` no guard here removes; this file keeps none of its own.
-// `readable` and `connection` reach the cap check of `Http1Connection`'s
-// constructor (std/net/http1-server.ts:498:5) through the server's `build` of
-// a pooled connection (:2885, :2967; the server's own constructor has no
-// site), and `write` its caller-window check (:506:5): `src/panics.ts` follows
-// a call into any function that can panic, and only `std/threads.ts`'s checks
-// are discharged at their caller (`callerProven`, src/attributes.ts), a `src/`
-// gap on the WP80 tracking issue #2176. `writable` and `flush` reach the
-// `netRead` window of `Http1Server.drain` (:3230:22) and `next` the `netWrite`
-// window of `Http1Server.send` (:3286:22). `preforkWorkers` reaches the
-// `netRead` window of `preforkDiscard` (std/net/prefork.ts:1169:10) and the
-// panic `preforkSupervise` raises on a refused config (:1392:5). #2279 (for
-// #2208) proves `drain`'s and `preforkDiscard`'s windows, not `send`'s
-// `[start, end)`. Once all are gone, build this file without `--allow-panics`.
+// Opt-out (`--allow-panics`), for sites in `std/net/http1-server`,
+// `std/net/websocket` and `std/net/prefork` no guard here removes; this file
+// keeps none of its own. `readable`, `connection` and `flush` reach the cap
+// check of `Http1Connection`'s constructor (std/net/http1-server.ts:499:5)
+// through the server's `build` of a pooled connection: `Http1Config` is a
+// mutable class stored as given, so no caller's proof reaches it. `next`
+// reaches the window check of `websocketIsUtf8` (std/net/websocket.ts:267:5),
+// written inline rather than as a window guard, and `preforkWorkers` the panic
+// `preforkSupervise` raises on a refused config (std/net/prefork.ts:1392:5).
+// The `write` below holds its window at the call (the `window` contract,
+// docs/LANGUAGE.md, "Panic sites", #2296), which `body.length` proves. Once
+// all are gone, build this file without `--allow-panics`.
 //
 // An HTTP/1.1 server on every core: `nish/net/prefork` starts one worker
 // process per core, each binds its own SO_REUSEPORT listener on the port, and

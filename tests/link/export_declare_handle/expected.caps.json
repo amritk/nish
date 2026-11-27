@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "entry": "main.ts",
+  "deterministic": false,
+  "capabilities": ["ffi"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["ffi"],
+      "modules": [
+        {
+          "path": "lib.ts",
+          "capabilities": ["ffi"],
+          "functions": [
+            {
+              "name": "countFrom",
+              "exported": true,
+              "capabilities": ["ffi"],
+              "witnesses": {
+                "ffi": [
+                  { "function": "countFrom", "at": "lib.ts:6:13", "calls": "counter_new" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "lib.ts:6:13", "allowed": true },
+                { "kind": "overflow", "at": "lib.ts:11:30", "proven": true }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "main.ts",
+          "capabilities": ["ffi"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["ffi"],
+              "witnesses": {
+                "ffi": [
+                  { "function": "main", "at": "main.ts:8:29", "calls": "counter_new" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "main.ts:8:29", "allowed": true },
+                { "kind": "oom", "at": "main.ts:13:3", "allowed": true },
+                { "kind": "oom", "at": "main.ts:15:3", "allowed": true }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "sys.ts",
+          "capabilities": [],
+          "functions": []
+        }
+      ]
+    }
+  ]
+}

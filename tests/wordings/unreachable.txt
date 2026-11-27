@@ -27,6 +27,7 @@ NL1061  retired: `Object spread is forbidden in`, the Phase 0 refusal object spr
 NL2004  retired: the `implements` field-order rule, reworded since
 NL2017  retired: a field clashing with a method, reworded since
 NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`Result` rule
+NL2306  retired: `... cannot be exported: it is a C function this program calls`, the refusal WP89 S3b lifted; an exported `declare function` is imported and called now (tests/link/export_declare_handle), and a C struct layout in its signature keeps its own refusal (tests/link/export_declare_layout_param)
 NL2040  retired: inheritance, removed
 NL2533  retired: `... cannot take a union as a type argument`, the refusal union type arguments lifted; a union is a generic's, a `Result`'s and `nish/map`'s helpers' type argument now (tests/cases/union_generic_class, union_generic_call, union_result, union_map_helpers), and what stays refused keeps its own code: a `Set` element or `Map` key NL2353, a generic variant NL2522, an inferred union NL2172, a variant stored through a generic field NL2534
 NL2042  retired: the long form of the allocation performance warning; the live one is NL9001

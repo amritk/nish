@@ -3,7 +3,7 @@
 A rule a tool can check is checked by a tool, not by a reviewer. This file says
 which rules those are and where each is enforced.
 
-`npm run lint` runs the file-name check, the install-script check and
+`npm run lint` runs the file-name check, the install-script check, the RFC-spec check and
 `biome check .`, with the formatter on. `npm run lint:dead` runs knip. CI's `lint` job runs both, plus
 shellcheck, and every rule is an `error`: a finding fails the pull request.
 `npm run lint:fix` applies every safe fix and formats, and
@@ -16,6 +16,7 @@ shellcheck, and every rule is an `error`: a finding fails the pull request.
 | Biome (lint and format) | `src/`, `std/`, `bin/`, `tests/**/*.js`, `tests/self/**/*.ts`, `examples/`, `docs/cookbook/`, `docs/*.mjs`, `bench/`, `web/`, `scripts/`, `.claude/hooks/` | `biome.json` |
 | `scripts/check-filenames.mjs` | every path `git ls-files` prints | the constants at its top |
 | `scripts/check-install-scripts.mjs` | `package-lock.json`: no dependency has an install script (SC-30, `docs/security/supply-chain.md`) | none |
+| `scripts/rfc-specs.mjs` | `std/**/*.ts`, `contracts/*.json`, `specs/*.md`, `test/spec/*.ts`: every RFC a module cites is covered by a vector spec of that module, or listed | `scripts/rfc-unspecified.txt`; its pre-rule lines are pinned by `PRE_RULE_SHA256` and only shrink |
 | tsc (`npm run check`) | `src/`, `std/`, `tests/nish/` | `tsconfig.json` |
 | knip (`npm run lint:dead`) | the same files as Biome, from the entry points in its config | `knip.json` |
 | shellcheck (`-S warning`) | `scripts/*.sh`, `docs/cookbook/regen.sh`, `install.sh`, `.github/*.sh`, `.claude/hooks/*.sh` | the CI step |

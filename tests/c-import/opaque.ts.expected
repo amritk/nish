@@ -7,33 +7,33 @@ declare class OutPtr {
   value: CPtr | null
 }
 
-declare class conn {}
+export declare class conn {}
 
-declare class chan {}
+export declare class chan {}
 
 declare class outer {
   in: CPtr | null
   n: i32
 }
 
-declare class later {}
+export declare class later {}
 
-declare function conn_open(host: string): conn | null
-declare function conn_send(c: conn, msg: string, len: u64): i32
-declare function conn_close(c: conn): void
-declare function conn_chan(c: conn, id: i32): chan | null
-declare function chan_id(ch: chan): i32
+export declare function conn_open(host: string): conn | null
+export declare function conn_send(c: conn, msg: string, len: u64): i32
+export declare function conn_close(c: conn): void
+export declare function conn_chan(c: conn, id: i32): chan | null
+export declare function chan_id(ch: chan): i32
 declare function stmt_prepare(c: conn, sql: string, out: OutPtr): i32
-declare function stmt_next(s: CPtr): CPtr | null
-declare function stmt_done(s: CPtr): void
+export declare function stmt_next(s: CPtr): CPtr | null
+export declare function stmt_done(s: CPtr): void
 declare function outer_inner(o: outer): CPtr | null
-declare function ghost_poke(g: CPtr): void
+export declare function ghost_poke(g: CPtr): void
 // The result is owned: free it with blob_free.
-declare function blob_make(n: u64): CPtr | null
-declare function blob_free(b: CPtr): void
-declare function later_get(): later | null
-declare function later_put(l: later): void
-declare function chan_id_of(ch: chan): CPtr | null
+export declare function blob_make(n: u64): CPtr | null
+export declare function blob_free(b: CPtr): void
+export declare function later_get(): later | null
+export declare function later_put(l: later): void
+export declare function chan_id_of(ch: chan): CPtr | null
 
 /* Not bound:
  *   struct stmt: stays a `CPtr`: `stmt_prepare` takes a pointer to a pointer to it, which only a `CPtr` can stand for

@@ -185,6 +185,7 @@ provide("NET_UNIX_UNLINK_STALE", 1);
 provide("NET_UNIX_STREAM", 1);
 provide("NET_UNIX_SEQPACKET", 2);
 provide("NET_LISTEN_RING", 8);
+provide("NET_LISTEN_RING_WIDE", 16);
 
 // `nish:term`. Whether a descriptor is a terminal and how big stdout's is have
 // Node's answers; reading stdin, waiting for it and raw mode throw, each naming

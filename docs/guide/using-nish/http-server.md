@@ -1,7 +1,7 @@
 # One server for HTTP/1.1, 2 and 3
 
-`nish/net/http-server` answers HTTP/1.1, HTTP/2 (over TLS or cleartext) and
-HTTP/3 from one loop and one routing switch. You configure a listener for
+`nish/net/http-server` answers HTTP/1.1 and HTTP/2 (each over TLS or
+cleartext) and HTTP/3 from one loop and one routing switch. You configure a listener for
 each version you serve; every request, whichever version carried it, comes out of the same
 `take` with the same fields, and one route body answers all three. Once an
 HTTP/3 listener is configured, every HTTP/1.1 and HTTP/2 response carries an
@@ -141,13 +141,61 @@ and after the preface `idleTimeout` applies as on HTTP/2 over TLS.
 Nothing on an h2c connection is encrypted or authenticated. Serve it only
 behind a proxy that ends TLS for you, or on a network you trust.
 
+#### HTTP/1.1 and h2c on one port
+
+A `listenH2c` port serves HTTP/2 alone. To serve both HTTP/1.1 and
+prior-knowledge h2c on one cleartext port, pass `listenHttp1` the HTTP/2
+caps as a fourth argument instead of calling `listenH2c`:
+
+```ts
+server.listenHttp1(tcpFd, new Http1Config(), 256, new Http2Config());
+```
+
+- The server reads each new connection's first bytes, up to 24, against
+  the HTTP/2 preface. All 24 matching makes it an h2c connection, with
+  `r.version` 2; anything else, from the first byte that differs, is served
+  as HTTP/1.1, with nothing lost of what was read.
+- A request whose method is `PRI` is answered as on any HTTP/1.1 port.
+- A client that sends part of the preface and then nothing is closed
+  `prefaceTimeout` after it connected.
+- Up to `slots` h2c connections are held beside the `slots` HTTP/1.1 ones.
+  The call panics as `listenH2c` does on the `Http2Config`, and when the
+  server already has an h2c listener.
+- Without the fourth argument nothing is read ahead, and an h2c client
+  gets `505 HTTP Version Not Supported`.
+- There is still no `Upgrade: h2c`, and the h2c warning above applies.
+
+### HTTP/1.1 over TLS
+
+`server.listenHttp1Tls(fd, tls, new Http1Config(), slots)` serves HTTP/1.1
+over TLS on a TCP listener of its own, for clients that do not speak HTTP/2:
+
+```ts
+server.listenHttp1Tls(httpsFd, tls1, new Http1Config(), 256);
+server.listenHttp2Tls(h2Fd, tls, new Http2Config(), 64);
+```
+
+- `tls1` is a `TlsServerConfig` with ALPN `["http/1.1"]`. A client that
+  offers no ALPN is served too.
+- One port serves one protocol. A client that offers only `h2` is never
+  handed to the HTTP/2 listener: it gets a fatal `no_application_protocol`
+  alert when `tls1` offers `http/1.1` alone, and a `close_notify` right
+  after the handshake when `tls1` offers `h2` too. To offer both, give each
+  its own port; there is no ALPN fallback on one port.
+- Its requests say `r.version` 1 and `r.secure` true, and its responses
+  carry `Alt-Svc` as HTTP/2 over TLS ones do.
+- It panics as `listenHttp1` does, on a second call, or when its `slots`,
+  with `listenHttp1`'s if there is one, pass 1048576: a server holds at most
+  1048576 HTTP/1.1 connections over both listeners. Serve it with
+  `waitSigned`.
+
 ## Reading a request
 
 A request holds the same fields on every version. `r.head` holds its method,
 target and fields, copied once out of the connection; `r.body` holds
 `r.bodyLength` bytes of body. Both stay valid until you answer it.
 `r.version` is 1, 2 or 3, and `r.secure` says whether it came over TLS or
-QUIC: false on HTTP/1.1 and h2c.
+QUIC: false on cleartext HTTP/1.1 and h2c.
 
 | You want | Call |
 | --- | --- |

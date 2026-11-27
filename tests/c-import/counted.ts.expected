@@ -11,10 +11,10 @@ declare class OutU8 {
   value: u8
 }
 
-declare function put_u32(data: CountedBy<readonly u8[], "len">, len: u32): i32
-declare function put_u16(len: u16, data: CountedBy<readonly u8[], "len">): i32
-declare function put_u8(data: CountedBy<readonly u8[], "n">, n: u8): i32
+export declare function put_u32(data: CountedBy<readonly u8[], "len">, len: u32): i32
+export declare function put_u16(len: u16, data: CountedBy<readonly u8[], "len">): i32
+export declare function put_u8(data: CountedBy<readonly u8[], "n">, n: u8): i32
 declare function get_into(into: CountedBy<u8[], "got">, got: OutU32): i32
 declare function get_uchar(into: CountedBy<u8[], "got">, got: OutU8): i32
-declare function two_bufs(a: CountedBy<readonly u8[], "n">, b: readonly u8[], n: u64): i32
-declare function positional(data: readonly u8[], len: u64): i32
+export declare function two_bufs(a: CountedBy<readonly u8[], "n">, b: readonly u8[], n: u64): i32
+export declare function positional(data: readonly u8[], len: u64): i32

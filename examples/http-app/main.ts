@@ -1,19 +1,17 @@
 // Opt-out (`--allow-panics`): it answers through the `try` calls of
 // `nish/net/handler`, `nish/net/serve` and `nish/net/static`, and still
 // reaches: the cap check of `Http1Connection`'s constructor
-// (std/net/http1-server.ts:498:5), through every answer, `wait`, `next` and
+// (std/net/http1-server.ts:499:5), through every answer, `wait`, `next` and
 // `drain`; the limits panic of the `HttpHandler` constructor
 // (std/net/handler.ts:934:7), which `openHttpHandler` calls only once the
-// limits passed the same check; and `std/net/router`'s contract panics
+// limits passed the same check; `std/net/router`'s contract panics
 // (std/net/router.ts:1290:3, :1304:5), through `Router`, `add` and
-// `tryRefuse`. Those are checks a caller's proof cannot discharge (only
-// `std/threads.ts`'s are, `callerProven` in src/attributes.ts), a `src/` gap
-// on the WP80 tracking issue #2176. The two `String.fromBytes` slices of
-// `nish/net/static` it reaches are proven: #2279 (for #2208) proves
-// `tryServeHandler`'s (std/net/static.ts:969:39), and #2297 the `this.path`
-// window behind the content type (:1419:46), whose field-held bounds
-// `staticFields` copies into locals it checks. Once the panics above are gone,
-// build this program without `--allow-panics`.
+// `tryRefuse`; and a `nish/net/static` slice (std/net/static.ts:221:20). The
+// config and the limits are mutable classes stored as given, and the router's
+// panics are not window guards, so no caller's proof discharges them (only a
+// guard's window is, the `window` contract in docs/LANGUAGE.md, "Panic
+// sites", #2296). Once the panics above are gone, build this program without
+// `--allow-panics`.
 //
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on

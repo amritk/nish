@@ -6067,7 +6067,9 @@ export const main = (): i32 => {
   element `i` held before it; and `compareExchange(i, expected, desired)`.
   `length` is a `readonly` field, fixed by `new AtomicI32Array(n)`, which
   makes `n` elements, each `0`; a negative `n` stops the program as
-  `new Array` of one does. `AtomicI64Array` is the same over `i64`, its index
+  `new Array` of one does, and `atomicI32ArrayChecked(n)` (with
+  `atomicI64ArrayChecked(n)`) returns the array as a `Result` instead, an
+  `Err` for a negative `n`. `AtomicI64Array` is the same over `i64`, its index
   still an `i32`.
 - **An index is checked as an array index is**: one out of range stops the
   program with `index out of range: 16 >= 16` and exit status 1, and never
@@ -6991,8 +6993,12 @@ declare i8* @strdup(i8*)
   `` `strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of
   the string `` (`tests/cases/panics_ffi_nul`). That is the
   [`ffi-nul` panic site](#panic-sites). A literal with no NUL in it is proved
-  at compile time, so `puts("hello")` has no check and no site; every other
-  string is checked with one scan of the bytes C is about to read anyway.
+  at compile time, so `puts("hello")` has no check and no site. So is a local
+  the code has searched for NUL and not assigned since: `s.indexOf("\u0000")
+  < 0` proves it in the branch it holds, and `s.indexOf("\u0000") >= 0` in
+  the branch it fails, so `if (s.indexOf("\u0000") >= 0) { return … }` before
+  the call leaves no check (`tests/link/ffi_nul_guarded`). Every other string
+  is checked with one scan of the bytes C is about to read anyway.
 - **`string | null` passes `NULL` for `null`**, and checks only a string.
 - **The declaration carries no attribute** for a string parameter: `nocapture`
   and `readonly` would restate the borrow as an LLVM fact the C body need not
@@ -7728,7 +7734,9 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   nothing else**: no `readonly`, `static` or optional field (NL2747), no initializer,
   because `new` zero-fills (NL2748), no constructor, method, accessor or other
   member such as an index signature (NL2751, `reject_ffi_struct_index_signature`), no type parameter (NL2741, `reject_generic_declare_class`), no `extends` or `implements` (NL2750),
-  and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
+  and no `export` (NL2746; an opaque one may be exported, see
+  [A binding exported from one module](#a-binding-exported-from-one-module)) —
+  each pinned by a `reject_ffi_struct_*` case.
 - **It stays in its module.** It cannot be a parameter or the return type of an
   exported function or an exported class's method, or a field of an exported
   class or interface: `` `declare class Point` cannot be a parameter of an
@@ -7868,6 +7876,71 @@ ffi.null:
   C by pointer like any other `declare class`. It is now an opaque pointer, and
   `new Db()` is NL2806: a program that built one declares the C function that
   makes it instead, or gives the class the fields C lays out.
+
+#### A binding exported from one module
+
+**One module may hold a C library's binding and export it: an exported
+`declare function`, and an exported opaque `declare class`, are imported like
+any other export.** A module that imports one names the class in its types,
+passes it to the imported functions and calls them under the rules above, with
+the same `declare` and the same call in its own IR as a declaration it wrote
+itself (`tests/link/export_declare_handle`, `docs/wp89-gfx.md` S3b):
+
+```ts
+// sys.ts
+export declare class Counter {}
+export declare function counter_new(start: i32): Counter | null
+export declare function counter_bump(c: Counter, by: i32): i32
+export declare function counter_free(c: Counter): void
+
+// main.ts
+import { Counter, counter_new, counter_bump, counter_free } from "./sys"
+
+const c: Counter | null = counter_new(40)
+if (c !== null) {
+  console.log(counter_bump(c, 1))
+  counter_free(c)
+}
+```
+
+```llvm
+; main.ll
+declare i8* @counter_new(i32)
+declare i32 @counter_bump(i8*, i32)
+declare void @counter_free(i8*)
+  %0 = call i8* @counter_new(i32 40)
+  %4 = call i32 @counter_bump(i8* %3, i32 1)
+```
+
+- **The importer reaches `ffi`, not the binding's module.** The call is where
+  C runs, so the capability report and `expected.caps.json` charge `ffi` to the
+  function that makes it, through every function that calls that one, and
+  `--deny ffi` refuses the program with the chain from `main` to the call
+  (`tests/link/export_declare_deny_ffi`). The module that only declares the
+  binding reaches nothing.
+- **A `declare class` with fields stays in its module**:
+  `` `declare class Point` cannot be exported: it has fields, and a C struct
+  layout is built and read only in the module that declares it `` (NL2746,
+  `tests/link/export_declare_layout`), and an exported `declare function` that
+  takes one, `| null` or not, is refused as an exported function of this
+  program is (NL2756, `tests/link/export_declare_layout_param`,
+  `export_declare_layout_nullable`). Behind an array or in a `Result` arm it
+  is refused before that, because no `declare function` takes either
+  (`export_declare_layout_array`, `export_declare_layout_result`). Only an
+  opaque class, which every module holds as the same C pointer, crosses.
+- **A binding is not re-exported.** `export { counter_new } from "./sys"` is
+  refused as every re-export is (`tests/link/export_declare_reexport`), and
+  so is `import * as sys from "./sys"` (`tests/link/export_declare_namespace`):
+  a module that wants the binding imports it by name from the module that
+  declares it.
+- **It is a binding between modules of one program, and the program links the
+  C library** as it would for a declaration of its own. The symbol stays C's:
+  no module defines it, so `--emit-header`, `--emit-dts` and `--emit-napi`,
+  which describe the functions the program defines for a host, leave it out
+  however it is exported (`tests/link/export_declare_header`). The
+  `--emit-capabilities` report lists it under no module's functions either:
+  the `ffi` a call of it reaches is the caller's, witnessed at the call
+  (`tests/link/export_declare_handle`).
 
 #### `readStruct`: a struct out of memory C owns
 
@@ -9597,7 +9670,7 @@ and `io_nish_import_global` and comparing the two bodies.
 `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`,
 `recvFd`, `peerCredentials`, `netRingState` and the constants
 `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET`,
-`NET_LISTEN_RING`. Each is a global too
+`NET_LISTEN_RING`, `NET_LISTEN_RING_WIDE`. Each is a global too
 ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
 
 **[`nish:term`](reference/nish-term.md)** exports `readStdin`, `waitStdin`,
@@ -12132,8 +12205,11 @@ runtime sets on every accepted connection, on every platform, closing one on
 which it cannot. `4`, with `1`, steers each connection to the listener of the
 CPU that received it, Linux only (`-95` elsewhere, `-22` without `1`). `8`
 (`NET_LISTEN_RING`) accepts into io_uring slots on Linux, as
-[slot handles](#slot-handles) say, and does nothing elsewhere. Any other bit
-is `-22` before a socket is made.
+[slot handles](#slot-handles) say, and does nothing elsewhere. `16`
+(`NET_LISTEN_RING_WIDE`), with `8`, makes each ring hold as many slots as the
+descriptor limit allows, up to 65,536 rather than 16,384: fewer rings for a
+busy loop to enter each pass, at about 110 bytes a slot per ring up front
+(`-22` without `8`). Any other bit is `-22` before a socket is made.
 
 - *Tests:* `net_tcp_reuseport`, `net_tcp_nodelay`, `net_ring_calls`,
   `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`;
@@ -16805,13 +16881,87 @@ not a slot of `dst`, which `spawn` checks before it takes the task
   check itself stays in `std/threads.ts`; a call no longer reaches it, so the
   site at the call is the only one the caller answers for
 
+**`window`**: a call to a *window guard* whose `[off, off + len)` is not inside
+its `buf`, or to a method that hands its own window to one first. A guard is
+a free function returning `void` whose body is exactly
+`const size: i32 = toI32(buf.length)` and then
+`if (off < 0 || len < 0 || off > size || len > size - off) { panic(m) }`, with
+`buf` an array parameter and `off` and `len` `i32` ones; a forwarding method's
+first statement is the guard's call on its own parameters, each window
+parameter named once and the others string literals or parameters. Any other
+shape, the tests reordered (`tests/link/window_contract_not_a_guard`) or a
+statement before the call, is no contract, and its check is followed as any
+call's is
+
+- *What proves it away:* what proves `buf.slice(off, off + len)` at the call:
+  `off` and `len` literals or the whole `buf.length` behind a length test, or
+  `end - off` behind `off >= 0 && off <= end && end <= buf.length`
+  (`tests/link/window_contract_proven`, `window_contract_unproven`); an
+  assignment between the test and the call undoes it
+  (`window_contract_guard_then_mutate`). A forwarding method's own call is
+  proven, because each of its callers holds the window
+  (`window_contract_late_forward` is a method that writes first and forwards
+  nothing). A guard passed as a value is judged in each instance it is
+  passed into, whose call is to the guard itself
+  (`window_contract_unnamed`). A call is judged in any function, one with
+  nothing else to prove included. A window read from an object's fields is
+  never proven (`window_kept_field`), and neither is one a statement or a
+  later argument between the test and the call shortens or rebinds
+  (`window_kept_pop`, `window_kept_alias_call`, `window_kept_later_argument`,
+  `window_kept_rebound`; `window_kept_control` is each with nothing between). The guard's `panic` stays listed
+  at its own line; a call no longer reaches it, so the site at the call is the
+  only one the caller answers for. `std/net/http1-server.ts` writes through
+  one (`http1ServerCheckWindow`)
+
+**`fault`**: a call to a *fault guard* whose fault function finds a fault in
+what the call passes, or to a constructor or method whose first statement
+hands one a parameter of its own that it never assigns. A guard is a free,
+non-generic function of one parameter `p` returning `void` whose body is
+exactly `const fault: string = F(p)` and then
+`if (fault.length > 0) { panic(fault) }`, with `F` a free function returning
+`string` that reads only its parameters: it names only them, its own locals
+and module `const`s with a literal value, makes no object and calls only
+conversions and other such functions. A forwarding method's or
+constructor's defaults are literals, and a constructor's class starts every
+field at a literal. Any other shape, or an `F` that reads anything else
+(`tests/link/fault_contract_impure`), is no contract, and its check is
+followed as any call's is
+
+- *What proves it away:* the caller runs the same `F` on the same value just
+  before the call and leaves on a fault:
+  `const fault = F(limits); if (fault.length > 0) { return … }`
+  (`tests/link/fault_contract_proven`, `fault_contract_unproven`), in a block
+  around the call with no loop or closure between
+  (`fault_contract_loop`). The value is a parameter or a `const` declared
+  once and assigned nowhere (`fault_contract_reassigned`), the call passes
+  that value (`fault_contract_other_value`), the test runs the guard's own
+  `F` (`fault_contract_other_fault`), the fault branch ends in `return`,
+  `throw` or `panic` (`fault_contract_falls_through`), and nothing from the
+  test to the call assigns a field or element, makes an object, or calls
+  anything but a `nish:` function on primitive names or literals
+  (`fault_contract_field_write`, `fault_contract_call_between`), except an
+  `if` with no `else` whose test is that quiet and whose branch never falls
+  through: only its test runs on the way to the call
+  (`fault_contract_early_exit`; `fault_contract_late_exit`, whose branch
+  falls through, stays unproven). The call's other arguments are names or
+  literals. The guard's `panic` stays listed at its own line;
+  a call no longer reaches it. `std/net/handler.ts` checks its limits through
+  one (`handlerCheckLimits`), so `openHttpHandler`, which tests
+  `handlerLimitsFault` first and leaves on a fault (a failed `pollCreate`
+  returns between), proves the limit check of the handler it makes
+
 **`ffi-nul`**: a `string` argument to a [`declare function`](#calling-c) that
 holds a NUL byte, which C would read as the end of the string:
 `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string ``
 
 - *What proves it away:* a literal with no NUL in it, which is not checked and
-  not a site; every other string is checked, and `string | null` checks only
-  the string (`tests/cases/panics_ffi_nul`)
+  not a site; a local searched with `indexOf("\u0000")` against `0` on the
+  branch where it found none, and not assigned since
+  (`tests/link/ffi_nul_guarded`; the search for another string, against
+  another bound, on the other branch or before an assignment proves nothing:
+  `ffi_nul_wrong_needle`, `_wrong_bound`, `_wrong_direction`, `_reassigned`);
+  every other string is checked, and `string | null` checks only the string
+  (`tests/cases/panics_ffi_nul`)
 
 **`ffi-null`**: a `string` result of a [`declare function`](#calling-c) that
 is `NULL`:
@@ -17052,7 +17202,8 @@ site: a call from the [no-panic scope](#the-no-panic-scope) that reaches it is
 refused (NL2458), and the same `panic` in a module of the scope is NL2457. A
 caller in the scope calls the checked twin where there is one, or proves the
 contract at the call where the site is the caller's own, as a
-[`spawn-slot`](#panic-sites) or a [`parallel-length`](#panic-sites) is.
+[`spawn-slot`](#panic-sites), a [`parallel-length`](#panic-sites), a
+[`window`](#panic-sites) or a [`fault`](#panic-sites) is.
 
 ### The compatibility dialect
 

@@ -614,8 +614,15 @@ const RUNTIME_HOST_TEXT_BUDGET = 1024
  * from it; `nish_net_close` +53, which gives the slot's back and frees the stack with
  * its set; `nish_net_read` +44, which gives a drained queue back and unlists the slot.
  * The budget is the next 256-byte boundary, leaving 22.
+ * **13,435 bytes** on 2026-11-26 with clang 18.1.3 on linux-x64, 13,290 on `main` before,
+ * once a listener may ask for wide rings, `NET_LISTEN_RING_WIDE`, and a set splits its
+ * handles by its rings' width (NURING-54; 13,312 to 13,568): `nish_tcp_listen_flags`
+ * +107, the new flag's check and, with `nr_open` inlined, the split's width found from
+ * the slots; `nr_slots` +19, the wide cap; `nr_decode` +18, the set's split read before
+ * the ring; `nish_net_ring_premake` +2. The budget is the next 256-byte boundary, leaving
+ * 133.
  */
-const NET_TEXT_BUDGET = 13312
+const NET_TEXT_BUDGET = 13568
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
@@ -922,8 +929,14 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * `nish_uring_send` 802 to 541, with the fill out of line as `ur_record` 84;
  * `nish_uring_shutdown` +12, `ur_unlink_all` +7 and `ur_release` -6. The budget is the
  * 256-byte boundary above it, leaving 212.
+ * **10,010 bytes** on 2026-11-26 with clang 18.1.3 on linux-x64, 9,907 on `main` before,
+ * once a busy set of several rings sleeps in its first ring (NURING-55; 9,984 to
+ * 10,240): `nish_uring_wait_direct` +98, the busy check, the other rings' submissions
+ * handed to the kernel and the sleep cut to `UR_DIRECT_BUSY_MS`; `nish_uring_wait` +5,
+ * the count of events it hands out. The budget is the next 256-byte boundary, leaving
+ * 230.
  */
-const RUNTIME_URING_TEXT_BUDGET = 9984
+const RUNTIME_URING_TEXT_BUDGET = 10240
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle
@@ -1042,8 +1055,11 @@ export const SQLITE_BUILD_DEFINES = [
  * `column_value` 299 to 174 and `cursor_free` -29, which no longer build or free Mems.
  * The serial types' integer decode is one function, `serial_int`, inlined into both of
  * its callers at -Oz as at -O2; out of line it would be a call per field read.
+ * Measured **10,873 bytes** on 2026-11-26 (565,112 for the unit), 10,631 on 0.48.0
+ * before it, with the page cache's wrapped fetch, rekey, truncate and destroy and the
+ * constructor that installs them (`nishsqlite_pcache_*`, 242).
  */
-const RUNTIME_SQLITE_TEXT_BUDGET = 10752
+const RUNTIME_SQLITE_TEXT_BUDGET = 11008
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena

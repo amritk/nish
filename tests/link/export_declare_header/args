@@ -1,0 +1,1 @@
+--emit-header build/test/link/export_declare_header.h --emit-napi build/test/link/export_declare_header.napi.c

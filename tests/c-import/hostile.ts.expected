@@ -6,7 +6,7 @@
 export const MODE_A: i32 = 0
 export const GREETING: string = "hello"
 
-declare function use_box(b: CPtr): void
+export declare function use_box(b: CPtr): void
 
 /* Not bound:
  *   get$value: its name is not an ASCII identifier

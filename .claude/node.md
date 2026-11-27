@@ -53,7 +53,7 @@ node tests/run.js <sub>  # only cases whose name contains <sub>
 npm run test:update      # write missing .ll goldens
 npm run sync-main        # merge origin/main, regenerate the goldens, stage them
 npm run test:diff        # the full differential set, against the frozen rewrites under Node
-npm run lint             # file names, install scripts, biome check (.claude/linting.md)
+npm run lint             # file names, install scripts, RFC specs, biome check (.claude/linting.md)
 npm run format           # biome format --write
 npm run smoke            # build and run every example with a main
 npm run size-report      # binary size table for examples/add.ts
@@ -64,6 +64,7 @@ node scripts/arrow-verify.mjs [--debug]       # rewrite the corpus and diff ever
 node scripts/arrow-verify.mjs --applied src/  # the same, for a rewrite the tree already carries
 node scripts/gen-diagnostic-codes.mjs --check  # src/codes.ts well formed, every code unique (CI + npm test)
 node scripts/security-scope.mjs                # every std/net, std/crypto, runtime C file in a docs/security/ scope (CI + npm test)
+node scripts/rfc-specs.mjs                     # every RFC std/ cites has a vector spec of its module, or a scripts/rfc-unspecified.txt line (npm run lint)
 node scripts/ci-profile.mjs                  # which check a CI job's wall clock went to
 node scripts/ci-profile.mjs -- npm run test:nish   # ...for any suite command
 ```

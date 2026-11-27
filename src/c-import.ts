@@ -266,6 +266,75 @@ const trimSpaces = (s: string): string => {
   return s.slice(start, end)
 }
 
+/** Where `sub` last starts in `s`, or -1. */
+const lastIndexOf = (s: string, sub: string): i32 => {
+  let last = -1
+  let at = s.indexOf(sub, 0)
+  while (at >= 0) {
+    last = at
+    at = s.indexOf(sub, at + 1)
+  }
+  return last
+}
+
+/** The most of a header a doc comment may span, a cap on the text one is read from. */
+const DOC_MAX: i32 = 65536
+
+/** A blank, newline or `*`: what lies between a doc comment's opening and its first word. */
+const isDocMargin = (c: i32): boolean => c === 32 || c === 9 || c === 10 || c === 13 || c === 42
+
+/**
+ * The text of the doc comment (`/**` to its close) `s` starts with, one line per line of
+ * the comment with its margin (spaces, a leading `*` and the space after it)
+ * removed, joined by `\n`; empty when `s` does not start with one, when it is
+ * a trailing `/**<` comment, or when any line is not one the module's own
+ * comment could hold. A header's doc comment lands on its binding whole or
+ * not at all, so no line of it is dropped or rewritten.
+ */
+const docText = (s: string): string => {
+  if (!s.startsWith("/**") || s.startsWith("/**<") || s.startsWith("/**/")) {
+    return ""
+  }
+  const end = s.indexOf("*/", 3)
+  if (end < 0) {
+    return ""
+  }
+  const raw = splitByte(s.slice(3, end), 10)
+  const lines: string[] = []
+  for (let i = 0; i < raw.length; i++) {
+    let line = raw[i]
+    if (line.endsWith("\r")) {
+      line = line.slice(0, line.length - 1)
+    }
+    line = trimSpaces(line)
+    if (line.startsWith("*")) {
+      line = line.slice(1)
+      line = line.startsWith(" ") ? line.slice(1) : line
+      line = trimSpaces(line)
+    }
+    lines.push(line)
+  }
+  let first = 0
+  let last = lines.length
+  while (first < last && lines[first].length === 0) {
+    first++
+  }
+  while (last > first && lines[last - 1].length === 0) {
+    last--
+  }
+  if (first === last) {
+    return ""
+  }
+  let kept = ""
+  for (let i = first; i < last; i++) {
+    if (!emittable(lines[i], AS_COMMENT)) {
+      return ""
+    }
+    kept = i === first ? lines[i] : `${kept}\n${lines[i]}`
+  }
+  return kept
+}
+
 /** Whether `c` may continue a C identifier. */
 const isIdentByte = (c: i32): boolean =>
   (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95
@@ -713,6 +782,8 @@ class CRecord {
   opaque: boolean = false
   /** For an incomplete struct a bound declaration names: why it stays a `CPtr`, or empty. */
   opaqueWhy: string = ""
+  /** The header's doc comment on a declaration of it, as `docText` gives it, or empty. */
+  doc: string = ""
 
   constructor() {
     this.fieldNames = []
@@ -734,12 +805,15 @@ class CEnum {
   constLines: i32[]
   /** Why the enumerator has no constant, or empty: a value the generator cannot read, or one above 2^63. */
   constWhys: string[]
+  /** The header's doc comment on each enumerator, as `docText` gives it, or empty. */
+  constDocs: string[]
 
   constructor() {
     this.constNames = []
     this.constValues = []
     this.constLines = []
     this.constWhys = []
+    this.constDocs = []
   }
 }
 
@@ -756,6 +830,8 @@ class CFunc {
   noSymbol: boolean = false
   inHeader: boolean = false
   returnsNonNull: boolean = false
+  /** The header's doc comment on it, as `docText` gives it, or empty. */
+  doc: string = ""
 
   constructor() {
     this.paramNames = []
@@ -885,6 +961,12 @@ class Importer {
   curFile: string = ""
   typedefs: StringMap
   typedefTypes: string[]
+  /** Per typedef, the header's doc comment on it, or empty: an opaque struct's lands there. */
+  typedefDocs: string[]
+  /** The header's own text, read once, for the doc comments clang points into it. */
+  headerText: string = ""
+  /** Where each line of `headerText` starts, the first line's at 0: `docAbove` looks a macro's line up here. */
+  headerLineStarts: i32[]
   /** Per typedef, whether it carries its own `aligned` attribute. */
   typedefAligned: boolean[]
   tags: StringMap
@@ -913,6 +995,11 @@ class Importer {
   /** The status `failure` exits with. */
   failureStatus: i32 = 1
   curLine: i32 = 0
+  /**
+   * Whether the function being declared names a class with fields, whose
+   * layout stays in this module (NL2756), so the function is not exported.
+   */
+  pendingLayout: boolean
   lp64: boolean
   charUnsigned: boolean
   hasAllow: boolean = false
@@ -926,6 +1013,8 @@ class Importer {
   constructor(triple: string, headerAbs: string) {
     this.typedefs = new StringMap()
     this.typedefTypes = []
+    this.typedefDocs = []
+    this.headerLineStarts = []
     this.typedefAligned = []
     this.tags = new StringMap()
     this.recordIds = new StringMap()
@@ -946,6 +1035,7 @@ class Importer {
     this.classNames = new StringSet()
     this.fnNames = new StringSet()
     this.pendingOut = []
+    this.pendingLayout = false
     this.doc = new CJson()
     this.triple = triple
     this.lp64 = dataModelOf(triple) === "LP64"
@@ -1142,6 +1232,14 @@ class Importer {
     if (root < 0) {
       return
     }
+    const bytes = readCapped(this.headerAbs)
+    this.headerText = bytes === null ? "" : String.fromBytes(bytes, 0, bytes.length)
+    this.headerLineStarts = [0]
+    let nl = this.headerText.indexOf("\n", 0)
+    while (nl >= 0) {
+      this.headerLineStarts.push(nl + 1)
+      nl = this.headerText.indexOf("\n", nl + 1)
+    }
     const decls = this.inner(root)
     const n = this.count(decls)
     for (let i = 0; i < n; i++) {
@@ -1165,6 +1263,99 @@ class Importer {
       }
       this.trackRest(node)
     }
+  }
+
+  /**
+   * The doc comment clang attached to `node` (its `FullComment` child), read
+   * from the header's own text: clang's offset is the comment's first word,
+   * so the margin before it is walked back to the opening slash. Empty when it has none, or one `docText` refuses.
+   */
+  docOf(node: i32): string {
+    const children = this.inner(node)
+    const n = this.count(children)
+    for (let i = 0; i < n; i++) {
+      const child = this.doc.at(children, i)
+      if (this.kindIs(child, "FullComment")) {
+        const offset = this.member(this.member(this.member(child, "range"), "begin"), "offset")
+        if (offset < 0 || this.doc.kind(offset) !== CJ_NUMBER) {
+          return ""
+        }
+        const text = this.headerText
+        const at = parseInt(this.doc.numberText(offset))
+        if (at < 0 || at > text.length) {
+          return ""
+        }
+        // Back over the margin (blanks, newlines and `*`) to the `/` that opens it.
+        let start = at - 1
+        while (start >= 0 && at - start < DOC_MAX && isDocMargin(text.charCodeAt(start))) {
+          start--
+        }
+        if (start < 0 || text.substring(start, start + 3) !== "/**") {
+          return ""
+        }
+        return docText(text.slice(start, Math.min(text.length, start + DOC_MAX)))
+      }
+    }
+    return ""
+  }
+
+  /**
+   * The doc comment that ends on the header line just above `line` and
+   * starts a line of its own, for a macro, which clang's AST does not hold.
+   */
+  docAbove(line: i32): string {
+    const text = this.headerText
+    const starts = this.headerLineStarts
+    // Line 1 has nothing above it; a line past the header's last has no start.
+    if (line <= 1 || line > starts.length) {
+      return ""
+    }
+    const start = starts[line - 1]
+    const lo = Math.max(0, start - DOC_MAX)
+    let above = text.slice(lo, start - 1)
+    if (above.endsWith("\r")) {
+      above = above.slice(0, above.length - 1)
+    }
+    while (above.length > 0 && (above.endsWith(" ") || above.endsWith("\t"))) {
+      above = above.slice(0, above.length - 1)
+    }
+    if (!above.endsWith("*/")) {
+      return ""
+    }
+    const open = lastIndexOf(above, "/**")
+    if (open < 0 || trimSpaces(above.slice(lastIndexOf(above.slice(0, open), "\n") + 1, open)).length > 0) {
+      return ""
+    }
+    const doc = docText(above.slice(open))
+    // The comment has to end where `above` does: a `*/` before it is another comment's.
+    return doc.length > 0 && above.indexOf("*/", open + 3) === above.length - 2 ? doc : ""
+  }
+
+  /** A struct's doc comment: its own, else the one on the typedef that names it (`typedef struct x x;`). */
+  recordDoc(r: CRecord): string {
+    if (r.doc.length > 0) {
+      return r.doc
+    }
+    const t = this.typedefs.get(r.className, -1)
+    return t >= 0 && t < this.typedefDocs.length ? this.typedefDocs[t] : ""
+  }
+
+  /** `doc` as the module writes it above a binding: a doc comment of one line or several. */
+  docComment(doc: string): string {
+    if (doc.length === 0) {
+      return ""
+    }
+    const lines = splitByte(doc, 10)
+    if (lines.length === 1) {
+      return `/** ${this.word(lines[0], AS_COMMENT)} */\n`
+    }
+    const out = new StringBuilder()
+    out.add("/**\n")
+    for (let i = 0; i < lines.length; i++) {
+      out.add(lines[i].length > 0 ? ` * ${this.word(lines[i], AS_COMMENT)}\n` : " *\n")
+    }
+    out.add(" */\n")
+    return out.toText()
   }
 
   /** Whether `node`'s name is already listed, compared in place so the loop allocates nothing. */
@@ -1201,6 +1392,7 @@ class Importer {
     this.typedefs.set(name, this.typedefTypes.length)
     this.typedefTypes.push(this.qualType(node))
     this.typedefAligned.push(aligned)
+    this.typedefDocs.push(this.curFile === this.headerAbs ? this.docOf(node) : "")
     // `typedef struct { ... } name;`: the tag has no name of its own, and
     // clang spells it `struct name` from here on.
     const owned = this.member(this.doc.at(children, 0), "ownedTagDecl")
@@ -1274,6 +1466,9 @@ class Importer {
     if (inHeader && !r.declaredInHeader) {
       r.declaredInHeader = true
       r.headerLine = this.curLine
+    }
+    if (inHeader && r.doc.length === 0) {
+      r.doc = this.docOf(node)
     }
     if (!complete || r.complete) {
       return
@@ -1357,6 +1552,7 @@ class Importer {
         e.constValues.push(v)
         e.constLines.push(this.curLine)
         e.constWhys.push(why)
+        e.constDocs.push(inHeader ? this.docOf(child) : "")
         nextWhy = why
         // The implicit value after 2^63 - 1 is 2^63, which an i64 does not hold.
         const i64Max: i64 = parseI64("9223372036854775807")
@@ -1427,6 +1623,7 @@ class Importer {
         const first = this.funcs[seen]
         if (inHeader) {
           first.inHeader = true
+          first.doc = first.doc.length > 0 ? first.doc : this.docOf(node)
         }
         const again = this.inner(node)
         for (let i = 0; i < this.count(again); i++) {
@@ -1452,6 +1649,7 @@ class Importer {
     f.noSymbol = this.textIs(node, "storageClass", "static") || this.flag(node, "inline")
     f.inHeader = inHeader
     f.line = this.curLine
+    f.doc = inHeader ? this.docOf(node) : ""
     const children = this.inner(node)
     const n = this.count(children)
     for (let i = 0; i < n; i++) {
@@ -2060,6 +2258,9 @@ class Importer {
     if (t.base === BASE_RECORD) {
       const index = this.recordOf(t.tag)
       if (this.fits(index) || (index >= 0 && this.records[index].opaque)) {
+        if (!this.records[index].opaque) {
+          this.pendingLayout = true
+        }
         return `${this.word(this.records[index].className, AS_IDENT)}${orNull}`
       }
       return `CPtr${orNull}`
@@ -3015,7 +3216,7 @@ class Importer {
       }
       fields.push(`  ${this.word(r.fieldNames[i], AS_IDENT)}: ${this.fieldType(t)}\n`)
     }
-    out.add(`declare class ${this.word(r.className, AS_IDENT)} {\n`)
+    out.add(`${this.docComment(this.recordDoc(r))}declare class ${this.word(r.className, AS_IDENT)} {\n`)
     for (let i = 0; i < fields.length; i++) {
       out.add(fields[i])
     }
@@ -3255,6 +3456,7 @@ class Importer {
       const f = this.funcs[i]
       if (this.selected(f)) {
         this.pendingOut = []
+        this.pendingLayout = false
         let decl = this.functionDecl(f, true)
         if (!decl.startsWith("!") && (isNameReserved(f.name) || isOutName(f.name))) {
           decl = "!its name is a word or type Nish reserves"
@@ -3263,7 +3465,15 @@ class Importer {
           report.push(reportLine(f.name, decl.slice(1)))
           reportLines.push(f.inHeader ? f.line : 1000000000 + i)
         } else {
-          functions.add(`${decl}\n`)
+          // Another module may import a function whose types are all its
+          // own to pass: an out class or a class with fields stays here.
+          const exported = this.pendingOut.length === 0 && !this.pendingLayout
+          const at = decl.indexOf("declare function ")
+          const shown =
+            exported && at >= 0 && at <= decl.length
+              ? `${decl.substring(0, at)}export ${decl.slice(at)}`
+              : decl
+          functions.add(`${this.docComment(f.doc)}${shown}\n`)
           names.set(f.name, owners.length)
           owners.push(`the function \`${f.name}\``)
           for (let j = 0; j < this.pendingOut.length; j++) {
@@ -3315,7 +3525,9 @@ class Importer {
           reportLines.push(r.line)
         }
       } else if (r.opaque) {
-        out.add(`declare class ${this.word(r.className, AS_IDENT)} {}\n\n`)
+        out.add(
+          `${this.docComment(this.recordDoc(r))}export declare class ${this.word(r.className, AS_IDENT)} {}\n\n`
+        )
         names.set(r.className, owners.length)
         owners.push(`the struct \`${r.key}\``)
       } else if (r.opaqueWhy.length > 0) {
@@ -3352,7 +3564,7 @@ class Importer {
           reportLines.push(e.constLines[j])
         } else {
           consts.add(
-            `export const ${this.word(name, AS_IDENT)}: ${this.word(type, AS_IDENT)} = ${this.word(`${e.constValues[j]}`, AS_INTEGER)}\n`
+            `${this.docComment(j < e.constDocs.length ? e.constDocs[j] : "")}export const ${this.word(name, AS_IDENT)}: ${this.word(type, AS_IDENT)} = ${this.word(`${e.constValues[j]}`, AS_INTEGER)}\n`
           )
         }
       }
@@ -3364,10 +3576,12 @@ class Importer {
         report.push(reportLine(m.name, why))
         reportLines.push(m.line)
       } else if (m.type === "string") {
-        consts.add(`export const ${this.word(m.name, AS_IDENT)}: string = ${this.word(m.body, AS_STRING)}\n`)
+        consts.add(
+          `${this.docComment(this.docAbove(m.line))}export const ${this.word(m.name, AS_IDENT)}: string = ${this.word(m.body, AS_STRING)}\n`
+        )
       } else {
         consts.add(
-          `export const ${this.word(m.name, AS_IDENT)}: ${this.word(m.type, AS_IDENT)} = ${this.word(`${m.value}`, AS_INTEGER)}\n`
+          `${this.docComment(this.docAbove(m.line))}export const ${this.word(m.name, AS_IDENT)}: ${this.word(m.type, AS_IDENT)} = ${this.word(`${m.value}`, AS_INTEGER)}\n`
         )
       }
     }

@@ -12,7 +12,8 @@ program runs and stops the program if it fails. Under the default each is a
 compile error: an `i32` sum that may overflow, an index the compiler cannot
 prove in range, a string passed to C that may hold a NUL, a C pointer that may
 be `NULL`. A guard removes most of them: a bound on the sum's inputs, a test of
-the index against `length`, a string literal, a C result declared `| null` and
+the index against `length`, a string literal or a string the code turned
+away when `s.indexOf("\u0000") >= 0`, a C result declared `| null` and
 narrowed.
 
 Each direction starts from an ordinary module that `export`s the functions to
@@ -1561,7 +1562,12 @@ wasm32 build without `--profile wasi` has no C library, so `cErrno` is refused
 there. The rules are in
 [`cErrno`](../../reference/language/declarations.md#cerrno-the-errno-a-c-call-left).
 
-A declared function has no body and cannot be exported. Calling C has a cost
+A declared function has no body. One module can bind a library and export
+its functions and opaque classes for the others to import: each module that
+calls one is charged `ffi`, and a `declare class` with fields stays in the
+module that declares it, as
+[A binding exported from one module](../../reference/language/declarations.md#a-binding-exported-from-one-module)
+sets out. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
 so it drops the optimisation facts it would otherwise give the caller and
 everything that calls it. The rules are in

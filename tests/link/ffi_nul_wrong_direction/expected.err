@@ -1,0 +1,1 @@
+main.ts:6:19: error: `ffi-nul` may panic here

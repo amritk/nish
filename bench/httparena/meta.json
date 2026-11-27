@@ -1,0 +1,33 @@
+{
+  "display_name": "nish",
+  "language": "Nish",
+  "engine": "nish",
+  "type": "emerging",
+  "mode": "standard",
+  "description": "Nish, a statically compiled TypeScript subset, on its standard library's nish/net/http-server: one process a core under nish/net/prefork, pinned, each on one poll loop over a kernel-steered SO_REUSEPORT listener. HTTP/1.1 on 8080 and h2c on 8082 through the same server and router; JSON written by JsonWriter on every request and gzipped through nish/net/http-compress; Postgres through nish/net/postgres.",
+  "repo": "https://github.com/amritk/nish",
+  "website": "https://github.com/amritk/nish",
+  "enabled": true,
+  "tests": [
+    "baseline",
+    "pipelined",
+    "limited-conn",
+    "async",
+    "latency-1m",
+    "latency-10k",
+    "json-comp",
+    "baseline-h2c",
+    "json-h2c",
+    "async-db",
+    "connections-1m"
+  ],
+  "maintainers": [
+    "amritk"
+  ],
+  "completeness": {
+    "routing": true,
+    "middleware": true,
+    "request": true,
+    "response": true
+  }
+}

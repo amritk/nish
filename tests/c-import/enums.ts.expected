@@ -10,14 +10,16 @@ export const HIGH_A: u32 = 2147483648
 export const HIGH_B: u32 = 2147483649
 export const CAST_A: i32 = 3
 export const CAST_B: i32 = 4
+/** The first. */
 export const DOC_A: i32 = 5
+/** The second, implicit. */
 export const DOC_B: i32 = 6
 
-declare function take_small(s: i32): i32
-declare function take_high(h: u32): i32
-declare function take_cast(c: i32): i32
-declare function read_names(names: CPtr | null, count: i32): i32
-declare function take_high_again(h: u32): i32
+export declare function take_small(s: i32): i32
+export declare function take_high(h: u32): i32
+export declare function take_cast(c: i32): i32
+export declare function read_names(names: CPtr | null, count: i32): i32
+export declare function take_high_again(h: u32): i32
 
 /* Not bound:
  *   WIDE_A: an enumerator of an enum whose values need more than 4 bytes, or cannot be read

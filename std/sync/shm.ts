@@ -175,6 +175,9 @@ const shmDone = (rc: i32): Result<void, ShmError> => {
  * Whether `name` keeps `createRegion`'s rules: 1 to 30 of
  * `A-Z a-z 0-9 . _ -`, not starting with `.`. The runtime checks them too;
  * checking here answers a NUL byte as `SHM_INVALID` before C would read it.
+ * Each caller also asks `name.indexOf("\u0000") < 0` itself, which is what
+ * proves the name NUL-free at the `declare function` call, so no `ffi-nul`
+ * panic is left there.
  */
 const shmNameOk = (name: string): boolean => {
   const n: i32 = toI32(name.length)
@@ -211,7 +214,7 @@ const shmNameOk = (name: string): boolean => {
  *   system gave
  */
 export const createRegion = (name: string, bytes: i32): Result<SharedRegion, ShmError> => {
-  if (!shmNameOk(name)) {
+  if (name.indexOf("\u0000") >= 0 || !shmNameOk(name)) {
     return Err(new ShmError(SHM_INVALID))
   }
   const h: i32 = nishshm_create(name, bytes)
@@ -235,7 +238,7 @@ export const createRegion = (name: string, bytes: i32): Result<SharedRegion, Shm
  *   system gave
  */
 export const openRegion = (name: string): Result<SharedRegion, ShmError> => {
-  if (!shmNameOk(name)) {
+  if (name.indexOf("\u0000") >= 0 || !shmNameOk(name)) {
     return Err(new ShmError(SHM_INVALID))
   }
   const h: i32 = nishshm_open(name)
@@ -254,7 +257,7 @@ export const openRegion = (name: string): Result<SharedRegion, ShmError> => {
  *   `SHM_INVALID`, code 95 on wasi, or the errno the system gave
  */
 export const unlinkRegion = (name: string): Result<void, ShmError> => {
-  if (!shmNameOk(name)) {
+  if (name.indexOf("\u0000") >= 0 || !shmNameOk(name)) {
     return Err(new ShmError(SHM_INVALID))
   }
   return shmDone(nishshm_unlink(name))

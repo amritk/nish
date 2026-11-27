@@ -1,0 +1,65 @@
+PASS  the stand-in PostgreSQL listens
+PASS  the entry starts and listens on both ports
+PASS  GET /baseline11 answers 200
+PASS  with the sum of a random a and b
+PASS  as text/plain
+PASS  POST /baseline11 adds its body's number
+PASS  and reads a lower-cased content-length
+PASS  a chunked POST answers 200
+PASS  with the number its chunks spell added
+PASS  a request split inside its request line is answered as one
+PASS  and one split after its request line
+PASS  and a POST split between its head and its body
+PASS  and one split in three places
+PASS  16 pipelined requests in one write are answered in the order sent
+PASS  32 overlapping /delay requests are each answered with their ms
+PASS  none of them sooner than its ms
+PASS  and all of them in under 3 s, not the 11.5 s their delays add up to
+PASS  /delay/abc answers 400
+PASS  /json/2?m=3 answers 200
+PASS  with the first two items, each total times m
+PASS  as application/json
+PASS  and with no Accept-Encoding, uncompressed
+PASS  with Accept-Encoding gzip it is gzip
+PASS  still application/json
+PASS  whose inflation is the uncompressed body
+PASS  and smaller than it
+PASS  /json/abc answers 400
+PASS  an m of 18 digits is capped at a million
+PASS  /async-db answers 200
+PASS  with the rows priced in [min, max], up to the limit, as the exact body
+PASS  as application/json
+PASS  without parameters, the 5 rows priced in min 10 .. max 50
+PASS  from the first row
+PASS  without a limit, 50 of the 60 rows in range
+PASS  a limit of 500 is 50
+PASS  and one of 0 is 1
+PASS  with the query refused it answers 200
+PASS  with no items
+PASS  and the next query is answered again
+PASS  another path answers 404
+PASS  h2c /baseline2 answers :status 200
+PASS  with the sum
+PASS  h2c /json/2?m=3 answers :status 200
+PASS  with the exact body
+PASS  GET /baseline11 on 127.0.0.2 answers 55
+PASS  GET /baseline11 on 127.0.0.32 answers 55
+PASS  GET /baseline11 on 127.0.0.160 answers 55
+PASS  200 keep-alive connections are each answered
+PASS  and each again after 6 s idle, past the 5 s no idle close may fall under
+PASS  one worker's HTTP/1.1 slots are the most one server holds
+PASS  64 workers' are each 4 times its even share
+PASS  never fewer than 16384
+PASS  no workers counts as one
+PASS  and fewer than none as one
+PASS  3 workers' share is clamped to the most
+PASS  4 workers' share, under it, is not
+PASS  a share that does not divide evenly rounds up
+PASS  244 workers' share is above the fewest
+PASS  245 workers' is raised to it
+PASS  and slots above 0 are as given
+PASS  SIGTERM stops the server
+PASS  slots 0 gave its one worker the most HTTP/1.1 slots
+PASS  and h2c 16384
+PASS  and it exits 0
+httparena entry: 64 passed, 0 failed, 0 skipped

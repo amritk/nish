@@ -15,6 +15,7 @@ four listeners:
 | Listener | Carrier it drives | Port |
 | --- | --- | --- |
 | HTTP/1.1 cleartext | `Http1Server` (`std/net/http1-server.ts`) | TCP |
+| HTTP/1.1 over TLS | `Http1TlsServer` (`std/net/http1-server.ts`), on a port of its own (§4.2) | TCP |
 | HTTP/2 cleartext (h2c) | **new** `Http2CleartextServer` (`std/net/http2-cleartext.ts`) over `Http2Connection` | TCP |
 | HTTP/2 over TLS | `Http2TlsServer` (`std/net/http2-tls.ts`) | TCP |
 | HTTP/3 | `Http3Server` (`std/net/http3-server.ts`) | UDP |
@@ -192,6 +193,7 @@ export class HttpServer {
   constructor(limits: HttpServerLimits, router: Router);
 
   listenHttp1(fd: i32, config: Http1Config, slots: i32): void;
+  listenHttp1Tls(fd: i32, tls: TlsServerConfig, config: Http1Config, slots: i32): void;
   listenH2c(fd: i32, config: Http2Config, slots: i32): void;
   listenHttp2Tls(fd: i32, tls: TlsServerConfig, config: Http2Config, slots: i32): void;
   listenHttp3(fd: i32, quic: QuicServerConfig, config: Http3Config, slots: i32,
@@ -201,6 +203,8 @@ export class HttpServer {
 - Each kind of listener can be configured at most once. A second call
   panics.
 - `listenHttp3` panics when `config.webtransportSessions > 0`.
+- `listenHttp1Tls` panics as `listenHttp1` does, and when the two HTTP/1.1
+  listeners' `slots` together pass 1048576.
 - `listenH2c` and `listenHttp2Tls` panic when
   `config.enableConnectProtocol` is set.
 - These are configuration mistakes, found at start-up, so they panic and do
@@ -558,8 +562,10 @@ length runs in bounded memory.
   `Upgrade: h2c` that arrives on an h2c port fails the preface check and is
   closed. The same request arriving on the HTTP/1.1 port is served as plain
   HTTP/1.1, with no upgrade.
-- **No sniffing.** An h2c port never falls back to HTTP/1.1. A deployment
-  that wants both runs two ports.
+- **No sniffing, unless a listener opts in.** An h2c port (`listenH2c`)
+  never falls back to HTTP/1.1, and a default HTTP/1.1 port reads nothing
+  ahead. A deployment that wants both on one port passes `listenHttp1` an
+  `Http2Config` as its fourth argument (§4.3); without it, it runs two ports.
 
 ### 4.1 Finding F1: the preface and "close with no response"
 
@@ -597,15 +603,58 @@ a carrier change. `Http2TlsServer` closes any slot whose ALPN is not `h2`
 with close_notify, and it has no way to hand that slot to an HTTP/1.1
 server. G7 therefore offers:
 
-- HTTP/1.1 over cleartext `Http1Server` only. `Http1TlsServer` is left out
-  of the façade, because a second TLS port for HTTP/1.1 doubles the
-  certificate and port setup for little gain.
+- HTTP/1.1 over cleartext `Http1Server`, and HTTP/1.1 over TLS
+  `Http1TlsServer` (`listenHttp1Tls`) on a port of its own. The TLS
+  listener takes ALPN `http/1.1` or none; a client whose handshake chose
+  another protocol is shut down, never handed to the HTTP/2 listener. Its
+  requests say `secure` true, and its responses carry Alt-Svc as HTTP/2
+  over TLS ones do. The two HTTP/1.1 listeners share one slot table, so
+  their `slots` together are at most 1048576.
 - HTTP/2 over TLS on its own port.
+
+The façade checks the chosen protocol itself before it asks the carrier for
+a request (`h1Next`). The carrier's own refusal reads its TLS state, which
+its shutdown moves past open, so on its own it would hand on a request a
+client sent right after its Finished on a connection whose ALPN was `h2`.
 
 ALPN fallback on one port is deferred until wp34-finish lands, and it is a
 change to `http2-tls.ts` that its owner makes. Behind a TLS-terminating
 proxy, which is the common deployment, this costs nothing: the proxy speaks
 TLS and talks to h2c or HTTP/1.1 upstream.
+
+### 4.3 One cleartext port for HTTP/1.1 and h2c (issue #2012)
+
+The owner's decision of 2026-11-20: opt in per listener, off by default.
+`listenHttp1(fd, config, slots, h2c)` with an `Http2Config` makes the h2c
+carrier with `slots` slots of its own on the same socket, beside the
+HTTP/1.1 ones, and registers no second listener: `Http1Server` accepts every
+connection, and the façade decides each one before HTTP/1.1 reads a byte.
+
+1. A new slot reads into its own 24-byte array, as the h2c carrier does
+   (§4.1 step 1), and compares each byte as it arrives with the preface.
+2. At the first byte that differs, or the peer's end, the slot is
+   HTTP/1.1's: the bytes read so far are fed to its `Http1Connection` with
+   `feed`, as `readable` feeds what it reads, and the rest of the socket is
+   read by `Http1Server` as on any other port. A request whose method is
+   `PRI` matches the preface for 11 bytes (`PRI * HTTP/`), differs at its
+   twelfth (`PRI * HTTP/1.1` against `PRI * HTTP/2.0`), and is answered
+   exactly as a default port answers it.
+3. When all 24 match, the socket leaves the loop and `Http1Server`, unclosed
+   (`Http1Server.release`), and the h2c carrier takes it with the 24 bytes
+   (`Http2CleartextServer.adopt`), which feeds them to `Http2Connection` as
+   §4.1 step 3 does. The slot is served at once, so the server's SETTINGS go
+   out in the same turn.
+4. A peer that sends part of the preface and then nothing holds its slot and
+   24 bytes until `prefaceTimeout` after accept, when `expireAll` closes it;
+   one that sends nothing at all holds it until `idleTimeout`, as on a
+   default port.
+
+The two carriers gain one method each, `release` and `adopt`, both recorded
+([http1-codec.md](security/http1-codec.md),
+[http2-cleartext.md](security/http2-cleartext.md)); neither codec changes.
+There is still no `Upgrade: h2c`, and a TLS port still serves one protocol
+(F2). The façade's record is [http-server.md](security/http-server.md)
+(HTTPSRV-24).
 
 ## 5. Alt-Svc
 
@@ -762,9 +811,9 @@ a warmed run. For HTTP/3 that pin is new. Today `net_http3_server` pins only
 
 | Version | Not offered by G7 |
 | --- | --- |
-| HTTP/1.1 | TLS (F2); `Upgrade` and WebSocket (stay on `Http1Server`, [WebSocket](guide/using-nish/websocket.md)); `Upgrade: h2c` (served as plain HTTP/1.1) |
+| HTTP/1.1 | `Upgrade` and WebSocket (stay on `Http1Server`, [WebSocket](guide/using-nish/websocket.md)); `Upgrade: h2c` (served as plain HTTP/1.1) |
 | HTTP/2 over TLS | HTTP/1.1 fallback on the port (F2); server push; extended CONNECT; the ALTSVC frame; RFC 9218 priorities |
-| h2c | `Upgrade: h2c` and 101; HTTP/1.1 or sniffing on the port; any response to a bad preface; confidentiality of any kind |
+| h2c | `Upgrade: h2c` and 101; HTTP/1.1 on an h2c port (`listenHttp1` with `h2c` serves both, §4.3); any response to a bad preface; confidentiality of any kind |
 | HTTP/3 | WebTransport, datagrams and extended CONNECT; any ALPN but `h3` |
 | all | response trailers on HTTP/1.1 and HTTP/3 (`trailers` panics there; HTTP/2 has them since WP72 S2); 1xx and 103 Early Hints; streaming request bodies on HTTP/1.1 and HTTP/3 (held whole up to `maxBody`, 413 above; HTTP/2 has them per route since WP72 S6a, §3.5); async `serve` over the façade (follow-up, §2.5) |
 
@@ -842,6 +891,19 @@ fixtures in `tests/link/net_interop_server`. When `curl` with HTTP/3
 exists, one GET goes over it as a smoke check; otherwise a skip line is
 printed. The guide page, `docs/guide/using-nish/http-server.md` (with its
 route in `scalar.config.json`), lands with g7-facade.
+
+### 8.3 `tests/link/net_http_server_h1_tls` (g7-h1-tls)
+
+| Case | Expect |
+| --- | --- |
+| GET `/hello`, GET `/users/42`, POST `/echo` and an unrouted path over TLS with ALPN `http/1.1` | served, `secure` true, Alt-Svc on `/hello`; a plain GET on the cleartext listener says `secure` false |
+| a TLS client that offers no ALPN | served |
+| `Arena.used()` over 32 warmed requests | flat |
+| a client offering only `h2`, against a listener that offers only `http/1.1` | alert 120 (no_application_protocol), closed, nothing taken |
+| a client offering only `h2`, against a listener that offers `http/1.1` and `h2`, with a GET sent after its Finished | close_notify, closed, nothing taken |
+| `idleTimeout` and a body stalled past `bodyTimeout` | closed; the stalled request never reaches `take` |
+| `drain` | open connections closed |
+| negative: a second `listenHttp1Tls`; `wait` with the listener; `slots` past 1048576 with `listenHttp1`'s | panics (`net_http_server_h1_tls_twice`, `_wait`, `_slots`) |
 
 ## 9. Security
 

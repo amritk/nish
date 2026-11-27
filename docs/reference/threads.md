@@ -14,6 +14,9 @@ import {
   Mutex,
   MutexGuard,
   ThreadScope,
+  atomicArrayLengthFault,
+  atomicI32ArrayChecked,
+  atomicI64ArrayChecked,
   parallelFrom,
   parallelMap,
   parallelMapInto,
@@ -61,6 +64,24 @@ export const main = (): i32 => {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="atomic​Array​Length​Fault" icon="phosphor/regular/function" href="#atomicarraylengthfault">
+
+Why an atomic array cannot be made `length` long, or "" when it can: a negative length is refused with the message `new Array` of one prints, so the two refuse it alike.
+
+</scalar-card>
+
+<scalar-card title="atomic​I32​Array​Checked" icon="phosphor/regular/function" href="#atomici32arraychecked">
+
+A new `AtomicI32Array` of `length` elements, each `0`, or why one cannot be made: the twin of its constructor for a length read from input, which refuses a negative length with the message the constructor would panic with, rather than panicking.
+
+</scalar-card>
+
+<scalar-card title="atomic​I64​Array​Checked" icon="phosphor/regular/function" href="#atomici64arraychecked">
+
+A new `AtomicI64Array` of `length` elements, each `0`, or why one cannot be made: the twin of its constructor for a length read from input, which refuses a negative length with the message the constructor would panic with, rather than panicking.
+
+</scalar-card>
 
 <scalar-card title="parallel​From" icon="phosphor/regular/function" href="#parallelfrom">
 
@@ -197,6 +218,78 @@ parameters and cannot see through a named function.
 </scalar-detail>
 
 ## Functions
+
+### atomicArrayLengthFault
+
+Why an atomic array cannot be made `length` long, or "" when it can: a
+negative length is refused with the message `new Array` of one prints, so
+the two refuse it alike.
+
+```ts
+const atomicArrayLengthFault: (length: i32) => string
+```
+
+<scalar-field name="length" type="i32" required>
+
+the length an atomic array would be made with.
+
+</scalar-field>
+
+<scalar-field name="returns" type="string">
+
+the reason the length is refused, or "" when it is not.
+
+</scalar-field>
+
+### atomicI32ArrayChecked
+
+A new `AtomicI32Array` of `length` elements, each `0`, or why one cannot
+be made: the twin of its constructor for a length read from input, which
+refuses a negative length with the message the constructor would panic
+with, rather than panicking.
+
+```ts
+const atomicI32ArrayChecked: (
+  length: i32,
+) => Result<AtomicI32Array, string>
+```
+
+<scalar-field name="length" type="i32" required>
+
+how many elements.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;AtomicI32Array, string&gt;">
+
+the array, or the reason the length is refused.
+
+</scalar-field>
+
+### atomicI64ArrayChecked
+
+A new `AtomicI64Array` of `length` elements, each `0`, or why one cannot
+be made: the twin of its constructor for a length read from input, which
+refuses a negative length with the message the constructor would panic
+with, rather than panicking.
+
+```ts
+const atomicI64ArrayChecked: (
+  length: i32,
+) => Result<AtomicI64Array, string>
+```
+
+<scalar-field name="length" type="i32" required>
+
+how many elements.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;AtomicI64Array, string&gt;">
+
+the array, or the reason the length is refused.
+
+</scalar-field>
 
 ### parallelFrom
 

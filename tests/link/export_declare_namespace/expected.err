@@ -1,0 +1,1 @@
+Namespace imports (`import * as sys`) are not supported; import functions by name

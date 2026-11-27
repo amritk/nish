@@ -8,9 +8,9 @@ declare class plain {
   y: u32
 }
 
-declare function use_p(v: CPtr): i32
+export declare function use_p(v: CPtr): i32
 declare function use_plain(v: plain): i32
-declare function use_la(v: CPtr): i32
+export declare function use_la(v: CPtr): i32
 
 /* Not bound:
  *   struct p: packed or aligned layout (PackedAttr), which a declare class does not follow

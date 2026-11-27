@@ -1,0 +1,1 @@
+main.ts:7:10: error: `main` reaches `ffi`, which the capability policy does not grant (`--deny ffi`); the chain that reaches it: main.ts:7:10 calls countFrom, lib.ts:6:13 calls counter_new
