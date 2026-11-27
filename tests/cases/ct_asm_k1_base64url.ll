@@ -1,9 +1,5 @@
 %struct.nish_array = type { i64, i64, i8* }
 
-@.str.0 = private unnamed_addr constant { i64, [47 x i8] } { i64 46, [47 x i8] c"value out of range: expected integer<0, 65535>\00" }, align 8
-
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
-
 define internal noundef i32 @base64urlRangeMask(i32 noundef %c, i32 noundef %lo, i32 noundef %hi) #0 {
 entry:
   %d.addr = alloca i32, align 4
@@ -46,63 +42,66 @@ entry:
   ret i32 %18
 }
 
-define noundef i32 @base64urlSextetOf(i32 noundef %c) #1 {
+define noundef i32 @base64urlSextetOf(i32 noundef %code) #0 {
 entry:
+  %c.addr = alloca i32, align 4
   %upper.addr = alloca i32, align 4
   %lower.addr = alloca i32, align 4
   %digit.addr = alloca i32, align 4
   %dash.addr = alloca i32, align 4
   %underscore.addr = alloca i32, align 4
   %value.addr = alloca i32, align 4
-  %0 = icmp ult i32 %c, 65536
-  br i1 %0, label %rng.ok, label %rng.fail
-
-rng.fail:
-  call void @nish_panic(i8* bitcast ({ i64, [47 x i8] }* @.str.0 to i8*))
-  unreachable
-
-rng.ok:
-  %1 = call i32 @base64urlRangeMask(i32 %c, i32 65, i32 90)
-  store i32 %1, i32* %upper.addr, align 4
-  %2 = call i32 @base64urlRangeMask(i32 %c, i32 97, i32 122)
-  store i32 %2, i32* %lower.addr, align 4
-  %3 = call i32 @base64urlRangeMask(i32 %c, i32 48, i32 57)
-  store i32 %3, i32* %digit.addr, align 4
-  %4 = call i32 @base64urlRangeMask(i32 %c, i32 45, i32 45)
-  store i32 %4, i32* %dash.addr, align 4
-  %5 = call i32 @base64urlRangeMask(i32 %c, i32 95, i32 95)
-  store i32 %5, i32* %underscore.addr, align 4
-  %6 = load i32, i32* %upper.addr, align 4
-  %7 = sub nsw i32 %c, 65
-  %8 = and i32 %6, %7
-  %9 = load i32, i32* %lower.addr, align 4
-  %10 = sub nsw i32 %c, 71
-  %11 = and i32 %9, %10
-  %12 = or i32 %8, %11
-  %13 = load i32, i32* %digit.addr, align 4
-  %14 = add nsw i32 %c, 4
-  %15 = and i32 %13, %14
-  %16 = or i32 %12, %15
-  %17 = load i32, i32* %dash.addr, align 4
-  %18 = and i32 %17, 62
-  %19 = or i32 %16, %18
-  %20 = load i32, i32* %underscore.addr, align 4
-  %21 = and i32 %20, 63
-  %22 = or i32 %19, %21
-  store i32 %22, i32* %value.addr, align 4
-  %23 = load i32, i32* %value.addr, align 4
-  %24 = load i32, i32* %upper.addr, align 4
-  %25 = load i32, i32* %lower.addr, align 4
-  %26 = or i32 %24, %25
-  %27 = load i32, i32* %digit.addr, align 4
-  %28 = or i32 %26, %27
-  %29 = load i32, i32* %dash.addr, align 4
-  %30 = or i32 %28, %29
-  %31 = load i32, i32* %underscore.addr, align 4
-  %32 = or i32 %30, %31
-  %33 = xor i32 %32, -1
-  %34 = or i32 %23, %33
-  ret i32 %34
+  %0 = and i32 %code, 65535
+  store i32 %0, i32* %c.addr, align 4
+  %1 = load i32, i32* %c.addr, align 4
+  %2 = call i32 @base64urlRangeMask(i32 %1, i32 65, i32 90)
+  store i32 %2, i32* %upper.addr, align 4
+  %3 = load i32, i32* %c.addr, align 4
+  %4 = call i32 @base64urlRangeMask(i32 %3, i32 97, i32 122)
+  store i32 %4, i32* %lower.addr, align 4
+  %5 = load i32, i32* %c.addr, align 4
+  %6 = call i32 @base64urlRangeMask(i32 %5, i32 48, i32 57)
+  store i32 %6, i32* %digit.addr, align 4
+  %7 = load i32, i32* %c.addr, align 4
+  %8 = call i32 @base64urlRangeMask(i32 %7, i32 45, i32 45)
+  store i32 %8, i32* %dash.addr, align 4
+  %9 = load i32, i32* %c.addr, align 4
+  %10 = call i32 @base64urlRangeMask(i32 %9, i32 95, i32 95)
+  store i32 %10, i32* %underscore.addr, align 4
+  %11 = load i32, i32* %upper.addr, align 4
+  %12 = load i32, i32* %c.addr, align 4
+  %13 = sub nsw i32 %12, 65
+  %14 = and i32 %11, %13
+  %15 = load i32, i32* %lower.addr, align 4
+  %16 = load i32, i32* %c.addr, align 4
+  %17 = sub nsw i32 %16, 71
+  %18 = and i32 %15, %17
+  %19 = or i32 %14, %18
+  %20 = load i32, i32* %digit.addr, align 4
+  %21 = load i32, i32* %c.addr, align 4
+  %22 = add nsw i32 %21, 4
+  %23 = and i32 %20, %22
+  %24 = or i32 %19, %23
+  %25 = load i32, i32* %dash.addr, align 4
+  %26 = and i32 %25, 62
+  %27 = or i32 %24, %26
+  %28 = load i32, i32* %underscore.addr, align 4
+  %29 = and i32 %28, 63
+  %30 = or i32 %27, %29
+  store i32 %30, i32* %value.addr, align 4
+  %31 = load i32, i32* %value.addr, align 4
+  %32 = load i32, i32* %upper.addr, align 4
+  %33 = load i32, i32* %lower.addr, align 4
+  %34 = or i32 %32, %33
+  %35 = load i32, i32* %digit.addr, align 4
+  %36 = or i32 %34, %35
+  %37 = load i32, i32* %dash.addr, align 4
+  %38 = or i32 %36, %37
+  %39 = load i32, i32* %underscore.addr, align 4
+  %40 = or i32 %38, %39
+  %41 = xor i32 %40, -1
+  %42 = or i32 %31, %41
+  ret i32 %42
 }
 
 define void @base64urlEncodeGroup(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %data, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out) #1 {
@@ -184,7 +183,7 @@ for.end:
   ret void
 }
 
-define noundef i32 @base64urlDecodeGroup(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %text, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out) #1 {
+define noundef i32 @base64urlDecodeGroup(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %text, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out) #2 {
 entry:
   %bad.addr = alloca i32, align 4
   %s0.addr = alloca i32, align 4
@@ -282,7 +281,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #1 = { nounwind "probe-stack"="inline-asm" }
-attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!13, !14, !15, !16, !17}
 !0 = !{!"nish array"}

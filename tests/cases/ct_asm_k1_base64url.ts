@@ -24,7 +24,7 @@
 // each function to the module on every sextet, every byte and generated groups,
 // so a copy that drifts from std/crypto/base64url.ts fails there.
 // ct-check: base64urlCharOf secret=v
-// ct-check: base64urlSextetOf secret=c
+// ct-check: base64urlSextetOf secret=code
 // ct-check: base64urlEncodeGroup secret=contents
 // ct-check: base64urlDecodeGroup secret=contents
 
