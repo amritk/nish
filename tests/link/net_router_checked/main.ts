@@ -54,7 +54,7 @@ export const main = (): i32 => {
     toI32(method.length),
     target,
     0,
-    end + 1,
+    9,
     params,
   );
   console.log(
@@ -71,6 +71,30 @@ export const main = (): i32 => {
   );
   console.log(
     `negative method start: ${negative === ROUTER_NOT_FOUND ? "not found" : `route ${negative}`}`,
+  );
+  const negativeTarget: i32 = router.tryMatch(
+    method,
+    0,
+    toI32(method.length),
+    target,
+    -1,
+    end,
+    params,
+  );
+  console.log(
+    `negative target start: ${negativeTarget === ROUTER_NOT_FOUND ? "not found" : `route ${negativeTarget}`}`,
+  );
+  const reversed: i32 = router.tryMatch(
+    method,
+    0,
+    toI32(method.length),
+    target,
+    end,
+    1,
+    params,
+  );
+  console.log(
+    `reversed target: ${reversed === ROUTER_NOT_FOUND ? "not found" : `route ${reversed}`}`,
   );
   console.log(
     `off the table: ${router.tryParamCount(99)}, ${router.tryParamCount(-1)}`,

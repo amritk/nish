@@ -5,9 +5,9 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1048,
+  "total": 1049,
   "explicit": {
-    "kept": 359,
+    "kept": 360,
     "toFix": 7
   },
   "modules": {
@@ -200,7 +200,7 @@
     },
     "std/net/router.ts": {
       "fault": 1,
-      "panic": 5
+      "panic": 6
     },
     "std/net/serve.ts": {
       "panic": 3,
@@ -1396,7 +1396,7 @@
     },
     {
       "module": "std/net/router.ts",
-      "function": "routerOutside",
+      "function": "routerCheckRanges",
       "reason": "the match range must lie inside its buffer; a caller precondition of Router.match"
     },
     {

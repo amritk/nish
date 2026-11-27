@@ -234,6 +234,13 @@ export class Router {
    */
   pathEnd: i32 = 0
   private wanted: i32 = 0
+  /**
+   * Set by `enter` on a range outside its array, and cleared by the `match`
+   * that reads it: only then does `match` test the ranges again, to panic.
+   * One left set by `tryMatch` costs the next `match` that answers
+   * `ROUTER_NOT_FOUND` a test that passes.
+   */
+  private outside: boolean = false
   private foundCount: i32 = 0
   /** During a match: whether a route of another method ended at the path's end. */
   private otherMethod: boolean = false
@@ -785,7 +792,12 @@ export class Router {
    * @returns the matched route's index, or `ROUTER_NOT_FOUND`, `ROUTER_METHOD_NOT_ALLOWED` or `ROUTER_TOO_MANY_PARAMS`
    */
   match(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
-    return this.lookup(method, mStart, mEnd, target, tStart, tEnd, params, true)
+    const route: i32 = this.lookup(method, mStart, mEnd, target, tStart, tEnd, params)
+    if (route === ROUTER_NOT_FOUND && this.outside) {
+      this.outside = false
+      routerCheckRanges(method, mStart, mEnd, target, tStart, tEnd)
+    }
+    return route
   }
 
   /**
@@ -803,13 +815,14 @@ export class Router {
    * @returns what `match` answers, or `ROUTER_NOT_FOUND` for a range outside its array
    */
   tryMatch(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
-    return this.lookup(method, mStart, mEnd, target, tStart, tEnd, params, false)
+    return this.lookup(method, mStart, mEnd, target, tStart, tEnd, params)
   }
 
   /**
-   * `match` and `tryMatch`, one body: `strict` panics on a range outside its
-   * array, where false answers `ROUTER_NOT_FOUND` for it. Either way the ranges
-   * are tested once, in `enter`.
+   * `tryMatch`, and `match` before its panic: a range outside its array is
+   * `ROUTER_NOT_FOUND`, tested once, in `enter`. `match` tests the ranges
+   * again only when `enter` found one outside, so the found and not-found
+   * answers pay for one test.
    */
   private lookup(
     method: u8[],
@@ -818,10 +831,9 @@ export class Router {
     target: u8[],
     tStart: i32,
     tEnd: i32,
-    params: i32[],
-    strict: boolean
+    params: i32[]
   ): i32 {
-    if (!this.enter(method, mStart, mEnd, target, tStart, tEnd, strict)) {
+    if (!this.enter(method, mStart, mEnd, target, tStart, tEnd)) {
       return ROUTER_NOT_FOUND
     }
     // A static route's path is never longer than the longest one: a target
@@ -857,7 +869,8 @@ export class Router {
    * @returns the matched route's index, or `ROUTER_NOT_FOUND`, `ROUTER_METHOD_NOT_ALLOWED` or `ROUTER_TOO_MANY_PARAMS`
    */
   matchTree(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
-    if (!this.enter(method, mStart, mEnd, target, tStart, tEnd, true)) {
+    if (!this.enter(method, mStart, mEnd, target, tStart, tEnd)) {
+      routerCheckRanges(method, mStart, mEnd, target, tStart, tEnd)
       return ROUTER_NOT_FOUND
     }
     return this.descend(target, tStart, tEnd, params)
@@ -866,30 +879,18 @@ export class Router {
   /**
    * The start of every lookup: the range checks, and `wanted` set to the
    * method's index, or -1 for one the table has never seen. False for a range
-   * outside its array, after a panic naming it when `strict`, and for a target
-   * that is not `/`-rooted, which is `ROUTER_NOT_FOUND` with `pathEnd` set.
+   * outside its array, which `match` then panics for, and for a target that
+   * is not `/`-rooted, which is `ROUTER_NOT_FOUND` with `pathEnd` set.
    */
-  private enter(
-    method: u8[],
-    mStart: i32,
-    mEnd: i32,
-    target: u8[],
-    tStart: i32,
-    tEnd: i32,
-    strict: boolean
-  ): boolean {
+  private enter(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32): boolean {
     // The returns are what tell the prover that both ranges are inside their
-    // arrays from here on; under `strict` the helper panics before them.
+    // arrays from here on.
     if (mStart < 0 || mEnd < 0 || mEnd < mStart || mEnd > toI32(method.length)) {
-      if (strict) {
-        routerOutside("method", mStart, mEnd, toI32(method.length))
-      }
+      this.outside = true
       return false
     }
     if (tStart < 0 || tEnd < tStart || tEnd > toI32(target.length)) {
-      if (strict) {
-        routerOutside("target", tStart, tEnd, toI32(target.length))
-      }
+      this.outside = true
       return false
     }
     this.visited = 0
@@ -1341,16 +1342,30 @@ const routerSlot = (hash: u32, mask: i32): i32 => {
 }
 
 /**
- * Panics for a `what` range `start` to `end` outside its `length` bytes. Apart
- * from `enter`, so that a lookup holds no string of its own.
+ * Panics for a method or target range outside its array, naming it; returns
+ * for ranges inside. `match` calls it only when `enter` found a range
+ * outside, so no other answer is tested twice. Apart
+ * from the lookup, so that it holds no string of its own.
  */
-const routerOutside = (what: string, start: i32, end: i32, length: i32): void => {
-  panic(`Router.match: the ${what} range ${start} to ${end} is outside its ${length} bytes`)
+const routerCheckRanges = (
+  method: u8[],
+  mStart: i32,
+  mEnd: i32,
+  target: u8[],
+  tStart: i32,
+  tEnd: i32
+): void => {
+  if (mStart < 0 || mEnd < 0 || mEnd < mStart || mEnd > toI32(method.length)) {
+    panic(`Router.match: the method range ${mStart} to ${mEnd} is outside its ${toI32(method.length)} bytes`)
+  }
+  if (tStart < 0 || tEnd < tStart || tEnd > toI32(target.length)) {
+    panic(`Router.match: the target range ${tStart} to ${tEnd} is outside its ${toI32(target.length)} bytes`)
+  }
 }
 
 /**
  * Panics for a `route` that is not one of the table's `routes`. Apart from
- * `paramCount`, which a server calls per request, for the reason `routerOutside` is.
+ * `paramCount`, which a server calls per request, for the reason `routerCheckRanges` is.
  */
 const routerNoRoute = (route: i32, routes: i32): void => {
   panic(`Router.paramCount: route ${route} is not in a table of ${routes}`)

@@ -37,6 +37,16 @@ export const main = (): i32 => {
     serverVerdict(linger),
     "Http1Config.lingerTimeout: 0 is outside 1 to 1073741824"
   )
+  const body = new Http1Config()
+  body.maxBody = -1
+  t.eqStr("a server under a body cap below 0 is refused", serverVerdict(body), "Http1Config.maxBody: -1 is outside 0 to 1073741824")
+  const output = new Http1Config()
+  output.outputSize = 1023
+  t.eqStr(
+    "a server under an output size below 1024 is refused",
+    serverVerdict(output),
+    "Http1Config.outputSize: 1023 is outside 1024 to 1073741824"
+  )
   t.eqStr("a connection under the default caps is made", connectionVerdict(new Http1Config()), "ok")
   const header = new Http1Config()
   header.maxHeaderBytes = 63
@@ -44,6 +54,19 @@ export const main = (): i32 => {
     "a connection under a header cap below 64 is refused",
     connectionVerdict(header),
     "Http1Config.maxHeaderBytes: 63 is outside 64 to 1073741824"
+  )
+  const chunk = new Http1Config()
+  chunk.chunkSize = 0
+  t.eqStr(
+    "a connection under a chunk size of 0 is refused",
+    connectionVerdict(chunk),
+    "Http1Config.chunkSize: 0 is outside 1 to 1073741824"
+  )
+  const sum = new Http1Config()
+  sum.maxTarget = 1073741824
+  t.ok(
+    "a connection whose target and header caps sum past 2^30 is refused",
+    connectionVerdict(sum).startsWith("Http1Config.maxTarget + maxHeaderBytes: ")
   )
   const later = new Http1Config()
   const made = http1ServerChecked(later, -1, 4)
