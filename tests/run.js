@@ -42747,6 +42747,385 @@ if (!only || "spec".includes(only)) {
   }
 }
 
+// ---- rfc-specs: every RFC std/ cites has a vector spec of its module, or a list line ----
+// CLAUDE.md, "Definition of done": a module that implements an RFC lands spec-first.
+// `npm run lint` runs the live check too; the rows below are what it refuses. The
+// `spec` filter reaches this section as well as `rfc-specs`.
+if (!only || "rfc-specs".includes(only)) {
+  const rfcScript = path.join(root, "scripts", "rfc-specs.mjs")
+  const rfcLive = spawnSync(process.execPath, [rfcScript], { cwd: root, encoding: "utf8" })
+  check(
+    "spec: rfc-specs: every RFC std/ cites is covered by a vector spec of its module or listed in scripts/rfc-unspecified.txt",
+    rfcLive.status === 0,
+    rfcLive.stdout + rfcLive.stderr
+  )
+  // A contract covers only with its spec and the test emitted from it, which
+  // pins its hash: `rfcSpec` writes all three, `rfcContract` the contract alone.
+  const rfcContract = (mod, ...rfcs) =>
+    JSON.stringify({ target: { module: mod }, sources: rfcs.map((rfc) => ({ id: `rfc${rfc}`, rfc })) })
+  const rfcSpec = (name, mod, ...rfcs) => {
+    const contract = rfcContract(mod, ...rfcs)
+    const sha = crypto.createHash("sha256").update(contract).digest("hex")
+    return {
+      [`contracts/${name}.json`]: contract,
+      [`specs/${name}.md`]: "# spec\n",
+      [`test/spec/${name}.ts`]: `// vector-contract-sha256: ${sha}\n`,
+    }
+  }
+  // The script's preRuleDigest: the pairs sorted, one per line.
+  const rfcPin = (...keys) =>
+    crypto
+      .createHash("sha256")
+      .update(
+        [...keys]
+          .sort()
+          .map((k) => `${k}\n`)
+          .join("")
+      )
+      .digest("hex")
+  const rfcRun = (files, flags = [], { root: useRoot = true, links = {} } = {}) => {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), "nish-rfc-specs-"))
+    fs.mkdirSync(path.join(tree, "std"), { recursive: true })
+    for (const [rel, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true })
+      fs.writeFileSync(path.join(tree, rel), text)
+    }
+    for (const [rel, target] of Object.entries(links)) {
+      fs.symlinkSync(path.join(tree, target), path.join(tree, rel))
+    }
+    const argv = useRoot ? [rfcScript, "--root", tree, ...flags] : [rfcScript, ...flags]
+    const r = spawnSync(process.execPath, argv, { encoding: "utf8" })
+    const listPath = path.join(tree, "scripts", "rfc-unspecified.txt")
+    const list = fs.existsSync(listPath) ? fs.readFileSync(listPath, "utf8") : ""
+    fs.rmSync(tree, { recursive: true, force: true })
+    return { ...r, list }
+  }
+  const listRel = "scripts/rfc-unspecified.txt"
+  const oldNet = "std/net/old.ts RFC9999"
+  const rfcRows = [
+    {
+      name: "refuses an RFC a module cites with no contract and no line, naming the file and line",
+      files: { "std/net/new.ts": "// one\n// Framing per RFC 9999 section 4.\n" },
+      exit: 1,
+      has: ["std/net/new.ts:2: cites RFC9999, which no vector spec"],
+    },
+    {
+      name: "reads RFC9999, RFC-9999, a no-break space, RFCs 9 and 10, RFC 11/12, a lowercase rfc13 in a URL and rfc822Name",
+      files: {
+        "std/a.ts": "// RFC9999\n",
+        "std/b.ts": "// RFC-9998\n",
+        "std/c.ts": "// RFC 9997\n",
+        "std/d.ts": "// RFCs 9 and 10, RFC 11/12\n// https://www.rfc-editor.org/rfc/rfc13\n",
+        "std/e.ts": "// rfc822Name\n",
+      },
+      exit: 1,
+      has: [
+        "std/a.ts:1: cites RFC9999",
+        "std/b.ts:1: cites RFC9998",
+        "std/c.ts:1: cites RFC9997",
+        "std/d.ts:1: cites RFC9,",
+        "std/d.ts:1: cites RFC10,",
+        "std/d.ts:1: cites RFC11,",
+        "std/d.ts:1: cites RFC12,",
+        "std/d.ts:2: cites RFC13,",
+        "std/e.ts:1: cites RFC822,",
+      ],
+    },
+    {
+      name: "reads a citation wrapped across a comment line, a list with `, and`, `&` and `or`, and a range",
+      files: {
+        "std/w.ts":
+          "/**\n * Written from RFC\n * 9001, RFCs 9002, 9003, and 9004, rfcs 9005 & 9006 or 9007\n * and RFC\n// 9010-9012, RFC 100-900\n */\n",
+      },
+      exit: 1,
+      // One citation runs on across the wrapped lines, so each pair names line 2.
+      has: [9001, 9002, 9003, 9004, 9005, 9006, 9007, 9010, 9011, 9012, 100, 900].map(
+        (rfc) => `std/w.ts:2: cites RFC${rfc},`
+      ),
+      lacks: ["cites RFC101,"],
+    },
+    {
+      name: "reads no citation in rfc-editor or RFCX with no number, and none in a file that is not .ts",
+      files: { "std/x.ts": "// see the rfc-editor, RFCX\n", "std/notes.md": "RFC 9999\n" },
+      exit: 0,
+      has: ["0 RFC citations"],
+    },
+    {
+      name: "follows a symbolic link to a directory under std/",
+      files: { "elsewhere/new.ts": "// RFC 9999\n" },
+      links: { "std/linked": "elsewhere" },
+      exit: 1,
+      has: ["std/linked/new.ts:1: cites RFC9999"],
+    },
+    {
+      name: "accepts a citation a spec of that module covers",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", ...rfcSpec("new", "nish/crypto/new", 9999) },
+      exit: 0,
+      has: ["1 covered by a spec"],
+    },
+    {
+      name: "refuses a citation a spec of another module covers",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", ...rfcSpec("other", "nish/crypto/other", 9999) },
+      exit: 1,
+      has: ["std/crypto/new.ts:1: cites RFC9999"],
+    },
+    {
+      name: "refuses a citation a spec of that module covers for another RFC",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", ...rfcSpec("new", "nish/crypto/new", 9998) },
+      exit: 1,
+      has: ["std/crypto/new.ts:1: cites RFC9999"],
+    },
+    {
+      name: "refuses a contract no test was emitted from, which covers nothing",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", "contracts/new.json": rfcContract("nish/crypto/new", 9999), "specs/new.md": "" },
+      exit: 1,
+      has: ["contracts/new.json: test/spec/new.ts was not emitted from it", "std/crypto/new.ts:1: cites RFC9999"],
+    },
+    {
+      name: "refuses a contract whose test pins another hash",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999),
+        "test/spec/new.ts": `// vector-contract-sha256: ${"0".repeat(64)}\n`,
+      },
+      exit: 1,
+      has: ["contracts/new.json: test/spec/new.ts was not emitted from it"],
+    },
+    {
+      name: "refuses a contract whose test pins it twice, once rightly",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999),
+        "test/spec/new.ts": `${rfcSpec("new", "nish/crypto/new", 9999)["test/spec/new.ts"]}// vector-contract-sha256: ${"0".repeat(64)}\n`,
+      },
+      exit: 1,
+      has: ["contracts/new.json: test/spec/new.ts was not emitted from it"],
+    },
+    {
+      name: "refuses a contract with no spec",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999),
+        "specs/new.md": undefined,
+      },
+      exit: 1,
+      has: ["contracts/new.json: has no spec specs/new.md"],
+    },
+    {
+      name: "refuses a contract that does not parse, has no nish/ target, or names an RFC that is not a number",
+      files: {
+        "contracts/a.json": "{",
+        "contracts/b.json": rfcContract("std/crypto/b", 9999),
+        "contracts/c.json": JSON.stringify({ sources: [{ rfc: 9999 }] }),
+        "contracts/d.json": JSON.stringify({ target: { module: "nish/d" }, sources: [{ rfc: "9999" }] }),
+      },
+      exit: 1,
+      has: [
+        "contracts/a.json: does not parse",
+        "contracts/b.json: target.module is",
+        "contracts/c.json: target.module is undefined",
+        "contracts/d.json: a sources[].rfc is not an RFC number",
+      ],
+    },
+    {
+      name: "accepts a line from before the rule that the pin pins",
+      files: { "std/net/old.ts": "// RFC 9999\n", [listRel]: `${oldNet}\n` },
+      flags: ["--pin", rfcPin(oldNet)],
+      exit: 0,
+      has: ["1 listed from before the rule"],
+    },
+    {
+      name: "refuses a line from before the rule added by hand",
+      files: { "std/net/old.ts": "// RFC 9999\n", [listRel]: `${oldNet}\n` },
+      exit: 1,
+      has: ["lines from before the rule are not the set --pin pins"],
+    },
+    {
+      name: "refuses a line swapped by hand for another the pin does not pin",
+      files: { "std/net/old.ts": "// RFC 9999 and RFC 9998\n", [listRel]: "std/net/old.ts RFC9998\n" },
+      flags: ["--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: ["lines from before the rule are not the set --pin pins", "std/net/old.ts:1: cites RFC9999"],
+    },
+    {
+      name: "refuses a line deleted by hand",
+      files: { "std/net/old.ts": "// RFC 9999 and RFC 9998\n", [listRel]: `${oldNet}\n` },
+      flags: ["--pin", rfcPin(oldNet, "std/net/old.ts RFC9998")],
+      exit: 1,
+      has: ["lines from before the rule are not the set --pin pins"],
+    },
+    {
+      name: "accepts a `cites:` line with its reason",
+      files: { "std/net/old.ts": "// RFC 9999 is out of scope\n", [listRel]: `${oldNet} cites: out of scope\n` },
+      exit: 0,
+      has: ["1 cited and not implemented"],
+    },
+    {
+      name: "refuses a `cites:` line with no reason",
+      files: { "std/net/old.ts": "// RFC 9999\n", [listRel]: `${oldNet} cites: \n` },
+      exit: 1,
+      has: ["a `cites:` line gives its reason"],
+    },
+    {
+      name: "refuses a listed line, from before the rule or `cites:`, that a spec now covers",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999 and RFC 9998\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999, 9998),
+        [listRel]: "std/crypto/new.ts RFC9999\nstd/crypto/new.ts RFC9998 cites: x\n",
+      },
+      flags: ["--pin", rfcPin("std/crypto/new.ts RFC9999")],
+      exit: 1,
+      has: ["std/crypto/new.ts RFC9999: a contract covers it now", "std/crypto/new.ts RFC9998: a contract covers it now"],
+    },
+    {
+      name: "refuses a listed line, from before the rule or `cites:`, the file no longer cites",
+      files: { "std/net/old.ts": "// nothing\n", [listRel]: `${oldNet}\nstd/net/old.ts RFC9998 cites: gone\n` },
+      flags: ["--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: [`${oldNet}: no longer cited`, "std/net/old.ts RFC9998: no longer cited"],
+    },
+    {
+      name: "refuses a malformed line and a line listed twice, either way",
+      files: {
+        "std/net/old.ts": "// RFC 9999 and RFC 9998\n",
+        [listRel]: `std/net/old.ts 9999\n${oldNet}\n${oldNet}\n${oldNet} cites: twice\n`,
+      },
+      flags: ["--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: [`${listRel}:1: not`, `${listRel}:3: ${oldNet} is listed twice`, `${listRel}:4: ${oldNet} is listed twice`],
+    },
+    {
+      name: "--update-baseline drops a covered and a gone line, keeps the rest and the `cites:` lines, rewrites the header and names the new pin",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        "std/net/old.ts": "// RFC 9998 and RFC 9996\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999),
+        [listRel]: "# a hand-written note\nstd/crypto/new.ts RFC9999\nstd/net/gone.ts RFC9997\nstd/net/old.ts RFC9998\nstd/net/old.ts RFC9996 cites: a pointer\n",
+      },
+      flags: ["--update-baseline", "--pin", rfcPin("std/crypto/new.ts RFC9999", "std/net/gone.ts RFC9997", "std/net/old.ts RFC9998")],
+      exit: 0,
+      has: [`--pin moves to ${rfcPin("std/net/old.ts RFC9998")} (1 lines)`],
+      list: (l) =>
+        l.startsWith("# RFCs a std/ module cites") &&
+        !l.includes("hand-written") &&
+        l.includes("\nstd/net/old.ts RFC9998\n") &&
+        l.includes("\nstd/net/old.ts RFC9996 cites: a pointer\n") &&
+        !l.includes("RFC9999") &&
+        !l.includes("RFC9997"),
+    },
+    {
+      name: "--update-baseline refuses a file whose lines from before the rule were edited by hand",
+      files: { "std/net/old.ts": "// RFC 9999 and RFC 9998\n", [listRel]: `${oldNet}\nstd/net/old.ts RFC9998\n` },
+      flags: ["--update-baseline", "--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: ["are not the set --pin pins: restore them"],
+      list: (l) => l === `${oldNet}\nstd/net/old.ts RFC9998\n`,
+    },
+    {
+      name: "--update-baseline refuses to add a line",
+      files: { "std/net/new.ts": "// RFC 9999\n" },
+      flags: ["--update-baseline"],
+      exit: 1,
+      has: ["std/net/new.ts:1: cites RFC9999"],
+      list: (l) => l === "",
+    },
+    {
+      name: "--grow-baseline refuses a file whose lines from before the rule were edited by hand",
+      files: { "std/net/old.ts": "// RFC 9999 and RFC 9998\n", [listRel]: `${oldNet}\nstd/net/old.ts RFC9998\n` },
+      flags: ["--grow-baseline", "--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: ["are not the set --pin pins: restore them"],
+      list: (l) => l === `${oldNet}\nstd/net/old.ts RFC9998\n`,
+    },
+    {
+      name: "--grow-baseline adds the line and names it and the new pin",
+      files: { "std/net/new.ts": "// RFC 9999\n" },
+      flags: ["--grow-baseline"],
+      exit: 0,
+      has: [`grows ${listRel}: std/net/new.ts RFC9999`, `--pin moves to ${rfcPin("std/net/new.ts RFC9999")}`],
+      list: (l) => l.includes("\nstd/net/new.ts RFC9999\n"),
+    },
+    {
+      name: "exits 2 on an unknown flag, a positional argument, --root with no value or no std/, and --pin without --root",
+      runs: [
+        [["--bogus"], {}],
+        [["update-baseline"], {}],
+        [["--pin", rfcPin()], { root: false }],
+      ],
+      exit: 2,
+      has: ["unknown argument --bogus", "unknown argument update-baseline", "--pin is for a --root tree"],
+    },
+  ]
+  const rfcScriptBefore = fs.readFileSync(rfcScript, "utf8")
+  for (const row of rfcRows) {
+    const files = Object.fromEntries(Object.entries(row.files ?? {}).filter(([, v]) => v !== undefined))
+    const runs = row.runs ?? [[row.flags ?? [], { links: row.links }]]
+    const results = runs.map(([flags, opts]) => rfcRun(files, flags, opts))
+    const out = results.map((r) => r.stdout + r.stderr).join("\n")
+    check(
+      `spec: rfc-specs: ${row.name}`,
+      results.every((r) => r.status === row.exit) &&
+        (row.has ?? []).every((h) => out.includes(h)) &&
+        !(row.lacks ?? []).some((h) => out.includes(h)) &&
+        (!row.list || results.every((r) => row.list(r.list))),
+      `exit ${results.map((r) => r.status).join(", ")}\n${out}${row.list ? `\n${listRel}:\n${results.map((r) => r.list).join("\n")}` : ""}`
+    )
+  }
+  // The --update-baseline and --grow-baseline rows above moved their tree's pin:
+  // under --root that is --pin's, and the script's own PRE_RULE_SHA256 stays.
+  check(
+    "spec: rfc-specs: an --update-baseline or --grow-baseline run under --root leaves scripts/rfc-specs.mjs as it was",
+    fs.readFileSync(rfcScript, "utf8") === rfcScriptBefore,
+    "scripts/rfc-specs.mjs changed during the fixture runs"
+  )
+  {
+    // On its own tree, --update-baseline re-pins the script's constants: a copy of
+    // the script in a scratch tree's scripts/ is that tree's live script.
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), "nish-rfc-specs-"))
+    const put = (rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true })
+      fs.writeFileSync(path.join(tree, rel), text)
+    }
+    const kept = "std/net/old.ts RFC9998"
+    put("std/net/old.ts", "// RFC 9998\n")
+    put(listRel, `${oldNet}\n${kept}\n`)
+    put(
+      "scripts/rfc-specs.mjs",
+      rfcScriptBefore
+        .replace(/^const PRE_RULE_LINES = \d+$/m, "const PRE_RULE_LINES = 2")
+        .replace(/^const PRE_RULE_SHA256 = "[0-9a-f]+"$/m, `const PRE_RULE_SHA256 = "${rfcPin(oldNet, kept)}"`)
+    )
+    const copy = path.join(tree, "scripts", "rfc-specs.mjs")
+    const r = spawnSync(process.execPath, [copy, "--update-baseline"], { encoding: "utf8" })
+    const after = fs.readFileSync(copy, "utf8")
+    const again = spawnSync(process.execPath, [copy], { encoding: "utf8" })
+    fs.rmSync(tree, { recursive: true, force: true })
+    check(
+      "spec: rfc-specs: --update-baseline on its own tree re-pins PRE_RULE_LINES and PRE_RULE_SHA256, and the check then passes",
+      r.status === 0 &&
+        after.includes("\nconst PRE_RULE_LINES = 1\n") &&
+        after.includes(`\nconst PRE_RULE_SHA256 = "${rfcPin(kept)}"\n`) &&
+        again.status === 0,
+      `exit ${r.status}, then ${again.status}\n${r.stdout}${r.stderr}${again.stdout}${again.stderr}`
+    )
+  }
+  {
+    // --root with no value, and a --root with no std/ under it, are usage errors too.
+    const noValue = spawnSync(process.execPath, [rfcScript, "--root"], { encoding: "utf8" })
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "nish-rfc-specs-"))
+    const noStd = spawnSync(process.execPath, [rfcScript, "--root", empty], { encoding: "utf8" })
+    fs.rmSync(empty, { recursive: true, force: true })
+    check(
+      "spec: rfc-specs: exits 2 on --root with no value and on a --root tree with no std/",
+      noValue.status === 2 &&
+        noValue.stderr.includes("--root needs a value") &&
+        noStd.status === 2 &&
+        noStd.stderr.includes("has no std/ directory"),
+      `exit ${noValue.status}, ${noStd.status}\n${noValue.stderr}${noStd.stderr}`
+    )
+  }
+}
+
 // ---- The release train's version: the implied bump and the `Release-As:` trailer -----
 // `scripts/changelog-gen.mjs --next` is the number the Release PR proposes and every
 // file it bumps. Its suite builds throwaway repositories, so it needs git and nothing else.
