@@ -9,20 +9,21 @@
  * natively and under Node, because the kitty and Sixel output is ASCII and the
  * cell drawers go through `Screen`, which already is.
  *
- *     import { Framebuffer, fitFramebuffer, GRAPHICS_KITTY, kittyFrame, PixelBytes } from "nish/term-pixels"
+ *     import { fitFramebuffer, GRAPHICS_KITTY, kittyFrame, PixelBytes, tryFramebuffer } from "nish/term-pixels"
  *
- *     const fb = new Framebuffer(160, 90)
+ *     const fb = tryFramebuffer(160, 90).expect("a 160 × 90 framebuffer")
  *     fb.fill(0x000020)
  *     fb.set(80, 45, 0xffcc00)
- *     const rect = fitFramebuffer(fb.width, fb.height, 80, 24, 0, 0, GRAPHICS_KITTY)
+ *     const rect = fitFramebuffer(fb.pixelWidth(), fb.pixelHeight(), 80, 24, 0, 0, GRAPHICS_KITTY)
  *     const out = new PixelBytes(1 << 16)
  *     kittyFrame(fb, rect, 1, out)
  *     // out.text() is the frame's bytes, for one write
  *
- * - `Framebuffer(width, height)` holds the pixels, with `set`, `get`, `fill`,
- *   `clear` and `resize`. `scaleFramebuffer(src, divisor, dst)` shrinks one by
- *   an integer divisor, nearest-neighbour, for the refresh controller's
- *   resolution downgrade.
+ * - `tryFramebuffer(width, height)` makes a `Framebuffer`, which holds the
+ *   pixels, with `set`, `get`, `fill`, `clear`, `resize`, `pixelWidth`,
+ *   `pixelHeight` and `pixelData`. `scaleFramebuffer(src, divisor, dst)`
+ *   shrinks one by an integer divisor, nearest-neighbour, for the refresh
+ *   controller's resolution downgrade.
  * - `GRAPHICS_ASCII`, `GRAPHICS_HALFBLOCK`, `GRAPHICS_SIXEL` and
  *   `GRAPHICS_KITTY` name the backends, numbered from worst to best so that a
  *   capability and a cap combine with `Math.min`.
@@ -163,55 +164,98 @@ const pixelsArea = (who: string, width: i32, height: i32): i32 => {
   return toI32(area)
 }
 
+/** Why `width × height`, asked of `who`, is not a size an array of pixels can have, or "" when it is. */
+const pixelsSizeProblem = (who: string, width: i32, height: i32): string => {
+  if (width < 0 || height < 0) {
+    return `${who}: a negative size, ${width} × ${height}`
+  }
+  if (toI64(width) * toI64(height) > toI64(2147483647)) {
+    return `${who}: ${width} × ${height} is more than 2^31 - 1 pixels`
+  }
+  return ""
+}
+
 /** `y * width + x` as an index below `length`, or -1 when it is not one. */
 const pixelsIndex = (x: i32, y: i32, width: i32, length: i32): i32 => {
   const wide: i64 = toI64(y) * toI64(width) + toI64(x)
   return wide < toI64(0) || wide >= toI64(length) ? -1 : toI32(wide)
 }
 
-/** A `width × height` grid of `0xRRGGBB` pixels, row by row, all black when made. */
+/**
+ * A grid of `0xRRGGBB` pixels, row by row, all black when made. `tryFramebuffer` makes one of a
+ * size, and `resize` changes it; the size and the pixels are private, so they never fall out of
+ * step.
+ */
 export class Framebuffer {
   /** Pixels across. */
-  width: i32
+  private width: i32
   /** Pixels down. */
-  height: i32
+  private height: i32
   /** One colour per pixel, `y * width + x`. */
-  pixels: i32[]
+  private pixels: i32[]
 
-  /**
-   * A black framebuffer of `width × height`; a negative size, or more than 2^31 - 1 pixels, panics.
-   *
-   * @param width Pixels across.
-   * @param height Pixels down.
-   */
-  constructor(width: i32, height: i32) {
-    const area: i32 = pixelsArea("Framebuffer", width, height)
-    this.width = width
-    this.height = height
-    this.pixels = new Array<i32>(area)
-    this.pixels.fill(0)
+  /** An empty `0 × 0` framebuffer; `tryFramebuffer` makes one of a size. */
+  constructor() {
+    this.width = 0
+    this.height = 0
+    this.pixels = []
   }
 
   /**
-   * Make the framebuffer `width × height` and black; the array is replaced only when the size changes.
+   * Pixels across.
    *
-   * @param width The new pixels across; negative panics, as in the constructor.
-   * @param height The new pixels down; negative panics, as in the constructor.
+   * @returns The width, 0 or more.
    */
-  resize(width: i32, height: i32): void {
-    const area: i32 = pixelsArea("Framebuffer.resize", width, height)
+  pixelWidth(): i32 {
+    return this.width
+  }
+
+  /**
+   * Pixels down.
+   *
+   * @returns The height, 0 or more.
+   */
+  pixelHeight(): i32 {
+    return this.height
+  }
+
+  /**
+   * The pixels, one `0xRRGGBB` colour each at `y * pixelWidth() + x`, for `rasterFrame` to draw
+   * into. Writing them is drawing; a caller that pushes or pops one leaves the pixels past the
+   * array undrawn, as `set` and `get` index only within it.
+   *
+   * @returns The framebuffer's own array, not a copy.
+   */
+  pixelData(): i32[] {
+    return this.pixels
+  }
+
+  /**
+   * Make the framebuffer `width × height` and black; the array is replaced only when the size
+   * changes. A refused size leaves the framebuffer as it was.
+   *
+   * @param width The new pixels across, 0 or more.
+   * @param height The new pixels down, 0 or more.
+   * @returns `Ok`, or `Err` naming the problem for a negative size or more than 2^31 - 1 pixels.
+   */
+  resize(width: i32, height: i32): Result<void, string> {
+    const area: i64 = toI64(width) * toI64(height)
+    const count: i32 = area >= toI64(0) && area <= toI64(2147483647) ? toI32(area) : -1
+    if (width < 0 || height < 0 || count < 0) {
+      return Err(pixelsSizeProblem("Framebuffer.resize", width, height))
+    }
     if (width !== this.width || height !== this.height) {
+      const length: integer<0, 2147483647> = count
       this.width = width
       this.height = height
-      this.pixels = new Array<i32>(area)
+      this.pixels = new Array<i32>(length)
     }
     this.pixels.fill(0)
+    return Ok()
   }
 
   /**
    * Set the pixel at `x`, `y` to `colour`'s low 24 bits; a pixel off the framebuffer is not drawn.
-   * Panics when `pixels` does not hold `width × height`, as after setting those public fields
-   * out of step.
    *
    * @param x The pixel column, from 0 at the left.
    * @param y The pixel row, from 0 at the top.
@@ -223,18 +267,13 @@ export class Framebuffer {
     }
     const pixels: i32[] = this.pixels
     const at: i32 = pixelsIndex(x, y, this.width, toI32(pixels.length))
-    // In range while `pixels` holds `width * height`. The fields are public,
-    // and one set out of step with the others is a broken framebuffer, which
-    // panics as indexing past `pixels` did, rather than drop the write.
-    if (at < 0 || at >= toI32(pixels.length)) {
-      panic("Framebuffer.set: pixels does not hold width × height")
+    if (at >= 0 && at < toI32(pixels.length)) {
+      pixels[at] = colour & 0xffffff
     }
-    pixels[at] = colour & 0xffffff
   }
 
   /**
-   * The colour of the pixel at `x`, `y`, or black off the framebuffer. Panics when `pixels` does
-   * not hold `width × height`, as after setting those public fields out of step.
+   * The colour of the pixel at `x`, `y`, or black off the framebuffer.
    *
    * @param x The pixel column, from 0 at the left.
    * @param y The pixel row, from 0 at the top.
@@ -246,13 +285,7 @@ export class Framebuffer {
     }
     const pixels: i32[] = this.pixels
     const at: i32 = pixelsIndex(x, y, this.width, toI32(pixels.length))
-    // In range while `pixels` holds `width * height`. The fields are public,
-    // and one set out of step with the others is a broken framebuffer, which
-    // panics as indexing past `pixels` did, rather than read as black.
-    if (at < 0 || at >= toI32(pixels.length)) {
-      panic("Framebuffer.get: pixels does not hold width × height")
-    }
-    return pixels[at]
+    return at >= 0 && at < toI32(pixels.length) ? pixels[at] : 0
   }
 
   /**
@@ -271,43 +304,69 @@ export class Framebuffer {
 }
 
 /**
+ * A black framebuffer of `width × height`.
+ *
+ * @param width Pixels across, 0 or more.
+ * @param height Pixels down, 0 or more.
+ * @returns The framebuffer, or `Err` naming the problem for a negative size or more than
+ * 2^31 - 1 pixels.
+ */
+export const tryFramebuffer = (width: i32, height: i32): Result<Framebuffer, string> => {
+  const problem: string = pixelsSizeProblem("tryFramebuffer", width, height)
+  if (problem.length > 0) {
+    return Err(problem)
+  }
+  const fb: Framebuffer = new Framebuffer()
+  const sized: Result<void, string> = fb.resize(width, height)
+  if (sized.isErr()) {
+    return Err(sized.error)
+  }
+  return Ok(fb)
+}
+
+/**
  * Shrink `src` by `divisor` into `dst`, which is resized to
  * `ceil(width / divisor) × ceil(height / divisor)`: each pixel of `dst` is the
  * top-left pixel of its `divisor × divisor` block, nearest-neighbour, so a
- * frame costs a quarter or a sixteenth of the bytes at divisor 2 or 4. A
- * divisor below 1 panics; 1 copies. `dst` must be another framebuffer than
- * `src`, which resizing it would blank.
+ * frame costs a quarter or a sixteenth of the bytes at divisor 2 or 4. 1
+ * copies. `dst` must be another framebuffer than `src`, which resizing it
+ * would blank.
  *
  * @param src The full-size framebuffer, read only.
  * @param divisor How many pixels across and down become one, 1 or more; 2 or 4 for the controller's steps.
  * @param dst Where the shrunk frame goes; resized to fit.
+ * @returns `Ok`, or `Err` for a divisor below 1, leaving `dst` as it was.
  */
-export const scaleFramebuffer = (src: Framebuffer, divisor: i32, dst: Framebuffer): void => {
+export const scaleFramebuffer = (src: Framebuffer, divisor: i32, dst: Framebuffer): Result<void, string> => {
   if (divisor < 1) {
-    panic("scaleFramebuffer: a divisor below 1")
+    return Err(`scaleFramebuffer: a divisor of ${divisor}, below 1`)
   }
-  const w: i32 = pixelsCeilDiv(src.width, divisor)
-  const h: i32 = pixelsCeilDiv(src.height, divisor)
-  dst.resize(w, h)
-  const from: i32[] = src.pixels
-  const to: i32[] = dst.pixels
-  const srcW: i32 = src.width
+  const srcW: i32 = src.pixelWidth()
+  const srcH: i32 = src.pixelHeight()
+  const w: i32 = pixelsCeilDiv(srcW, divisor)
+  const h: i32 = pixelsCeilDiv(srcH, divisor)
+  // `w × h` is no more than `src`'s own size, which `resize` took.
+  const sized: Result<void, string> = dst.resize(w, h)
+  if (sized.isErr()) {
+    return sized
+  }
+  const from: i32[] = src.pixelData()
+  const to: i32[] = dst.pixelData()
   // `x * divisor` and `y * divisor` stay below the source's size, as `w` and
   // `h` are its size over `divisor` rounded up; the loops say so for the
-  // prover. Each index is then in its array while each framebuffer's `pixels`
-  // holds its `width * height`; one whose public fields a caller set out of
-  // step panics, as indexing past `pixels` did, rather than skip the pixel.
-  for (let y: i32 = 0; y < h && toI64(y) * toI64(divisor) < toI64(src.height); y++) {
+  // prover. Each index is then in its array, which only a caller that pushed
+  // or popped `pixelData()` changes; a pixel past either array is not copied.
+  for (let y: i32 = 0; y < h && toI64(y) * toI64(divisor) < toI64(srcH); y++) {
     const sy: i32 = toI32(toI64(y) * toI64(divisor))
     for (let x: i32 = 0; x < w && toI64(x) * toI64(divisor) < toI64(srcW); x++) {
       const s: i32 = pixelsIndex(toI32(toI64(x) * toI64(divisor)), sy, srcW, toI32(from.length))
       const d: i32 = pixelsIndex(x, y, w, toI32(to.length))
-      if (s < 0 || s >= toI32(from.length) || d < 0 || d >= toI32(to.length)) {
-        panic("scaleFramebuffer: pixels does not hold width × height")
+      if (s >= 0 && s < toI32(from.length) && d >= 0 && d < toI32(to.length)) {
+        to[d] = from[s]
       }
-      to[d] = from[s]
     }
   }
+  return Ok()
 }
 
 /**
@@ -693,11 +752,11 @@ const pixelsStringEnd = (out: PixelBytes): void => {
  */
 export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: PixelBytes): void => {
   pixelsCheckImageId("kittyFrame", imageId)
-  const pixels: i32[] = fb.pixels
+  const pixels: i32[] = fb.pixelData()
   const count: i32 = toI32(pixels.length)
   // The header gives `width` and `height`; pixels of another count are a
   // framebuffer whose public fields a caller set out of step, not an image.
-  if (toI64(count) !== toI64(fb.width) * toI64(fb.height)) {
+  if (toI64(count) !== toI64(fb.pixelWidth()) * toI64(fb.pixelHeight())) {
     panic("kittyFrame: pixels does not hold width × height")
   }
   const raw: u8[] = out.kittyRaw
@@ -725,9 +784,9 @@ export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: 
       out.putText("a=T,f=24,t=d,i=")
       out.putDecimal(imageId)
       out.putText(",p=1,s=")
-      out.putDecimal(fb.width)
+      out.putDecimal(fb.pixelWidth())
       out.putText(",v=")
-      out.putDecimal(fb.height)
+      out.putDecimal(fb.pixelHeight())
       out.putText(",c=")
       out.putDecimal(rect.cols)
       out.putText(",r=")
@@ -846,7 +905,7 @@ const pixelsSixelRun = (out: PixelBytes, bits: i32, count: i32): void => {
 export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, out: PixelBytes): void => {
   const w: i32 = rect.width
   const h: i32 = rect.height
-  if (w <= 0 || h <= 0 || fb.width <= 0 || fb.height <= 0) {
+  if (w <= 0 || h <= 0 || fb.pixelWidth() <= 0 || fb.pixelHeight() <= 0) {
     return
   }
   const area: i32 = pixelsArea("sixelFrame", w, h)
@@ -858,8 +917,8 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   out.sixelBits = pixelsAtLeast(out.sixelBits, bitsArea)
   const xs: i32[] = out.sampleXs
   const ys: i32[] = out.sampleYs
-  pixelsSampleMapInto(xs, w, fb.width)
-  pixelsSampleMapInto(ys, h, fb.height)
+  pixelsSampleMapInto(xs, w, fb.pixelWidth())
+  pixelsSampleMapInto(ys, h, fb.pixelHeight())
   // Every destination pixel's register, and which registers the frame uses.
   const reg: i32[] = out.sixelReg
   const used: u8[] = out.sixelUsed
@@ -1029,11 +1088,11 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
  * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_HALFBLOCK`.
  */
 export const drawHalfBlocks = (fb: Framebuffer, canvas: Canvas, rect: PixelRect): void => {
-  if (rect.width <= 0 || rect.height <= 0 || fb.width <= 0 || fb.height <= 0) {
+  if (rect.width <= 0 || rect.height <= 0 || fb.pixelWidth() <= 0 || fb.pixelHeight() <= 0) {
     return
   }
-  const xs: i32[] = pixelsSampleMap(rect.width, fb.width)
-  const ys: i32[] = pixelsSampleMap(rect.height, fb.height)
+  const xs: i32[] = pixelsSampleMap(rect.width, fb.pixelWidth())
+  const ys: i32[] = pixelsSampleMap(rect.height, fb.pixelHeight())
   // Read once: the calls below drop what the prover knows of fields.
   const left: i32 = rect.col
   const cw: i32 = canvas.width
@@ -1134,11 +1193,11 @@ const pixelsNearestAnsi16 = (colour: i32): i32 => {
  * @param colors How many colours the terminal shows: 16 for the Linux console, anything else for more.
  */
 export const drawAscii = (fb: Framebuffer, screen: Screen, rect: PixelRect, colors: i32): void => {
-  if (rect.width <= 0 || rect.height <= 0 || fb.width <= 0 || fb.height <= 0) {
+  if (rect.width <= 0 || rect.height <= 0 || fb.pixelWidth() <= 0 || fb.pixelHeight() <= 0) {
     return
   }
-  const xs: i32[] = pixelsSampleMap(rect.width, fb.width)
-  const ys: i32[] = pixelsSampleMap(rect.height, fb.height)
+  const xs: i32[] = pixelsSampleMap(rect.width, fb.pixelWidth())
+  const ys: i32[] = pixelsSampleMap(rect.height, fb.pixelHeight())
   // A local the prover can bound reads by.
   const rampText: string = PIXELS_RAMP
   const ramp: i32 = toI32(rampText.length)
