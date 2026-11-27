@@ -44,31 +44,26 @@ meant:
 
 <!-- nish:err NL2231 -->
 ```ts
-const total = (a: i32, b: i64): i64 => {
+const total = (a: i32, b: u32): i64 => {
   return a + b;
 };
 ```
 
-Several examples on this page build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): most do `i32` arithmetic
-nothing bounds, which bounding the operands would fix, and the `Math` one calls
-`std/math.ts` code that keeps panic sites no proof removes yet, which will
-build under the default once that code is made panic-free.
-
 Convert explicitly with `toI32`, `toI64`, `toF64` (and `toU8`, `toU16`,
-`toU32`, `toU64`, `toF32`):
+`toU32`, `toU64`, `toF32`). Converting both operands to a type wide enough
+for the answer is also what proves it fits: two 32-bit values add up to less
+than an `i64` can hold.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-const total = (a: i32, b: i64): i64 => {
-  return toI64(a) + b;
+const total = (a: i32, b: u32): i64 => {
+  return toI64(a) + toI64(b);
 };
 
 const average = (sum: i32, n: i32): f64 => toF64(sum) / toF64(n);
 
 export const main = (): i32 => {
-  console.log(`${total(2, toI64(40))} ${average(7, 2)}`);   // 42 3.5
+  console.log(`${total(2, toU32(40))} ${average(7, 2)}`);   // 42 3.5
   return 0;
 };
 ```

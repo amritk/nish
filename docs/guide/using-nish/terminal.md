@@ -23,21 +23,21 @@ called whenever a frame may go out, and draws into the frame's `screen` (text
 cells) and `framebuffer` (pixels, when the options ask for one). This program
 bounces a square across the screen until you press `q`.
 
-Most examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): they index arrays,
-slice buffers and move positions by sums the compiler cannot prove in range,
-and the `nish/term` code they reach keeps panic sites no proof removes yet.
+The first example builds with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): the `nish/term` code
+it reaches keeps panic sites no proof removes yet, and it negates a step read
+from a field, whose lower bound the checker does not read from a guard yet.
 `nish/term-probe` keeps none; `nish/term-rate` keeps only its frame counters,
 which overflow past 2^31 - 1 frames; `nish/term-io` keeps only the
 slices that copy what stdin read, and `nish/term-pixels` only the panics a
 negative or too large size, a zero scale, a bad image id or a framebuffer
 whose `pixels` no longer holds `width × height` trips, its arrays sized by a
-count and its slices. A guard such as `i < xs.length` before an index, a
-test of a slice's bounds, or a bound on a position, proves your own code; the
-library calls build under the default once the standard library is made
-panic-free.
+count and its slices. The rest of its code bounds each position before it
+moves or draws one, and the size example tests `size.length` before it reads
+a pair; the library calls build under the default once the standard library
+is made panic-free.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/term-io.ts`, `std/term-pixels.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: negates and subtracts a step read from a field, whose lower bound no guard the checker reads proves yet; calls `std/term-pixels.ts` and `std/term.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { ACTION_PRESS, ATTR_NONE, COLOR_DEFAULT, EVENT_KEY, KEY_CHAR } from "nish/term";
@@ -54,18 +54,30 @@ const update = (b: Ball, input: TermInput): boolean => {
       return false; // q
     }
   }
-  if (b.x + b.dx < 0 || b.x + b.dx > 80) {
-    b.dx = -b.dx;
+  const x: i32 = b.x;
+  const dx: i32 = b.dx;
+  // The ball stays in columns 0 to 80 and moves one a step: anything else
+  // is a state these steps never make, so it ends the loop.
+  if (x < 0 || x > 80 || dx < -1 || dx > 1) {
+    return false;
   }
-  b.x = b.x + b.dx;
+  if (x + dx < 0 || x + dx > 80) {
+    b.dx = -dx; // bounce
+    b.x = x - dx;
+  } else {
+    b.x = x + dx;
+  }
   return true;
 };
 
 const render = (b: Ball, frame: Frame): void => {
   frame.framebuffer.fill(0x102040);
-  for (let y = 40; y < 50; y++) {
-    for (let x = b.x; x < b.x + 10; x++) {
-      frame.framebuffer.set(x, y, 0xffcc00);
+  const left: i32 = b.x;
+  if (left >= 0 && left <= 80) {
+    for (let y = 40; y < 50; y++) {
+      for (let x = left; x < left + 10; x++) {
+        frame.framebuffer.set(x, y, 0xffcc00);
+      }
     }
   }
   frame.screen.clear(COLOR_DEFAULT);
@@ -411,13 +423,15 @@ undone them all itself. It answers `0`, `-25` when stdout is not a terminal
 `terminalSize()` answers a new pair each time you call it. Call it again on
 each frame to notice when the window is resized.
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { isTerminal, terminalSize } from "nish:term";
 
 export const main = (): i32 => {
   const size = terminalSize();
+  if (size.length < 2) {
+    return 1;
+  }
   if (size[0] < 0) {
     console.log(`not a terminal (${size[0]})`);
     return 0;

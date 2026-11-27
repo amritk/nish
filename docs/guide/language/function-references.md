@@ -43,11 +43,6 @@ whichever function the field holds at that moment.
 
 ## Arrays, returns and comparison
 
-Some examples from here on build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): they add and index with
-nothing bounding them, and bounding the operands and testing `i < xs.length`
-before an index builds them under the default.
-
 A reference goes anywhere a value of its type can: a local, a field of a
 class or an interface, an array element, a return value, and a parameter
 whose type is the alias, of a function, a method or a constructor. You call
@@ -55,14 +50,13 @@ it with the usual syntax, `h(3)` or `this.op(4)`, or call an element in place
 as below, and `===` and `!==` tell you whether two references name the same
 function:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-type Step = (x: i32) => i32;
+type Step = (x: f64) => f64;
 
-const inc = (x: i32): i32 => x + 1;
-const square = (x: i32): i32 => x * x;
-const half = (x: i32): i32 => x / 2;
+const inc = (x: f64): f64 => x + 1;
+const square = (x: f64): f64 => x * x;
+const half = (x: f64): f64 => x / 2;
 
 const pick = (name: string): Step => {
   if (name === "inc") {
@@ -73,13 +67,13 @@ const pick = (name: string): Step => {
 
 export const main = (): i32 => {
   const steps: Step[] = [inc, square];
+  console.log(`${steps[1](7)}`);          // 49
   steps.push(half);
-  let x = 3;
+  let x: f64 = 3;
   for (const step of steps) {
     x = step(x);
   }
   console.log(`${x}`);                    // 8
-  console.log(`${steps[1](7)}`);          // 49
   const s = pick("inc");
   console.log(`${s(1)}`);                 // 2
   console.log(`${s === inc}`);            // true
@@ -237,8 +231,7 @@ A reference cannot sit directly in a `Result`, in either arm, nullable or not:
 `Result<Op, string>` is refused (`NL2762`). Return an array of references
 (`Result<Op[], string>`), or a class with a reference field, instead:
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 type Op = (x: i32) => i32;
 
@@ -249,8 +242,9 @@ const pick = (): Result<Op[], string> => Ok([plus1]);
 export const main = (): void => {
   const r = pick();
   if (r.ok) {
-    const f = r.value[0];
-    console.log(`${f(10)}`);
+    for (const f of r.value) {
+      console.log(`${f(10)}`);
+    }
   }
 };
 ```
@@ -261,13 +255,17 @@ A parameter whose function type is written out in the parameter list, as in
 `apply` below, takes a function's name, an arrow, or a variable holding a
 reference. The call passes an arrow that calls the reference:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 type F = (x: i32) => i32;
 
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
-const inc = (x: i32): i32 => x + 1;
+const inc = (x: i32): i32 => {
+  if (x > 1000000) {
+    return x;
+  }
+  return x + 1;
+};
 
 export const main = (): i32 => {
   const h: F = inc;

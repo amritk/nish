@@ -95,14 +95,9 @@ too.
 class over it, `Box<Shape>` or `Stack<Shape>`, holds the union in each `T`
 slot, a generic function called with one binds its type parameter to the
 union, and a `Result` can carry one on either side. A variant converts here
-too, so `new Box<Shape>(new Circle())` and `Ok(new Square())` need no cast.
-Some examples from here on build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): they add and index with
-nothing bounding them, which bounding the operands and testing
-`i < xs.length` before an index would fix:
+too, so `new Box<Shape>(new Circle())` and `Ok(new Square())` need no cast:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 enum Kind {
   Circle,
@@ -111,16 +106,16 @@ enum Kind {
 
 class Circle {
   readonly kind: Kind.Circle = Kind.Circle;
-  r: i32;
-  constructor(r: i32) {
+  r: f64;
+  constructor(r: f64) {
     this.r = r;
   }
 }
 
 class Square {
   readonly kind: Kind.Square = Kind.Square;
-  side: i32;
-  constructor(side: i32) {
+  side: f64;
+  constructor(side: f64) {
     this.side = side;
   }
 }
@@ -134,20 +129,23 @@ class Box<T> {
   }
 }
 
-const area = (s: Shape): i32 => {
+const area = (s: Shape): f64 => {
   switch (s.kind) {
     case Kind.Circle:
-      return 3 * s.r * s.r;
+      return Math.PI * s.r * s.r;
     case Kind.Square:
       return s.side * s.side;
   }
 };
 
-const largest = <T>(xs: T[], measure: (x: T) => i32): T => {
-  let best = xs[0];
+const largest = <T>(xs: T[], measure: (x: T) => f64): T | null => {
+  let best: T | null = null;
+  let most: f64 = 0;
   for (const x of xs) {
-    if (measure(x) > measure(best)) {
+    const m = measure(x);
+    if (best === null || m > most) {
       best = x;
+      most = m;
     }
   }
   return best;
@@ -156,7 +154,10 @@ const largest = <T>(xs: T[], measure: (x: T) => i32): T => {
 export const main = (): void => {
   const b = new Box<Shape>(new Circle(2));
   const shapes: Shape[] = [new Square(3), b.value, new Square(4)];
-  console.log(area(largest(shapes, area)));
+  const big = largest(shapes, area);
+  if (big !== null) {
+    console.log(area(big));
+  }
 };
 ```
 
@@ -234,8 +235,7 @@ whatever variants remain. `!==`, the operands the other way round
 so does each `case` of a `switch (s.kind)`, with `default` holding the
 variants no `case` named.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 enum Kind {
   Circle,
@@ -244,27 +244,27 @@ enum Kind {
 
 class Circle {
   readonly kind: Kind.Circle = Kind.Circle;
-  r: i32 = 3;
+  r: f64 = 3;
 }
 
 class Square {
   readonly kind: Kind.Square = Kind.Square;
-  side: i32 = 4;
+  side: f64 = 4;
 }
 
 type Shape = Circle | Square;
 
-const area = (s: Shape): i32 => {
+const area = (s: Shape): f64 => {
   if (s.kind === Kind.Circle) {
-    return 3 * s.r * s.r;
+    return Math.PI * s.r * s.r;
   }
   return s.side * s.side;
 };
 
-const perimeter = (s: Shape): i32 => {
+const perimeter = (s: Shape): f64 => {
   switch (s.kind) {
     case Kind.Circle:
-      return 6 * s.r;
+      return 2 * Math.PI * s.r;
     default:
       return 4 * s.side;
   }
@@ -272,7 +272,7 @@ const perimeter = (s: Shape): i32 => {
 
 export const main = (): i32 => {
   const shapes: Shape[] = [new Circle(), new Square()];
-  let total = 0;
+  let total: f64 = 0;
   for (const s of shapes) {
     total = total + area(s) + perimeter(s);
   }

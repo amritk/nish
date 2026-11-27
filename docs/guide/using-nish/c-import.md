@@ -147,18 +147,12 @@ functions.
 
 ## Using the module
 
-This example builds with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): it adds two `i64`
-values C answered, a sum the compiler cannot prove fits. Test both against a
-bound before the addition to build it under the default.
-
 Import what you need and call it as you would any declared function. The
 library is linked the way any other C your program calls is, as
 [Calling Nish from other languages](interop.md#calling-c-from-nish-declare-function)
 shows:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 declare class OutI64 {
   value: i64;
@@ -180,7 +174,13 @@ export const count = (): i64 => {
   const words = new OutI64();
   const bytes = wc_total(c, words);
   wc_free(c);
-  return bytes + words.value;
+  const wordCount = words.value;
+  // C's answers are counts; testing both against a bound before adding
+  // them is what proves the sum fits.
+  if (bytes < 0 || bytes > 1000000000 || wordCount < 0 || wordCount > 1000000000) {
+    return toI64(-1);
+  }
+  return bytes + wordCount;
 };
 ```
 
