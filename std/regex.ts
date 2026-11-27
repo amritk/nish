@@ -1825,7 +1825,15 @@ class RegexParser {
     }
     i = 0
     let at: i32 = from
-    while (i >= 0 && i < n && i < toI32(srcLo.length) && i < toI32(srcHi.length) && at >= 0 && at < toI32(lows.length) && at < toI32(highs.length)) {
+    while (
+      i >= 0 &&
+      i < n &&
+      i < toI32(srcLo.length) &&
+      i < toI32(srcHi.length) &&
+      at >= 0 &&
+      at < toI32(lows.length) &&
+      at < toI32(highs.length)
+    ) {
       lows[at] = srcLo[i]
       highs[at] = srcHi[i]
       i += 1
@@ -5227,7 +5235,10 @@ export class Regex {
         }
       }
       // `q` is -1 at the least, where `p` is 0, and below `len`.
-      const here: i32 = q < 0 ? 0 : q < len ? q + 1 : len
+      let here: i32 = len
+      if (q < len) {
+        here = q < 0 ? 0 : q + 1
+      }
       if (here < 0) {
         return DFA_GAVE_UP
       }
@@ -5908,7 +5919,13 @@ export class Regex {
       } else if (c >= 48 && c <= 57) {
         const one: i32 = c - 48
         const d: i32 = two < n ? toI32(rep.charCodeAt(two)) : -1
-        if (two < n && d >= 48 && d <= 57 && one * 10 + (d - 48) >= 1 && one * 10 + (d - 48) <= groupsAfterZero) {
+        if (
+          two < n &&
+          d >= 48 &&
+          d <= 57 &&
+          one * 10 + (d - 48) >= 1 &&
+          one * 10 + (d - 48) <= groupsAfterZero
+        ) {
           value = this.slotText(text, ns, one * 10 + (d - 48))
           next = two + 1
         } else if (one >= 1 && one <= groupsAfterZero) {
