@@ -817,7 +817,11 @@ export class Url {
 /** `bytes[a, b)` as a string with A to Z lower-cased. */
 const urlLowerString = (bytes: u8[], a: i32, b: i32): string => {
   // Callers pass `0 <= a <= b`; a window the other way round is empty.
-  const out: u8[] = new Array<u8>(b > a && a >= 0 ? b - a : 0)
+  let width: i32 = 0
+  if (b > a && a >= 0) {
+    width = b - a
+  }
+  const out: u8[] = new Array<u8>(width)
   const n: i32 = toI32(bytes.length)
   let j: i32 = 0
   let i: i32 = a
