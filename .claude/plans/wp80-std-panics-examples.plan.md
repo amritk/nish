@@ -105,17 +105,59 @@ stages:
         content: Land the router rework so std/net/router.ts keeps only its kept explicit panics (std-router +4.3% accepted on #2204) — see WP80 S6
         status: completed
       - id: s6-sites
-        content: Clear the std sites outside the prover gaps (the shm ffi-nul site, prefork.ts:1170 slice, bytes.ts:592) — see WP80 S6
-        status: in_progress
+        content: Clear the std sites outside the prover gaps (the shm ffi-nul site, prefork.ts:1170 slice, bytes.ts:592); what #2294 and #2350 did not clear, bytes.ts:592 included, moved to S7 and S8 on the owner's decision on #2209 — see WP80 S6
+        status: completed
       - id: s6-twins
-        content: Route constructor and contract panics through checked twins (http1-server.ts:498/:506, handler.ts:908, routerOutside, routerNoRoute) and clear respondEncoded, HttpHandler.put and HttpServer.carry — see WP80 S6
-        status: pending
+        content: Route constructor and contract panics through checked twins (http1-server.ts:498/:506, handler.ts:908, routerOutside, routerNoRoute) and clear respondEncoded, HttpHandler.put and HttpServer.carry; moved to S8 on the owner's decision on #2209 — see WP80 S6
+        status: cancelled
       - id: s6-bench
         content: Lower each instruction count that fell to CI's printed figure, with the before and after table in the PR body — see WP80 S6
         status: completed
       - id: s6-optout
-        content: After #2206, #2207 and #2208, drop the opt-out headers and smoke args of histogram-atomic, merge-patch, prefork-jobs, file-server, prefork-server and http-app, and the guide markers and sentences about them — see WP80 S6
-        status: in_progress
+        content: After #2206, #2207 and #2208, drop the opt-out headers and smoke args of histogram-atomic, merge-patch, prefork-jobs, file-server, prefork-server and http-app, and the guide markers and sentences about them; histogram-atomic and prefork-jobs are freed, merge-patch moved to S7 and file-server, prefork-server and http-app to S8 on the owner's decision on #2209 — see WP80 S6
+        status: completed
+  - id: s7-bytes-windows
+    title: WP80 S7 — window contracts for std/bytes, freeing merge-patch and the byte-order guide snippet
+    goal: std/bytes checks each window through a window guard the prover reads as a contract, so a caller that tests its window discharges the check at its call, and examples/merge-patch.ts and the byte-order snippet in the standard-library guide build without --allow-panics, with no instruction count raised.
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js json && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/nish-cmp.js --no-sidecars
+    issue: 2356
+    todos:
+      - id: s7-fix
+        content: Give std/bytes.ts's fixed-width getters and setters (getU16LE, getU32BE, setU32LE and their siblings) and bytesUtf8End's walk a window guard of the shape docs/LANGUAGE.md's window contract names, so the check moves to each caller and a caller's own test proves it (std/bytes.ts:92, :125, :273 and :592:27 are the sites the snippet and merge-patch reach today; others may appear after each fix) — see WP80 S7
+        status: pending
+      - id: s7-optout
+        content: Drop the opt-out header and smoke args of examples/merge-patch.ts, and the allow-panics marker of the byte-order snippet in docs/guide/using-nish/standard-library.md with its sentence that a guard in your own loop does not yet remove the checks, rewritten to show the guard that does — see WP80 S7
+        status: pending
+      - id: s7-pins
+        content: Regenerate the pinned std/bytes.ts line numbers, the checked goldens and docs/reference, and add the nish-cmp DECLARED and file exit entries the PR's IR moves need — see WP80 S7
+        status: pending
+      - id: s7-ratchet
+        content: Lower tests/std-panics.json to the new exact bytes count and lower each instruction count that fell to CI's figure, with the before and after table in the PR body; std-json-typed may not rise — see WP80 S7
+        status: pending
+  - id: s8-http1-checked-config
+    title: WP80 S8 — a checked HTTP/1 server config and constructor twins, freeing file-server, prefork-server and http-app
+    goal: The HTTP/1 server takes its caps from a config snapshot it checks once and returns as a Result, the handler, router and prefork entry points a server example calls have checked twins that return Err where the constructor panics today, and file-server, prefork-server and http-app build without --allow-panics.
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js net && node tests/run.js net_static && node tests/run.js file-server && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/nish-cmp.js --no-sidecars
+    issue: 2357
+    todos:
+      - id: s8-config
+        content: Add a checked Http1Config snapshot, built by a Result-returning constructor that runs http1ServerConfigFault once and keeps a copy the caller cannot change, and an Http1Connection constructor twin that takes it, so the cap check at std/net/http1-server.ts:499:5 is not reached from a server that built its config the checked way — see WP80 S8
+        status: pending
+      - id: s8-twins
+        content: Add checked twins for the other constructor and contract panics the three examples reach - the HttpHandler limits check (handlerCheckLimits, std/net/handler.ts:934:7; openHttpHandler is the Result form), the Router contracts routerOutside and routerNoRoute (std/net/router.ts:1289, :1290, :1304) and preforkSupervise's panic through preforkWorkers (std/net/prefork.ts:1392:5; tryPreforkWith is the Result form) - and clear respondEncoded, HttpHandler.put and HttpServer.carry, the explicit panics S4 lists as not kept — see WP80 S8
+        status: pending
+      - id: s8-windows
+        content: Clear the window sites the examples reach outside http1-server - websocketIsUtf8's inline window check (std/net/websocket.ts:267:5) as a window guard, staticReadAll's slice (std/net/static.ts:221:20), and file-server's own write at examples/file-server.ts:126:23 of a length fileReadAt returned - each with a proof or a Result, never a made-up value — see WP80 S8
+        status: pending
+      - id: s8-optout
+        content: Move examples/file-server.ts, examples/prefork-server.ts and examples/http-app onto the checked forms, drop their opt-out headers and smoke args and the ALLOW_PANICS their tests/run.js builds pass, and drop every guide marker and sentence the stale opt-out check reports freed (the prefork snippets in docs/guide/using-nish/networking.md and docs/guide/using-nish/api-server.md among them) — see WP80 S8
+        status: pending
+      - id: s8-pins
+        content: Regenerate the pinned std/net line numbers, the checked goldens and docs/reference, update the guide pages of each new export, and add the nish-cmp DECLARED and file exit entries the PR's IR moves need — see WP80 S8
+        status: pending
+      - id: s8-ratchet
+        content: Lower tests/std-panics.json to the new exact per-module counts and lower each instruction count that fell to CI's figure, with the before and after table in the PR body — see WP80 S8
+        status: pending
 ---
 
 # WP80 — std panic-free for threads, CLI, sync and the HTTP/1 server stack
@@ -176,3 +218,32 @@ Sites as of 071ed014 (442): net/handler 171, net/serve 140, net/router 131. Kind
 Added on the owner's decision on #2204: the `src/` prover gaps the earlier stages hit are their own work (#2206 atomic element index, #2207 type-only `new Array<T>(n)` length, #2208 `String.fromBytes`/`netRead` slices), and this stage follows them. It clears what S1–S5 left outside those gaps, lowers the instruction counts that fell during the package to CI's figures, and drops the six opt-outs (histogram-atomic, merge-patch, prefork-jobs, file-server, prefork-server, http-app) once the prover proves their sites.
 
 One exception to rule 6, accepted on #2204: the router rework (plain guards and clamps in place of wrap helpers, so router.ts keeps only its six kept explicit panics) raises std-router by about 4.3% of instructions. Its count is written from the run that measured it and replaced with CI's printed figure once the bench shard prints it.
+
+## WP80 S7 — window contracts for std/bytes, freeing merge-patch and the byte-order guide snippet
+
+Split from S6 (#2209) on the owner's decision of 2026-11-27. #2321 made a window guard a contract: a call to a free `void` function whose body is exactly `const size: i32 = toI32(buf.length)` then `if (off < 0 || len < 0 || off > size || len > size - off) { panic(m) }` has its check recorded at the call, and a caller that tests the window proves it there (`docs/LANGUAGE.md`, the `window` contract; `tests/link/window_contract_*`). std/bytes does not use that shape yet, so its checks stay inside the module and every caller answers for them.
+
+What still opts out on 09a6f22a8, and why:
+
+- **`examples/merge-patch.ts`**: its only remaining site is the lead-byte read in `bytesUtf8End` (std/bytes.ts:592:27). A guard inside the walk cost +0.45% on std-json-typed, over its tolerance, so the fix puts the window check at the walk's entry, as a contract, and proves the walk from it, leaving the loop as it is.
+- **The byte-order snippet** in `docs/guide/using-nish/standard-library.md` (its `allow-panics` marker cites `std/bytes.ts`): it calls `getU32BE`, `setU32LE` and `getU16LE` (std/bytes.ts:125, :273, :92). The prose after it says a guard in your own loop, such as `off + 3 < b.length`, does not yet remove these checks. That sentence changes to show the guard that now does.
+
+The diagnostic names only the first site per call, so more std/bytes sites may appear after each fix. Rule 6 holds: no count in `bench/instructions.json` may rise, std-json-typed included.
+
+## WP80 S8 — a checked HTTP/1 server config and constructor twins, freeing file-server, prefork-server and http-app
+
+Split from S6 (#2209) on the owner's decision of 2026-11-27. It takes over S6's checked-twins todo, which never started, and the three server examples S6 could not free.
+
+The blocker the three share is the cap check in the `Http1Connection` constructor (std/net/http1-server.ts:499:5, `http1ServerCheckCap`). `Http1Config` is a mutable class the connection stores as given, so no caller-side proof can show its caps are still good when the constructor runs. The fix is a config snapshot: a Result-returning constructor checks the caps once and keeps a copy nobody else can change, and a constructor twin takes only that snapshot. Letting a caller's proof discharge a constructor or contract panic in general is prover work, tracked separately in #2296; this stage does not wait for it.
+
+Sites the examples reach on 09a6f22a8 (the first per call; more may appear after each fix):
+
+| Example | Sites |
+| --- | --- |
+| `examples/file-server.ts` | http1-server.ts:499:5; `websocketIsUtf8`'s window check (std/net/websocket.ts:267:5), written inline rather than as a window guard; its own `write` at file-server.ts:126:23, of a length `fileReadAt` returned that nothing proves inside `served.window` |
+| `examples/prefork-server.ts` | http1-server.ts:499:5; websocket.ts:267:5; `preforkSupervise`'s panic through `preforkWorkers` (std/net/prefork.ts:1392:5), where `tryPreforkWith` is the Result form `prefork-jobs` already uses |
+| `examples/http-app/main.ts` | http1-server.ts:499:5; the `HttpHandler` limits check (`handlerCheckLimits`, std/net/handler.ts:934:7), where `openHttpHandler` is the Result form; the Router contracts `routerOutside` (router.ts:1289, :1290, from `Router.match`) and `routerNoRoute` (:1304, from `paramCount`); `staticReadAll`'s slice (std/net/static.ts:221:20) |
+
+Each new export is public std API, so it lands with its doc comment, its `@param` and `@returns`, its reference page and a guide mention (`docs/guide/using-nish/networking.md`, `docs/guide/using-nish/api-server.md`). The `tests/run.js` builds of file-server and http-app pass `ALLOW_PANICS` today; they drop it with the headers. The prefork snippets in `networking.md` keep their markers unless the stale opt-out check reports them freed.
+
+`examples/multi` keeps `--allow-panics` on the owner's decision of 2026-11-27 (its `math.ts` says no follow-up is planned); no stage of this package frees it.
