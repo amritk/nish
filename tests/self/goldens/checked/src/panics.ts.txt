@@ -233,14 +233,14 @@ function hostCalls(program: CheckedProgram, strictExports: boolean, sig: Functio
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.compileTimeOnly FunctionSig.definedIn nish_str_eq
   pointer program: size=928 writesThrough=false captured=false
-  pointer sig: size=296 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.compileTimeOnly#0
+  pointer sig: size=304 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.compileTimeOnly#0
   stackSites=0 stackLocals=0
   local +0:9 main: FunctionSig | null (const)
   callee +7:5 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee +9:6 FunctionSig.compileTimeOnly -> @FunctionSig.compileTimeOnly
 function forwardSite(sig: FunctionSig, site: PanicSite): boolean -> @forwardSite
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer sig: size=296 writesThrough=false captured=false
+  pointer sig: size=304 writesThrough=false captured=false
   pointer site: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 forward: Node | null (const)
@@ -249,7 +249,7 @@ function hostProof(program: CheckedProgram, sig: FunctionSig, site: PanicSite): 
   sharedWrite: via faultProven
   calls: faultProven nish_panic_index
   pointer program: size=928 writesThrough=true captured=false passedTo=faultProven#0
-  pointer sig: size=296 writesThrough=false captured=false passedTo=faultProven#1
+  pointer sig: size=304 writesThrough=false captured=false passedTo=faultProven#1
   pointer site: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 guard: FunctionSig | null (const)
@@ -257,7 +257,7 @@ function hostProof(program: CheckedProgram, sig: FunctionSig, site: PanicSite): 
 function contractCheck(sig: FunctionSig): Node | null -> @contractCheck
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isFaultGuard isWindowGuard
-  pointer sig: size=296 writesThrough=false captured=false passedTo=isWindowGuard#0 isFaultGuard#0
+  pointer sig: size=304 writesThrough=false captured=false passedTo=isWindowGuard#0 isFaultGuard#0
   stackSites=0 stackLocals=0
   callee +0:7 isWindowGuard -> @isWindowGuard
   callee +3:10 isFaultGuard -> @isFaultGuard
@@ -312,7 +312,7 @@ function listedFacts(program: CheckedProgram, facts: FactsTable, sig: FunctionSi
   calls: FactsTable.get FunctionSig.definedIn FunctionSig.foreign
   pointer program: size=928 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
-  pointer sig: size=296 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.foreign#0
+  pointer sig: size=304 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.foreign#0
   stackSites=0 stackLocals=0
   callee +0:3 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee +0:37 FunctionSig.foreign -> @FunctionSig.foreign
@@ -324,7 +324,7 @@ function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite 
   pointer program: size=928 writesThrough=true captured=false passedTo=hostProof#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=reachOf#0 forwardGuardAt#0 reachOf#0
   pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
-  pointer sig: size=296 writesThrough=false captured=false passedTo=contractCheck#0 forwardSite#0 hostProof#1
+  pointer sig: size=304 writesThrough=false captured=false passedTo=contractCheck#0 forwardSite#0 hostProof#1
   pointer f: size=464 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local -32:9 sites: PanicSite[] (const)
@@ -646,13 +646,15 @@ function windowAdvice(program: CheckedProgram, call: Node): string -> @windowAdv
   callee +8:15 argumentName -> @argumentName
   local +9:9 off: string (const)
   callee +9:15 argumentName -> @argumentName
-  local +10:9 len: string (const)
-  callee +10:15 argumentName -> @argumentName
-  local +11:9 args: Node[] (const)
-  local +12:9 start: i32 (const)
-  callee +12:17 literalValue -> @literalValue
-  local +13:9 count: i32 (const)
-  callee +13:17 literalValue -> @literalValue
+  local +11:9 literal: i32 (const)
+  local +12:9 len: string (const)
+  callee +12:45 argumentName -> @argumentName
+  local +13:9 args: Node[] (const)
+  local +14:9 start: i32 (const)
+  callee +14:17 literalValue -> @literalValue
+  local +15:9 count: i32 (const)
+  callee +15:42 literalValue -> @literalValue
+  local +24:11 test: string (const)
 function vectorAdvice(program: CheckedProgram, call: Node, lanes: i32): string -> @vectorAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_concat nish_str_from_i32 siteLocalName

@@ -185,11 +185,11 @@ function liftDefaults(parser: Parser, file: Node, allowed: boolean): DefaultWrap
   local -3:9 i: i32 (let)
   local -1:13 param: Node (const)
 function defaultTarget(ctx: CheckContext, sig: FunctionSig, count: i32): FunctionSig -> @defaultTarget [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=296
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=304
   escaping: sig
   calls: nish_panic_index
   pointer ctx: size=448 writesThrough=false captured=false
-  pointer sig: size=296 writesThrough=true captured=true
+  pointer sig: size=304 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +3:13 wrapper: Node (const)
