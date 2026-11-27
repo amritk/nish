@@ -103,6 +103,12 @@ cannot cause it. One call is the exception: the client picks the HTTP
 version, and `trailers` panics on an HTTP/1.1 or HTTP/3 request, so a
 handler behind more than one kind of listener that calls it without
 checking `r.version === 2` can be panicked by any client (HTTPSRV-13).
+The WebSocket calls answer misuse instead of panicking: `sendFrame` and
+`closeWebSocket` answer `H1_INVALID` on a request that is not a held
+WebSocket, and `sendFrame` on a window outside its buffer (`link/net_http_server_ws`
+"so do sendFrame and closeWebSocket on a request not upgraded", "each WebSocket
+handed back answers H1_INVALID to closeWebSocket and acceptWebSocket",
+"sendFrame answers H1_INVALID to a window past its buffer, sending nothing").
 
 ## Findings
 

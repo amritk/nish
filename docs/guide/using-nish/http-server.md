@@ -422,6 +422,9 @@ export const main = (): i32 => {
 
 A request that arrived over HTTP/2 or HTTP/3 does not upgrade:
 `acceptWebSocket` answers `H1_INVALID` and you answer it as any other.
+`sendFrame` and `closeWebSocket` answer `H1_INVALID`, and `received` does
+nothing, on a request that is not a WebSocket you hold: one never upgraded, or
+one you handed back. `sendFrame` answers it too for a window outside its buffer.
 Extended CONNECT ([RFC 8441](https://www.rfc-editor.org/rfc/rfc8441)) is not
 served. `bodyTimeout` does not apply to a WebSocket; the HTTP/1.1 listener's
 `Http1Config.idleTimeout` closes one nothing moves on, and it comes out

@@ -3,6 +3,7 @@ PASS  the program upgraded one request
 PASS  a text message is echoed as text
 PASS  a 300000-byte binary message in three fragments is echoed whole
 PASS  two messages echoed
+PASS  sendFrame answers H1_INVALID to a window past its buffer, sending nothing
 PASS  a ping is answered with a pong by the connection
 PASS  and not handed to the program
 PASS  a close from the client is answered with 1000
@@ -19,6 +20,7 @@ PASS  and its connection closes
 PASS  the program saw it closed with 1002
 PASS  a connection dropped without a close settles
 PASS  the program saw it closed with 1006
+PASS  each WebSocket handed back answers H1_INVALID to closeWebSocket and acceptWebSocket
 PASS  every WebSocket was handed back
 PASS  a pool of one serves three WebSockets one after another
 PASS  while a WebSocket holds the pool of one, a second handshake waits unanswered
@@ -28,8 +30,10 @@ PASS  and leave the arena where it was (0 bytes kept)
 PASS  h2c: a connection
 PASS  acceptWebSocket answers H1_INVALID on HTTP/2
 PASS  and the program answers it 400
+PASS  before which sendFrame and closeWebSocket answer it H1_INVALID
 PASS  a GET with no Upgrade: acceptWebSocket answers H1_INVALID
 PASS  and the program answers it 400
+PASS  so do sendFrame and closeWebSocket on a request not upgraded
 PASS  no request was upgraded
 PASS  bodyTimeout 1: a WebSocket quiet for 1.5 s is still open
 PASS  and still echoes
@@ -43,4 +47,4 @@ PASS  TLS: a close from the client is answered with 1000
 PASS  TLS: then the server closes the connection
 PASS  TLS: and the server holds no connection
 PASS  TLS: the program saw it closed with the client's 1000
-net_http_server_ws: 45 passed, 0 failed, 0 skipped
+net_http_server_ws: 49 passed, 0 failed, 0 skipped

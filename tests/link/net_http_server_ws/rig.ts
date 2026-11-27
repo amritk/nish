@@ -7,7 +7,7 @@
 import { Secret } from "nish:secret"
 import { netLocalPort, tcpListen } from "nish:net"
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server"
-import { H1_AGAIN, Http1Config } from "nish/net/http1-server"
+import { H1_AGAIN, H1_INVALID, Http1Config } from "nish/net/http1-server"
 import { Http2Config } from "nish/net/http2"
 import { Router, RouterLimits } from "nish/net/router"
 import { TlsServerConfig } from "nish/net/tls"
@@ -41,6 +41,11 @@ export class Rig {
   codes: i32[]
   /** Arena bytes the server's own calls left allocated, summed over every `step`. */
   kept: i64 = 0
+  /** How many refused requests answered `H1_INVALID` to `sendFrame` and `closeWebSocket`, and how many WebSockets handed back answered it to `closeWebSocket` and `acceptWebSocket`. */
+  misused: i32 = 0
+  handedBack: i32 = 0
+  /** How many messages had `sendFrame` answer `H1_INVALID` to a window past their buffer before their echo. */
+  outside: i32 = 0
   /** Whether a 3-byte text message starting `b` has the program close the WebSocket with 1000. */
   bye: boolean = true
 
@@ -106,9 +111,15 @@ export class Rig {
 
   /** A new request: upgraded, or answered 400 when it cannot be. */
   private upgrade(r: HttpServerRequest): void {
-    this.accepted = this.h.acceptWebSocket(r, "")
+    const h: HttpServer = this.h
+    this.accepted = h.acceptWebSocket(r, "")
     if (this.accepted !== 0) {
-      this.h.empty(r, 400)
+      const none: u8[] = []
+      if (h.sendFrame(r, true, WS_OP_TEXT, none, 0, 0) === H1_INVALID && h.closeWebSocket(r, WS_CLOSE_NORMAL) === H1_INVALID) {
+        this.misused = this.misused + 1
+      }
+      h.received(r)
+      h.empty(r, 400)
       return
     }
     this.upgrades = this.upgrades + 1
@@ -134,6 +145,9 @@ export class Rig {
       this.codes.push(r.closeCode)
       this.forget(i)
       h.closeWebSocket(r, WS_CLOSE_NORMAL)
+      if (h.closeWebSocket(r, WS_CLOSE_NORMAL) === H1_INVALID && h.acceptWebSocket(r, "") === H1_INVALID) {
+        this.handedBack = this.handedBack + 1
+      }
       return
     }
     if (!r.message) {
@@ -144,6 +158,9 @@ export class Rig {
         this.forget(i)
         h.closeWebSocket(r, WS_CLOSE_NORMAL)
         return
+      }
+      if (h.sendFrame(r, true, r.opcode, r.messageData, toI32(r.messageData.length), 1) === H1_INVALID) {
+        this.outside = this.outside + 1
       }
       this.sent[i] = 0
     } else if (r.writable) {

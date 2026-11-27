@@ -98,6 +98,7 @@ const echoes = (t: Suite): void => {
   c.send(true, WS_OP_CONTINUATION, large.slice(2 * third, LARGE))
   t.ok("a 300000-byte binary message in three fragments is echoed whole", c.next() === WS_MESSAGE && c.dec.opcode === WS_OP_BINARY && holds(c, large))
   t.eqI32("two messages echoed", rig.echoed, 2)
+  t.eqI32("sendFrame answers H1_INVALID to a window past its buffer, sending nothing", rig.outside, 2)
 
   c.send(true, WS_OP_PING, ascii("p"))
   t.ok("a ping is answered with a pong by the connection", c.next() === WS_PONG && holds(c, ascii("p")))
@@ -155,6 +156,7 @@ const closes = (t: Suite): void => {
   netClose(gone.peer.fd)
   t.ok("a connection dropped without a close settles", settles(rig))
   t.ok("the program saw it closed with 1006", lastCode(rig, 2, 1006))
+  t.eqI32("each WebSocket handed back answers H1_INVALID to closeWebSocket and acceptWebSocket", rig.handedBack, 2)
   t.eqI32("every WebSocket was handed back", toI32(rig.sockets.length), 0)
 }
 
@@ -234,12 +236,14 @@ const refused = (t: Suite): void => {
   const frames: string = h2.awaitFrames(3)
   t.eqI32("acceptWebSocket answers H1_INVALID on HTTP/2", rig.accepted, H1_INVALID)
   t.ok("and the program answers it 400", frames.indexOf("HEADERS 1 end :status=400") >= 0)
+  t.eqI32("before which sendFrame and closeWebSocket answer it H1_INVALID", rig.misused, 1)
 
   rig.accepted = 1
   const c = new WsClient(rig)
   const head: string = c.request(rig.port, ascii("GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"))
   t.eqI32("a GET with no Upgrade: acceptWebSocket answers H1_INVALID", rig.accepted, H1_INVALID)
   t.ok("and the program answers it 400", head.startsWith("HTTP/1.1 400 "))
+  t.eqI32("so do sendFrame and closeWebSocket on a request not upgraded", rig.misused, 2)
   t.eqI32("no request was upgraded", rig.upgrades, 0)
 }
 
