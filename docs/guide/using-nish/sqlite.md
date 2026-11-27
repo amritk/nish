@@ -25,22 +25,27 @@ The reference is
 the file when it is missing. The path `:memory:` is a database of its own that
 lives as long as the connection. `close()` closes it.
 
-The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): they unwrap each
-`Result` with `expect`, which stops the program on an error, and `nish/sqlite`
-keeps panic sites no proof removes yet. Test `r.isErr()` before reading
-`r.value` instead of calling `expect`, and the rest builds under the default
-once the standard library is made panic-free.
+Every call that can fail answers a `Result`, and the examples handle each
+one: they test `r.isErr()` before reading `r.value`, and a function that
+returns a `Result` passes a failure up with
+[`orReturn()`](../language/errors.md#passing-a-failure-up). They still build
+with [`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/sqlite`
+keeps panic sites no proof removes yet, so a call into it is refused by
+default for now.
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
 
 export const main = (): i32 => {
-  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
-  db.close().expect("close");
-  return 0;
+  const opened = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE);
+  if (opened.isErr()) {
+    console.error(opened.error.message);
+    return 1;
+  }
+  const db = opened.value;
+  return db.close().isOk() ? 0 : 1;
 };
 ```
 
@@ -48,16 +53,23 @@ Settings are SQL. A file database that many readers share usually wants
 SQLite's write-ahead log, which `PRAGMA journal_mode=WAL` turns on and which
 the file keeps; `PRAGMA synchronous=NORMAL` is the usual setting beside it.
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
 
 export const main = (): i32 => {
-  const db = openDatabase("app.db", OPEN_READWRITE | OPEN_CREATE).expect("open");
-  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL").expect("pragmas");
-  db.close().expect("close");
-  return 0;
+  const opened = openDatabase("app.db", OPEN_READWRITE | OPEN_CREATE);
+  if (opened.isErr()) {
+    console.error(opened.error.message);
+    return 1;
+  }
+  const db = opened.value;
+  const set = db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL");
+  if (set.isErr()) {
+    console.error(db.error(set.error).message);
+  }
+  return db.close().isOk() && set.isOk() ? 0 : 1;
 };
 ```
 
@@ -70,16 +82,23 @@ to it in this program closes.
 A WAL database then keeps its index in memory, so there is no `-shm` file
 beside it. Name the VFS in a `file:` URI and add `OPEN_URI`:
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { OPEN_CREATE, OPEN_READWRITE, OPEN_URI, openDatabase } from "nish/sqlite";
 
 export const main = (): i32 => {
-  const db = openDatabase("file:app.db?vfs=unix-excl", OPEN_READWRITE | OPEN_CREATE | OPEN_URI).expect("open");
-  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL").expect("pragmas");
-  db.close().expect("close");
-  return 0;
+  const opened = openDatabase("file:app.db?vfs=unix-excl", OPEN_READWRITE | OPEN_CREATE | OPEN_URI);
+  if (opened.isErr()) {
+    console.error(opened.error.message);
+    return 1;
+  }
+  const db = opened.value;
+  const set = db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL");
+  if (set.isErr()) {
+    console.error(db.error(set.error).message);
+  }
+  return db.close().isOk() && set.isOk() ? 0 : 1;
 };
 ```
 
@@ -107,18 +126,30 @@ for schema changes, settings and one-off writes. `changes()` answers how many
 rows the last `INSERT`, `UPDATE` or `DELETE` changed, and `lastInsertRowid()`
 the rowid of the last row an `INSERT` made.
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
+import { Database, OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
+
+const fill = (db: Database): Result<void, i32> => {
+  db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)").orReturn();
+  db.exec("INSERT INTO t (name) VALUES ('ada'), ('grace')").orReturn();
+  console.log(`${db.changes()} rows, last id ${db.lastInsertRowid()}`);
+  return Ok();
+};
 
 export const main = (): i32 => {
-  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
-  db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)").expect("create");
-  db.exec("INSERT INTO t (name) VALUES ('ada'), ('grace')").expect("insert");
-  console.log(`${db.changes()} rows, last id ${db.lastInsertRowid()}`);
-  db.close().expect("close");
-  return 0;
+  const opened = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE);
+  if (opened.isErr()) {
+    console.error(opened.error.message);
+    return 1;
+  }
+  const db = opened.value;
+  const done = fill(db);
+  if (done.isErr()) {
+    console.error(db.error(done.error).message);
+  }
+  return db.close().isOk() && done.isOk() ? 0 : 1;
 };
 ```
 
@@ -149,24 +180,39 @@ program with the
 [`ffi-nul` panic](../../reference/language/semantics-decisions.md#panic-sites) rather than cutting the SQL
 short; bind text with NUL bytes in it through `bindTextBytes`.
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
+import { Database, OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
+
+const fill = (db: Database): Result<void, i32> => {
+  db.exec("CREATE TABLE squares (n INTEGER, sq INTEGER)").orReturn();
+  const prepared = db.prepare("INSERT INTO squares VALUES (?1, ?2)");
+  if (prepared.isErr()) {
+    return Err(prepared.error.extendedCode);
+  }
+  const insert = prepared.value;
+  for (let n = 1; n <= 1000; n++) {
+    insert.bindI64(1, toI64(n)).orReturn();
+    insert.bindI64(2, toI64(n * n)).orReturn();
+    insert.step().orReturn();
+    insert.reset().orReturn();
+  }
+  return insert.finalize();
+};
 
 export const main = (): i32 => {
-  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
-  db.exec("CREATE TABLE squares (n INTEGER, sq INTEGER)").expect("create");
-  const insert = db.prepare("INSERT INTO squares VALUES (?1, ?2)").expect("prepare");
-  for (let n = 1; n <= 1000; n++) {
-    insert.bindI64(1, toI64(n)).expect("bind n");
-    insert.bindI64(2, toI64(n * n)).expect("bind sq");
-    insert.step().expect("insert");
-    insert.reset().expect("reset");
+  const opened = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE);
+  if (opened.isErr()) {
+    console.error(opened.error.message);
+    return 1;
   }
-  insert.finalize().expect("finalize");
-  db.close().expect("close");
-  return 0;
+  const db = opened.value;
+  const done = fill(db);
+  if (done.isErr()) {
+    console.error(db.error(done.error).message);
+  }
+  return db.close().isOk() && done.isOk() ? 0 : 1;
 };
 ```
 
@@ -202,22 +248,40 @@ answer 0, `SQLITE_NULL` or `null` for a column that is not there. With no
 current row, before the first `step` or after the last, every read answers as
 for `NULL`: `columnInto` answers `Ok(0)`.
 
-<!-- allow-panics: unwraps a `Result` with `expect`; slices with bounds it does not test; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
+import { Database, OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
+
+const list = (db: Database): Result<void, i32> => {
+  db.exec("CREATE TABLE t (id INTEGER, name TEXT); INSERT INTO t VALUES (1, 'ada'), (2, 'grace')").orReturn();
+  const prepared = db.prepare("SELECT id, name FROM t ORDER BY id");
+  if (prepared.isErr()) {
+    return Err(prepared.error.extendedCode);
+  }
+  const rows = prepared.value;
+  const buf = new Array<u8>(64);
+  while (rows.step().orReturn()) {
+    const n = rows.columnInto(1, buf, 0).orReturn();
+    // A name longer than `buf` is not copied, and `n` is the room it needs.
+    const name = n >= 0 && n <= buf.length ? String.fromBytes(buf, 0, n) : "(too long)";
+    console.log(`${rows.columnI64(0)} ${name}`);
+  }
+  return Ok();
+};
 
 export const main = (): i32 => {
-  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
-  db.exec("CREATE TABLE t (id INTEGER, name TEXT); INSERT INTO t VALUES (1, 'ada'), (2, 'grace')").expect("setup");
-  const rows = db.prepare("SELECT id, name FROM t ORDER BY id").expect("prepare");
-  const buf = new Array<u8>(64);
-  while (rows.step().expect("step")) {
-    const n = rows.columnInto(1, buf, 0).expect("name");
-    console.log(`${rows.columnI64(0)} ${String.fromBytes(buf, 0, n)}`);
+  const opened = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE);
+  if (opened.isErr()) {
+    console.error(opened.error.message);
+    return 1;
   }
-  db.close().expect("close");
-  return 0;
+  const db = opened.value;
+  const done = list(db);
+  if (done.isErr()) {
+    console.error(db.error(done.error).message);
+  }
+  return db.close().isOk() && done.isOk() ? 0 : 1;
 };
 ```
 
@@ -227,19 +291,30 @@ export const main = (): i32 => {
 Many inserts inside one transaction are written to the file once, at the
 commit, rather than once each.
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
+import { Database, OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
+
+const undo = (db: Database): Result<void, i32> => {
+  db.exec("CREATE TABLE t (x INTEGER)").orReturn();
+  db.begin().orReturn();
+  db.exec("INSERT INTO t VALUES (1)").orReturn();
+  return db.rollback();
+};
 
 export const main = (): i32 => {
-  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
-  db.exec("CREATE TABLE t (x INTEGER)").expect("create");
-  db.begin().expect("begin");
-  db.exec("INSERT INTO t VALUES (1)").expect("insert");
-  db.rollback().expect("rollback");
-  db.close().expect("close");
-  return 0;
+  const opened = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE);
+  if (opened.isErr()) {
+    console.error(opened.error.message);
+    return 1;
+  }
+  const db = opened.value;
+  const done = undo(db);
+  if (done.isErr()) {
+    console.error(db.error(done.error).message);
+  }
+  return db.close().isOk() && done.isOk() ? 0 : 1;
 };
 ```
 
@@ -257,27 +332,42 @@ index has it, and then `rowid`. Column `n` is the `n`th name. If the list
 does not match the schema, the open fails with `SQLITE_SCHEMA`, so a
 changed schema cannot be misread.
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { OPEN_CREATE, OPEN_READWRITE, SEEK_GE, openDatabase } from "nish/sqlite";
+import { Database, OPEN_CREATE, OPEN_READWRITE, SEEK_GE, openDatabase } from "nish/sqlite";
+
+const walk = (db: Database): Result<void, i32> => {
+  db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT); CREATE INDEX t_name ON t (name)").orReturn();
+  db.exec("INSERT INTO t (name) VALUES ('ada'), ('bo'), ('cy')").orReturn();
+  db.beginRead().orReturn();
+  const opened = db.openCursor("t_name", "name,rowid");
+  if (opened.isErr()) {
+    return Err(opened.error.extendedCode);
+  }
+  const ix = opened.value;
+  ix.keyReset().orReturn();
+  ix.keyText("b").orReturn();
+  let found = ix.seek(SEEK_GE).orReturn();
+  while (found) {
+    console.log(`${ix.rowid()}`);
+    found = ix.next().orReturn();
+  }
+  return db.endRead();
+};
 
 export const main = (): i32 => {
-  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
-  db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT); CREATE INDEX t_name ON t (name)").expect("create");
-  db.exec("INSERT INTO t (name) VALUES ('ada'), ('bo'), ('cy')").expect("insert");
-  db.beginRead().expect("begin");
-  const ix = db.openCursor("t_name", "name,rowid").expect("cursor");
-  ix.keyReset().expect("reset");
-  ix.keyText("b").expect("key");
-  let r = ix.seek(SEEK_GE);
-  while (r.isOk() && r.value) {
-    console.log(`${ix.rowid()}`);
-    r = ix.next();
+  const opened = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE);
+  if (opened.isErr()) {
+    console.error(opened.error.message);
+    return 1;
   }
-  db.endRead().expect("end");
-  db.close().expect("close");
-  return 0;
+  const db = opened.value;
+  const done = walk(db);
+  if (done.isErr()) {
+    console.error(db.error(done.error).message);
+  }
+  return db.close().isOk() && done.isOk() ? 0 : 1;
 };
 ```
 
@@ -350,25 +440,41 @@ A `SqliteError` has three fields:
   extended one;
 - `message`, SQLite's own text, such as `UNIQUE constraint failed: t.id`.
 
-<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { OPEN_CREATE, OPEN_READWRITE, SQLITE_CONSTRAINT, openDatabase } from "nish/sqlite";
+import { Database, OPEN_CREATE, OPEN_READWRITE, SQLITE_CONSTRAINT, openDatabase } from "nish/sqlite";
 
-export const main = (): i32 => {
-  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
-  db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)").expect("create");
-  const insert = db.prepare("INSERT INTO t VALUES (?1)").expect("prepare");
-  insert.bindI64(1, toI64(7)).expect("bind");
-  insert.step().expect("first");
-  insert.reset().expect("reset");
+const insertTwice = (db: Database): Result<void, i32> => {
+  db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)").orReturn();
+  const prepared = db.prepare("INSERT INTO t VALUES (?1)");
+  if (prepared.isErr()) {
+    return Err(prepared.error.extendedCode);
+  }
+  const insert = prepared.value;
+  insert.bindI64(1, toI64(7)).orReturn();
+  insert.step().orReturn();
+  insert.reset().orReturn();
   const again = insert.step();
   if (again.isErr()) {
     const e = insert.error(again.error);
     console.log(`${e.code === SQLITE_CONSTRAINT} ${e.message}`);
   }
-  db.close().expect("close");
-  return 0;
+  return Ok();
+};
+
+export const main = (): i32 => {
+  const opened = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE);
+  if (opened.isErr()) {
+    console.error(opened.error.message);
+    return 1;
+  }
+  const db = opened.value;
+  const done = insertTwice(db);
+  if (done.isErr()) {
+    console.error(db.error(done.error).message);
+  }
+  return db.close().isOk() && done.isOk() ? 0 : 1;
 };
 ```
 

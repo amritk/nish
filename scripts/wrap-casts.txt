@@ -44,7 +44,6 @@
 16 std/net/tls.ts
 2 std/net/tls/record.ts
 3 std/net/tls/ticket.ts
-131 std/regex.ts
 6 std/sqlite.ts
 9 std/sync/ring.ts
 1 std/sync/shm.ts

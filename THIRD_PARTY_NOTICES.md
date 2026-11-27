@@ -580,18 +580,20 @@ Copied from vector (https://github.com/amritk/vector), specs/rfc5869-hkdf-sha256
 
 ## IETF RFCs
 
-`rfcs/rfc4231.txt`, `rfcs/rfc4648.txt`, `rfcs/rfc5802.txt`,
-`rfcs/rfc5869.txt`, `rfcs/rfc6234.txt`, `rfcs/rfc6979.txt`,
-`rfcs/rfc7677.txt`, `rfcs/rfc7748.txt`, `rfcs/rfc7914.txt`,
-`rfcs/rfc8017.txt`, `rfcs/rfc8032.txt`, `rfcs/rfc8439.txt` and
-`rfcs/rfc8446.txt` are complete,
+`rfcs/rfc2046.txt`, `rfcs/rfc4231.txt`, `rfcs/rfc4648.txt`,
+`rfcs/rfc5802.txt`, `rfcs/rfc5869.txt`, `rfcs/rfc6234.txt`,
+`rfcs/rfc6979.txt`, `rfcs/rfc7578.txt`, `rfcs/rfc7677.txt`,
+`rfcs/rfc7748.txt`, `rfcs/rfc7914.txt`, `rfcs/rfc8017.txt`,
+`rfcs/rfc8032.txt`, `rfcs/rfc8439.txt` and `rfcs/rfc8446.txt` are complete,
 unmodified copies of the RFC Editor's plain-text publications, byte-identical
-to <https://www.rfc-editor.org/rfc/rfc4231.txt>,
+to <https://www.rfc-editor.org/rfc/rfc2046.txt>,
+<https://www.rfc-editor.org/rfc/rfc4231.txt>,
 <https://www.rfc-editor.org/rfc/rfc4648.txt>,
 <https://www.rfc-editor.org/rfc/rfc5802.txt>,
 <https://www.rfc-editor.org/rfc/rfc5869.txt>,
 <https://www.rfc-editor.org/rfc/rfc6234.txt>,
 <https://www.rfc-editor.org/rfc/rfc6979.txt>,
+<https://www.rfc-editor.org/rfc/rfc7578.txt>,
 <https://www.rfc-editor.org/rfc/rfc7677.txt>,
 <https://www.rfc-editor.org/rfc/rfc7748.txt>,
 <https://www.rfc-editor.org/rfc/rfc7914.txt>,
@@ -605,12 +607,14 @@ against, so a modified copy is caught.
 
 | RFC | Title | Stream | Copyright |
 | --- | --- | --- | --- |
+| 2046 | Multipurpose Internet Mail Extensions (MIME) Part Two: Media Types | IETF | none printed; published in 1996, before the IETF Trust |
 | 4231 | Identifiers and Test Vectors for HMAC-SHA-224, HMAC-SHA-256, HMAC-SHA-384, and HMAC-SHA-512 | IETF | © The Internet Society (2005) |
 | 4648 | The Base16, Base32, and Base64 Data Encodings | IETF | © The Internet Society (2006) |
 | 5802 | Salted Challenge Response Authentication Mechanism (SCRAM) SASL and GSS-API Mechanisms | IETF | © 2010 IETF Trust and the persons identified as the document authors |
 | 5869 | HMAC-based Extract-and-Expand Key Derivation Function (HKDF) | IETF | © 2010 IETF Trust and the persons identified as the document authors |
 | 6234 | US Secure Hash Algorithms (SHA and SHA-based HMAC and HKDF) | IETF | © 2011 IETF Trust and the persons identified as the document authors |
 | 6979 | Deterministic Usage of the Digital Signature Algorithm (DSA) and Elliptic Curve Digital Signature Algorithm (ECDSA) | Independent | © 2013 IETF Trust and the persons identified as the document authors |
+| 7578 | Returning Values from Forms: multipart/form-data | IETF | © 2015 IETF Trust and the persons identified as the document authors |
 | 7677 | SCRAM-SHA-256 and SCRAM-SHA-256-PLUS Simple Authentication and Security Layer (SASL) Mechanisms | IETF | © 2015 IETF Trust and the persons identified as the document authors |
 | 7748 | Elliptic Curves for Security | IRTF | © 2016 IETF Trust and the persons identified as the document authors |
 | 7914 | The scrypt Password-Based Key Derivation Function | IETF | © 2016 IETF Trust and the persons identified as the document authors |
@@ -650,12 +654,12 @@ Trust's Legal Provisions Relating to IETF Documents
 RFC 7748, 8032 and 8439 are IRTF-stream documents, for which TLP §4's BSD
 grant may not apply (§8); their excerpts rely on §3.c.iii alone, as do those of
 RFC 4231 and 4648, which were published before the IETF Trust's Legal
-Provisions and carry The Internet Society's notice. These portions are derived
-from IETF RFC 4231, 4648, 5869, 7748, 8017, 8032, 8439 and 8446; please
-reproduce this note
-if possible.
+Provisions and carry The Internet Society's notice, and of RFC 2046, published
+before them with no copyright notice. These portions are derived from IETF
+RFC 2046, 4231, 4648, 5802, 5869, 6234, 6979, 7578, 7677, 7748, 7914, 8017,
+8032, 8439 and 8446; please reproduce this note if possible.
 
-`.refcache/reference.RFC.{2119,4231,4648,5869,7748,8017,8032,8174,8439,8446}.xml` are the `<reference>`
+`.refcache/reference.RFC.{2046,2119,4231,4648,5802,5869,6234,6979,7578,7677,7748,7914,8017,8032,8174,8439,8446}.xml` are the `<reference>`
 elements kramdown-rfc fetched from the IETF BibXML Service
 (<https://bib.ietf.org/>), kept unedited so `scripts/build-spec.sh` builds
 offline; `specs/*.xml` embeds them in its back matter. Each is bibliographic

@@ -59,6 +59,18 @@
  * `Date` field takes. It reads no clock, so a wasm32 build can import it; the
  * caller supplies the second.
  *
+ * **Media types.** `mediaTypeParse` reads a `Content-Type` value (RFC 9110
+ * §8.3.1): a `type/subtype` pair of tokens, lowercased, then `;`-separated
+ * parameters whose names are lowercased tokens and whose values are tokens or
+ * quoted strings, a backslash in one escaping the octet after it. A
+ * parameter named twice is refused, since two readers could believe
+ * different ones, and so is a 17th, which keeps that check linear in the
+ * value. `formDataDispositionParse` reads the `Content-Disposition`
+ * of a `multipart/form-data` part the same way, except that a backslash in a
+ * quoted value is a backslash: the HTML form submission algorithm writes `"`
+ * as `%22` and leaves `\` alone, so `filename="C:\x.txt"` names the file a
+ * browser sent. `mediaTypeParam` looks a parameter up.
+ *
  * Names and values are octets (`u8[]`), as HPACK and QPACK answer them. A
  * section that passes keeps references to the caller's arrays, not copies, so
  * it is valid for as long as they are.
@@ -66,8 +78,8 @@
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  *
- * Written from RFC 9110, RFC 9113, RFC 9114 and RFC 8441, not ported from
- * another implementation.
+ * Written from RFC 9110, RFC 9113, RFC 9114, RFC 8441 and the HTML form
+ * submission algorithm, not ported from another implementation.
  */
 
 /** A field section that has the shape asked for. */
@@ -839,4 +851,270 @@ export const httpDateWrite = (out: u8[], at: i32, seconds: i64): i32 => {
   // The room test above, whose 29 is `HTTP_DATE_SIZE`, keeps the end at most
   // `out.length`; it is what proves the sum cannot overflow.
   return at + 29
+}
+
+/**
+ * A media type or a disposition as `mediaTypeParse` and
+ * `formDataDispositionParse` read it: the type and subtype in lowercase, and
+ * the parameters in the order they came, each name in lowercase beside its
+ * value with any quoting removed.
+ */
+export class MediaType {
+  /** The type, `text` in `text/html`, or a disposition's type, in lowercase. */
+  type: string = ""
+  /** The subtype, `html` in `text/html`, in lowercase; empty for a disposition. */
+  subtype: string = ""
+  /** The parameter names, in lowercase, in the order they came. */
+  names: string[] = []
+  /** The parameter values, `values[k]` beside `names[k]`, quotes removed. */
+  values: string[] = []
+}
+
+/** The most parameters a media type or disposition may carry; one more is refused. */
+const HTTP_FIELDS_MAX_PARAMS: i32 = 16
+
+/** Whether `c` is a `tchar` (RFC 9110 §5.6.2), in either case. */
+const httpFieldsTchar = (c: i32): boolean => httpFieldsLowerTchar(c) || (c >= 65 && c <= 90)
+
+/** Whether `c` is optional whitespace (RFC 9110 §5.6.3): a space or a tab. */
+const httpFieldsOws = (c: i32): boolean => c === 32 || c === 9
+
+/**
+ * Whether `c` may stand inside a quoted string as itself (RFC 9110 §5.6.4's
+ * `qdtext`): a tab, a space, any visible character but `"` and `\`, or
+ * obs-text.
+ */
+const httpFieldsQdtext = (c: i32): boolean =>
+  c === 9 || c === 32 || c === 33 || (c >= 35 && c <= 91) || (c >= 93 && c <= 126) || (c >= 128 && c <= 255)
+
+/**
+ * The octets in `bytes[from .. to)` as a string, letters in lowercase when
+ * `lower`; empty when the window is not inside `bytes`. It goes a byte at a
+ * time because `String.fromBytes` keeps a range check no proof removes; each
+ * `String.fromCharCode` is the one octet, so the string's bytes are the
+ * window's.
+ */
+const httpFieldsString = (bytes: readonly u8[], from: i32, to: i32, lower: boolean): string => {
+  const parts: string[] = []
+  let i: i32 = from
+  while (i >= 0 && i < to && i < toI32(bytes.length)) {
+    const c: i32 = toI32(bytes[i])
+    parts.push(String.fromCharCode(lower && c >= 65 && c <= 90 ? c | 32 : c))
+    i = i + 1
+  }
+  return parts.join("")
+}
+
+/** The end of the run of `tchar` that starts at `from`, at most `to`. */
+const httpFieldsTokenEnd = (bytes: readonly u8[], from: i32, to: i32): i32 => {
+  const n: i32 = toI32(bytes.length)
+  let i: i32 = from
+  while (i >= 0 && i < to && i < n && httpFieldsTchar(toI32(bytes[i]))) {
+    i = i + 1
+  }
+  return i
+}
+
+/** The first index from `from` that is not optional whitespace, at most `to`. */
+const httpFieldsOwsEnd = (bytes: readonly u8[], from: i32, to: i32): i32 => {
+  const n: i32 = toI32(bytes.length)
+  let i: i32 = from
+  while (i >= 0 && i < to && i < n && httpFieldsOws(toI32(bytes[i]))) {
+    i = i + 1
+  }
+  return i
+}
+
+/**
+ * Reads the parameters in `bytes[from .. to)` into `into`: each is optional
+ * whitespace, `;`, optional whitespace and then, unless the list ends or
+ * another `;` follows, a token name, `=` and a value that is a token or a
+ * quoted string (RFC 9110 §5.6.6). With `escapes`, a backslash inside the
+ * quotes takes the next octet as itself (§5.6.4); without, it is an octet
+ * like any other, as HTML form submission writes a name (it escapes `"` as
+ * `%22` instead). Answers false for any other shape, for a name given
+ * twice, letters compared without case, and for a 17th parameter.
+ */
+const httpFieldsParams = (
+  bytes: readonly u8[],
+  from: i32,
+  to: i32,
+  escapes: boolean,
+  into: MediaType
+): boolean => {
+  let i: i32 = from
+  while (i >= 0 && i < to && i < toI32(bytes.length)) {
+    i = httpFieldsOwsEnd(bytes, i, to)
+    if (i === to) {
+      return true
+    }
+    if (i < 0 || i >= toI32(bytes.length) || toI32(bytes[i]) !== 59) {
+      return false
+    }
+    i = httpFieldsOwsEnd(bytes, i + 1, to)
+    if (i === to) {
+      return true
+    }
+    if (i < 0 || i >= toI32(bytes.length)) {
+      return false
+    }
+    if (toI32(bytes[i]) === 59) {
+      continue
+    }
+    const nameEnd: i32 = httpFieldsTokenEnd(bytes, i, to)
+    if (
+      nameEnd === i ||
+      nameEnd < 0 ||
+      nameEnd >= to ||
+      nameEnd >= toI32(bytes.length) ||
+      toI32(bytes[nameEnd]) !== 61
+    ) {
+      return false
+    }
+    // A cap on the count keeps the repeat check below from going quadratic.
+    if (toI32(into.names.length) >= HTTP_FIELDS_MAX_PARAMS) {
+      return false
+    }
+    const name: string = httpFieldsString(bytes, i, nameEnd, true)
+    for (const seen of into.names) {
+      if (seen === name) {
+        return false
+      }
+    }
+    i = nameEnd + 1
+    if (i < to && i < toI32(bytes.length) && toI32(bytes[i]) === 34) {
+      const out: string[] = []
+      i = i + 1
+      let closed: boolean = false
+      while (!closed && i >= 0 && i < to && i < toI32(bytes.length)) {
+        const c: i32 = toI32(bytes[i])
+        if (c === 34) {
+          closed = true
+        } else if (c === 92 && escapes) {
+          // A quoted pair: the octet after the backslash is a tab, a space,
+          // a visible character or obs-text, and stands for itself.
+          i = i + 1
+          if (i >= to || i >= toI32(bytes.length)) {
+            return false
+          }
+          const e: i32 = toI32(bytes[i])
+          if (!(e === 9 || (e >= 32 && e <= 126) || (e >= 128 && e <= 255))) {
+            return false
+          }
+          out.push(String.fromCharCode(e))
+        } else if (httpFieldsQdtext(c) || c === 92) {
+          out.push(String.fromCharCode(c))
+        } else {
+          return false
+        }
+        i = i + 1
+      }
+      if (!closed) {
+        return false
+      }
+      into.names.push(name)
+      into.values.push(out.join(""))
+    } else {
+      const valueEnd: i32 = httpFieldsTokenEnd(bytes, i, to)
+      if (valueEnd === i) {
+        return false
+      }
+      into.names.push(name)
+      into.values.push(httpFieldsString(bytes, i, valueEnd, false))
+      i = valueEnd
+    }
+  }
+  return i === to
+}
+
+/**
+ * Reads a `Content-Type` value (RFC 9110 §8.3.1): a `type/subtype` pair of
+ * tokens, then parameters, each `; name=value` with optional whitespace
+ * around the `;`, the value a token or a quoted string whose backslash takes
+ * the next octet as itself. Whitespace may also open and close the value.
+ * Type, subtype and parameter names are answered in lowercase; values as
+ * given, less their quoting.
+ *
+ *     const m: MediaType | null = mediaTypeParse(value, 0, toI32(value.length));
+ *     // m.type === "multipart", mediaTypeParam(m, "boundary") === "xyz"
+ *
+ * @param value the octets that hold the field value
+ * @param from where the value starts in `value`
+ * @param to where it ends, one past its last octet
+ * @returns the media type, or null when the window is not inside `value`, a
+ *   token is empty or holds a non-`tchar`, a quoted string is not closed or
+ *   holds a control character, a parameter has no `=`, a parameter name
+ *   comes twice, or more than 16 parameters come
+ */
+export const mediaTypeParse = (value: readonly u8[], from: i32, to: i32): MediaType | null => {
+  const n: i32 = toI32(value.length)
+  if (from < 0 || to < from || to > n) {
+    return null
+  }
+  const start: i32 = httpFieldsOwsEnd(value, from, to)
+  const typeEnd: i32 = httpFieldsTokenEnd(value, start, to)
+  if (typeEnd === start || typeEnd < 0 || typeEnd >= to || typeEnd >= n || toI32(value[typeEnd]) !== 47) {
+    return null
+  }
+  const subStart: i32 = typeEnd + 1
+  const subEnd: i32 = httpFieldsTokenEnd(value, subStart, to)
+  if (subEnd === subStart) {
+    return null
+  }
+  const m: MediaType = new MediaType()
+  m.type = httpFieldsString(value, start, typeEnd, true)
+  m.subtype = httpFieldsString(value, subStart, subEnd, true)
+  return httpFieldsParams(value, subEnd, to, true, m) ? m : null
+}
+
+/**
+ * Reads a part's `Content-Disposition` value the way a browser writes one in
+ * a `multipart/form-data` body (RFC 7578 §4.2, and HTML's form submission):
+ * a disposition type token, then parameters as `mediaTypeParse` reads them,
+ * except that a backslash inside quotes is an octet like any other. A sender
+ * writes a `"`, CR or LF in a name as `%22`, `%0D` or `%0A`, which are kept
+ * as given; Windows paths keep their backslashes.
+ *
+ * @param value the octets that hold the field value
+ * @param from where the value starts in `value`
+ * @param to where it ends, one past its last octet
+ * @returns the disposition, its type in `type` and `subtype` empty, or null
+ *   on the shapes `mediaTypeParse` refuses past the type
+ */
+export const formDataDispositionParse = (value: readonly u8[], from: i32, to: i32): MediaType | null => {
+  const n: i32 = toI32(value.length)
+  if (from < 0 || to < from || to > n) {
+    return null
+  }
+  const start: i32 = httpFieldsOwsEnd(value, from, to)
+  const typeEnd: i32 = httpFieldsTokenEnd(value, start, to)
+  if (typeEnd === start) {
+    return null
+  }
+  const m: MediaType = new MediaType()
+  m.type = httpFieldsString(value, start, typeEnd, true)
+  return httpFieldsParams(value, typeEnd, to, false, m) ? m : null
+}
+
+/**
+ * The value of parameter `name` of `m`, its letters compared without case.
+ *
+ * @param m a media type or disposition `mediaTypeParse` or
+ *   `formDataDispositionParse` answered
+ * @param name the parameter's name, in any case
+ * @returns its value, quotes removed, or null when `m` has no such parameter
+ */
+export const mediaTypeParam = (m: MediaType, name: string): string | null => {
+  const raw: u8[] = httpFieldBytes(name)
+  const key: string = httpFieldsString(raw, 0, toI32(raw.length), true)
+  const count: i32 =
+    toI32(m.names.length) < toI32(m.values.length) ? toI32(m.names.length) : toI32(m.values.length)
+  let k: i32 = 0
+  while (k >= 0 && k < count && k < toI32(m.names.length) && k < toI32(m.values.length)) {
+    if (m.names[k] === key) {
+      return m.values[k]
+    }
+    k = k + 1
+  }
+  return null
 }

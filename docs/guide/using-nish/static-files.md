@@ -17,17 +17,19 @@ leave the directory.
 ## A first file server
 
 The example builds with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/router`,
-`nish/net/http-server` and `nish/net/static` keep panic sites no proof
-removes yet, so a call to them is refused by default until the standard
-library is made panic-free.
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/http-server`
+and `nish/net/static` keep panic sites no proof removes yet, so a call to
+them is refused by default until the standard library is made panic-free. The
+code around the calls builds under the default: it makes the router with
+`routerChecked`, which gives `Err` for a limit outside its range where
+`new Router` panics.
 
-<!-- allow-panics: calls `std/net/http-server.ts`, `std/net/router.ts`, `std/net/static.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/http-server.ts` and `std/net/static.ts` code that keeps panic sites, and reaches those of `std/net/http3-server.ts`, `std/net/router.ts` and `std/bytes.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HttpServer, HttpServerLimits } from "nish/net/http-server";
 import { Http1Config } from "nish/net/http1-server";
-import { Router, RouterLimits } from "nish/net/router";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { STATIC_NOT_FOUND, StaticFiles, StaticLimits } from "nish/net/static";
 import { tcpListen } from "nish:net";
 
@@ -36,7 +38,12 @@ const FILES: i32 = 0;
 const FILES_HEAD: i32 = 1;
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    console.error(table.error);
+    return 1;
+  }
+  const router = table.value;
   router.add("GET", "/static/*");
   router.add("HEAD", "/static/*");
   const files = new StaticFiles("./public", new StaticLimits());

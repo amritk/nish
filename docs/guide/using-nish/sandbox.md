@@ -21,19 +21,20 @@ nish run --sandbox app.ts
 nish app.ts --sandbox          # IR only: the .ll carries the sandbox
 ```
 
-Take a program that reads one file and does nothing else. It builds with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do) because
-`readFileSync` ends the program when the file cannot be read; call
-`readFileSyncOrNull`, which answers `null` instead, and test for it to build
-it under the default:
+Take a program that reads one file and does nothing else. It calls
+`readFileSyncOrNull`, which answers `null` when the file cannot be read, and
+tests for it:
 
-<!-- allow-panics: calls a file or entropy builtin that exits on failure -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-import { readFileSync } from "nish:fs"
+import { readFileSyncOrNull } from "nish:fs"
 
 export const main = (): number => {
-  const text = readFileSync("/etc/hostname")
+  const text = readFileSyncOrNull("/etc/hostname")
+  if (text === null) {
+    console.log("cannot read /etc/hostname")
+    return 1
+  }
   console.log(text.length > 0)
   return 0
 }
