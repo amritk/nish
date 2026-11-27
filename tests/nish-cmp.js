@@ -11806,6 +11806,22 @@ const DECLARED = [
     }
   ),
   ...checkedConfig(
+    "Router gains the outside flag tryMatch leaves for match, so the C header that names Router's struct gains a bool field",
+    {
+      "tests/link/net_http_server_h2c_default_refused/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_drain/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_ended/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_full/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_h1/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_late/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_partial/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_pri/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_silent/main.ts": ["main.h"],
+      "tests/link/net_router_use_unknown/main.ts": ["main.h"],
+    }
+  ),
+  ...checkedConfig(
     "HttpHandler matches through Router.tryMatch and tryParamCount, so handler.ll moves in every program that reaches std/net/handler.ts",
     {
       "tests/link/net_http_server_h2c_default_refused/main.ts": ["handler.ll"],
