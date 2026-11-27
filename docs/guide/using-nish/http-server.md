@@ -360,7 +360,8 @@ three things holds:
 - `r.writable`: an earlier `sendFrame` answered `H1_AGAIN` and the output has
   room again.
 - `r.closed`: the WebSocket is over. `r.closeCode` is the peer's close code,
-  1002 when it broke the protocol, or 1006 when the connection ended without a
+  1002, 1007 or 1009 when it broke the protocol, sent text that is not UTF-8
+  or sent a message too large, or 1006 when the connection ended without a
   close. Hand `r` back with `closeWebSocket`.
 
 `server.sendFrame(r, fin, opcode, buf, off, len)` sends one frame; its payload

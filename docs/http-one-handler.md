@@ -323,8 +323,8 @@ whenever one of three things holds:
 - `writable`: `sendFrame` answered `H1_AGAIN` and the output has room
   again.
 - `closed`: the WebSocket is over, `closeCode` saying why: the peer's close
-  code, 1002 for a frame the decoder refuses, 1006 when the connection
-  ended without a close frame.
+  code (1005 when it carried none), 1002, 1007 or 1009 for a frame the
+  decoder refuses, 1006 when the connection ended without a close frame.
 
 `sendFrame(r, fin, opcode, buf, off, len)` writes one frame, copying the
 payload once into the connection's output. Neither direction allocates per

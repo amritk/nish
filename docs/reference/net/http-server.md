@@ -204,7 +204,7 @@ class HttpServerRequest
 | `closed: boolean` | Whether the WebSocket is over: the peer sent a close, broke the protocol, or the connection ended. `closeCode` says why; the program hands the request back with `closeWebSocket`. |
 | `head: u8[]` | The method, the target and the header section (field names lowercased); on HTTP/2 and 3, `:authority` is the field `host`. |
 | `index: i32` | Its index in the server's pool. |
-| `message: boolean` | Whether a WebSocket message is held for the program: `messageData` from `messageStart`, `messageLength` bytes, valid until `received` or `closeWebSocket`. The connection reads no further frame until then. |
+| `message: boolean` | Whether a WebSocket message is held for the program: `messageData` from `messageStart`, `messageLength` bytes, valid until `received`, or until it comes out `closed`, which clears this. No further frame is read till then. |
 | `messageData: u8[]` | The bytes of the held message, the connection's own decoder buffer, not a copy: `messageData[messageStart .. messageStart + messageLength)`. |
 | `messageLength: i32` | How many bytes the held message has. |
 | `messageStart: i32` | Where the held message starts in `messageData`. |

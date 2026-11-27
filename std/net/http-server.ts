@@ -427,8 +427,8 @@ export class HttpServerRequest {
   socket: boolean = false
   /**
    * Whether a WebSocket message is held for the program: `messageData` from
-   * `messageStart`, `messageLength` bytes, valid until `received` or
-   * `closeWebSocket`. The connection reads no further frame until then.
+   * `messageStart`, `messageLength` bytes, valid until `received`, or until it
+   * comes out `closed`, which clears this. No further frame is read till then.
    */
   message: boolean = false
   /** The held message's opcode: 1 (`WS_OP_TEXT`) for text, which the decoder has checked is UTF-8, or 2 (`WS_OP_BINARY`). */
@@ -2251,6 +2251,7 @@ export class HttpServer {
     }
     r.closed = true
     r.closeCode = code
+    r.message = false
     this.requeue(r)
   }
 
@@ -4017,7 +4018,7 @@ export class HttpServer {
    * @param r a request `acceptWebSocket` upgraded; the server's again unless this answers `H1_INVALID`
    * @param code a close status code `nish/net/websocket` may send, such as 1000 for a normal close
    * @returns 0 once `r` is handed back; `H1_INVALID`, with `r` still the
-   *   program's, for a code that may not be sent
+   *   program's, for a code that may not be sent while it is open
    */
   closeWebSocket(r: HttpServerRequest, code: i32): i32 {
     this.own(r, "closeWebSocket")
