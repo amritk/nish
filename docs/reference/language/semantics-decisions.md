@@ -1373,6 +1373,11 @@ are not all in `[0, length)`; and the second check of a compound store
   `reject_deny_panics_downcount_write`, `reject_deny_panics_downcount_reassign`);
   nothing removes the second check of a compound store, which is made after
   the call however the first was proved (`tests/cases/panics_index_recheck`).
+  An index into [module storage](declarations.md#module-storage) is proven the same ways,
+  from the length it was made with, which never changes: a constant below it,
+  a loop below the storage's `.length` or below that constant, or a guard on
+  either (`tests/cases/deny_panics_storage_index`); a guard that lets the
+  index reach the length is refused (`tests/link/storage_index_unbounded`).
   A `nish:simd` access is proven exactly where its check is left out (the
   guard on its last lane under
   [`loadI32x4`](builtins.md#nishsimd-sixteen-byte-vectors)), so a program held
