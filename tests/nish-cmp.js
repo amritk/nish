@@ -12210,8 +12210,23 @@ const checkedConfig = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: CHECKED_CONFIG, why }))
   )
+/** The changelog words of WP80 S9, which checks the handler's body decoder limit. */
+const DECODER_LIMIT = "HttpHandler builds its body decoder through a checked limit"
+const decoderLimit = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: DECODER_LIMIT, why }))
+  )
 const DECLARED = [
   ...RSA_PSS_SERVER_DECLARED,
+  // WP80 S9: HttpBodyDecoder's limit has a fault contract the handler checks
+  // first, and the handler decodes through tryDecode.
+  ...decoderLimit(
+    "HttpBodyDecoder's constructor opens with the httpCheckBodyDecoder fault guard and http-compress.ll gains httpBodyDecoderFault, so the module moves",
+    {
+      "tests/link/net_serve_idle_record/main.ts": ["http-compress.ll"],
+      "tests/link/net_serve_rss_flat/main.ts": ["http-compress.ll"],
+    }
+  ),
   // WP80 S8: a checked HTTP/1 server config, and the router, handler and
   // prefork twins the server examples call.
   ...checkedConfig(
