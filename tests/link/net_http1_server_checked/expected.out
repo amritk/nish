@@ -1,0 +1,7 @@
+PASS  a server under the default caps is made
+PASS  a server under a linger timeout of 0 is refused
+PASS  a connection under the default caps is made
+PASS  a connection under a header cap below 64 is refused
+PASS  a cap set bad after the check reaches no connection
+PASS  an unchecked pool with a bad cap gives no connection
+http1-server-checked: 6 passed, 0 failed, 0 skipped

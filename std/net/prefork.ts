@@ -1395,6 +1395,26 @@ export const preforkSupervise = <S>(
 }
 
 /**
+ * `preforkSupervise` for a caller built without `--allow-panics`: a config
+ * that breaks its contract is an `Err` with the reason, before any worker
+ * starts, where `preforkSupervise` panics.
+ *
+ * @param args the process's arguments, `process.argv`
+ * @param config the supervisor's settings, checked in the supervisor and
+ *   each worker alike
+ * @param state the program's own value, passed to every `onChannel` call
+ * @param onChannel what the supervisor runs when worker `index`'s channel
+ *   `fd` wakes it, with `pollWait`'s `events`
+ * @returns `Ok` with what `preforkSupervise` answers, or `Err` with why the config was refused
+ */
+export const tryPreforkSupervise = <S>(
+  args: string[],
+  config: PreforkConfig,
+  state: S,
+  onChannel: (state: S, index: i32, fd: i32, events: i32) => void
+): Result<i32, string> => preforkRun(args, config, state, onChannel)
+
+/**
  * `preforkWith` with the default `PreforkConfig`.
  *
  * @param args the process's arguments, `process.argv`

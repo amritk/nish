@@ -54,8 +54,7 @@ The examples on this page build with
 unless the compiler can see the window is inside the buffer (`buf, 0,
 buf.length`, or an offset of 0 and a count tested with
 `n >= 0 && n <= buf.length`, or a window `buf, start, end - start` under
-`start >= 0 && start <= end && end <= buf.length`); the servers built on
-`nish/net/prefork`, the
+`start >= 0 && start <= end && end <= buf.length`); the
 HTTP handlers and `nish/net/dns` call standard-library code that keeps
 panic sites until the standard library is made panic-free;
 and some examples index arrays or add numbers without a guard, which a test
@@ -118,8 +117,15 @@ head past `headTimeout` (30 s), by itself. A QUIC PING keeps the connection,
 not the slot. A WebTransport layer ends a session quiet past its
 `idleTimeout` and drops datagrams past `maxDatagramsPerSecond`; dropping is
 the whole defence, as datagrams may be lost anyway, so a burst never closes
-the session. Each limit has a default and is checked at start-up;
-[the standard library's `nish/net` section](standard-library.md#nishnet) has
+the session. Each limit has a default and is checked at start-up.
+`http1ServerChecked(config, listener, size)` checks an `Http1Config` once
+and answers a cap outside its range as an `Err`, where `new Http1Server`
+would panic building its first connection, and `server.tryConnection(slot)`
+answers null where `server.connection(slot)` would panic
+(`http1ConnectionChecked` is the same twin for one connection);
+`examples/file-server.ts` and `examples/prefork-server.ts` are built this way
+and need no `--allow-panics`.
+[The standard library's `nish/net` section](standard-library.md#nishnet) has
 the details.
 
 ### Keeping a request loop's memory flat
@@ -568,17 +574,19 @@ fallback.
 A Nish server is one thread. To use every core of a multicore machine, run
 one copy of it per core, each with its own `SO_REUSEPORT` listener on the same
 port: that is what `nish/net/prefork` does. Call
-`preforkWorkers(process.argv)` at the top of `main`, before you open a
+`tryPreforkWorkers(process.argv)` at the top of `main`, before you open a
 listener:
 
-<!-- allow-panics: calls `std/net/prefork.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
 ```ts
 import { netClose, tcpListenFlags } from "nish:net";
-import { PREFORK_STOPPED, preforkWorkers } from "nish/net/prefork";
+import { PREFORK_STOPPED, tryPreforkWorkers } from "nish/net/prefork";
 
 export const main = (): i32 => {
-  const worker = preforkWorkers(process.argv);
+  const started = tryPreforkWorkers(process.argv);
+  if (!started.ok) {
+    return 1;
+  }
+  const worker = started.value;
   if (worker < 0) {
     // The process you started: every worker has exited.
     return worker === PREFORK_STOPPED ? 0 : 1;
@@ -595,7 +603,7 @@ export const main = (): i32 => {
 ```
 
 The program runs in two roles. The process you start becomes the supervisor:
-it starts the program again once per worker, and `preforkWorkers` answers it
+it starts the program again once per worker, and `tryPreforkWorkers` answers it
 only when they have all exited, with `-1` (`PREFORK_STOPPED`) after a shutdown
 or `-2` (`PREFORK_SPAWN_FAILED`) when a worker's first start failed or the
 supervisor could not set up its signal handling, in which case no worker
@@ -632,7 +640,9 @@ restart that is due). A negative number, a `tickMs` or `backoffMs` of zero,
 or a `backoffCapMs` below `backoffMs` stops the program with a panic naming
 the field; `tryPreforkWith(process.argv, config)` answers the same config as
 an `Err` with that reason instead, before any worker starts, and otherwise
-`Ok` with what `preforkWith` would. `examples/prefork-server.ts` is a whole HTTP server built this way:
+`Ok` with what `preforkWith` would; `tryPreforkWorkers(process.argv)` and
+`tryPreforkSupervise` are the same twins of `preforkWorkers` and
+`preforkSupervise`. `examples/prefork-server.ts` is a whole HTTP server built this way:
 each answer names the worker that sent it, so a few `curl`s show the spread.
 
 By default the workers are not pinned to cores. Each one binds the port with
@@ -657,16 +667,18 @@ Add `pin = true` and worker `k` also pins itself to CPU `k`
 worker on the CPU that received it, so a connection's packets and the worker
 that answers it share a core's caches:
 
-<!-- allow-panics: calls `std/net/prefork.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
 ```ts
-import { PREFORK_STOPPED, PreforkConfig, preforkListener, preforkWith } from "nish/net/prefork";
+import { PREFORK_STOPPED, PreforkConfig, preforkListener, tryPreforkWith } from "nish/net/prefork";
 
 export const main = (): i32 => {
   const config = new PreforkConfig();
   config.listenPort = 8080;
   config.pin = true;
-  const worker = preforkWith(process.argv, config);
+  const started = tryPreforkWith(process.argv, config);
+  if (!started.ok) {
+    return 1;
+  }
+  const worker = started.value;
   if (worker === PREFORK_STOPPED) {
     return 0;
   }
@@ -681,8 +693,8 @@ export const main = (): i32 => {
 
 Pinning is for a machine the server has to itself: each worker owns a core,
 so `workers` should be at most `availableParallelism()`, and on Linux **more pinned
-workers than CPUs stops the program with a panic** rather than doubling two
-workers up on one core. That count is `availableParallelism()`, which a
+workers than CPUs is refused**, an `Err` from `tryPreforkWith` and a panic
+from `preforkWith`, rather than doubling two workers up on one core. That count is `availableParallelism()`, which a
 container's CPU quota or `NISH_NUM_THREADS` lowers.
 
 A CPU outside the ones the program may run on (`taskset`, a container's cpuset)
@@ -692,8 +704,7 @@ and runs unpinned, and a connection received on CPU 4 or above, past the
 listeners, falls back to the kernel's hash. Run a pinned server on CPUs that
 start at 0. Off Linux the workers run unpinned and unsteered, and the
 supervisor says so on stderr. A `listenPort` outside `-1..65535`, a
-`listenBacklog` of 0 or less, or other `listenFlags` stop the program with a
-panic.
+`listenBacklog` of 0 or less, or other `listenFlags` are refused the same way.
 
 ### QUIC on every core: `listenUdp`
 
@@ -707,10 +718,8 @@ a datagram whose destination connection ID starts with byte `k` goes to worker
 the group's size with `preforkUdpCount(process.argv)`, and puts both in its
 `QuicServerConfig`, so every connection ID it hands out starts with `k`:
 
-<!-- allow-panics: calls `std/net/prefork.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
 ```ts
-import { PREFORK_STOPPED, PreforkConfig, preforkUdpCount, preforkUdpListener, preforkWith } from "nish/net/prefork";
+import { PREFORK_STOPPED, PreforkConfig, preforkUdpCount, preforkUdpListener, tryPreforkWith } from "nish/net/prefork";
 import { QuicServerConfig } from "nish/net/quic";
 
 /** Worker `worker`'s QUIC settings: every connection ID it issues starts with its index. */
@@ -724,7 +733,11 @@ export const main = (): i32 => {
   const config = new PreforkConfig();
   config.listenPort = 4433;
   config.listenUdp = true;
-  const worker = preforkWith(process.argv, config);
+  const started = tryPreforkWith(process.argv, config);
+  if (!started.ok) {
+    return 1;
+  }
+  const worker = started.value;
   if (worker === PREFORK_STOPPED) {
     return 0;
   }

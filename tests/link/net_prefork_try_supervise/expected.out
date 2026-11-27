@@ -1,0 +1,6 @@
+PASS  a tick of 0
+PASS  UDP without a port
+PASS  no channel woke the program
+PASS  tryPreforkWorkers answers a worker
+PASS  with the worker's index
+nish/net/prefork tryPreforkSupervise: 5 passed, 0 failed, 0 skipped
