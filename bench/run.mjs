@@ -725,6 +725,9 @@ const STD_COUNTED = [
     name: "std-math-kernel",
     what: "sin, cos, tan, atan2, hypot, exp, log, pow and fmod, and the exact decimal readers",
   },
+  { name: "std-yaml-parse", what: "parseYaml of one document of block, flow, quoted and block scalars" },
+  { name: "std-yaml-json", what: "YamlJsonLoader.load and stringifyYaml of a merged document, with line and column" },
+  { name: "std-json-equal", what: "jsonEqual, hash, canonical text and duplicate check of two spellings" },
 ]
 
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
