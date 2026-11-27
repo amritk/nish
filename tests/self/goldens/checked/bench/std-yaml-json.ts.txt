@@ -9960,11 +9960,11 @@ function yamlWriteKeyTooLong(text: string, quoted: boolean): boolean -> @nish.ya
   local +0:9 n: i32 (const)
   local +4:7 length: i32 (let)
   local +5:7 i: i32 (let)
-  local +9:11 c: i32 (const)
-  callee +9:20 yamlWriteByte -> @nish.yamlWriteByte
-  local +10:11 escaped: i32 (const)
-  callee +10:26 yamlWriteEscapedLength -> @nish.yamlWriteEscapedLength
-  callee +23:11 yamlWriteStep -> @nish.yamlWriteStep
+  local +7:11 c: i32 (const)
+  callee +7:20 yamlWriteByte -> @nish.yamlWriteByte
+  local +8:11 escaped: i32 (const)
+  callee +8:26 yamlWriteEscapedLength -> @nish.yamlWriteEscapedLength
+  callee +21:11 yamlWriteStep -> @nish.yamlWriteStep
 function YamlWriter.constructor(this: YamlWriter, doc: JsonDocument): void -> @nish.YamlWriter.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: doc
