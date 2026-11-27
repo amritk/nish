@@ -183,11 +183,12 @@ const walk = (dir) => {
   if (!fs.existsSync(at)) {
     return []
   }
-  return fs
-    .readdirSync(at, { withFileTypes: true })
-    .flatMap((e) =>
-      e.isDirectory() ? walk(`${dir}/${e.name}`) : e.name.endsWith(".ts") ? [`${dir}/${e.name}`] : []
-    )
+  return fs.readdirSync(at, { withFileTypes: true }).flatMap((e) => {
+    if (e.isDirectory()) {
+      return walk(`${dir}/${e.name}`)
+    }
+    return e.name.endsWith(".ts") ? [`${dir}/${e.name}`] : []
+  })
 }
 // The live tree lists what git tracks; a --root copy need not be a repository, so it is walked.
 const files = (
