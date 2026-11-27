@@ -194,9 +194,13 @@ const PG_CARRIER_CLOCK_MOST: i64 = 1073741824 * 4294967296 - 1
  */
 const pgCarrierDeadline = (span: i64): i64 => {
   const now: i64 = monotonicNanos()
-  if (now < 0 || span < 0) { return now }
+  if (now < 0 || span < 0) {
+    return now
+  }
   const room: i64 = PG_CARRIER_CLOCK_MOST - now
-  if (room < 0) { return PG_CARRIER_CLOCK_MOST }
+  if (room < 0) {
+    return PG_CARRIER_CLOCK_MOST
+  }
   const left: i64 = room - span
   return left > 0 ? PG_CARRIER_CLOCK_MOST - left : PG_CARRIER_CLOCK_MOST
 }

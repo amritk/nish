@@ -1535,7 +1535,8 @@ const tlsTcpDeadline = (timeoutMs: i32): i64 => {
  * while `end > start`. A record layer's output start is never negative; a
  * pair out of that order has none waiting.
  */
-const tlsTcpPending = (start: i32, end: i32): i32 => (start >= 0 && end >= 0 && end >= start ? end - start : 0)
+const tlsTcpPending = (start: i32, end: i32): i32 =>
+  start >= 0 && end >= 0 && end >= start ? end - start : 0
 
 /**
  * Opens a TLS 1.3 connection to the server at `addr` (`nish:net`'s 18-byte

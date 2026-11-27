@@ -1584,7 +1584,8 @@ export class TlsServer {
     }
     const type: i32 = toI32(this.input[0])
     // Three bytes, 0 to 2^24 - 1; the mask is the bound the proof reads.
-    const length: i32 = ((toI32(this.input[1]) << 16) | (toI32(this.input[2]) << 8) | toI32(this.input[3])) & 0xffffff
+    const length: i32 =
+      ((toI32(this.input[1]) << 16) | (toI32(this.input[2]) << 8) | toI32(this.input[3])) & 0xffffff
     if (length > TLS_MAX_HANDSHAKE_MESSAGE) {
       return this.fail(TLS_ALERT_DECODE_ERROR)
     }

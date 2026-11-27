@@ -1067,7 +1067,8 @@ const pgAsyncWakePool = (pool: PgAsyncPool): void => {
   wake = wake > PG_ASYNC_LANES ? PG_ASYNC_LANES : wake
   for (let k: i32 = 0; k < wake; k++) {
     // The queue lane of the `k`th task waiting, after the pool's own wake.
-    const lane: i32 = ((pool.seatHead & (PG_ASYNC_LANES - 1)) + (k & (PG_ASYNC_LANES - 1))) & (PG_ASYNC_LANES - 1)
+    const lane: i32 =
+      ((pool.seatHead & (PG_ASYNC_LANES - 1)) + (k & (PG_ASYNC_LANES - 1))) & (PG_ASYNC_LANES - 1)
     pgAsyncSignal(pool, PG_ASYNC_POOL_WAKE + 1 + lane)
   }
 }
@@ -1383,7 +1384,9 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
     if (best >= 0 && turn) {
       // `best` is below 64 and `statement` below 64, so the offset is exact;
       // it is then checked against its array.
-      const known: i32 = (best & (PG_ASYNC_MAX_SIZE - 1)) * PG_ASYNC_MAX_STATEMENTS + (statement & (PG_ASYNC_MAX_STATEMENTS - 1))
+      const known: i32 =
+        (best & (PG_ASYNC_MAX_SIZE - 1)) * PG_ASYNC_MAX_STATEMENTS +
+        (statement & (PG_ASYNC_MAX_STATEMENTS - 1))
       for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
         const seat: i32 = pgAsyncSeatAt(best, k)
         if (
@@ -1444,10 +1447,7 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
       continue
     }
     // A queued task waits on its queue lane, after the pool's own wake.
-    const w: i32 =
-      queued >= 0
-        ? PG_ASYNC_POOL_WAKE + 1 + (queued & (PG_ASYNC_LANES - 1))
-        : PG_ASYNC_POOL_WAKE
+    const w: i32 = queued >= 0 ? PG_ASYNC_POOL_WAKE + 1 + (queued & (PG_ASYNC_LANES - 1)) : PG_ASYNC_POOL_WAKE
     pool.waits = pgAsyncCount(pool.waits)
     await pgAsyncPark(pool, w, left)
     pgAsyncDrain(pool, w)
