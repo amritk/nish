@@ -324,7 +324,7 @@ const jsonTokSigned = (m: u64, negative: boolean): i64 => {
     return toI64(0)
   }
   // `m` is at least 1 here, so the `u64` difference never wraps.
-  const less: u64 = m - 1
+  const less: u64 = m - toU64(1)
   return ~toI64(less)
 }
 
