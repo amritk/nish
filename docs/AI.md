@@ -1281,43 +1281,45 @@ When tasks must update one value, put it in a `Mutex` and reach it only through
 ```ts
 import { Mutex, scope } from "nish/threads";
 
-class Peaks {
-  top: i32[];
+class Tally {
+  bins: i32[];
   constructor() {
-    this.top = [0, 0, 0, 0];
+    this.bins = [0, 0, 0, 0];
   }
 }
 
 class Shard {
   xs: i32[];
-  peaks: Mutex<Peaks>;
-  constructor(xs: i32[], peaks: Mutex<Peaks>) {
+  tally: Mutex<Tally>;
+  constructor(xs: i32[], tally: Mutex<Tally>) {
     this.xs = xs;
-    this.peaks = peaks;
+    this.tally = tally;
   }
 }
 
-// The largest value seen in each of four bins, by its low two bits.
 const binAll = (s: Shard): void => {
   for (const x of s.xs) {
     const bin: i32 = x & 3;
-    using g = s.peaks.lock();                  // held to the end of this pass
-    if (bin < g.value.top.length && x > g.value.top[bin]) {
-      g.value.top[bin] = x;
+    using g = s.tally.lock();                  // held to the end of this pass
+    if (bin < g.value.bins.length) {
+      const n = g.value.bins[bin];
+      if (n < 2147483647) {                    // the bound the `+ 1` needs
+        g.value.bins[bin] = n + 1;
+      }
     }
   }
 };
 
 export const main = (): i32 => {
-  const peaks = new Mutex<Peaks>(new Peaks()); // a fresh value: `new` or a literal
+  const tally = new Mutex<Tally>(new Tally()); // a fresh value: `new` or a literal
   {
     using s = scope();
-    s.spawn(binAll, new Shard([1, 2, 3], peaks));
-    s.spawn(binAll, new Shard([4, 5, 6], peaks));
+    s.spawn(binAll, new Shard([1, 2, 3], tally));
+    s.spawn(binAll, new Shard([4, 5, 6], tally));
   }
-  using g = peaks.lock();                      // after the join: lock freely
-  if (g.value.top.length > 1) {
-    console.log(`${g.value.top[1]}`);          // 5
+  using g = tally.lock();                      // after the join: lock freely
+  if (g.value.bins.length > 1) {
+    console.log(`${g.value.bins[1]}`);         // 2
   }
   return 0;
 };

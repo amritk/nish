@@ -241,20 +241,24 @@ way `Array.from({ length: n }, (_, i) => f(i))` builds one. Each allocates the
 array before it starts and then runs exactly the map above, under the same
 rules for `f`. There is no `dst` to get wrong.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelFrom, parallelMap } from "nish/threads";
 
 export const main = (): i32 => {
-  const squares = parallelFrom(5, (i) => i * i);       // 0 1 4 9 16
-  const shifted = parallelMap(squares, (x) => x + 1);  // 1 2 5 10 17
+  const squares = parallelFrom(5, (i) => (i >= 0 && i < 1000 ? i * i : 0)); // 0 1 4 9 16
+  const shifted = parallelMap(squares, (x) => (x < 1000000 ? x + 1 : x));    // 1 2 5 10 17
   if (squares.length > 4 && shifted.length > 4) {
     console.log(`${squares[4]} ${shifted[4]}`); // 16 17
   }
   return 0;
 };
 ```
+
+The tests on `i` and `x` bound the `*` and the `+`, which an `i32` would
+otherwise overflow on a large enough input: the checker does not yet read that
+`i` runs from `0` to `n - 1`, so the arrow says so itself.
 
 The answer may be a string or an array of numbers, too; each one is copied out
 of the thread that built it, so it lives as long as the array you get back:
@@ -408,13 +412,20 @@ Answer the value from the body instead, and fold the answers with
 `parallelReduce` after the call. Here the body answers `x` itself, so the
 fold reads the array the call was given:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelReduce } from "nish/threads";
 
+const add = (a: i32, b: i32): i32 => {
+  if (a < 0 || a > 1000000000 || b < 0 || b > 1000000000) {
+    return -1; // past any total these counts reach
+  }
+  return a + b;
+};
+
 export const main = (): i32 => {
-  const sumTotal = parallelReduce([1, 2, 3], (a, b) => a + b, 0);
+  const sumTotal = parallelReduce([1, 2, 3], add, 0);
   return sumTotal;
 };
 ```
@@ -652,12 +663,18 @@ deeper than that faults. A type checker walking a deep tree is the usual
 case. `scopeWithStack(bytes)` is a scope whose tasks each run on a thread with
 at least `bytes` of stack:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { scopeWithStack } from "nish/threads";
 
-const depth = (n: i32): i32 => (n <= 0 ? 0 : depth(n - 1) + 1);
+const depth = (n: i32): i32 => {
+  if (n <= 0) {
+    return 0;
+  }
+  const below = depth(n - 1); // one call deeper each time
+  return below < n ? below + 1 : n;
+};
 
 export const main = (): i32 => {
   const out: i32[] = [0];
@@ -1357,8 +1374,8 @@ with an example on this page that compiles.
 | Code | Refused | Write instead |
 |---|---|---|
 | NL2345 | `f` of a parallel call writes what its caller can see, or prints | `f` answers the value, `const square = (x: f64): f64 => x * x`, and the call writes it, `parallelMapInto(src, dst, square)`: [the first example](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
-| NL2348 | an element answer that is an array of strings or arrays, an object, a `Map` or a `Set` | answer a string or a number per element, `const squares = parallelFrom(5, (i) => i * i)`, and build the structure after the call: [`parallelFrom`](#a-new-array-parallelmap-and-parallelfrom) |
-| NL2503 | a parallel arrow writes a local of its function | answer the value from the body instead, and fold the answers with `parallelReduce`, `const sumTotal = parallelReduce([1, 2, 3], (a, b) => a + b, 0)`: [below the rule](#reading-the-functions-constants) |
+| NL2348 | an element answer that is an array of strings or arrays, an object, a `Map` or a `Set` | answer a string or a number per element, `const squares = parallelFrom(5, (i) => (i >= 0 && i < 1000 ? i * i : 0))`, and build the structure after the call: [`parallelFrom`](#a-new-array-parallelmap-and-parallelfrom) |
+| NL2503 | a parallel arrow writes a local of its function | answer the value from the body instead, and fold the answers with `parallelReduce`, `const sumTotal = parallelReduce([1, 2, 3], add, 0)`: [below the rule](#reading-the-functions-constants) |
 | NL2500 | a parallel arrow reads a `let` | a `const` snapshot before the call, `const kNow = k`: [below](#a-let-read-by-a-parallel-arrow) |
 | NL2388 | `scope()` bound without `using` | `using s = scope()`: [below](#a-scope-bound-without-using) |
 | NL2584 | `scopeWithStack` given a number below 131072 | at least the minimum, `scopeWithStack(64 * 1024 * 1024)`: [below](#a-stack-below-the-minimum) |
