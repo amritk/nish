@@ -4,13 +4,16 @@
 // once it is over (`closed`, `closeCode`). The checks echo text and a
 // 300000-byte binary message larger than the output, close from either side,
 // close a malformed frame with 1002 and a dropped connection with 1006,
-// reuse the one request a pool of one holds, keep the arena flat over warmed
-// round trips, refuse the upgrade on h2c, leave a socket alone when
-// `bodyTimeout` has long passed, and close one quiet past `idleTimeout`.
+// reuse the one request a pool of one holds (a second handshake waits while
+// a WebSocket holds it), keep the arena flat over warmed round trips, refuse
+// the upgrade on h2c, leave a socket alone when `bodyTimeout` has long passed,
+// close one quiet past `idleTimeout`, and upgrade, echo and close over
+// `listenHttp1Tls`.
 import { Suite } from "nish/testing"
+import { Secret, secret, wipe } from "nish:secret"
 import { netClose } from "nish:net"
 import { H2_FLAG_END_STREAM } from "nish/net/http2-frame"
-import { H1_INVALID, Http1Config } from "nish/net/http1-server"
+import { H1_ALPN, H1_INVALID, Http1Config } from "nish/net/http1-server"
 import {
   WS_CLOSE,
   WS_CLOSE_NORMAL,
@@ -25,8 +28,10 @@ import {
 } from "nish/net/websocket"
 import { Wire, getOf } from "../net_http2/peer"
 import { ascii } from "../net_tls_record_common/bytes"
-import { TURNS, WsClient, H2cClient, clientFrame } from "./client"
+import { leafPrivate, tcpConfig } from "../net_tls_common/server"
+import { TURNS, WsClient, H2cClient, clientFrame, handshake } from "./client"
 import { Rig, rigLimits } from "./rig"
+import { WsTlsClient } from "./tls-client"
 
 /** Whether the program saw `n` WebSockets come out closed, the last with `code`. */
 const lastCode = (rig: Rig, n: i32, code: i32): boolean => toI32(rig.codes.length) === n && rig.codes[n - 1] === code
@@ -168,6 +173,20 @@ const reused = (t: Suite): void => {
     settles(rig)
   }
   t.eqI32("a pool of one serves three WebSockets one after another", opened, 3)
+
+  const first = new WsClient(rig)
+  first.open(rig.port, "/ws")
+  const second = new WsClient(rig)
+  second.peer.connect(rig.port)
+  second.peer.send(handshake("/ws"))
+  for (let turn: i32 = 0; turn < 100; turn++) {
+    second.peer.turn()
+  }
+  t.ok("while a WebSocket holds the pool of one, a second handshake waits unanswered", toI32(second.peer.got.length) === 0 && rig.upgrades === 4)
+  first.send(true, WS_OP_CLOSE, closeBody(WS_CLOSE_NORMAL))
+  first.next()
+  first.peer.awaitClose(TURNS)
+  t.ok("and is upgraded once the first one closes", second.head().startsWith("HTTP/1.1 101 ") && rig.upgrades === 5)
 }
 
 /** `Arena.used()` stays flat over warmed round trips, the server's calls and the echo both. */
@@ -216,6 +235,7 @@ const refused = (t: Suite): void => {
   t.eqI32("acceptWebSocket answers H1_INVALID on HTTP/2", rig.accepted, H1_INVALID)
   t.ok("and the program answers it 400", frames.indexOf("HEADERS 1 end :status=400") >= 0)
 
+  rig.accepted = 1
   const c = new WsClient(rig)
   const head: string = c.request(rig.port, ascii("GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"))
   t.eqI32("a GET with no Upgrade: acceptWebSocket answers H1_INVALID", rig.accepted, H1_INVALID)
@@ -254,6 +274,35 @@ const idle = (t: Suite): void => {
   t.eqI32("and handed it back", toI32(rig.sockets.length), 0)
 }
 
+/** The same over `listenHttp1Tls`: an upgrade inside TLS, a round trip, and a close from the client. */
+const overTls = (t: Suite): void => {
+  const key: Secret<u8[]> = secret(leafPrivate())
+  const rig = new Rig(rigLimits(4, 30000), 4, new Http1Config(), 0)
+  rig.listenTls(tcpConfig([H1_ALPN]), 4)
+  const c = new WsTlsClient(rig)
+  t.ok("TLS: a handshake offering http/1.1, the server's signature and Finished verified", c.connect(rig.tlsPort, key) && c.verified)
+  const head: string = c.open("/ws", key)
+  t.ok("TLS: the handshake is answered 101 with RFC 6455's accept value", head.startsWith("HTTP/1.1 101 ") && head.indexOf(ACCEPT) >= 0)
+  const hello: u8[] = ascii("hello")
+  c.frame(true, WS_OP_TEXT, hello, key)
+  const event: i32 = c.next(key)
+  let same: boolean = c.dec.dataLen === toI32(hello.length)
+  for (let k: i32 = 0; same && k < toI32(hello.length); k++) {
+    same = c.dec.data[k] === hello[k]
+  }
+  t.ok("TLS: a text message is echoed as text", event === WS_MESSAGE && c.dec.opcode === WS_OP_TEXT && same)
+  c.frame(true, WS_OP_CLOSE, closeBody(WS_CLOSE_NORMAL), key)
+  t.ok("TLS: a close from the client is answered with 1000", c.next(key) === WS_CLOSE && c.dec.closeCode === WS_CLOSE_NORMAL)
+  t.ok("TLS: then the server closes the connection", c.awaitClose(key))
+  c.hangUp()
+  for (let turn: i32 = 0; turn < TURNS && rig.h.connections() > 0; turn++) {
+    rig.stepSigned(5, key)
+  }
+  t.eqI32("TLS: and the server holds no connection", rig.h.connections(), 0)
+  t.ok("TLS: the program saw it closed with the client's 1000", lastCode(rig, 1, WS_CLOSE_NORMAL))
+  wipe(key)
+}
+
 export const main = (): i32 => {
   const t = new Suite("net_http_server_ws")
   echoes(t)
@@ -264,5 +313,6 @@ export const main = (): i32 => {
   refused(t)
   quiet(t)
   idle(t)
+  overTls(t)
   return t.done()
 }

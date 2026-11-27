@@ -2929,7 +2929,9 @@ export class HttpServer {
   /**
    * The next request, of any version, which the program now owes an answer;
    * a `streaming` request it already holds comes out again each time more
-   * of its body, its end or a reset arrives, at most once per wait. Panics
+   * of its body, its end or a reset arrives, at most once per wait, and an
+   * upgraded request (`acceptWebSocket`) comes out again for each message,
+   * for room after `H1_AGAIN` (`writable`) and once it is `closed`. Panics
    * when none is `ready`.
    * @returns the oldest queued request, the program's until it answers it
    */

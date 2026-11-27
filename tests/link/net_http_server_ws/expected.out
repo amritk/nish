@@ -21,6 +21,8 @@ PASS  a connection dropped without a close settles
 PASS  the program saw it closed with 1006
 PASS  every WebSocket was handed back
 PASS  a pool of one serves three WebSockets one after another
+PASS  while a WebSocket holds the pool of one, a second handshake waits unanswered
+PASS  and is upgraded once the first one closes
 PASS  200 warmed round trips are echoed
 PASS  and leave the arena where it was (0 bytes kept)
 PASS  h2c: a connection
@@ -34,4 +36,11 @@ PASS  and still echoes
 PASS  idleTimeout 300: a quiet WebSocket's connection is closed
 PASS  and the program saw it closed with 1006
 PASS  and handed it back
-net_http_server_ws: 36 passed, 0 failed, 0 skipped
+PASS  TLS: a handshake offering http/1.1, the server's signature and Finished verified
+PASS  TLS: the handshake is answered 101 with RFC 6455's accept value
+PASS  TLS: a text message is echoed as text
+PASS  TLS: a close from the client is answered with 1000
+PASS  TLS: then the server closes the connection
+PASS  TLS: and the server holds no connection
+PASS  TLS: the program saw it closed with the client's 1000
+net_http_server_ws: 45 passed, 0 failed, 0 skipped

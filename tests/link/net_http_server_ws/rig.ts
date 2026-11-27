@@ -1,13 +1,16 @@
 // The server half of `net_http_server_ws`: one `HttpServer` with a cleartext
-// HTTP/1.1 listener and an h2c listener, and the program that upgrades every
+// HTTP/1.1 listener and an h2c listener (and an HTTP/1.1 over TLS one when
+// `listenTls` adds it), and the program that upgrades every
 // request it takes to a WebSocket and echoes each message, fragmented as
 // `tests/link/net_interop_server/ws.ts` does, until the peer closes or sends
 // `bye` (`autobahn.ts` turns that off).
+import { Secret } from "nish:secret"
 import { netLocalPort, tcpListen } from "nish:net"
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server"
 import { H1_AGAIN, Http1Config } from "nish/net/http1-server"
 import { Http2Config } from "nish/net/http2"
 import { Router, RouterLimits } from "nish/net/router"
+import { TlsServerConfig } from "nish/net/tls"
 import { WS_CLOSE_INTERNAL_ERROR, WS_CLOSE_NORMAL, WS_OP_CONTINUATION, WS_OP_TEXT } from "nish/net/websocket"
 import { WS_FRAGMENT } from "../net_interop_server/ws"
 
@@ -21,6 +24,8 @@ export class Rig {
   port: i32 = 0
   /** The h2c listener's port. */
   h2cPort: i32 = 0
+  /** The HTTP/1.1 over TLS listener's port; 0 until `listenTls`. */
+  tlsPort: i32 = 0
   /** The WebSockets the program holds, and how much of each one's message has gone back, -1 between messages. */
   sockets: HttpServerRequest[]
   sent: i32[]
@@ -55,12 +60,32 @@ export class Rig {
     this.codes = []
   }
 
+  /** Adds an HTTP/1.1 over TLS listener under `tls` with `slots` connections; the loop then turns with `stepSigned`. */
+  listenTls(tls: TlsServerConfig, slots: i32): void {
+    const fd: i32 = tcpListen("127.0.0.1", 0, 16)
+    this.h.listenHttp1Tls(fd, tls, new Http1Config(), slots)
+    this.tlsPort = netLocalPort(fd)
+  }
+
   /** One turn of the server's loop, at most `wait` ms, then an answer to everything it handed over. */
   step(wait: i32): void {
-    const h: HttpServer = this.h
     const before: i64 = Arena.used()
-    h.wait(wait)
+    this.h.wait(wait)
     this.keep(before)
+    this.answer()
+  }
+
+  /** `step` for a rig with a TLS listener: the turn signs each handshake with `key`. */
+  stepSigned(wait: i32, key: Secret<u8[]>): void {
+    const before: i64 = Arena.used()
+    this.h.waitSigned(wait, key)
+    this.keep(before)
+    this.answer()
+  }
+
+  /** Answers every request the turn handed over. */
+  private answer(): void {
+    const h: HttpServer = this.h
     while (h.ready()) {
       const r: HttpServerRequest = h.take()
       const at: i64 = Arena.used()

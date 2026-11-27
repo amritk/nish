@@ -119,6 +119,11 @@ export class WsClient {
       return ""
     }
     this.peer.send(bytes)
+    return this.head()
+  }
+
+  /** The response head once it is whole, turning the server's loop until then; "" when none came. What follows it goes to the decoder. */
+  head(): string {
     for (let turn: i32 = 0; turn < TURNS && !this.peer.closed; turn++) {
       const end: i32 = this.headEnd()
       if (end > 0) {
