@@ -30,6 +30,9 @@ stages:
       - id: s1-spec-rerun
         content: After S2's spec is on main, merge main, run vector's check (--nish-root .) and mutate on S2's contract against std/crypto/rsa-sign.ts, kill what survives, and register every RFC the diff's std/ files cite so node scripts/rfc-specs.mjs passes — see TLS RSA S1, "Spec rerun"
         status: pending
+      - id: s1-vector-specs
+        content: Write vector specs, contracts and emitted tests for the two other new exports a vector interface can call, x509ParseRsaPrivateKey (RFC 5958 / RFC 5208 / RFC 8017 §A.1.2) and rsaVerifyPssDer (RFC 8017 §8.1.2) — see TLS RSA S1, "Vector specs for the other new exports"
+        status: pending
   - id: s2-rsa-pss-spec
     title: TLS RSA S2 — vector spec for RSASSA-PSS with SHA-256 (RFC 8017) as TLS 1.3's rsa_pss_rsae_sha256 (RFC 8446 §4.2.3)
     goal: The spec, contract and emitted Nish test for nish/crypto/rsa-sign land on main before the module does, as the spec-first rule requires, profiling RSASSA-PSS signing with SHA-256, MGF1-SHA-256 and a hash-length salt (RFC 8017 §8.1.1, §9.1.1, §B.2.1) as TLS 1.3's rsa_pss_rsae_sha256 (RFC 8446 §4.2.3), with vector's check and mutate already run against #2335's module.
@@ -72,7 +75,7 @@ That needs RSA-PSS signing with constant-time big numbers, a new crypto lane wit
 Reads: `docs/security/crypto-rsa.md`, `docs/security/tls.md`, `docs/wp71-httparena.md` §2.
 Likely files: `std/crypto/rsa.ts`, `std/crypto/x509.ts`, `std/net/tls.ts`, `std/net/quic.ts`, `tests/run.js`, `docs/security/crypto-rsa.md`, `docs/security/tls.md`, `docs/security/README.md`.
 
-**Owns:** `std/crypto/rsa.ts`, `std/crypto/rsa-*.ts` (new), `std/crypto/x509.ts`, `std/net/tls.ts`, `std/net/tls/**`, `std/net/tls-tcp.ts`, `std/net/quic.ts`, `std/net/quic-conn-params.ts`, `std/net/http3-server.ts`, `std/net/http1-server.ts`, `std/net/http2-tls.ts`, `std/net/http-server.ts`, `std/net/grpc.ts`, `std/README.md`, `tests/run.js`, `tests/nish-cmp.js`, `tests/ct-asm.js`, `tests/cases/ct_asm_rsa*` (new), `tests/link/*rsa*/**` (existing and new RSA cases on any listener), `tests/link/crypto_x509*/**`, `tests/link/net_tls_*/**`, `docs/security/crypto-rsa.md`, `docs/security/tls.md`, `docs/security/quic.md`, `docs/security/http3.md`, `docs/security/README.md`, `docs/guide/using-nish/tls-certificates.md`, `docs/guide/using-nish/http-server.md`, `THIRD_PARTY_NOTICES.md`, and, from the run's Owns amendments, `src/std-modules.ts`, `tests/speed-link.txt`, `docs/guide/using-nish/standard-library.md` (amendment 1) and `scripts/rfc-unspecified.txt` (amendment 2, for the spec rerun)
+**Owns:** `std/crypto/rsa.ts`, `std/crypto/rsa-*.ts` (new), `std/crypto/x509.ts`, `std/net/tls.ts`, `std/net/tls/**`, `std/net/tls-tcp.ts`, `std/net/quic.ts`, `std/net/quic-conn-params.ts`, `std/net/http3-server.ts`, `std/net/http1-server.ts`, `std/net/http2-tls.ts`, `std/net/http-server.ts`, `std/net/grpc.ts`, `std/README.md`, `tests/run.js`, `tests/nish-cmp.js`, `tests/ct-asm.js`, `tests/cases/ct_asm_rsa*` (new), `tests/link/*rsa*/**` (existing and new RSA cases on any listener), `tests/link/crypto_x509*/**`, `tests/link/net_tls_*/**`, `docs/security/crypto-rsa.md`, `docs/security/tls.md`, `docs/security/quic.md`, `docs/security/http3.md`, `docs/security/README.md`, `docs/guide/using-nish/tls-certificates.md`, `docs/guide/using-nish/http-server.md`, `THIRD_PARTY_NOTICES.md`, and, from the run's Owns amendments, `src/std-modules.ts`, `tests/speed-link.txt`, `docs/guide/using-nish/standard-library.md` (amendment 1) and `scripts/rfc-unspecified.txt` (amendment 2, for the spec rerun), and `specs/rfc5958-*`, `contracts/rfc5958-*`, `test/spec/rfc5958-*`, `specs/rfc8017-rsa-pss-verify*`, `contracts/rfc8017-rsa-pss-verify*`, `test/spec/rfc8017-rsa-pss-verify*`, `rfcs/rfc5958.txt`, `rfcs/rfc5208.txt`, `.refcache/**` (amendment 3, for the vector specs)
 
 **Generated** (regenerated with the repo's tooling, never edited or hand-merged): `tests/self/goldens/checked/**`, `docs/reference/**`, `scalar.config.json`, `tests/differential/goldens/**`, `docs/IR_COOKBOOK.md`, `tests/wordings/*.err`, `tests/link/*/expected.caps.json`, `docs/reference/diagnostics/**`, `examples/break-web/help.ts`, `docs/site/break/**`
 
@@ -84,6 +87,18 @@ No `Model:` line: the stage designs a constant-time signing lane and touches sec
 - `vector spec mutate` on that contract against `std/crypto/rsa-sign.ts`. A surviving mutant is killed by a test in the module's own tests (`tests/link/crypto_rsa_sign`), or, if the spec is what misses it, reported to the lead for S2's owner. It is never killed by weakening the module;
 - `node tests/run.js spec`, where the emitted test now builds and runs;
 - `node scripts/rfc-specs.mjs`. Every RFC the diff's `std/` files newly cite is covered by S2's contract or gets a `cites:` line in `scripts/rfc-unspecified.txt` with its reason. `rsa-sign.ts`'s RFC 6979 is a pointer, not an implementation. The pre-rule lines are never edited by hand.
+
+**Vector specs for the other new exports.** The owner asked on 2026-11-27 for vector tests wherever vector can hold them. #2335 adds two more exports that a vector `ts-interface` block can call:
+
+- `x509ParseRsaPrivateKey(pem: string): Secret<u8[]> | null` in `std/crypto/x509.ts` reads PKCS#1 (RFC 8017 §A.1.2) and unencrypted PKCS#8 (RFC 5208 §5, RFC 5958 §2) PEM.
+- `rsaVerifyPssDer(der, hash, saltLen, msg, sig): boolean` in `std/crypto/rsa.ts` implements RFC 8017 §8.1.2. It takes no class argument, so it can hold the verification that S2's spec could not test through `rsaVerifyPss`.
+
+Both modules are already on main. Their specs therefore land in this PR, with the exports: an emitted test that calls an export main lacks would fail there. For each export, follow `contracts/README.md`'s steps: write the spec, build it, extract the contract, check it with `--run-sources --nish-root .`, emit the test, and run `mutate`.
+
+- `specs/rfc5958-rsa-private-key.md` targets `nish/crypto/x509`, with sources RFC 5958, RFC 5208 and RFC 8017.
+- `specs/rfc8017-rsa-pss-verify.md` targets `nish/crypto/rsa`. S2's known answers are its accepting vectors. A signature, message or salt length off by one bit or one octet is rejected.
+
+Prefer a vector row, or a `command` source, to a property wherever a section or a rerunnable command prints the value. Every other export of each module that no clause tests is declared `Out of scope:` with its reason. A pre-rule pair a contract now covers (`std/crypto/x509.ts RFC5958`, `RFC5208`, `std/crypto/rsa.ts RFC8017`) leaves `scripts/rfc-unspecified.txt` through `node scripts/rfc-specs.mjs --update-baseline`, never by hand. If vector refuses an export, quote the refusal to the lead, and that export stays covered by `tests/link` alone. These files are tests and lint registrations, so they are within the owner decision's limit below. If a spec forces a change to `std/` code, that change goes back to the owner.
 
 **Merge:** every file this stage owns under `std/crypto/` and `std/net/tls*` is crypto, a sensitive path under the `/feature` merge gate. Round 2 converged at `0a7c4ad8` and was escalated for a human. The owner's decision on #481 is that human call: "Spec PR first, then merge … rerun check/mutate against #2335, then merge #2335." The run therefore merges #2335 on the other eight gate conditions once the rerun is reviewed, provided the rerun changes only tests, lint registrations and what a merge of main regenerates. A rerun that changes the signing arithmetic, the key parsing or the wipes goes back to the owner instead.
 
