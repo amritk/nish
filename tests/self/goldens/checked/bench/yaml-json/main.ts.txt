@@ -8509,6 +8509,8 @@ const YAML_JSON_ERR_MERGE: i32 = -46 [exported]
 const YAML_JSON_MAX_RADIX_DIGITS: i32 = 256 [exported]
 const YAML_JSON_SCAN_KEYS: i32 = 16 [exported]
 const YAML_JSON_MERGE_HOPS: i32 = 100
+const YAML_JSON_MERGE_PAIR: i32 = 1
+const YAML_JSON_WHOLE: i32 = 0
 const YAML_JSON_PLUS: i32 = 43
 const YAML_JSON_DASH: i32 = 45
 const YAML_JSON_DOT: i32 = 46
@@ -8739,7 +8741,8 @@ function YamlJsonLoader.quickCount(this: YamlJsonLoader, lo: i32, root: i32): i3
   local +28:19 maps: i32 (const)
   callee +28:40 YamlStream.count -> @nish.YamlStream.count
   callee +28:53 YamlStream.resolved -> @nish.YamlStream.resolved
-  callee +29:41 YamlJsonLoader.plus -> @nish.YamlJsonLoader.plus
+  local +29:19 less: i32 (const)
+  callee +30:41 YamlJsonLoader.plus -> @nish.YamlJsonLoader.plus
 function YamlJsonLoader.quickPart(this: YamlJsonLoader, p: i32, lo: i32, n: i32): i32 -> @nish.YamlJsonLoader.quickPart [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: p
@@ -8812,7 +8815,8 @@ function YamlJsonLoader.sizeOf(this: YamlJsonLoader, n: i32): i32 -> @nish.YamlJ
   local +19:15 maps: i32 (const)
   callee +19:36 YamlStream.count -> @nish.YamlStream.count
   callee +19:49 YamlStream.resolved -> @nish.YamlStream.resolved
-  callee +22:47 YamlJsonLoader.plus -> @nish.YamlJsonLoader.plus
+  local +20:15 less: i32 (const)
+  callee +23:47 YamlJsonLoader.plus -> @nish.YamlJsonLoader.plus
 function YamlJsonLoader.partSize(this: YamlJsonLoader, n: i32): i32 -> @nish.YamlJsonLoader.partSize [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n

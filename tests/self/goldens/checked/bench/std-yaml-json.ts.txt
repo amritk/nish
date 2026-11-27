@@ -8509,6 +8509,8 @@ const YAML_JSON_ERR_MERGE: i32 = -46 [exported]
 const YAML_JSON_MAX_RADIX_DIGITS: i32 = 256 [exported]
 const YAML_JSON_SCAN_KEYS: i32 = 16 [exported]
 const YAML_JSON_MERGE_HOPS: i32 = 100
+const YAML_JSON_MERGE_PAIR: i32 = 1
+const YAML_JSON_WHOLE: i32 = 0
 const YAML_JSON_PLUS: i32 = 43
 const YAML_JSON_DASH: i32 = 45
 const YAML_JSON_DOT: i32 = 46
@@ -8739,7 +8741,8 @@ function YamlJsonLoader.quickCount(this: YamlJsonLoader, lo: i32, root: i32): i3
   local +28:19 maps: i32 (const)
   callee +28:40 YamlStream.count -> @nish.YamlStream.count
   callee +28:53 YamlStream.resolved -> @nish.YamlStream.resolved
-  callee +29:41 YamlJsonLoader.plus -> @nish.YamlJsonLoader.plus
+  local +29:19 less: i32 (const)
+  callee +30:41 YamlJsonLoader.plus -> @nish.YamlJsonLoader.plus
 function YamlJsonLoader.quickPart(this: YamlJsonLoader, p: i32, lo: i32, n: i32): i32 -> @nish.YamlJsonLoader.quickPart [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: p
@@ -8812,7 +8815,8 @@ function YamlJsonLoader.sizeOf(this: YamlJsonLoader, n: i32): i32 -> @nish.YamlJ
   local +19:15 maps: i32 (const)
   callee +19:36 YamlStream.count -> @nish.YamlStream.count
   callee +19:49 YamlStream.resolved -> @nish.YamlStream.resolved
-  callee +22:47 YamlJsonLoader.plus -> @nish.YamlJsonLoader.plus
+  local +20:15 less: i32 (const)
+  callee +23:47 YamlJsonLoader.plus -> @nish.YamlJsonLoader.plus
 function YamlJsonLoader.partSize(this: YamlJsonLoader, n: i32): i32 -> @nish.YamlJsonLoader.partSize [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
@@ -9713,6 +9717,7 @@ module std/yaml-lines.ts [package nish]
 const YAML_LINES_LF: i32 = 10
 const YAML_LINES_CONTINUATION: i32 = 128
 const YAML_LINES_LEAD: i32 = 192
+const YAML_LINES_MAX_COLUMN: i32 = 2147483647
 struct YamlLineIndex (class) size=16 align=8 exported
   field text: string index=0 offset=0
   field starts: i32[] index=1 offset=8
@@ -9753,9 +9758,9 @@ function YamlLineIndex.line(this: YamlLineIndex, offset: i32): i32 -> @nish.Yaml
   callee +0:12 YamlLineIndex.linesFrom -> @nish.YamlLineIndex.linesFrom
   callee +0:27 YamlLineIndex.clamp -> @nish.YamlLineIndex.clamp
 function YamlLineIndex.column(this: YamlLineIndex, offset: i32): i32 -> @nish.YamlLineIndex.column [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: offset
-  calls: nish.YamlLineIndex.clamp nish.YamlLineIndex.lineStart nish.YamlLineIndex.linesFrom nish_panic_overflow
+  calls: nish.YamlLineIndex.clamp nish.YamlLineIndex.lineStart nish.YamlLineIndex.linesFrom
   pointer this: size=16 writesThrough=false captured=false passedTo=nish.YamlLineIndex.clamp#0 nish.YamlLineIndex.lineStart#0 nish.YamlLineIndex.linesFrom#0
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
@@ -9768,15 +9773,17 @@ function YamlLineIndex.column(this: YamlLineIndex, offset: i32): i32 -> @nish.Ya
   local +4:9 column: i32 (let)
   local +6:13 code: i32 (const)
 function YamlLineIndex.byteColumn(this: YamlLineIndex, offset: i32): i32 -> @nish.YamlLineIndex.byteColumn [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: offset
-  calls: nish.YamlLineIndex.clamp nish.YamlLineIndex.lineStart nish.YamlLineIndex.linesFrom nish_panic_overflow
+  calls: nish.YamlLineIndex.clamp nish.YamlLineIndex.lineStart nish.YamlLineIndex.linesFrom
   pointer this: size=16 writesThrough=false captured=false passedTo=nish.YamlLineIndex.clamp#0 nish.YamlLineIndex.lineStart#0 nish.YamlLineIndex.linesFrom#0
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +0:21 YamlLineIndex.clamp -> @nish.YamlLineIndex.clamp
-  callee +1:17 YamlLineIndex.lineStart -> @nish.YamlLineIndex.lineStart
-  callee +1:32 YamlLineIndex.linesFrom -> @nish.YamlLineIndex.linesFrom
+  local +1:11 start: i32 (const)
+  callee +1:24 YamlLineIndex.lineStart -> @nish.YamlLineIndex.lineStart
+  callee +1:39 YamlLineIndex.linesFrom -> @nish.YamlLineIndex.linesFrom
+  local +5:11 span: i32 (const)
 function YamlLineIndex.clamp(this: YamlLineIndex, offset: i32): i32 -> @nish.YamlLineIndex.clamp [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: offset
