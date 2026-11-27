@@ -1,0 +1,52 @@
+PASS  a bare type
+PASS  type and subtype are lowercased
+PASS  a token parameter
+PASS  a parameter name is lowercased, its value is not
+PASS  a quoted value loses its quotes
+PASS  a quoted-pair escapes a quote
+PASS  a quoted-pair escapes a backslash
+PASS  an empty quoted value
+PASS  whitespace before and after ;
+PASS  empty parameters are skipped
+PASS  parameters keep their order
+PASS  a tchar-only type
+PASS  refused: an empty value
+PASS  refused: no slash
+PASS  refused: an empty subtype
+PASS  refused: an empty type
+PASS  refused: a space inside the type
+PASS  refused: a space around the slash
+PASS  refused: a parameter with no =
+PASS  refused: whitespace before =
+PASS  refused: whitespace after =
+PASS  refused: an empty token value
+PASS  refused: an unclosed quoted value
+PASS  refused: a backslash ends the value
+PASS  refused: a control character in quotes
+PASS  refused: text after a quoted value
+PASS  refused: a parameter named twice
+PASS  refused: named twice in two cases
+PASS  16 parameters parse
+PASS  refused: a 17th parameter
+PASS  16 parameters on a disposition parse
+PASS  refused: a 17th parameter on a disposition
+PASS  refused: a non-tchar in a token value
+PASS  a window inside the array
+PASS  refused: a window starting below 0
+PASS  refused: a window past the array
+PASS  refused: a window that ends before it starts
+PASS  a parameter looked up in another case
+PASS  an absent parameter is null
+PASS  a quoted parameter looked up
+PASS  a form-data disposition
+PASS  its type is lowercased
+PASS  a filename beside the name
+PASS  a backslash in a form-data value is kept
+PASS  so a backslash before the closing quote does not escape it
+PASS  a percent-escaped quote is kept as given
+PASS  a token name
+PASS  refused: a disposition named twice
+PASS  refused: no type
+PASS  refused: an unclosed name
+PASS  refused: a quote after a kept backslash
+net_media_type: 51 passed, 0 failed, 0 skipped
