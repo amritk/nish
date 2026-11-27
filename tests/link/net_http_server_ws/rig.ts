@@ -9,9 +9,10 @@ import { H1_AGAIN, Http1Config } from "nish/net/http1-server"
 import { Http2Config } from "nish/net/http2"
 import { Router, RouterLimits } from "nish/net/router"
 import { WS_CLOSE_INTERNAL_ERROR, WS_CLOSE_NORMAL, WS_OP_CONTINUATION, WS_OP_TEXT } from "nish/net/websocket"
+import { WS_FRAGMENT } from "../net_interop_server/ws"
 
-/** The most payload one echoed frame carries: a quarter of the default 64 KiB output. */
-export const RIG_FRAGMENT: i32 = 16384
+/** The most payload one echoed frame carries: the interop echo's, a quarter of the default 64 KiB output. */
+export const RIG_FRAGMENT: i32 = WS_FRAGMENT
 
 /** The server, its listeners, and the program answering its requests. */
 export class Rig {

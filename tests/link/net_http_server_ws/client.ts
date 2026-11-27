@@ -110,10 +110,15 @@ export class WsClient {
 
   /** Connects to `port` and sends the opening handshake for `target`; the response head, or "" when none came. */
   open(port: i32, target: string): string {
+    return this.request(port, handshake(target))
+  }
+
+  /** Connects to `port` and sends `bytes`; the response head, or "" when none came. */
+  request(port: i32, bytes: u8[]): string {
     if (!this.peer.connect(port)) {
       return ""
     }
-    this.peer.send(handshake(target))
+    this.peer.send(bytes)
     for (let turn: i32 = 0; turn < TURNS && !this.peer.closed; turn++) {
       const end: i32 = this.headEnd()
       if (end > 0) {

@@ -2324,7 +2324,9 @@ export class HttpServer {
       this.h1Close(s)
       return
     }
-    if (s.starved) {
+    // A slot that cannot read yet (no free request, or a WebSocket message
+    // the program holds) is not woken by input it would leave unread.
+    if (s.starved || this.holding(s, conn)) {
       wants = wants & ~H1_WANT_READ
     }
     this.h1Arm(s, wants)
@@ -2797,14 +2799,16 @@ export class HttpServer {
    * flushing is past caring.
    */
   private requeue(r: HttpServerRequest): void {
-    if (
-      r.again ||
-      (r.state !== HTTP_SERVER_HELD && r.state !== HTTP_SERVER_STREAMING && r.state !== HTTP_SERVER_SOCKET)
-    ) {
+    if (r.again || !this.programs(r)) {
       return
     }
     r.again = true
     this.queuePush(r.index)
+  }
+
+  /** Whether `r` is the program's while queued again: held, streaming or an open WebSocket. */
+  private programs(r: HttpServerRequest): boolean {
+    return r.state === HTTP_SERVER_HELD || r.state === HTTP_SERVER_STREAMING || r.state === HTTP_SERVER_SOCKET
   }
 
   /** Takes `r`'s second place out of the queue, closing the gap so the ring still holds each request at most once. */
@@ -2908,8 +2912,7 @@ export class HttpServer {
       }
       // A streaming request queued again is the program's, live or not: it learns of a reset by taking it.
       // One whose answer ended since (`end`, `trailers`) is flushing on its own, and stays out of `take`.
-      const held: boolean =
-        r.state === HTTP_SERVER_HELD || r.state === HTTP_SERVER_STREAMING || r.state === HTTP_SERVER_SOCKET
+      const held: boolean = this.programs(r)
       if ((r.again && held) || (!r.again && this.live(r))) {
         return r
       }
@@ -3929,7 +3932,7 @@ export class HttpServer {
    * The slot's `idleTimeout` (`Http1Config`) closes a WebSocket nothing moves
    * on; `bodyTimeout` does not apply. A draining server leaves a WebSocket
    * open until the program closes it. Panics on another server's request, or
-   * when `r` is not held unanswered.
+   * when `r` is not one taken and unanswered.
    * @param r a request `take` handed over and the program has not answered
    * @param protocol the subprotocol to name in `Sec-WebSocket-Protocol`, one the client offered, or "" for none
    * @returns 0 once the 101 is queued; `H1_INVALID` for a request that is not
@@ -3939,7 +3942,7 @@ export class HttpServer {
   acceptWebSocket(r: HttpServerRequest, protocol: string): i32 {
     this.own(r, "acceptWebSocket")
     if (r.state !== HTTP_SERVER_HELD) {
-      panic(`HttpServer.acceptWebSocket: the request is not held unanswered (state ${r.state})`)
+      panic(`HttpServer.acceptWebSocket: the request is not one taken and unanswered (state ${r.state})`)
     }
     if (r.kind !== HTTP_SERVER_H1) {
       return H1_INVALID
@@ -3956,6 +3959,14 @@ export class HttpServer {
     r.socket = true
     this.driveOf(r)
     return 0
+  }
+
+  /** Panics, naming `who`, unless `r` is this server's and an open WebSocket the program holds. */
+  private ownSocket(r: HttpServerRequest, who: string): void {
+    this.own(r, who)
+    if (r.state !== HTTP_SERVER_SOCKET) {
+      panic(`HttpServer.${who}: the request is not an open WebSocket (state ${r.state})`)
+    }
   }
 
   /**
@@ -3976,10 +3987,7 @@ export class HttpServer {
    *   than the output; `H1_CLOSED` when the WebSocket is closing or its connection closed
    */
   sendFrame(r: HttpServerRequest, fin: boolean, opcode: i32, buf: u8[], off: i32, len: i32): i32 {
-    this.own(r, "sendFrame")
-    if (r.state !== HTTP_SERVER_SOCKET) {
-      panic(`HttpServer.sendFrame: the request is not an open WebSocket (state ${r.state})`)
-    }
+    this.ownSocket(r, "sendFrame")
     r.writable = false
     const conn: Http1Connection | null = this.h1ConnOf(r)
     if (!this.live(r) || conn === null) {
@@ -4001,10 +4009,7 @@ export class HttpServer {
    * @param r a request `acceptWebSocket` upgraded, with or without a message held
    */
   received(r: HttpServerRequest): void {
-    this.own(r, "received")
-    if (r.state !== HTTP_SERVER_SOCKET) {
-      panic(`HttpServer.received: the request is not an open WebSocket (state ${r.state})`)
-    }
+    this.ownSocket(r, "received")
     r.message = false
     this.driveOf(r)
   }
@@ -4021,10 +4026,7 @@ export class HttpServer {
    *   program's, for a code that may not be sent while it is open
    */
   closeWebSocket(r: HttpServerRequest, code: i32): i32 {
-    this.own(r, "closeWebSocket")
-    if (r.state !== HTTP_SERVER_SOCKET) {
-      panic(`HttpServer.closeWebSocket: the request is not an open WebSocket (state ${r.state})`)
-    }
+    this.ownSocket(r, "closeWebSocket")
     const conn: Http1Connection | null = this.h1ConnOf(r)
     if (!this.live(r) || conn === null) {
       this.release(r)

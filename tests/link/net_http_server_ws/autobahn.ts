@@ -9,22 +9,17 @@
 //
 // prints `ws 9002` once it listens, then serves until SIGTERM or SIGINT;
 // exits 0.
-import { Http1Config } from "nish/net/http1-server"
+import { WS_SLOTS, wsConfig } from "../net_interop_server/ws"
 import { Rig, rigLimits } from "./rig"
 
 /** The port the fuzzingclient's `nish-facade` agent connects to. */
 const PORT: i32 = 9002
-/** The longest message taken: Autobahn's cases 9.1.6 and 9.2.6. */
-const MAX_MESSAGE: i32 = 16777216
-/** Connections served at once: the fuzzingclient opens one per case, one after another. */
-const SLOTS: i32 = 8
 /** `watch`'s name for the signal descriptor. */
 const SIGNAL: i32 = 0
 
 export const main = (): i32 => {
-  const config = new Http1Config()
-  config.maxMessage = MAX_MESSAGE
-  const rig = new Rig(rigLimits(SLOTS, 30000), SLOTS, config, PORT)
+  // The interop port's limits, so both Autobahn agents take the same messages.
+  const rig = new Rig(rigLimits(WS_SLOTS, 30000), WS_SLOTS, wsConfig(), PORT)
   rig.bye = false
   const fd: i32 = signalFd()
   if (fd >= 0) {

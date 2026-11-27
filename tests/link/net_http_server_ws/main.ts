@@ -21,11 +21,15 @@ import {
   WS_OP_PING,
   WS_OP_TEXT,
   WS_PONG,
+  websocketClosePayload,
 } from "nish/net/websocket"
-import { Wire, getOf, textAt } from "../net_http2/peer"
+import { Wire, getOf } from "../net_http2/peer"
 import { ascii } from "../net_tls_record_common/bytes"
 import { TURNS, WsClient, H2cClient, clientFrame } from "./client"
 import { Rig, rigLimits } from "./rig"
+
+/** Whether the program saw `n` WebSockets come out closed, the last with `code`. */
+const lastCode = (rig: Rig, n: i32, code: i32): boolean => toI32(rig.codes.length) === n && rig.codes[n - 1] === code
 
 /** The `Sec-WebSocket-Accept` RFC 6455 §1.3 derives from the handshake's key. */
 const ACCEPT: string = "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"
@@ -56,8 +60,11 @@ const holds = (c: WsClient, bytes: u8[]): boolean => {
   return true
 }
 
-/** A close frame's payload: `code`, big-endian. */
-const closeBody = (code: i32): u8[] => [toU8(code >> 8), toU8(code & 255)]
+/** A close frame's payload carrying `code` and no reason, from `nish/net/websocket`'s encoder. */
+const closeBody = (code: i32): u8[] => {
+  const payload: u8[] | null = websocketClosePayload(code, "")
+  return payload === null ? [] : payload
+}
 
 /** Turns `rig`'s loop until it holds no connection; whether it got there. */
 const settles = (rig: Rig): boolean => {
@@ -94,7 +101,7 @@ const echoes = (t: Suite): void => {
   c.send(true, WS_OP_CLOSE, closeBody(WS_CLOSE_NORMAL))
   t.ok("a close from the client is answered with 1000", c.next() === WS_CLOSE && c.dec.closeCode === WS_CLOSE_NORMAL)
   t.ok("then the server closes the connection", c.peer.awaitClose(TURNS) && settles(rig))
-  t.ok("the program saw it closed with the client's 1000", toI32(rig.codes.length) === 1 && rig.codes[0] === WS_CLOSE_NORMAL)
+  t.ok("the program saw it closed with the client's 1000", lastCode(rig, 1, WS_CLOSE_NORMAL))
 }
 
 /** A client that stops reading: the echo stops on `H1_AGAIN`, then goes on when `writable` comes, every message whole. */
@@ -136,13 +143,13 @@ const closes = (t: Suite): void => {
   bad.peer.send(clientFrame(true, WS_OP_TEXT, ascii("unmasked"), false))
   t.ok("an unmasked client frame is closed with 1002", bad.next() === WS_CLOSE && bad.dec.closeCode === 1002)
   t.ok("and its connection closes", bad.peer.awaitClose(TURNS) && settles(rig))
-  t.ok("the program saw it closed with 1002", toI32(rig.codes.length) === 1 && rig.codes[0] === 1002)
+  t.ok("the program saw it closed with 1002", lastCode(rig, 1, 1002))
 
   const gone = new WsClient(rig)
   gone.open(rig.port, "/ws")
   netClose(gone.peer.fd)
   t.ok("a connection dropped without a close settles", settles(rig))
-  t.ok("the program saw it closed with 1006", toI32(rig.codes.length) === 2 && rig.codes[1] === 1006)
+  t.ok("the program saw it closed with 1006", lastCode(rig, 2, 1006))
   t.eqI32("every WebSocket was handed back", toI32(rig.sockets.length), 0)
 }
 
@@ -210,15 +217,7 @@ const refused = (t: Suite): void => {
   t.ok("and the program answers it 400", frames.indexOf("HEADERS 1 end :status=400") >= 0)
 
   const c = new WsClient(rig)
-  c.peer.connect(rig.port)
-  c.peer.send(ascii("GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"))
-  let head: string = ""
-  for (let turn: i32 = 0; turn < TURNS && head === ""; turn++) {
-    c.peer.turn()
-    if (toI32(c.peer.got.length) > 12) {
-      head = textAt(c.peer.got, 0, toI32(c.peer.got.length))
-    }
-  }
+  const head: string = c.request(rig.port, ascii("GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"))
   t.eqI32("a GET with no Upgrade: acceptWebSocket answers H1_INVALID", rig.accepted, H1_INVALID)
   t.ok("and the program answers it 400", head.startsWith("HTTP/1.1 400 "))
   t.eqI32("no request was upgraded", rig.upgrades, 0)
@@ -251,7 +250,7 @@ const idle = (t: Suite): void => {
     c.peer.turn()
   }
   t.ok("idleTimeout 300: a quiet WebSocket's connection is closed", c.peer.closed && settles(rig))
-  t.ok("and the program saw it closed with 1006", toI32(rig.codes.length) === 1 && rig.codes[0] === 1006)
+  t.ok("and the program saw it closed with 1006", lastCode(rig, 1, 1006))
   t.eqI32("and handed it back", toI32(rig.sockets.length), 0)
 }
 
