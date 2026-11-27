@@ -825,7 +825,7 @@ export class JsonDecoder {
     // opening quote is a byte of `src`, so the `+ 1` fits, and a byte `at`
     // past it is in `src` only when `at` is below the bytes left; then its
     // index, `from + at`, is spelled as the length less the bytes after it,
-    // differences of non-negative `i32`s that `src/bounds.ts` proves.
+    // differences `src/bounds.ts` proves once each operand's sign is tested.
     if (
       toI64(n) !== toI64(tok.tokEnd) - toI64(start) - toI64(2) ||
       at < 0 ||
@@ -842,8 +842,11 @@ export class JsonDecoder {
       return -1
     }
     const after: i32 = left - at
-    const i: i32 = after < 0 ? -1 : length - after
-    if (i < 0 || i >= toI32(src.length)) {
+    if (after <= 0) {
+      return -1
+    }
+    const i: i32 = length - after
+    if (i < 0 || i >= length) {
       return -1
     }
     return toI32(src[i])
