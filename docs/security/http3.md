@@ -473,7 +473,19 @@ as a `Secret` on each `receive` and keeps nothing of it; its per-connection
 entropy is wiped by `QuicConnection` as soon as it is copied. The
 connection-ID index keeps eight bytes of the listener's entropy as its salt
 for the server's life, and `Http3Server.stop` wipes it with the listener's
-seed and the configuration's static keys (QUIC-5). What
+seed and the configuration's static keys (QUIC-5). The carrier signs
+through one `TlsKeySigner`, which signs with P-256 or RSA-PSS as the
+configuration's `signatureScheme` says ([tls.md](tls.md),
+[crypto-rsa.md](crypto-rsa.md)); H3-1's figures of 0 bytes a handshake
+were measured under P-256, and an RSA-PSS handshake's arena use is not
+measured. Under the RSA certificate, a third-party QUIC client, OpenSSL's
+`s_client -quic` (3.2 or later), shakes hands with the listener; it sends no
+HTTP/3 request, so the requests the RSA listener answers in a test are the
+in-repo client's ([tls.md](tls.md), "A production handshake also signs with
+RSA-PSS", lists the checks and what skips). No QUIC check offers that
+listener only `ecdsa_secp256r1_sha256` and expects a refusal, as the TCP
+half's "an s_client offering only ecdsa_secp256r1_sha256 is refused with
+handshake_failure" does; that gap is untested. What
 the connection holds is application data — request field sections in
 `section`, the decoder's buffer and the field copies, bodies in `data` — which
 may carry credentials (`cookie`, `authorization`).

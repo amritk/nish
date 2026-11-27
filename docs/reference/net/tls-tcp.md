@@ -26,7 +26,7 @@ const slot: i32 = tls.accept(random32(), random32());
 if (slot >= 0) { pollAdd(loop, tls.fd(slot), 1, slot); }
 // when a connection's token comes back:
 let wants: i32 = (events & 5) !== 0 ? tls.readable(slot) : tls.writable(slot);
-if ((wants & TLS_RECORD_SIGN) !== 0) { wants = tls.signP256(slot, leafKey); }
+if ((wants & TLS_RECORD_SIGN) !== 0) { wants = tls.signKey(slot, leafKey); }
 if ((wants & TLS_RECORD_DATA) !== 0) { tls.read(slot, buf, 0, buf.length); ... }
 if ((wants & TLS_RECORD_DONE) !== 0) { tls.close(slot); }
 else { pollModify(loop, tls.fd(slot), wants & 3, slot); }
@@ -112,10 +112,14 @@ safe, and refuses either when it is not 32 bytes before taking a connection;
 the slot's copy of the key is wiped once the ServerHello is written, when the
 handshake fails, or when the slot is closed.
 
-**Signing is the caller's**, as `TlsServer`'s is: `signP256` signs the
-CertificateVerify with a P-256 key the caller holds as a `Secret` and borrows
-for the call, and `signatureInput` / `sign` hand the input out and take any
-signature back.
+**Signing is the caller's**, as `TlsServer`'s is: `signKey` signs the
+CertificateVerify with the key the caller holds as a `Secret` and borrows
+for the call (P-256 or RSA, as the configuration's `signatureScheme`
+says), and `signatureInput` / `sign` hand the input out and take any
+signature back. Nothing checks that the key, the leaf certificate and
+`signatureScheme` agree: the signer refuses only a key not of its
+scheme's shape, and a key of the right shape that is not the leaf's signs,
+so the client's check of the CertificateVerify is what fails.
 
 </scalar-detail>
 
@@ -367,7 +371,8 @@ class TlsTcpServer
 | `shutdown(slot: i32): i32` | Closes the server's side of `slot`'s connection (§6.1): a `close_notify` after whatever is already written, sent as the socket takes it. The slot stays the program's until its interest says `TLS_RECORD_DONE` — every byte is sent and, once the slot lingers (`lingering`), the client has hung up — and the program calls `close`. Meanwhile the interest asks for the socket to be read. Answers the interest. |
 | `sign(slot: i32, signature: u8[]): i32` | Hands `slot` the signature over `signatureInput(slot)`, seals the rest of its flight and sends it. Answers its `interest`. |
 | `signatureInput(slot: i32): u8[] \| null` | What `slot`'s CertificateVerify signs, while its `interest` says `TLS_RECORD_SIGN`; `null` otherwise. |
-| `signP256(slot: i32, key: Secret<u8[]>): i32` | Signs `slot`'s CertificateVerify with the P-256 private key `key` and hands it over, as `sign` does, through the pool's `TlsP256Signer`, so a handshake's signature keeps nothing. The key is borrowed: the caller made the `Secret`, and wipes it. A malformed key fails the connection with `internal_error`. |
+| `signKey(slot: i32, key: Secret<u8[]>): i32` | Signs `slot`'s CertificateVerify with `key` in the configuration's `signatureScheme` — a P-256 key for `ecdsa_secp256r1_sha256`, an RSA key for `rsa_pss_rsae_sha256` — and hands it over, as `sign` does, through the pool's `TlsKeySigner`, so a handshake's signature keeps nothing. The key is borrowed: the caller made the `Secret`, and wipes it. A key of the wrong kind or a malformed one fails the connection with `internal_error`. |
+| `signP256(slot: i32, key: Secret<u8[]>): i32` | `signKey`, under the name it had when P-256 was the only scheme: it signs in whatever scheme the configuration names. |
 | `size(): i32` | How many slots the pool has, built or not. |
 | `writable(slot: i32): i32` | The socket of `slot` is writable: sends what the connection holds. Answers its `interest`. |
 | `write(slot: i32, data: u8[], off: i32, len: i32): i32` | Application data for `slot`'s client, `data[off .. off + len)`: seals as much as fits and sends what the socket takes, and answers how much was taken, -11 when nothing fits yet or the handshake is under way, -32 once the server has closed, as `TlsRecordServer.write` says. |
