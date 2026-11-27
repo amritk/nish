@@ -270,6 +270,9 @@ const SET_SPACE: i32 = 2
 /** The highest code point. */
 const REGEX_MAX_CP: i32 = 0x10ffff
 
+/** A generated table's numbers are below this, 2^21; `tableNumber` reads no further digits past it. */
+const REGEX_TABLE_NUMBER_LIMIT: i32 = 0x200000
+
 /**
  * The number `table` holds at `at`, four base-32 digits, `0` to `O`. Every
  * `at` read is a record's start inside its generated table, so the 0 the
@@ -290,7 +293,7 @@ const regexFixedAt = (table: string, at: i32): i32 => {
 /** The member a `REGEX_FOLD_DATA` step leads to from `c`: the step is a zigzag-coded difference, doubled, plus one in a pair. */
 const regexFoldTarget = (c: i32, step: i32): i32 =>
   // Unsigned: a code point and a table's difference are below 2^21, so nothing wraps.
-  toI32((step & 2) === 2 ? toU32(c) - toU32(step >>> 2) - 1 : toU32(c) + toU32(step >>> 2))
+  ((step & 2) === 2 ? toI32(c) - toI32(step >>> 2) - 1 : toI32(c) + toI32(step >>> 2))
 
 /** The code point `REGEX_FOLD_SPANS` holds at `at`. */
 const regexSpanAt = (at: i32): i32 => regexFixedAt(REGEX_FOLD_SPANS, at)
@@ -369,7 +372,7 @@ const regexFoldWordAt = (text: string, p: i32): boolean => {
 const regexPropertyEntry = (key: string): i32 => {
   const i: i32 = toI32(REGEX_PROPERTY_NAMES.indexOf(`|${key}=`))
   // Unsigned: the entry found ends inside the table, so the sum cannot wrap.
-  return i < 0 ? -1 : toI32(toU32(i) + toU32(key.length) + 2)
+  return i < 0 ? -1 : (toI32(i) + toI32(key.length) + 2)
 }
 
 /** Whether every character of `s` is ASCII. */
@@ -409,14 +412,14 @@ const regexDecodeAt = (text: string, p: i32): i32 => {
   // Callers read inside the text; outside it there is no byte, which reads as
   // the invalid character a byte above 0xff would be.
   if (p < 0 || p >= len) {
-    return toI32((toU32(REGEX_INVALID) + 0x100) * 8 + 1)
+    return ((toI32(REGEX_INVALID) + 0x100) * 8 + 1)
   }
   const b0: i32 = toI32(text.charCodeAt(p))
   if (b0 < 0x80) {
     return b0 * 8 + 1
   }
   // Unsigned: below 0x110100 * 8, far from wrapping.
-  const invalid: i32 = toI32((toU32(REGEX_INVALID) + toU32(b0 & 0xff)) * 8 + 1)
+  const invalid: i32 = ((toI32(REGEX_INVALID) + toI32(b0 & 0xff)) * 8 + 1)
   if (b0 < 0xc2 || b0 > 0xf4) {
     return invalid
   }
@@ -620,7 +623,7 @@ class RegexParser {
 
   /** `pos` plus `k`, unsigned for the same reason as `skip`. */
   private ahead(k: i32): i32 {
-    return toI32(toU32(this.pos) + toU32(k))
+    return (toI32(this.pos) + toI32(k))
   }
 
   /** The pattern's byte at `i`, or -1 past either end, which no byte test matches. */
@@ -730,21 +733,21 @@ class RegexParser {
     const n: i32 = toI32(table.length)
     let p: i32 = this.tablePos
     // Unsigned: the generated numbers are below 2^21, so nothing wraps.
-    let v: u32 = 0
+    let v: i32 = 0
     // A digit of 32 or more says another follows. The generator ends every
     // number inside its table, so the bound never stops the loop and the
     // partial number after it is never read.
-    while (p >= 0 && p < n) {
+    while (p >= 0 && p < n && v >= 0 && v < REGEX_TABLE_NUMBER_LIMIT) {
       const d: i32 = toI32(table.charCodeAt(p)) - 48
       p += 1
       if (d < 32) {
         this.tablePos = p
-        return toI32(v * 32 + toU32(d))
+        return v * 32 + d
       }
-      v = v * 32 + toU32(d) - 32
+      v = v * 32 + d - 32
     }
     this.tablePos = p
-    return toI32(v)
+    return v
   }
 
   /**
@@ -777,7 +780,7 @@ class RegexParser {
       this.tableNumber(REGEX_FOLD_DATA)
       if (this.tablePos < end) {
         // Unsigned: code points and their gaps are below 2^21.
-        c = toI32(toU32(c) + toU32(this.tableNumber(REGEX_FOLD_DATA)))
+        c = (toI32(c) + toI32(this.tableNumber(REGEX_FOLD_DATA)))
       }
     }
     return c === cp && this.tablePos < end ? this.tableNumber(REGEX_FOLD_DATA) : -1
@@ -1052,14 +1055,14 @@ class RegexParser {
       }
       index = this.groups
       // Unsigned: the test above stops the count past the limit.
-      this.groups = toI32(toU32(index) + 1)
+      this.groups = (toI32(index) + 1)
       this.names.push(name)
       if (name !== "") {
         this.hasNames = true
       }
     }
     // Unsigned: `parseAlt` fails past `REGEX_MAX_DEPTH`, so nothing wraps.
-    const inner: i32 = this.parseAlt(toI32(toU32(depth) + 1))
+    const inner: i32 = this.parseAlt((toI32(depth) + 1))
     if (this.failed) {
       return -1
     }
@@ -1131,7 +1134,7 @@ class RegexParser {
    */
   private parseCharEscape(inClass: boolean): i32 {
     // The cursor is past the backslash, so this is at least 0.
-    const at: i32 = toI32(toU32(this.pos) - 1)
+    const at: i32 = (toI32(this.pos) - 1)
     const c: i32 = this.byteAt(this.pos)
     this.skip(toI32(1))
     if (c === 110) {
@@ -1263,7 +1266,7 @@ class RegexParser {
       this.skip(toI32(2))
       const lo: i32 = this.parseHex(REGEX_HEX_UNIT)
       if (lo >= 0xdc00 && lo <= 0xdfff) {
-        return toI32(((toU32(v) - 0xd800) << 10) + (toU32(lo) - 0xdc00) + 0x10000)
+        return (((toI32(v) - 0xd800) << 10) + (toI32(lo) - 0xdc00) + 0x10000)
       }
       this.pos = save
     }
@@ -1284,7 +1287,7 @@ class RegexParser {
     }
     // Unsigned: each range has its slot in the lists, which hold far fewer
     // than 2^31.
-    this.tmpCount = toI32(toU32(n) + 1)
+    this.tmpCount = (toI32(n) + 1)
   }
 
   /**
@@ -1295,7 +1298,7 @@ class RegexParser {
   private addSet(letter: i32): void {
     const negate: boolean = letter === 68 || letter === 87 || letter === 83
     // Unsigned: a capital letter's code is far from wrapping.
-    const lower: i32 = negate ? toI32(toU32(letter) + 32) : letter
+    const lower: i32 = negate ? (toI32(letter) + 32) : letter
     let set: i32 = SET_SPACE
     if (lower === 100) {
       set = SET_DIGIT
@@ -1360,9 +1363,9 @@ class RegexParser {
       if (!negate) {
         this.addRange(lo, hi)
       } else if (lo > from) {
-        this.addRange(from, toI32(toU32(lo) - 1))
+        this.addRange(from, (toI32(lo) - 1))
       }
-      from = toI32(toU32(hi) + 1)
+      from = (toI32(hi) + 1)
       i = at + 1
     }
     if (!negate) {
@@ -1416,7 +1419,7 @@ class RegexParser {
       }
     } else {
       const name: string = regexSpan(this.src, start, eq)
-      const value: string = regexSpan(this.src, toI32(toU32(eq) + 1), i)
+      const value: string = regexSpan(this.src, (toI32(eq) + 1), i)
       const script: boolean = name === "Script" || name === "sc"
       const extensions: boolean = name === "Script_Extensions" || name === "scx"
       if (name === "General_Category" || name === "gc") {
@@ -1433,7 +1436,7 @@ class RegexParser {
       }
       // A script's entry is its Script list, a comma, then its Script_Extensions list.
       if (extensions) {
-        entry = toI32(toU32(REGEX_PROPERTY_NAMES.indexOf(",", entry)) + 1)
+        entry = (toI32(REGEX_PROPERTY_NAMES.indexOf(",", entry)) + 1)
       }
     }
     // An entry is the offset of its list in `REGEX_PROPERTY_DATA`, after a `~` for its complement.
@@ -1473,14 +1476,14 @@ class RegexParser {
     if (gaps && from <= toU32(REGEX_MAX_CP)) {
       this.addRange(toI32(from), REGEX_MAX_CP)
     }
-    this.countPropertyRanges(toI32(toU32(this.tmpCount) - toU32(before)), at)
+    this.countPropertyRanges((toI32(this.tmpCount) - toI32(before)), at)
   }
 
   /** Count `n` more ranges against `REGEX_MAX_PROPERTY_RANGES`, failing at `at` past it. */
   private countPropertyRanges(n: i32, at: i32): void {
     // Unsigned: the count fails the parse once past its limit, and `n` is
     // the ranges one escape just added.
-    this.propertyRanges = toI32(toU32(this.propertyRanges) + toU32(n))
+    this.propertyRanges = (toI32(this.propertyRanges) + toI32(n))
     if (this.propertyRanges > REGEX_MAX_PROPERTY_RANGES) {
       this.fail("property escapes and case folding add more than 100000 ranges", at)
     }
@@ -1660,7 +1663,7 @@ class RegexParser {
     // bound the run just pushed, and the run is the lists' tail.
     if (end - from <= REGEX_INSERTION_SORT) {
       // Unsigned: `from` is a list's length, far below 2^31.
-      i = toI32(toU32(from) + 1)
+      i = (toI32(from) + 1)
       while (i >= 1 && i < end && i < toI32(lows.length) && i < toI32(highs.length)) {
         const lo: i32 = lows[i]
         const hi: i32 = highs[i]
@@ -1674,7 +1677,7 @@ class RegexParser {
           }
           q -= 1
         }
-        const m: i32 = toI32(toU32(q) + 1)
+        const m: i32 = (toI32(q) + 1)
         if (m >= 0 && m < toI32(lows.length) && m < toI32(highs.length)) {
           lows[m] = lo
           highs[m] = hi
@@ -1691,8 +1694,8 @@ class RegexParser {
     while (i >= 0 && i < end && i < toI32(lows.length) && i < toI32(highs.length)) {
       const lo: i32 = lows[i]
       const hi: i32 = highs[i]
-      const last: i32 = toI32(toU32(out) - 1)
-      if (out > from && last >= 0 && last < toI32(highs.length) && lo <= toI32(toU32(highs[last]) + 1)) {
+      const last: i32 = (toI32(out) - 1)
+      if (out > from && last >= 0 && last < toI32(highs.length) && lo <= (toI32(highs[last]) + 1)) {
         if (hi > highs[last]) {
           highs[last] = hi
         }
@@ -1701,7 +1704,7 @@ class RegexParser {
           lows[out] = lo
           highs[out] = hi
         }
-        out = toI32(toU32(out) + 1)
+        out = (toI32(out) + 1)
       }
       i += 1
     }
@@ -1792,7 +1795,7 @@ class RegexParser {
     }
     i = 0
     while (i < n && i < toI32(srcLo.length) && i < toI32(srcHi.length)) {
-      const at: i32 = toI32(toU32(from) + toU32(i))
+      const at: i32 = (toI32(from) + toI32(i))
       if (at >= 0 && at < toI32(lows.length) && at < toI32(highs.length)) {
         lows[at] = srcLo[i]
         highs[at] = srcHi[i]
@@ -1822,10 +1825,10 @@ class RegexParser {
       if (!touches && regexFoldsIn(lo, highs[r0])) {
         touches = true
       }
-      if (covers && gap < lo && regexFoldsIn(gap, toI32(toU32(lo) - 1))) {
+      if (covers && gap < lo && regexFoldsIn(gap, (toI32(lo) - 1))) {
         covers = false
       }
-      gap = toI32(toU32(highs[r0]) + 1)
+      gap = (toI32(highs[r0]) + 1)
       r0 += 1
     }
     if (covers && gap <= REGEX_MAX_CP && regexFoldsIn(gap, REGEX_MAX_CP)) {
@@ -1859,8 +1862,8 @@ class RegexParser {
         this.tablePos = at
         f =
           at < end
-            ? toI32(toU32(f) + toU32(this.tableNumber(REGEX_FOLD_DATA)))
-            : toI32(toU32(REGEX_MAX_CP) + 1)
+            ? (toI32(f) + toI32(this.tableNumber(REGEX_FOLD_DATA)))
+            : (toI32(REGEX_MAX_CP) + 1)
       }
       r += 1
     }
@@ -1884,7 +1887,7 @@ class RegexParser {
     let hi: i32 = out
     while (lo < hi) {
       // Unsigned: both ends are list indexes, so their sum does not wrap.
-      const mid: i32 = toI32((toU32(lo) + toU32(hi)) >>> 1)
+      const mid: i32 = ((toI32(lo) + toI32(hi)) >>> 1)
       // `[from, out)` is inside the lists, so this always holds.
       if (mid < 0 || mid >= toI32(highs.length)) {
         return false
@@ -2013,14 +2016,14 @@ const regexBytesText = (bytes: u8[]): string => {
  * The first slot of group `g`'s pair. Unsigned: the parser stops the
  * groups at `REGEX_MAX_GROUPS`.
  */
-const regexSlot = (g: i32): i32 => toI32(2 * toU32(g))
+const regexSlot = (g: i32): i32 => (2 * toI32(g))
 
 /**
  * Minus `e`, a negative transition entry. `~e` is `-e - 1`, which is not
  * negative, so adding 1 in u32 cannot wrap, and it gives the same value
  * under JavaScript, where a u32 sum does not wrap.
  */
-const regexNegated = (e: i32): i32 => toI32(toU32(~e) + 1)
+const regexNegated = (e: i32): i32 => (toI32(~e) + 1)
 
 /** `a[i]`, or `missing` outside `a`. */
 const regexItem = (a: i32[], i: i32, missing: i32): i32 => {
@@ -2076,7 +2079,7 @@ const regexStoreSlots = (dst: i32[], base: i32, src: i32[], ns: i32): void => {
   let k: i32 = 0
   while (k < ns && k < toI32(src.length)) {
     // Unsigned: `base` and `k` are not negative, and `dst` bounds the sum.
-    const at: i32 = toI32(toU32(base) + toU32(k))
+    const at: i32 = (toI32(base) + toI32(k))
     if (at < 0 || at >= toI32(dst.length)) {
       return
     }
@@ -2089,7 +2092,7 @@ const regexStoreSlots = (dst: i32[], base: i32, src: i32[], ns: i32): void => {
 const regexLoadSlots = (dst: i32[], src: i32[], base: i32, ns: i32): void => {
   let k: i32 = 0
   while (k < ns && k < toI32(dst.length)) {
-    const at: i32 = toI32(toU32(base) + toU32(k))
+    const at: i32 = (toI32(base) + toI32(k))
     if (at < 0 || at >= toI32(src.length)) {
       return
     }
@@ -2192,9 +2195,9 @@ const regexSortPoints = (a: i32[]): void => {
           tmp[k] = a[from]
         }
         if (right) {
-          j = toI32(toU32(j) + 1)
+          j = (toI32(j) + 1)
         } else {
-          i = toI32(toU32(i) + 1)
+          i = (toI32(i) + 1)
         }
         k += 1
       }
@@ -2250,12 +2253,12 @@ const regexLetterPerMille = (i: i32): i32 => {
   const table: string = REGEX_LETTER_PER_MILLE
   // Unsigned: an `i` of 2^30 or more wraps negative, which the test turns
   // away. The table has a pair for every letter, so it never does.
-  const at: i32 = toI32(toU32(i) * 2)
+  const at: i32 = (toI32(i) * 2)
   if (i < 0 || at < 0 || at >= toI32(table.length) - 1) {
     return 0
   }
   // Two decimal digits, so the unsigned sum stays below 100.
-  return toI32((toU32(table.charCodeAt(at)) - 48) * 10 + toU32(table.charCodeAt(at + 1)) - 48)
+  return ((toI32(table.charCodeAt(at)) - 48) * 10 + toI32(table.charCodeAt(at + 1)) - 48)
 }
 
 /** How many of every thousand bytes of text are ASCII byte `b`, roughly: what a scan window is chosen by. */
@@ -2315,14 +2318,14 @@ const regexScanFrom = (text: string, masks: u8[], depth: i32, off: i32, width: i
     while (k < depth) {
       // The window's positions, then the ones before it, then the ones after.
       // Unsigned, as every operand is below `REGEX_SCAN_DEPTH` and none wraps.
-      let j: u32 = toU32(k)
+      let j: i32 = k
       if (k < width) {
-        j = toU32(off) + toU32(k)
-      } else if (toU32(k) < toU32(off) + toU32(width)) {
-        j = toU32(k) - toU32(width)
+        j = off + k
+      } else if (k < off + width) {
+        j = k - width
       }
       // `j` is below `depth`, so `at` is inside the text; the test proves it.
-      const at: i32 = toI32(toU32(i) + j)
+      const at: i32 = i + j
       if (at < 0 || at >= length) {
         break
       }
@@ -2330,7 +2333,7 @@ const regexScanFrom = (text: string, masks: u8[], depth: i32, off: i32, width: i
       if (b > 255) {
         b = 255
       }
-      const slot: i32 = toI32(toU32(depth) * 32 + (j << 8) + toU32(b))
+      const slot: i32 = depth * 32 + (j << 8) + b
       // Outside the table is never reached; the test is what proves `slot`.
       if (slot < 0 || slot >= toI32(masks.length) || masks[slot] === 0) {
         break
@@ -2415,7 +2418,7 @@ export class RegexMatch {
    */
   private slotOf(k: i32, end: boolean): i32 {
     const s: i32[] = this.slots
-    const at: i32 = toI32(toU32(k) * 2)
+    const at: i32 = (toI32(k) * 2)
     if (k < 0 || at < 0 || at >= toI32(s.length) - 1) {
       return -1
     }
@@ -2791,7 +2794,7 @@ export class Regex {
    * the program at `REGEX_MAX_INSTRUCTIONS`.
    */
   private branch(s: i32, first: boolean, other: i32): void {
-    const next: i32 = toI32(toU32(s) + 1)
+    const next: i32 = (toI32(s) + 1)
     regexPut(this.ia, s, first ? next : other)
     regexPut(this.ib, s, first ? other : next)
   }
@@ -2861,7 +2864,7 @@ export class Regex {
     if (kind === NODE_GROUP) {
       this.emit(OP_SAVE, regexSlot(p.aOf(n)), REGEX_NIL)
       this.compileNode(p, p.kidOf(n), rev)
-      this.emit(OP_SAVE, toI32(toU32(regexSlot(p.aOf(n))) + 1), REGEX_NIL)
+      this.emit(OP_SAVE, (toI32(regexSlot(p.aOf(n))) + 1), REGEX_NIL)
       return
     }
     if (kind === NODE_ALT) {
@@ -2971,7 +2974,7 @@ export class Regex {
     if (marks[n] < 0) {
       marks[n] = this.width
       // Unsigned: a slot per group end and per repeat node, far below 2^31.
-      this.width = toI32(toU32(this.width) + 1)
+      this.width = (toI32(this.width) + 1)
     }
     const k: i32 = marks[n]
     let i: i32 = 0
@@ -3014,10 +3017,10 @@ export class Regex {
     // Unsigned: the depth is at most the pattern's nesting, which the parser
     // bounds, and it goes back down only after it went up.
     if (level < REGEX_MAX_LEVELS && level >= this.levels) {
-      this.levels = toI32(toU32(level) + 1)
+      this.levels = (toI32(level) + 1)
     }
     this.emit(OP_MARK, k, level)
-    this.checkDepth = toI32(toU32(level) + 1)
+    this.checkDepth = (toI32(level) + 1)
     this.compileIteration(p, n, rev)
     this.checkDepth = level
     this.emit(OP_CHECK, k, REGEX_NIL)
@@ -3038,7 +3041,7 @@ export class Regex {
     const whole: i32 = regexSlot(REGEX_WHOLE)
     this.emit(OP_SAVE, whole, REGEX_NIL)
     this.compileNode(p, root, false)
-    this.emit(OP_SAVE, toI32(toU32(whole) + 1), REGEX_NIL)
+    this.emit(OP_SAVE, (toI32(whole) + 1), REGEX_NIL)
     this.emit(OP_MATCH, REGEX_NIL, REGEX_NIL)
     if (this.tooBig) {
       return "the pattern compiles to more than 100000 instructions"
@@ -3065,13 +3068,13 @@ export class Regex {
     }
     // Unsigned: the test above bounds `count * slots`, and `states` is at
     // most `1 << REGEX_MAX_LEVELS` beside a count `emit` bounds.
-    const table: i32 = toI32(toU32(count) * toU32(slots))
+    const table: i32 = (toI32(count) * toI32(slots))
     this.cDense = regexZeros(count)
     this.cSlots = regexZeros(table)
     this.nDense = regexZeros(count)
     this.nSlots = regexZeros(table)
     const states: i32 = 1 << this.levels
-    this.visit = regexZeros(toI32(toU32(count) * toU32(states)))
+    this.visit = regexZeros((toI32(count) * toI32(states)))
     this.caps = regexZeros(slots)
     this.mslots = regexZeros(slots)
     // Each instruction is visited once per closure and set of marks, and
@@ -3097,7 +3100,7 @@ export class Regex {
     }
     // Unsigned: the test above keeps `frames * states` within the slot
     // table's limit, and three times that far from wrapping.
-    this.stk = regexZeros(toI32(frames * toU32(states) * 3))
+    this.stk = regexZeros(toI32(frames) * states * 3)
     this.findPrefilters()
     if (this.revOk && !this.anchored && this.prefix === "") {
       this.findInner(p, root)
@@ -3134,9 +3137,9 @@ export class Regex {
       // Unsigned: `end` counts up from `i` and stops at `count`.
       let end: i32 = i
       while (end < count && this.isAsciiChar(p, regexItem(kids, end, REGEX_NONE))) {
-        end = toI32(toU32(end) + 1)
+        end = (toI32(end) + 1)
       }
-      const n: i32 = toI32(toU32(end) - toU32(i))
+      const n: i32 = (toI32(end) - toI32(i))
       if (n > 0) {
         const b: i32 = p.aOf(first)
         const score: i32 = regexByteScore(b)
@@ -3163,12 +3166,12 @@ export class Regex {
     i = 0
     while (i < toI32(bytes.length)) {
       // Unsigned: the run at `best` lies within the kids.
-      bytes[i] = toU8(p.aOf(regexItem(kids, toI32(toU32(best) + toU32(i)), REGEX_NONE)))
+      bytes[i] = toU8(p.aOf(regexItem(kids, (toI32(best) + toI32(i)), REGEX_NONE)))
       i += 1
     }
     this.innerEntry = this.pc()
     // The run is never the first part, so `best` is at least 1.
-    i = toI32(toU32(best) - 1)
+    i = (toI32(best) - 1)
     while (i >= 0 && i < toI32(kids.length)) {
       this.compileNode(p, kids[i], true)
       i -= 1
@@ -3252,7 +3255,7 @@ export class Regex {
       }
       this.rareAt = rare
       // Unsigned: `rare` is a byte of the prefix.
-      this.rareStr = regexSpan(this.prefix, rare, toI32(toU32(rare) + 1))
+      this.rareStr = regexSpan(this.prefix, rare, (toI32(rare) + 1))
     }
     pc = 0
     while (pc >= 0 && pc < toI32(op.length) && op[pc] === OP_SAVE) {
@@ -3351,10 +3354,10 @@ export class Regex {
           }
           // Unsigned: `k` is a class, and its table is 128 bytes of `ascii`.
           const ascii: u8[] = this.clsAscii
-          const base: u32 = toU32(k) * 128
+          const base: i32 = k * 128
           let c: i32 = 0
           while (c >= 0 && c < toI32(set.length)) {
-            const idx: i32 = toI32(base + toU32(c))
+            const idx: i32 = base + c
             if (idx >= 0 && idx < toI32(ascii.length) && ascii[idx] === 1) {
               set[c] = 1
             }
@@ -3444,7 +3447,7 @@ export class Regex {
     while (at >= 0 && at < toI32(256 * udepth)) {
       const b: i32 = at & 255
       const row: i32 = ((at >> 8) << 5) | ((b >> 7) << 4) | (b & 15)
-      const slot: i32 = toI32(toU32(vec) + toU32(at))
+      const slot: i32 = (toI32(vec) + toI32(at))
       if (slot >= 0 && slot < toI32(both.length) && row >= 0 && row < toI32(masks.length)) {
         both[slot] = toU8((toI32(masks[row]) >> ((b >> 4) & 7)) & 1)
       }
@@ -3480,7 +3483,7 @@ export class Regex {
       }
       let j: i32 = 0
       while (j < width) {
-        all = toI32(toU32(all) * 1000)
+        all = (toI32(all) * 1000)
         j += 1
       }
       if (width >= most || best < all / 256) {
@@ -3515,7 +3518,7 @@ export class Regex {
         const bit: i32 = toI32(1) << (c >> 4)
         const want: i32 = k === (c & 15) ? bit : 0
         // Unsigned: the prefix fits the scan's positions, tested above.
-        if (regexByteItem(this.posMasks, toI32(32 * toU32(j) + toU32(k))) !== want) {
+        if (regexByteItem(this.posMasks, (32 * toI32(j) + toI32(k))) !== want) {
           return false
         }
         k += 1
@@ -3530,7 +3533,7 @@ export class Regex {
     if (cp < 128) {
       // Unsigned: a class number is below the instruction limit, so its
       // 128-byte row stays inside an i32.
-      const at: i32 = toI32(toU32(k) * 128 + toU32(cp))
+      const at: i32 = (toI32(k) * 128 + toI32(cp))
       const ascii: u8[] = this.clsAscii
       return at >= 0 && at < toI32(ascii.length) && ascii[at] === 1
     }
@@ -3688,8 +3691,8 @@ export class Regex {
         const o: i32 = op[pc]
         // Unsigned: `visit` holds `states` stamps for each pc, and `marked`
         // is below `states`, so the slot is inside a table that fits an i32.
-        const row: u32 = toU32(pc) * toU32(states)
-        const at: i32 = toI32(o >= OP_SPLIT && o !== OP_MATCH ? row + toU32(marked) : row)
+        const row: i32 = pc * states
+        const at: i32 = o >= OP_SPLIT && o !== OP_MATCH ? row + marked : row
         if (at < 0 || at >= toI32(visit.length) || visit[at] === gen) {
           break
         }
@@ -3768,7 +3771,7 @@ export class Regex {
           dense[count] = pc
           count += 1
         }
-        regexStoreSlots(slots, toI32(toU32(pc) * toU32(ns)), caps, ns)
+        regexStoreSlots(slots, (toI32(pc) * toI32(ns)), caps, ns)
         break
       }
     }
@@ -3791,7 +3794,7 @@ export class Regex {
     const len: i32 = toI32(text.length)
     const n: i32 = toI32(prefix.length)
     // Unsigned: `from` is in the text and `rareAt` inside the prefix.
-    let p: i32 = toI32(toU32(from) + toU32(rareAt))
+    let p: i32 = (toI32(from) + toI32(rareAt))
     while (true) {
       const at: i32 = toI32(text.indexOf(this.rareStr, p))
       if (at < 0) {
@@ -3806,7 +3809,7 @@ export class Regex {
         return s
       }
       // `at` is a byte of the text, so one past it does not wrap.
-      p = toI32(toU32(at) + 1)
+      p = (toI32(at) + 1)
     }
   }
 
@@ -3831,7 +3834,7 @@ export class Regex {
         return s
       }
       // `s` is in the text, so one past it does not wrap.
-      p = toI32(toU32(s) + 1)
+      p = (toI32(s) + 1)
     }
     return -1
   }
@@ -3912,11 +3915,11 @@ export class Regex {
       if (o === OP_CHAR) {
         if (a >= 128) {
           points.push(a)
-          points.push(toI32(toU32(a) + 1))
+          points.push((toI32(a) + 1))
         }
         if (b >= 128 && b !== a) {
           points.push(b)
-          points.push(toI32(toU32(b) + 1))
+          points.push((toI32(b) + 1))
         }
       } else if (o === OP_CLASS) {
         const k: i32 = a
@@ -3930,7 +3933,7 @@ export class Regex {
             const lo: i32 = clsLo[r]
             if (hi >= 128) {
               points.push(lo > 128 ? lo : 128)
-              points.push(toI32(toU32(hi) + 1))
+              points.push((toI32(hi) + 1))
             }
             r += 1
           }
@@ -3963,7 +3966,7 @@ export class Regex {
     const wide: i32 = toI32(lows.length)
     // Unsigned: `wide` counts the boundaries, far below 2^31, and the test
     // below bounds `units` for the products after it.
-    const units: i32 = toI32(129 + toU32(wide))
+    const units: i32 = (129 + toI32(wide))
     if (units > DFA_MAX_UNITS) {
       return
     }
@@ -3983,7 +3986,7 @@ export class Regex {
     // whether the predicate holds for it.
     const cls: i32[] = regexZeros(units)
     const hit: u8[] = regexZeroBytes(units)
-    const remap: i32[] = regexZeros(toI32(2 * toU32(units)))
+    const remap: i32[] = regexZeros((2 * toI32(units)))
     let n: i32 = 1
     let work: i32 = 0
     u = 0
@@ -4007,7 +4010,7 @@ export class Regex {
       if (o === OP_CHAR) {
         if (a < 128 && b < 128) {
           // Unsigned: both are ASCII here.
-          const key: i32 = toI32(toU32(a) * 128 + toU32(b))
+          const key: i32 = (toI32(a) * 128 + toI32(b))
           // Always true for a character: the test is what proves `key`.
           if (key >= 0 && key < toI32(pairs.length)) {
             use = pairs[key] === 0
@@ -4044,7 +4047,7 @@ export class Regex {
       }
       if (use) {
         // Unsigned: the test below stops `work` at a bound far from wrapping.
-        work = toI32(toU32(work) + toU32(units))
+        work = (toI32(work) + toI32(units))
         if (work > DFA_MAX_WORK) {
           return
         }
@@ -4079,8 +4082,8 @@ export class Regex {
     // and leaves for the slow path, which decodes the character.
     // Unsigned: `n` is at most `units`, so `shift` stops far below 31.
     let shift: i32 = 0
-    while (1 << shift < toI32(toU32(n) + 1)) {
-      shift = toI32(toU32(shift) + 1)
+    while (1 << shift < (toI32(n) + 1)) {
+      shift = (toI32(shift) + 1)
     }
     if (shift > DFA_MAX_SHIFT) {
       return
@@ -4100,7 +4103,7 @@ export class Regex {
     const wcls: i32[] = regexZeros(wide)
     i = 0
     while (i < toI32(wcls.length)) {
-      wcls[i] = regexItem(cls, toI32(129 + toU32(i)), 0)
+      wcls[i] = regexItem(cls, (129 + toI32(i)), 0)
       i += 1
     }
     this.dWcls = wcls
@@ -4146,7 +4149,7 @@ export class Regex {
     this.dLeaf = regexZeros(total)
     this.dBuf = regexZeros(total)
     // Unsigned: `emit` bounds the program at `REGEX_MAX_INSTRUCTIONS`.
-    this.dStk = regexZeros(toI32(toU32(total) + 1))
+    this.dStk = regexZeros((toI32(total) + 1))
     this.dMax = DFA_MAX_TABLE >> shift < DFA_MAX_STATES ? DFA_MAX_TABLE >> shift : DFA_MAX_STATES
     this.dCap = this.dMax < DFA_FIRST_STATES ? this.dMax : DFA_FIRST_STATES
     this.dTrans = regexZeros(this.dCap << shift)
@@ -4154,7 +4157,7 @@ export class Regex {
     this.dLen = regexZeros(this.dCap)
     this.dFlags = regexZeros(this.dCap)
     this.dHash = regexZeros(this.dHashSize(this.dCap))
-    const pool: i32 = toI32(2 * toU32(total))
+    const pool: i32 = (2 * toI32(total))
     this.dPoolMax = pool > DFA_MIN_POOL ? pool : DFA_MIN_POOL
     this.dPool = regexZeros(DFA_FIRST_POOL)
     this.dPoolLen = 0
@@ -4176,19 +4179,19 @@ export class Regex {
     // Unsigned: classes number at most the code units, far below 2^31, and
     // `next` counts new ones.
     let k: i32 = 0
-    while (k < toI32(2 * toU32(n)) && k < toI32(remap.length)) {
+    while (k < (2 * toI32(n)) && k < toI32(remap.length)) {
       remap[k] = -1
       k += 1
     }
     let next: i32 = 0
     let u: i32 = 0
     while (u < units && u < toI32(cls.length) && u < toI32(hit.length)) {
-      const key: i32 = toI32(toU32(cls[u]) * 2 + toU32(hit[u]))
+      const key: i32 = (toI32(cls[u]) * 2 + toI32(hit[u]))
       // Always true: a class is below `n`. The test is what proves `key`.
       if (key >= 0 && key < toI32(remap.length)) {
         if (remap[key] < 0) {
           remap[key] = next
-          next = toI32(toU32(next) + 1)
+          next = (toI32(next) + 1)
         }
         cls[u] = remap[key]
       }
@@ -4215,18 +4218,18 @@ export class Regex {
     // array, so the tests on `lo` and `mid` below always hold and the class
     // 0 answer is never reached.
     let lo: i32 = 0
-    let hi: i32 = toI32(toU32(this.dWide) - 1)
+    let hi: i32 = (toI32(this.dWide) - 1)
     while (lo < hi) {
       // Both are indexes into the arrays, so the sum cannot wrap; `mid` is
       // above `lo`, so `mid - 1` is not negative.
-      const mid: i32 = toI32((toU32(lo) + toU32(hi) + 1) >>> 1)
+      const mid: i32 = ((toI32(lo) + toI32(hi) + 1) >>> 1)
       if (mid < 0 || mid >= toI32(wlo.length)) {
         return 0
       }
       if (wlo[mid] <= cp) {
         lo = mid
       } else {
-        hi = toI32(toU32(mid) - 1)
+        hi = (toI32(mid) - 1)
       }
     }
     if (lo < 0 || lo >= toI32(wcls.length)) {
@@ -4369,12 +4372,12 @@ export class Regex {
       this.dGen = 0
     }
     // Reset just above when it reaches the i32 maximum, so it cannot wrap.
-    this.dGen = toI32(toU32(this.dGen) + 1)
+    this.dGen = (toI32(this.dGen) + 1)
     const pool: i32[] = this.dPool
     let n: i32 = 0
     let i: i32 = 0
     while (i < len) {
-      const at: i32 = toI32(toU32(start) + toU32(i))
+      const at: i32 = (toI32(start) + toI32(i))
       if (at < 0 || at >= toI32(pool.length)) {
         return 0
       }
@@ -4444,7 +4447,7 @@ export class Regex {
             return 0
           }
           // `pc` is inside the program, so one more cannot wrap.
-          buf[nb] = toI32(toU32(pc) + 1)
+          buf[nb] = (toI32(pc) + 1)
           nb += 1
         }
       }
@@ -4481,11 +4484,11 @@ export class Regex {
     } else {
       // A state shifted left by 4 with its flags: negated in u32, where it
       // cannot overflow.
-      entry = toI32(0 - toU32(entry))
+      entry = (0 - toI32(entry))
     }
     // The table is a cache: a slot outside it would only go unremembered.
     const trans: i32[] = this.dTrans
-    const at: i32 = toI32(toU32(off) + toU32(c))
+    const at: i32 = (toI32(off) + toI32(c))
     if (epoch === this.dEpoch && at >= 0 && at < toI32(trans.length)) {
       trans[at] = entry
     }
@@ -4499,7 +4502,7 @@ export class Regex {
     let i: i32 = 0
     while (i < n) {
       // Callers hash a state's slots, which are inside `src`.
-      const k: i32 = toI32(toU32(at) + toU32(i))
+      const k: i32 = (toI32(at) + toI32(i))
       if (k < 0 || k >= toI32(src.length)) {
         break
       }
@@ -4531,7 +4534,7 @@ export class Regex {
     let slot: i32 = this.dHashOf(buf, toI32(0), n, flags) & mask
     while (slot >= 0 && slot < toI32(hash.length) && hash[slot] !== 0) {
       // Slots hold an id plus one.
-      const id: i32 = toI32(toU32(hash[slot]) - 1)
+      const id: i32 = (toI32(hash[slot]) - 1)
       if (
         id >= 0 &&
         id < toI32(flagsOf.length) &&
@@ -4544,7 +4547,7 @@ export class Regex {
         const pool: i32[] = this.dPool
         let k: i32 = 0
         while (k < n && k < toI32(buf.length)) {
-          const q: i32 = toI32(toU32(start) + toU32(k))
+          const q: i32 = (toI32(start) + toI32(k))
           if (q < 0 || q >= toI32(pool.length) || pool[q] !== buf[k]) {
             break
           }
@@ -4615,21 +4618,21 @@ export class Regex {
     let k: i32 = 0
     while (k < n && k < toI32(buf.length)) {
       // Inside the pool: checked above.
-      const q: i32 = toI32(toU32(base) + toU32(k))
+      const q: i32 = (toI32(base) + toI32(k))
       if (q < 0 || q >= toI32(pool.length)) {
         break
       }
       pool[q] = buf[k]
       k += 1
     }
-    this.dPoolLen = toI32(toU32(base) + toU32(n))
+    this.dPoolLen = (toI32(base) + toI32(n))
     const off: i32 = id << this.dShift
     const row: i32 = 1 << this.dShift
     // A state's row ends inside the table, which holds `dCap` rows.
-    this.dTrans.fill(0, off, toI32(toU32(off) + toU32(row)))
+    this.dTrans.fill(0, off, (toI32(off) + toI32(row)))
     // In `hash`, checked after the probe; the calls since then cost the proof.
     if (slot >= 0 && slot < toI32(hash.length)) {
-      hash[slot] = toI32(toU32(id) + 1)
+      hash[slot] = (toI32(id) + 1)
     }
     return off
   }
@@ -4638,7 +4641,7 @@ export class Regex {
   private dGrow(): void {
     // The cache holds at most `dMax` states, far below 2^30: doubling it
     // cannot wrap.
-    let cap: i32 = toI32(toU32(this.dCap) * 2)
+    let cap: i32 = (toI32(this.dCap) * 2)
     if (cap > this.dMax) {
       cap = this.dMax
     }
@@ -4703,7 +4706,7 @@ export class Regex {
     // Only whether the count passed `DFA_FREE_FLUSHES` is read, so it stops
     // one past it and cannot wrap.
     const flushes: i32 = this.dFlushes
-    this.dFlushes = flushes > DFA_FREE_FLUSHES ? flushes : toI32(toU32(flushes) + 1)
+    this.dFlushes = flushes > DFA_FREE_FLUSHES ? flushes : (toI32(flushes) + 1)
     const moved: f64 = Math.abs(toF64(p) - toF64(this.dPos))
     if (this.dFlushes > DFA_FREE_FLUSHES && moved < toF64(DFA_BYTES_PER_STATE) * toF64(this.dMax)) {
       return false
@@ -4715,7 +4718,7 @@ export class Regex {
     this.dStartOff.fill(0)
     this.dPrefOff = 0
     // Masked, so wrapping past 2^32 is harmless.
-    this.dEpoch = toI32((toU32(this.dEpoch) + 1) & toU32(DFA_EPOCH_MASK))
+    this.dEpoch = ((toI32(this.dEpoch) + 1) & toI32(DFA_EPOCH_MASK))
     return true
   }
 
@@ -4725,7 +4728,7 @@ export class Regex {
     // `dStartOff` has one per pair and `dBuf` room for a state: the -1 for a
     // slot outside either, which hands the search to the NFA, is never
     // answered.
-    const k: i32 = toI32(toU32(mode) * toU32(CTX_SLOTS) + toU32(ctx))
+    const k: i32 = (toI32(mode) * toI32(CTX_SLOTS) + toI32(ctx))
     const startOff: i32[] = this.dStartOff
     const buf: i32[] = this.dBuf
     if (k < 0 || k >= toI32(startOff.length) || toI32(buf.length) < 1) {
@@ -4752,7 +4755,7 @@ export class Regex {
     const after: i32[] = this.dStartOff
     if (off >= 0 && k < toI32(after.length)) {
       // A state's offset is inside the transition table: one more cannot wrap.
-      after[k] = toI32(toU32(off) + 1)
+      after[k] = (toI32(off) + 1)
     }
     return off
   }
@@ -4779,7 +4782,7 @@ export class Regex {
       }
       const c: i32 = cls[b]
       const trans: i32[] = this.dTrans
-      const at: i32 = toI32(toU32(off) + toU32(c))
+      const at: i32 = (toI32(off) + toI32(c))
       if (at < 0 || at >= toI32(trans.length)) {
         off = -1
         break
@@ -4787,7 +4790,7 @@ export class Regex {
       let e: i32 = trans[at]
       if (e === 0) {
         // The prefix is in the text at `p`, so `p + k` cannot wrap.
-        e = this.dStep(off, c, toI32(toU32(p) + toU32(k)))
+        e = this.dStep(off, c, (toI32(p) + toI32(k)))
       }
       off = e > 0 ? e : -1
       k += 1
@@ -4796,7 +4799,7 @@ export class Regex {
       this.dPrefFast = false
       return -1
     }
-    this.dPrefOff = toI32(toU32(off) + 1)
+    this.dPrefOff = (toI32(off) + 1)
     return off
   }
 
@@ -4840,7 +4843,7 @@ export class Regex {
         kind = CTX_WORD
       } else if (b === 0xe2 && regexByteAt(text, p + 1) === 0x80) {
         // `b` was read, so `p` is in the text and `p + 2` cannot wrap.
-        const b2: i32 = regexByteAt(text, toI32(toU32(p) + 2))
+        const b2: i32 = regexByteAt(text, (toI32(p) + 2))
         if (b2 === 0xa8 || b2 === 0xa9) {
           kind = CTX_LINE
         }
@@ -4881,7 +4884,7 @@ export class Regex {
         const prefOff: i32 = this.dPrefOff
         off = prefOff > 0 ? prefOff - 1 : this.dAfterPrefix(p)
         if (off >= 0) {
-          p = toI32(toU32(p) + toU32(this.prefix.length))
+          p = (toI32(p) + toI32(this.prefix.length))
         }
       }
     }
@@ -4949,7 +4952,7 @@ export class Regex {
       // States and classes are both non-negative, and a state's row holds
       // every class, so the slot is in the table; were it not, giving up
       // hands the search to the NFA.
-      const at: i32 = toI32(toU32(off) + toU32(c))
+      const at: i32 = (toI32(off) + toI32(c))
       if (at < 0 || at >= toI32(trans.length)) {
         return DFA_GAVE_UP
       }
@@ -4969,7 +4972,7 @@ export class Regex {
           return end
         }
         off = e
-        p = toI32(toU32(p) + toU32(w))
+        p = (toI32(p) + toI32(w))
         continue
       }
       e = regexNegated(e)
@@ -4985,7 +4988,7 @@ export class Regex {
         return end
       }
       off = e >> 4
-      p = toI32(toU32(p) + toU32(w))
+      p = (toI32(p) + toI32(w))
       if ((e & DFA_IDLE) !== 0) {
         // No thread is alive and no match has been seen: skip to where the
         // next one can start. The state reached is the start state there
@@ -5006,7 +5009,7 @@ export class Regex {
         if (prefOff > 0 && this.dPrefFast) {
           // The prefix is at `q`, inside the text: the sum cannot wrap.
           off = prefOff - 1
-          p = toI32(toU32(q) + toU32(this.prefix.length))
+          p = (toI32(q) + toI32(this.prefix.length))
         }
       }
     }
@@ -5036,7 +5039,7 @@ export class Regex {
       // `q` is the byte before `p`. `p` only falls from `e`, so `q` stays
       // below `len` and above -2: the tests on it stand in for the bounds
       // check its read needs, and `q - 1` and `q + 1` cannot wrap.
-      let q: i32 = toI32(toU32(p) - 1)
+      let q: i32 = (toI32(p) - 1)
       while (q >= from && q >= 0 && q < len) {
         const b: i32 = toI32(text.charCodeAt(q))
         // A byte or a slot outside its table gives up, as in `dfaForward`.
@@ -5066,7 +5069,7 @@ export class Regex {
       }
       // `q` is -1 at the least, where `p` is 0: in u32 -1 would wrap, which
       // JavaScript's numbers do not.
-      p = q < 0 ? 0 : toI32(toU32(q) + 1)
+      p = q < 0 ? 0 : (toI32(q) + 1)
       // The character before `p`. At `from` it is read only for its kind,
       // so it is decoded from the start of the text.
       let c: i32 = this.dEot
@@ -5083,7 +5086,7 @@ export class Regex {
           let k: i32 = 2
           while (k <= 4) {
             // Below zero, `at` wraps to a negative value under `lim`.
-            const at: i32 = toI32(toU32(p) - toU32(k))
+            const at: i32 = (toI32(p) - toI32(k))
             if (at < lim) {
               break
             }
@@ -5105,7 +5108,7 @@ export class Regex {
         }
       }
       // As in `dfaForward`: the slot is in the table.
-      const at: i32 = toI32(toU32(off) + toU32(c))
+      const at: i32 = (toI32(off) + toI32(c))
       if (at < 0 || at >= toI32(trans.length)) {
         return DFA_GAVE_UP
       }
@@ -5124,7 +5127,7 @@ export class Regex {
           return s
         }
         off = t
-        p = toI32(toU32(p) - toU32(w))
+        p = (toI32(p) - toI32(w))
         continue
       }
       t = regexNegated(t)
@@ -5135,7 +5138,7 @@ export class Regex {
         return s
       }
       off = t >> 4
-      p = toI32(toU32(p) - toU32(w))
+      p = (toI32(p) - toI32(w))
     }
   }
 
@@ -5179,7 +5182,7 @@ export class Regex {
         }
       }
       // `i` is a byte of the text, so the next one cannot wrap.
-      lower = toI32(toU32(i) + 1)
+      lower = (toI32(i) + 1)
     }
     // No match starts before `lower`.
     const e: i32 = this.dfaForward(text, lower, first, false)
@@ -5208,7 +5211,7 @@ export class Regex {
       }
       if (want >= REGEX_WANT_BOUNDS) {
         // The prefix found at `at` ends inside the text.
-        this.setBounds(at, toI32(toU32(at) + toU32(this.prefix.length)))
+        this.setBounds(at, (toI32(at) + toI32(this.prefix.length)))
       }
       return true
     }
@@ -5337,7 +5340,7 @@ export class Regex {
           break
         }
         // `p` is inside the text and a character is at most 4 bytes.
-        p = toI32(toU32(p) + toU32(regexWidthAt(text, p)))
+        p = (toI32(p) + toI32(regexWidthAt(text, p)))
         continue
       }
       let cp: i32 = -1
@@ -5371,7 +5374,7 @@ export class Regex {
           if (cp >= 0 && cp < 128) {
             // Unsigned: a class number is below the instruction limit, so its
             // 128-byte row stays inside an i32.
-            const at: i32 = toI32(toU32(ia[pc]) * 128 + toU32(cp))
+            const at: i32 = (toI32(ia[pc]) * 128 + toI32(cp))
             hit = at >= 0 && at < toI32(clsAscii.length) && clsAscii[at] === 1
           } else {
             hit = cp >= 0 && this.classHas(ia[pc], cp)
@@ -5385,13 +5388,13 @@ export class Regex {
             return true
           }
           // Unsigned: the slot table holds `ns` slots for every pc.
-          regexLoadSlots(mslots, cSlots, toI32(toU32(pc) * toU32(ns)), ns)
+          regexLoadSlots(mslots, cSlots, (toI32(pc) * toI32(ns)), ns)
           matched = true
           // Every thread after this one has lower priority.
           break
         }
         if (hit) {
-          regexLoadSlots(caps, cSlots, toI32(toU32(pc) * toU32(ns)), ns)
+          regexLoadSlots(caps, cSlots, (toI32(pc) * toI32(ns)), ns)
           // A hit read a character at `p`, inside the text; `pc` is below
           // the program's length.
           this.nCount = this.addThread(
@@ -5400,7 +5403,7 @@ export class Regex {
             this.nCount,
             pc + 1,
             text,
-            toI32(toU32(p) + toU32(w)),
+            (toI32(p) + toI32(w)),
             ns
           )
         }
@@ -5416,7 +5419,7 @@ export class Regex {
         break
       }
       // `p` is inside the text and `w` the width of its character.
-      p = toI32(toU32(p) + toU32(w))
+      p = (toI32(p) + toI32(w))
     }
     return matched
   }
@@ -5518,7 +5521,7 @@ export class Regex {
     let n: u32 = 0
     let pos: i32 = 0
     if (this.literal && this.prefix !== "") {
-      const n0: u32 = toU32(this.prefix.length)
+      const n0: i32 = toI32(this.prefix.length)
       while (true) {
         const at: i32 = this.findPrefix(text, pos)
         if (at < 0) {
@@ -5526,7 +5529,7 @@ export class Regex {
         }
         n += 1
         // The prefix found at `at` ends inside the text; unsigned, nothing wraps.
-        pos = toI32(toU32(at) + n0)
+        pos = at + n0
       }
     }
     if (!this.dReady) {
@@ -5637,7 +5640,7 @@ export class Regex {
 
   /** Two slots a group; `REGEX_MAX_GROUPS` keeps the product far from wrapping. */
   private groupSlots(): i32 {
-    return toI32(toU32(this.groups) * 2)
+    return (toI32(this.groups) * 2)
   }
 
   /**
@@ -5659,7 +5662,7 @@ export class Regex {
    * most 4 and the sum stays at or below the text's length.
    */
   private pastEmpty(text: string, e: i32): i32 {
-    return toI32(toU32(e) + toU32(regexWidthAt(text, e)))
+    return (toI32(e) + toI32(regexWidthAt(text, e)))
   }
 
   /**
@@ -5678,8 +5681,8 @@ export class Regex {
     // `2 * k` unsigned: a `k` of 2^30 or more wraps it negative, which the
     // test turns away as it does a negative `k`; an even `at` plus one
     // cannot wrap.
-    const at: i32 = toI32(toU32(k) * 2)
-    const end: i32 = toI32(toU32(at) + 1)
+    const at: i32 = (toI32(k) * 2)
+    const end: i32 = (toI32(at) + 1)
     if (k < 0 || at < 0 || end >= ns) {
       return ""
     }
@@ -5694,7 +5697,7 @@ export class Regex {
   private expand(rep: string, text: string, ns: i32, parts: string[]): void {
     const n: i32 = toI32(rep.length)
     // Group 0 is always there, so this is not negative.
-    const groupsAfterZero: i32 = toI32(toU32(this.groups) - 1)
+    const groupsAfterZero: i32 = (toI32(this.groups) - 1)
     let lit: i32 = 0
     let i: i32 = toI32(rep.indexOf("$"))
     while (i >= 0 && i < n - 1) {
@@ -5728,7 +5731,7 @@ export class Regex {
         if (close >= 0) {
           // `close` is at or after `i + 2`, so the unsigned width cannot wrap.
           value = this.namedText(text, ns, rep, i + 2, close)
-          used = toI32(toU32(close) + 1 - toU32(i))
+          used = (toI32(close) + 1 - toI32(i))
         }
       }
       if (used === 0) {
@@ -5737,7 +5740,7 @@ export class Regex {
       }
       parts.push(regexSpan(rep, lit, i))
       parts.push(value)
-      lit = toI32(toU32(i) + toU32(used))
+      lit = (toI32(i) + toI32(used))
       i = toI32(rep.indexOf("$", lit))
     }
     parts.push(regexSpan(rep, lit, n))
