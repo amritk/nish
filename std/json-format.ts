@@ -129,6 +129,25 @@ const JF_QUERY: i32 = 5 // the fragment's set, and `iprivate` in an IRI
  */
 const jfUnitAt = (s: string, i: i32): i32 => (i >= 0 && i < toI32(s.length) ? toI32(s.charCodeAt(i)) : -1)
 
+/**
+ * Where the `w` units of `s` from `i` end, `i + w`, or -1 when either is
+ * negative or they run past `s`. The widths the grammar counts are units of
+ * `s`, so a caller never sees -1; it is spelled as differences, each of which
+ * `src/bounds.ts` proves, so the step needs no overflow check.
+ */
+const jfStep = (s: string, i: i32, w: i32): i32 => {
+  const length: i32 = toI32(s.length)
+  if (i < 0 || w < 0) {
+    return -1
+  }
+  const room: i32 = length - i
+  if (room < 0) {
+    return -1
+  }
+  const gap: i32 = room - w
+  return gap < 0 ? -1 : length - gap
+}
+
 const jfIsDigit = (c: i32): boolean => c >= 48 && c <= 57
 
 const jfIsAlpha = (c: i32): boolean => (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
@@ -796,8 +815,10 @@ const jfUriRun = (s: string, from: i32, to: i32, set: i32, iri: boolean): boolea
     if (w === 0) {
       return false
     }
-    // The `w` units are in `s`, so the `u32` sum is at most its length.
-    i = toI32(toU32(i) + toU32(w))
+    i = jfStep(s, i, w)
+    if (i < 0) {
+      return false
+    }
   }
   return i === to
 }
@@ -1016,8 +1037,10 @@ const jfExpressionEnd = (s: string, open: i32): i32 => {
     if (w === 0) {
       return -1
     }
-    // `jfVarchar` counts only units of `s`, so the sum is at most its length.
-    i = toI32(toU32(i) + toU32(w))
+    i = jfStep(s, i, w)
+    if (i < 0) {
+      return -1
+    }
     while (i < length) {
       if (jfUnitAt(s, i) === 46) {
         const name = i + 1
@@ -1025,13 +1048,19 @@ const jfExpressionEnd = (s: string, open: i32): i32 => {
         if (w === 0) {
           return -1
         }
-        i = toI32(toU32(name) + toU32(w))
+        i = jfStep(s, name, w)
+        if (i < 0) {
+          return -1
+        }
       } else {
         w = jfVarchar(s, i)
         if (w === 0) {
           break
         }
-        i = toI32(toU32(i) + toU32(w))
+        i = jfStep(s, i, w)
+        if (i < 0) {
+          return -1
+        }
       }
     }
     // An expression ends with a `}`, so running out of text is not one.
@@ -1124,8 +1153,10 @@ export const isUriTemplate = (s: string): boolean => {
       if (w === 0) {
         return false
       }
-      // `jfUcsWidth` counts only units of `s`, so the sum is at most its length.
-      i = toI32(toU32(i) + toU32(w))
+      i = jfStep(s, i, w)
+      if (i < 0) {
+        return false
+      }
     }
   }
   return true
