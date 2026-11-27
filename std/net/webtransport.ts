@@ -1868,7 +1868,8 @@ export class WebTransport {
    * Writes up to `len` bytes of `buf` from `off` to session stream `id`, with
    * its FIN when `fin` and all were taken. Answers how many it took, or
    * H3_AGAIN, or H3_CLOSED (see `Http3Connection.writeStream`). A window
-   * outside `buf` panics, whatever stream `id` names.
+   * outside `buf` panics, whatever stream `id` names: on a stream this layer
+   * does not hold it panics rather than answering H3_CLOSED.
    * @param id The stream's ID, one of a session this layer took or opened.
    * @param buf The buffer holding the bytes; only read, and what is taken is copied.
    * @param off Where the bytes start in `buf`.
