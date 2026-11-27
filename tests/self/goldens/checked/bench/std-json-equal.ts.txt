@@ -36,40 +36,36 @@ function jsonEqualSetAt(a: i32[], i: i32, x: i32): void -> @nish.jsonEqualSetAt
   escaping: i x
   pointer a: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function jsonEqualSortedMembers(doc: JsonDocument, v: i32, keys: string[]): i32[] -> @nish.jsonEqualSortedMembers
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function jsonEqualSortedMembers(keys: string[]): i32[] -> @nish.jsonEqualSortedMembers
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: v
-  calls: nish.JsonDocument.keyAt nish.JsonDocument.length nish.jsonEqualAt nish.jsonEqualBefore nish.jsonEqualKeyAt nish.jsonEqualSetAt nish_array_grow
-  pointer doc: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.length#0 nish.JsonDocument.keyAt#0
-  pointer keys: size=0 writesThrough=true captured=false passedTo=nish.jsonEqualKeyAt#0 nish.jsonEqualKeyAt#0
+  calls: nish.jsonEqualAt nish.jsonEqualBefore nish.jsonEqualKeyAt nish.jsonEqualSetAt nish_array_grow
+  pointer keys: size=0 writesThrough=false captured=false passedTo=nish.jsonEqualKeyAt#0 nish.jsonEqualKeyAt#0
   stackSites=0 stackLocals=0
   local -4:9 n: i32 (const)
-  callee -4:18 JsonDocument.length -> @nish.JsonDocument.length
   local -3:7 order: i32[] (let)
   local -2:7 spare: i32[] (let)
   local -1:12 i: i32 (let)
-  callee +0:15 JsonDocument.keyAt -> @nish.JsonDocument.keyAt
-  local +7:7 width: i32 (let)
-  local +9:9 lo: i32 (let)
-  local +11:13 midWide: u32 (const)
-  local +12:13 mid: i32 (const)
-  local +13:13 hiWide: u32 (const)
-  local +14:13 hi: i32 (const)
-  local +15:11 i: i32 (let)
-  local +16:11 j: i32 (let)
-  local +17:16 k: i32 (let)
-  local +18:15 left: i32 (const)
-  callee +18:27 jsonEqualAt -> @nish.jsonEqualAt
-  local +19:15 right: i32 (const)
-  callee +19:28 jsonEqualAt -> @nish.jsonEqualAt
-  callee +22:24 jsonEqualBefore -> @nish.jsonEqualBefore
-  callee +22:40 jsonEqualKeyAt -> @nish.jsonEqualKeyAt
-  callee +22:69 jsonEqualKeyAt -> @nish.jsonEqualKeyAt
-  callee +24:11 jsonEqualSetAt -> @nish.jsonEqualSetAt
-  callee +30:11 jsonEqualSetAt -> @nish.jsonEqualSetAt
-  local +36:11 done: i32[] (const)
-  local +39:11 doubled: u32 (const)
+  local +6:7 width: i32 (let)
+  local +8:9 lo: i32 (let)
+  local +10:13 midWide: u32 (const)
+  local +11:13 mid: i32 (const)
+  local +12:13 hiWide: u32 (const)
+  local +13:13 hi: i32 (const)
+  local +14:11 i: i32 (let)
+  local +15:11 j: i32 (let)
+  local +16:16 k: i32 (let)
+  local +17:15 left: i32 (const)
+  callee +17:27 jsonEqualAt -> @nish.jsonEqualAt
+  local +18:15 right: i32 (const)
+  callee +18:28 jsonEqualAt -> @nish.jsonEqualAt
+  callee +21:24 jsonEqualBefore -> @nish.jsonEqualBefore
+  callee +21:40 jsonEqualKeyAt -> @nish.jsonEqualKeyAt
+  callee +21:69 jsonEqualKeyAt -> @nish.jsonEqualKeyAt
+  callee +23:11 jsonEqualSetAt -> @nish.jsonEqualSetAt
+  callee +29:11 jsonEqualSetAt -> @nish.jsonEqualSetAt
+  local +35:11 done: i32[] (const)
+  local +38:11 doubled: u32 (const)
 function jsonEqualNumbers(a: string, b: string): boolean -> @nish.jsonEqualNumbers
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
@@ -81,10 +77,10 @@ function jsonEqual(da: JsonDocument, a: i32, db: JsonDocument, b: i32): boolean 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.jsonEqualSortedMembers
   escaping: a b
-  calls: nish.JsonDocument.at nish.JsonDocument.boolean nish.JsonDocument.kind nish.JsonDocument.length nish.JsonDocument.numberText nish.JsonDocument.string nish.JsonDocument.stringEquals nish.jsonEqualAt nish.jsonEqualKeyAt nish.jsonEqualNumbers nish.jsonEqualSortedMembers nish_array_grow nish_str_eq
-  pointer da: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.kind#0 nish.JsonDocument.boolean#0 nish.JsonDocument.numberText#0 nish.JsonDocument.string#0 nish.JsonDocument.length#0 nish.JsonDocument.at#0 nish.jsonEqualSortedMembers#0 nish.JsonDocument.at#0
-  pointer db: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.kind#0 nish.JsonDocument.boolean#0 nish.JsonDocument.numberText#0 nish.JsonDocument.stringEquals#0 nish.JsonDocument.length#0 nish.JsonDocument.at#0 nish.jsonEqualSortedMembers#0 nish.JsonDocument.at#0
-  stackSites=4 stackLocals=4
+  calls: nish.JsonDocument.at nish.JsonDocument.boolean nish.JsonDocument.keys nish.JsonDocument.kind nish.JsonDocument.length nish.JsonDocument.numberText nish.JsonDocument.string nish.JsonDocument.stringEquals nish.jsonEqualAt nish.jsonEqualKeyAt nish.jsonEqualNumbers nish.jsonEqualSortedMembers nish_array_grow nish_str_eq
+  pointer da: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.kind#0 nish.JsonDocument.boolean#0 nish.JsonDocument.numberText#0 nish.JsonDocument.string#0 nish.JsonDocument.length#0 nish.JsonDocument.at#0 nish.JsonDocument.keys#0 nish.JsonDocument.at#0
+  pointer db: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.kind#0 nish.JsonDocument.boolean#0 nish.JsonDocument.numberText#0 nish.JsonDocument.stringEquals#0 nish.JsonDocument.length#0 nish.JsonDocument.at#0 nish.JsonDocument.keys#0 nish.JsonDocument.at#0
+  stackSites=2 stackLocals=2
   local +0:9 left: i32[] (const)
   local +1:9 right: i32[] (const)
   local +4:11 top: i32 (const)
@@ -108,7 +104,9 @@ function jsonEqual(da: JsonDocument, a: i32, db: JsonDocument, b: i32): boolean 
   callee +43:21 JsonDocument.at -> @nish.JsonDocument.at
   callee +44:22 JsonDocument.at -> @nish.JsonDocument.at
   local +47:15 keysX: string[] (const)
+  callee +47:33 JsonDocument.keys -> @nish.JsonDocument.keys
   local +48:15 keysY: string[] (const)
+  callee +48:33 JsonDocument.keys -> @nish.JsonDocument.keys
   local +49:15 orderX: i32[] (const)
   callee +49:31 jsonEqualSortedMembers -> @nish.jsonEqualSortedMembers
   local +50:15 orderY: i32[] (const)
@@ -155,9 +153,9 @@ function jsonEqualCanonicalText(doc: JsonDocument, v: i32): string -> @nish.json
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.jsonEqualSortedMembers
   escaping: v
-  calls: nish.JsonDocument.at nish.JsonDocument.boolean nish.JsonDocument.kind nish.JsonDocument.length nish.JsonDocument.string nish.jsonEqualAt nish.jsonEqualKeyAt nish.jsonEqualPut nish.jsonEqualPutNumber nish.jsonEqualPutText nish.jsonEqualSortedMembers nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
-  pointer doc: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.kind#0 nish.JsonDocument.kind#0 nish.JsonDocument.boolean#0 nish.jsonEqualPutNumber#1 nish.JsonDocument.string#0 nish.JsonDocument.length#0 nish.JsonDocument.at#0 nish.JsonDocument.length#0 nish.jsonEqualSortedMembers#0 nish.JsonDocument.at#0
-  stackSites=4 stackLocals=4
+  calls: nish.JsonDocument.at nish.JsonDocument.boolean nish.JsonDocument.keys nish.JsonDocument.kind nish.JsonDocument.length nish.JsonDocument.string nish.jsonEqualAt nish.jsonEqualKeyAt nish.jsonEqualPut nish.jsonEqualPutNumber nish.jsonEqualPutText nish.jsonEqualSortedMembers nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
+  pointer doc: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.kind#0 nish.JsonDocument.kind#0 nish.JsonDocument.boolean#0 nish.jsonEqualPutNumber#1 nish.JsonDocument.string#0 nish.JsonDocument.length#0 nish.JsonDocument.at#0 nish.JsonDocument.length#0 nish.JsonDocument.keys#0 nish.JsonDocument.at#0
+  stackSites=3 stackLocals=3
   local +0:9 out: string[] (const)
   callee +1:7 JsonDocument.kind -> @nish.JsonDocument.kind
   local +4:9 tasks: i32[] (const)
@@ -185,6 +183,7 @@ function jsonEqualCanonicalText(doc: JsonDocument, v: i32): string -> @nish.json
   callee +41:22 JsonDocument.length -> @nish.JsonDocument.length
   callee +42:7 jsonEqualPut -> @nish.jsonEqualPut
   local +43:13 keys: string[] (const)
+  callee +43:30 JsonDocument.keys -> @nish.JsonDocument.keys
   local +44:13 order: i32[] (const)
   callee +44:28 jsonEqualSortedMembers -> @nish.jsonEqualSortedMembers
   local +46:16 i: i32 (let)
@@ -458,8 +457,8 @@ import JSON_TOK_TRUE from "nish/json-tokenizer" -> const JSON_TOK_TRUE
 import JsonLimits from "nish/json-tokenizer" -> struct JsonLimits
 import JsonTokenizer from "nish/json-tokenizer" -> struct JsonTokenizer
 unsafe import 152:10 uncheckedSet from "nish:unsafe"
-unsafe call 2019:7 uncheckedSet (node 8178)
-unsafe call 2059:7 uncheckedSet (node 8346)
+unsafe call 2048:7 uncheckedSet (node 8313)
+unsafe call 2088:7 uncheckedSet (node 8481)
 const JSON_VALUE_NONE: i32 = 0 [exported]
 const JSON_VALUE_NULL: i32 = 1 [exported]
 const JSON_VALUE_BOOLEAN: i32 = 2 [exported]
@@ -567,6 +566,7 @@ struct JsonDocument (class) size=248 align=8 exported
   method slotAt -> @nish.JsonDocument.slotAt
   method at -> @nish.JsonDocument.at
   method keyAt -> @nish.JsonDocument.keyAt
+  method keys -> @nish.JsonDocument.keys
   method get -> @nish.JsonDocument.get
   method findKey -> @nish.JsonDocument.findKey
   method string -> @nish.JsonDocument.string
@@ -1136,14 +1136,15 @@ function JsonDocument.slotAt(this: JsonDocument, x: i32, i: i32): i32 -> @nish.J
 function JsonDocument.at(this: JsonDocument, v: i32, i: i32): i32 -> @nish.JsonDocument.at [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i v
-  calls: nish.JsonDocument.handle nish.JsonDocument.index nish.JsonDocument.slotAt nish.jsonValueGet
-  pointer this: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.slotAt#0 nish.JsonDocument.index#0 nish.JsonDocument.handle#0
+  calls: nish.JsonDocument.handle nish.JsonDocument.index nish.JsonDocument.lengthAt nish.jsonValueGet nish.jsonValueGetAt
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.lengthAt#0 nish.JsonDocument.handle#0
   stackSites=0 stackLocals=0
-  local +0:11 s: i32 (const)
-  callee +0:20 JsonDocument.slotAt -> @nish.JsonDocument.slotAt
-  callee +0:32 JsonDocument.index -> @nish.JsonDocument.index
-  callee +1:25 JsonDocument.handle -> @nish.JsonDocument.handle
-  callee +1:37 jsonValueGet -> @nish.jsonValueGet
+  local +0:11 x: i32 (const)
+  callee +0:20 JsonDocument.index -> @nish.JsonDocument.index
+  callee +1:23 JsonDocument.lengthAt -> @nish.JsonDocument.lengthAt
+  callee +4:12 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee +4:24 jsonValueGetAt -> @nish.jsonValueGetAt
+  callee +4:55 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.keyAt(this: JsonDocument, v: i32, i: i32): string -> @nish.JsonDocument.keyAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: i v
@@ -1158,6 +1159,25 @@ function JsonDocument.keyAt(this: JsonDocument, v: i32, i: i32): string -> @nish
   callee +8:12 JsonDocument.textOf -> @nish.JsonDocument.textOf
   callee +8:24 jsonValueGet -> @nish.jsonValueGet
   callee +8:57 jsonValueGet -> @nish.jsonValueGet
+function JsonDocument.keys(this: JsonDocument, v: i32): string[] -> @nish.JsonDocument.keys [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: v
+  calls: nish.JsonDocument.index nish.JsonDocument.kindAt nish.JsonDocument.textOf nish.jsonValueEnd nish.jsonValueGet nish_array_grow
+  pointer this: size=248 writesThrough=false captured=false passedTo=nish.JsonDocument.index#0 nish.JsonDocument.kindAt#0 nish.JsonDocument.textOf#0
+  stackSites=0 stackLocals=0
+  local +0:11 out: string[] (const)
+  local +1:11 x: i32 (const)
+  callee +1:20 JsonDocument.index -> @nish.JsonDocument.index
+  callee +2:9 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
+  local +5:11 start: i32 (const)
+  callee +5:24 jsonValueGet -> @nish.jsonValueGet
+  local +8:11 end: i32 (const)
+  callee +8:22 jsonValueEnd -> @nish.jsonValueEnd
+  callee +8:42 jsonValueGet -> @nish.jsonValueGet
+  local +9:14 s: i32 (let)
+  callee +10:16 JsonDocument.textOf -> @nish.JsonDocument.textOf
+  callee +10:28 jsonValueGet -> @nish.jsonValueGet
+  callee +10:61 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.get(this: JsonDocument, v: i32, key: string): i32 -> @nish.JsonDocument.get [exported method]
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key v
@@ -1321,8 +1341,8 @@ function JsonDocument.textOf(this: JsonDocument, at: i32, n: i32): string -> @ni
   pointer this: size=248 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 bytes: u8[] (const)
-  local +2:11 end: i32 (const)
-  callee +2:22 jsonValueEnd -> @nish.jsonValueEnd
+  local +5:11 end: i32 (const)
+  callee +5:22 jsonValueEnd -> @nish.jsonValueEnd
 function JsonDocument.bytesEqual(this: JsonDocument, at: i32, length: i32, s: string): boolean -> @nish.JsonDocument.bytesEqual [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
@@ -1831,6 +1851,13 @@ function jsonValueGet(a: i32[], i: i32): i32 -> @nish.jsonValueGet
   escaping: i
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function jsonValueGetAt(a: i32[], at: i32, i: i32): i32 -> @nish.jsonValueGetAt
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.jsonValueGet
+  pointer a: size=0 writesThrough=false captured=false passedTo=nish.jsonValueGet#0
+  stackSites=0 stackLocals=0
+  local +0:9 s: i64 (const)
+  callee +1:60 jsonValueGet -> @nish.jsonValueGet
 function jsonValuePut(a: i32[], i: i32, x: i32): void -> @nish.jsonValuePut
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

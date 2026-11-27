@@ -149,7 +149,7 @@ key's range and holds the last value, with that value's.
 **Objects keep insertion order**, the order the members were written in or
 added. `get` finds a member by its key with a scan, so it is for a handful of
 lookups per object; a program that looks up many keys of a large object
-walks it once with `keyAt` and `at`.
+walks it once with `keys` (or `keyAt`) and `at`.
 
 </scalar-detail>
 
@@ -264,6 +264,7 @@ class JsonDocument
 | `isU64(v: JsonValue): boolean` | Whether `v` is a number written without a sign, a fraction or an exponent whose value fits a `u64`: the spelling, as `isI64(v)` is. |
 | `keyAt(v: JsonValue, i: i32): string` | The key of member `i` of an object, decoded; `""` when `v` is not an object or has no member `i`. |
 | `keyEnd(o: JsonValue, i: i32): i32` | One past the offset of the last byte of the key of member `i` of object `o`, its closing quote. |
+| `keys(v: JsonValue): string[]` | Every key of an object, decoded, in member order: `keyAt` for each position in one pass. Empty when `v` is not an object. |
 | `keyStart(o: JsonValue, i: i32): i32` | The offset of the first byte of the key of member `i` of object `o`, its opening quote. |
 | `kind(v: JsonValue): i32` | `v`'s `JSON_VALUE_*` kind, or `JSON_VALUE_NONE` when `v` names no value of this document's current contents. |
 | `length(v: JsonValue): i32` | How many elements an array has, or members an object has; `-1` for any other value. |
