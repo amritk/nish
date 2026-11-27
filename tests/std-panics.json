@@ -5,7 +5,7 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1049,
+  "total": 959,
   "explicit": {
     "kept": 360,
     "toFix": 7
@@ -74,18 +74,8 @@
     "std/crypto/x509-random.ts": {
       "io-exit": 2
     },
-    "std/json-equal.ts": {
-      "index": 4,
-      "pop": 2
-    },
-    "std/json-tokenizer.ts": {
-      "slice": 1
-    },
     "std/json-typed.ts": {
       "slice": 1
-    },
-    "std/json-value.ts": {
-      "array-length": 1
     },
     "std/net/buffer-pool.ts": {
       "array-length": 1,
@@ -284,16 +274,6 @@
       "index": 32,
       "overflow": 4,
       "panic": 3
-    },
-    "std/yaml-json.ts": {
-      "index": 18,
-      "overflow": 39
-    },
-    "std/yaml-lines.ts": {
-      "overflow": 12
-    },
-    "std/yaml-write.ts": {
-      "overflow": 13
     },
     "std/yaml.ts": {
       "array-length": 3,
