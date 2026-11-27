@@ -5537,6 +5537,11 @@ export const parseYamlWith = (text: string, options: YamlOptions): YamlStream =>
   if (options.maxDepth < 1 || options.maxDepth > YAML_MAX_DEPTH) {
     panic("nish/yaml: maxDepth must be between 1 and 1000")
   }
+  return yamlParseValid(text, options)
+}
+
+/** Parses `text` with `options`, whose `maxDepth` the caller has checked is 1 to 1000. */
+const yamlParseValid = (text: string, options: YamlOptions): YamlStream => {
   const parser: YamlParser = new YamlParser(text, options)
   if (options.firstDocumentOnly) {
     parser.parseFirst()
@@ -5553,4 +5558,6 @@ export const parseYamlWith = (text: string, options: YamlOptions): YamlStream =>
  * @param text The YAML source.
  * @returns The documents, nodes and diagnostics the parse found.
  */
-export const parseYaml = (text: string): YamlStream => parseYamlWith(text, new YamlOptions())
+export const parseYaml = (text: string): YamlStream =>
+  // The default `maxDepth` is 1000, inside the range `parseYamlWith` checks.
+  yamlParseValid(text, new YamlOptions())
