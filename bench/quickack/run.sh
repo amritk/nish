@@ -115,7 +115,10 @@ echo
 
 # The alternatives. Each one changes host state, so the trap puts every change
 # back however the run ends.
-cc -O2 -Wall -o "$out/sockops" bench/quickack/sockops.c
+sockops_built=""
+if err="$(cc -O2 -Wall -o "$out/sockops" bench/quickack/sockops.c 2>&1)"; then
+  sockops_built=1
+fi
 route_was=()
 thresh_was=""
 cgroup_mount=""
@@ -136,6 +139,10 @@ restore() {
   fi
 }
 trap restore EXIT
+# sockops prints why it stopped on stderr; the record on stdout says so too.
+sockops_failed() {
+  echo "refused: sockops exited $1 (its reason is on stderr); no figure above this line is from the program"
+}
 alt_load() {
   node bench/http.mjs --acks --rounds "$rounds" --duration "$duration" --only "plaintext keep-alive c=256" \
     "none=$out/none" "reset0=$out/reset0"
@@ -207,7 +214,10 @@ fi
 echo
 echo "## sockops: a BPF program on a cgroup v2"
 echo
-if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+root_cg=""
+if [ -z "$sockops_built" ]; then
+  echo "refused: cc sockops.c: ${err:-no message}"
+elif [ -f /sys/fs/cgroup/cgroup.controllers ]; then
   root_cg=/sys/fs/cgroup
 else
   # A cgroup v1 host: mount a v2 hierarchy beside it for the run.
@@ -227,13 +237,13 @@ if [ -n "$root_cg" ]; then
   else
     echo "### TCP_BPF_DELACK_MAX 8000 us"
     echo
-    "$out/sockops" "$cgroup_dir" delack_max 8000 "$out/probe" acks none reset0 || true
+    "$out/sockops" "$cgroup_dir" delack_max 8000 "$out/probe" acks none reset0 || sockops_failed $?
     "$out/sockops" "$cgroup_dir" delack_max 8000 node bench/http.mjs --acks --rounds "$rounds" \
-      --duration "$duration" --only "plaintext keep-alive c=256" "none=$out/none" "reset0=$out/reset0" || true
+      --duration "$duration" --only "plaintext keep-alive c=256" "none=$out/none" "reset0=$out/reset0" || sockops_failed $?
     echo
     echo "### TCP_QUICKACK 0"
     echo
-    "$out/sockops" "$cgroup_dir" quickack 0 "$out/probe" acks none || true
+    "$out/sockops" "$cgroup_dir" quickack 0 "$out/probe" acks none || sockops_failed $?
   fi
 fi
 restore
@@ -249,4 +259,17 @@ node bench/http.mjs --acks --rounds "$rounds" --duration "$duration" --only "$sc
 echo
 echo "# --syscalls"
 echo
-node bench/http.mjs --syscalls --only "$scenarios" "${servers[@]}"
+# A strace that attached to nothing counts no calls: its 0.00 (or NaN) is a
+# refusal, printed as one rather than as a measured zero. A strace that exits
+# before http.mjs waits on it (it could not attach) leaves http.mjs waiting
+# for good: the timeout turns that into a refusal too.
+{ timeout 900 node bench/http.mjs --syscalls --only "$scenarios" "${servers[@]}" ||
+  echo "refused: bench/http.mjs --syscalls did not finish in 900 s (strace may not have attached)"; } | awk -F ' [|] ' '
+  / syscalls\/request / {
+    n = $3; sub(/ .*/, "", n)
+    if (!(n ~ /^[0-9]+(\.[0-9]+)?$/ && n + 0 > 0)) {
+      print $1 " | " $2 " | refused: strace counted " n " syscalls/request"
+      next
+    }
+  }
+  { print }'

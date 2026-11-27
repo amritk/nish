@@ -41,7 +41,7 @@ while [ $# -gt 0 ]; do
     --server-rounds) [ $# -ge 2 ] || usage; server_rounds="$2"; shift ;;
     --duration) [ $# -ge 2 ] || usage; duration="$2"; shift ;;
     --entry-only) entry_only=1 ;;
-    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "run.sh: unknown argument $1" >&2; exit 2 ;;
   esac
   shift
@@ -77,18 +77,22 @@ echo "- /sys/devices/system/cpu/vulnerabilities:"
 for f in /sys/devices/system/cpu/vulnerabilities/*; do
   [ -r "$f" ] && echo "  - $(basename "$f"): $(cat "$f")"
 done
-echo "- Pinned to CPU $cpu; $(cc --version | head -n1), -O2"
-echo
-
 pin=()
 if command -v taskset >/dev/null 2>&1; then
   pin=(taskset -c "$cpu")
+  echo "- Pinned to CPU $cpu; $(cc --version | head -n1), -O2"
 else
-  echo "(taskset not found: running unpinned)"
+  echo "- Unpinned (taskset not found); $(cc --version | head -n1), -O2"
 fi
+echo
 "${pin[@]}" "$out/entry" --rounds "$rounds" --calls "$calls" | tee "$out/table.txt"
 
 entry_ns="$(sed -n 's/^entry_ns=//p' "$out/table.txt")"
+# Every figure below is a multiple of it, so a run without one prints none.
+if ! [[ "$entry_ns" =~ ^[0-9]+(\.[0-9]+)?$ ]] || ! awk -v e="$entry_ns" 'BEGIN { exit !(e > 0) }'; then
+  echo "run.sh: entry.c printed no entry_ns above 0 (got '${entry_ns}'): refused, no split printed" >&2
+  exit 1
+fi
 
 # The server: the syscalls a request from strace, the system CPU a request
 # from one timed session of both builds.
@@ -105,7 +109,12 @@ if [ -z "$entry_only" ]; then
   echo
   echo "## Syscalls a request (bench/http.mjs --syscalls)"
   echo
-  node bench/http.mjs --syscalls --only "$scenarios" h1=build/bench/h1 | tee "$out/syscalls.txt"
+  # A strace that exits before http.mjs waits on it (it could not attach)
+  # leaves http.mjs waiting for good: the timeout turns that into a refusal.
+  if ! timeout 300 node bench/http.mjs --syscalls --only "$scenarios" h1=build/bench/h1 >"$out/syscalls.txt"; then
+    echo "refused: bench/http.mjs --syscalls did not finish in 300 s (strace may not have attached)" >>"$out/syscalls.txt"
+  fi
+  cat "$out/syscalls.txt"
   echo
   echo "## System CPU a request ($server_rounds interleaved rounds of $duration s)"
   node bench/http.mjs --rounds "$server_rounds" --duration "$duration" --only "$scenarios" \
@@ -124,7 +133,10 @@ BEGIN {
       if (line ~ / syscalls\/request /) {
         split(line, f, " [|] ")
         n = f[3]; sub(/ .*/, "", n)
-        calls[f[1]] = n
+        # A strace that attached to nothing counts no calls: 0.00, or NaN when
+        # wrk got no answers. That is a refusal, not a measured zero.
+        if (n ~ /^[0-9]+(\.[0-9]+)?$/ && n + 0 > 0) calls[f[1]] = n
+        else refused[f[1]] = n
       }
     }
     while ((getline line < tm) > 0) {
@@ -136,6 +148,10 @@ BEGIN {
     printf "| --- | ---: | ---: | ---: | ---: | ---: |\n"
     for (i = 1; i <= k; i++) {
       s = order[i]; h = sys[s, "h1"]; c = sys[s, "copy"]
+      if (s in refused) {
+        printf "| %s | refused: strace counted %s syscalls/request | n/a | n/a | n/a | n/a |\n", s, refused[s]
+        continue
+      }
       if (!(s in calls) || h + 0 <= 0 || c + 0 <= 0) {
         printf "| %s | n/a | n/a | n/a | n/a | n/a |\n", s
         continue
