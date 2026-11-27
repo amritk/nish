@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 816 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 817 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -11141,7 +11141,7 @@ export const main = (): void => {
 The message of an error contains:
 
 ```text
-` cannot be used here: a handle may only be opened by `using`, called, or lent to a parameter of its type, so that the close its `using` block emits is the last thing that names it
+` cannot be used here: a handle may only be opened by `using`, returned by a function that opens it, moved into an owning field of a handle class, called, or lent to a parameter of its type, so that the close its owner emits is the last thing that names it
 ```
 
 ## NL2561
@@ -11149,7 +11149,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` is a handle class, and its name may be written only as the type of a parameter that borrows one: a handle lives in the `using` block that opens it, and a value of this type anywhere else could outlive the close
+` is a handle class, and its name may be written only as the type of a parameter that borrows one, of a field of a handle class that owns one, or of the result of a top-level function that opens one: a value of this type anywhere else could outlive the close
 ```
 
 ## NL2562
@@ -11173,7 +11173,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-`: a handle class declares exactly one `CPtr` or `CPtr | null` field, `readonly` and with no initialiser, so the one pointer it owns is written once by its constructor and closed once by its dispose
+`: each field a handle class owns is a `CPtr`, an opaque `declare class`, a `HostHandle` or another handle class that does not hold this one, each perhaps `| null`, `readonly` and with no initialiser, so it is written once by the constructor and closed once by the dispose
 ```
 
 ## NL2565
@@ -11181,7 +11181,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…: a handle class has no type parameters, no `implements` and no `export`, so no other type and no other module can name it
+…: a handle class has no type parameters and no `implements`, so no other type can stand for it and outlive its close
 ```
 
 ## NL2566
@@ -11205,7 +11205,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…; if (p !== null) { close(p); }` for a `declare function` `close`: the `using` block emits that call at every exit and runs nothing else
+…: its owner emits these closes at every exit and runs nothing else
 ```
 
 ## NL2569
@@ -15769,4 +15769,12 @@ export const main = (): i32 => 0
 
 ```text
 Parameter `mask` of `declare function blend` is readonly u8[] in a run that `dst` opened as f32[]: the one count after a run is in elements, so every buffer of a run has the same element type; close the run with its count first
+```
+
+## NL2825
+
+The message of an error contains:
+
+```text
+` = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there: any other write would drop a handle the object owns or own one twice
 ```

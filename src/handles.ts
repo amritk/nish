@@ -439,13 +439,13 @@ const checkDispose = (
 }
 
 /** Whether `info` is reached again through the handle-class fields of `at`. */
-const holds = (info: StructInfo, at: StructInfo, depth: i32): boolean => {
+const ownerReaches = (info: StructInfo, at: StructInfo, depth: i32): boolean => {
   if (depth > 32) {
     return true
   }
   for (const field of at.owned) {
     const child = field.child
-    if (child !== null && (child === info || holds(info, child, depth + 1))) {
+    if (child !== null && (child === info || ownerReaches(info, child, depth + 1))) {
       return true
     }
   }
@@ -511,11 +511,11 @@ export const handleDisposes = (program: CheckedProgram, table: TypeTable): Handl
     }
   }
   for (const info of local) {
-    if (holds(info, info, 0)) {
+    if (ownerReaches(info, info, 0)) {
       for (const member of info.decl.children[3].children) {
         const field: FieldInfo | null = member.kind === NodeKind.Field ? info.field(member.children[0].text) : null
         const child: StructInfo | null = field === null ? null : handleOf(program, table, field.type)
-        if (child !== null && (child === info || holds(info, child, 0))) {
+        if (child !== null && (child === info || ownerReaches(info, child, 0))) {
           out.push(new HandleFinding(member.children[1], handleFieldMessage(info.name)))
         }
       }
