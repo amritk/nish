@@ -845,7 +845,11 @@ export const http1ConnectionChecked = (
  * @param size how many connections the pool serves at once; less than 1 counts as 1
  * @returns the pool, or the first cap outside its range, named with the range it must lie in
  */
-export const http1ServerChecked = (config: Http1Config, listener: i32, size: i32): Result<Http1Server, string> => {
+export const http1ServerChecked = (
+  config: Http1Config,
+  listener: i32,
+  size: i32
+): Result<Http1Server, string> => {
   const kept: Http1Config = http1ConfigCopy(config)
   const fault: string = http1ServerConfigFault(kept)
   if (fault.length > 0) {

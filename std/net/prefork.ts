@@ -1431,4 +1431,5 @@ export const preforkWorkers = (args: string[]): i32 => preforkWith(args, new Pre
  * @param args the process's arguments, `process.argv`
  * @returns `Ok` with what `preforkWorkers` answers, or `Err` with why the config was refused
  */
-export const tryPreforkWorkers = (args: string[]): Result<i32, string> => tryPreforkWith(args, new PreforkConfig())
+export const tryPreforkWorkers = (args: string[]): Result<i32, string> =>
+  tryPreforkWith(args, new PreforkConfig())

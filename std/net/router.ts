@@ -118,7 +118,8 @@ const ROUTER_WILD: i32 = 2
 
 /**
  * What a `Router` holds and refuses past. Each field has a default a server
- * can use as it is; the constructor panics on a value no table could work with.
+ * can use as it is; the constructor panics on a value no table could work with, and
+ * `routerChecked` refuses one.
  */
 export class RouterLimits {
   /** The longest pattern, in bytes (1 to 65536). */
@@ -244,11 +245,7 @@ export class Router {
    * @param limits the caps, copied out here, so changing them later has no effect on this table
    */
   constructor(limits: RouterLimits) {
-    routerLimit("maxPatternBytes", limits.maxPatternBytes, 1, 65536)
-    routerLimit("maxSegments", limits.maxSegments, 1, 256)
-    routerLimit("maxParams", limits.maxParams, 0, 256)
-    routerLimit("maxRoutes", limits.maxRoutes, 1, 1048576)
-    routerLimit("maxMethods", limits.maxMethods, 1, 64)
+    routerCheckLimits(limits)
     this.maxPatternBytes = limits.maxPatternBytes
     this.maxSegments = limits.maxSegments
     this.maxParams = limits.maxParams
@@ -275,7 +272,7 @@ export class Router {
     this.methodStart = []
     this.methodEnd = []
     this.methodKey = []
-    // routerLimit holds both to at most 256; the clamps restate that where the
+    // routerCheckLimits holds both to at most 256; the clamps restate that where the
     // prover reads it, so each length fits a `u16` and its sum cannot overflow.
     let maxSegments: i32 = limits.maxSegments
     if (maxSegments > 256) {
@@ -314,12 +311,24 @@ export class Router {
    * @returns how many pairs `match` writes to `params` for that route, so half the slots it needs
    */
   paramCount(route: i32): i32 {
+    const count: i32 = this.tryParamCount(route)
+    if (count < 0) {
+      routerNoRoute(route, this.routes())
+    }
+    return count
+  }
+
+  /**
+   * `paramCount` without its panic: a route the table does not hold answers
+   * -1, for a caller whose route came from somewhere it does not trust.
+   * @param route a route index `add` answered
+   * @returns how many pairs `match` writes to `params` for that route, or -1 for a route the table does not hold
+   */
+  tryParamCount(route: i32): i32 {
     if (route >= 0 && route < this.routes() && route < toI32(this.routeParams.length)) {
       return this.routeParams[route]
     }
-    routerNoRoute(route, this.routes())
-    // Not reached: the helper panics.
-    return 0
+    return -1
   }
 
   /**
@@ -775,12 +784,31 @@ export class Router {
    * @returns the matched route's index, or `ROUTER_NOT_FOUND`, `ROUTER_METHOD_NOT_ALLOWED` or `ROUTER_TOO_MANY_PARAMS`
    */
   match(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
+    routerCheckRanges(method, mStart, mEnd, target, tStart, tEnd)
+    return this.tryMatch(method, mStart, mEnd, target, tStart, tEnd, params)
+  }
+
+  /**
+   * `match` without its panic: a method or target range outside its array
+   * answers `ROUTER_NOT_FOUND`, `params` untouched, as a target that is not
+   * `/`-rooted does. For a server whose ranges come from a parser it does not
+   * want a mistake in to stop the process.
+   * @param method the buffer holding the request's method
+   * @param mStart where the method starts in `method`
+   * @param mEnd where the method ends in `method`
+   * @param target the buffer holding the request target, which may be the same buffer as `method`
+   * @param tStart where the target starts in `target`
+   * @param tEnd where the target ends in `target`, the query included
+   * @param params the caller's scratch for the parameter pairs, two slots for each pair
+   * @returns what `match` answers, or `ROUTER_NOT_FOUND` for a range outside its array
+   */
+  tryMatch(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
     if (!this.enter(method, mStart, mEnd, target, tStart, tEnd)) {
       return ROUTER_NOT_FOUND
     }
     // A static route's path is never longer than the longest one: a target
     // past that, query and all, is the tree's without a byte of it read here.
-    // `enter` panics on a range outside `target`, so this never holds; a proof
+    // `enter` refuses a range outside `target`, so this never holds; a proof
     // does not cross a call.
     if (tStart < 0 || tEnd < 0) {
       return ROUTER_NOT_FOUND
@@ -811,6 +839,7 @@ export class Router {
    * @returns the matched route's index, or `ROUTER_NOT_FOUND`, `ROUTER_METHOD_NOT_ALLOWED` or `ROUTER_TOO_MANY_PARAMS`
    */
   matchTree(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
+    routerCheckRanges(method, mStart, mEnd, target, tStart, tEnd)
     if (!this.enter(method, mStart, mEnd, target, tStart, tEnd)) {
       return ROUTER_NOT_FOUND
     }
@@ -819,19 +848,17 @@ export class Router {
 
   /**
    * The start of every lookup: the range checks, and `wanted` set to the
-   * method's index, or -1 for one the table has never seen. False for a target
-   * that is not `/`-rooted, which is `ROUTER_NOT_FOUND` with `pathEnd` set.
+   * method's index, or -1 for one the table has never seen. False for a range
+   * outside its array, and for a target that is not `/`-rooted, which is
+   * `ROUTER_NOT_FOUND` with `pathEnd` set.
    */
   private enter(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32): boolean {
+    // The returns are what tell the prover that both ranges are inside their
+    // arrays from here on.
     if (mStart < 0 || mEnd < 0 || mEnd < mStart || mEnd > toI32(method.length)) {
-      routerOutside("method", mStart, mEnd, toI32(method.length))
-      // Not reached, as below.
       return false
     }
     if (tStart < 0 || tEnd < tStart || tEnd > toI32(target.length)) {
-      routerOutside("target", tStart, tEnd, toI32(target.length))
-      // Not reached: the helper panics. The return is what tells the prover
-      // that `tStart .. tEnd` is inside `target` from here on.
       return false
     }
     this.visited = 0
@@ -1283,27 +1310,79 @@ const routerSlot = (hash: u32, mask: i32): i32 => {
 }
 
 /**
- * Panics for a `what` range `start` to `end` outside its `length` bytes. Apart
- * from `enter`, so that a lookup holds no string of its own.
+ * Panics, naming the range, unless `method[mStart .. mEnd)` and
+ * `target[tStart .. tEnd)` are inside their arrays: `match`'s and
+ * `matchTree`'s check, apart so that a lookup holds no string of its own.
  */
-const routerOutside = (what: string, start: i32, end: i32, length: i32): void => {
-  panic(`Router.match: the ${what} range ${start} to ${end} is outside its ${length} bytes`)
+const routerCheckRanges = (
+  method: u8[],
+  mStart: i32,
+  mEnd: i32,
+  target: u8[],
+  tStart: i32,
+  tEnd: i32
+): void => {
+  if (mStart < 0 || mEnd < 0 || mEnd < mStart || mEnd > toI32(method.length)) {
+    panic(`Router.match: the method range ${mStart} to ${mEnd} is outside its ${method.length} bytes`)
+  }
+  if (tStart < 0 || tEnd < tStart || tEnd > toI32(target.length)) {
+    panic(`Router.match: the target range ${tStart} to ${tEnd} is outside its ${target.length} bytes`)
+  }
 }
 
 /**
  * Panics for a `route` that is not one of the table's `routes`. Apart from
- * `paramCount`, which a server calls per request, for the reason `routerOutside` is.
+ * `paramCount`, which a server calls per request, for the reason `routerCheckRanges` is.
  */
 const routerNoRoute = (route: i32, routes: i32): void => {
   panic(`Router.paramCount: route ${route} is not in a table of ${routes}`)
 }
 
-/** Panics, naming `RouterLimits.<field>`, unless `value` is in `low .. high`. */
-const routerLimit = (field: string, value: i32, low: i32, high: i32): void => {
-  if (value < low || value > high) {
-    panic(`RouterLimits.${field}: ${value} is outside ${low} to ${high}`)
+/** Why `value` is no `RouterLimits.<field>`, naming it, or "" when it is in `low .. high`. */
+const routerLimitFault = (field: string, value: i32, low: i32, high: i32): string =>
+  value < low || value > high ? `RouterLimits.${field}: ${value} is outside ${low} to ${high}` : ""
+
+/** Why `limits` holds a field no table could work with, naming the first, or "" when every one is in range. */
+const routerLimitsFault = (limits: RouterLimits): string => {
+  let fault: string = routerLimitFault("maxPatternBytes", limits.maxPatternBytes, 1, 65536)
+  if (fault.length === 0) {
+    fault = routerLimitFault("maxSegments", limits.maxSegments, 1, 256)
+  }
+  if (fault.length === 0) {
+    fault = routerLimitFault("maxParams", limits.maxParams, 0, 256)
+  }
+  if (fault.length === 0) {
+    fault = routerLimitFault("maxRoutes", limits.maxRoutes, 1, 1048576)
+  }
+  if (fault.length === 0) {
+    fault = routerLimitFault("maxMethods", limits.maxMethods, 1, 64)
+  }
+  return fault
+}
+
+/** Panics unless every field of `limits` is one a table can work with: a limit outside is the program's mistake. */
+const routerCheckLimits = (limits: RouterLimits): void => {
+  const fault: string = routerLimitsFault(limits)
+  if (fault.length > 0) {
+    panic(fault)
   }
 }
+
+/**
+ * An empty table, the twin of `Router`'s constructor that refuses a limit
+ * outside the range `RouterLimits` gives it as an `Err` rather than
+ * panicking: for a program that reads its limits from a file or flags.
+ * @param limits the caps, copied out by the table, so changing them later has no effect on it
+ * @returns the table, or the first limit outside its range, named with the range it must lie in
+ */
+export const routerChecked = (limits: RouterLimits): Result<Router, string> => {
+  const fault: string = routerLimitsFault(limits)
+  if (fault.length > 0) {
+    return Err(fault)
+  }
+  return Ok(new Router(limits))
+}
+
 /** Whether `c` is a token character (RFC 9110 §5.6.2), what a method is made of. */
 const routerTchar = (c: i32): boolean => {
   if ((c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)) {

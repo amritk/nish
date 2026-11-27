@@ -1121,12 +1121,7 @@ export class HttpHandler {
     for (let s: i32 = 0; s < toI32(open.length) && s < toI32(current.length); s++) {
       const isOpen: boolean = open[s]
       const idle: boolean = current[s] === -1
-      if (
-        isOpen &&
-        this.server.holds(s) &&
-        idle &&
-        (this.server.resting(s) || !this.owesOutput(s))
-      ) {
+      if (isOpen && this.server.holds(s) && idle && (this.server.resting(s) || !this.owesOutput(s))) {
         this.closeSlot(s)
       } else if (isOpen && this.server.holds(s)) {
         // Its exchange is its last: the answer says `Connection: close` if
@@ -1404,7 +1399,7 @@ export class HttpHandler {
    */
   private route(r: HttpRequest): void {
     const params: i32[] = r.params
-    let route: i32 = this.router.match(
+    let route: i32 = this.router.tryMatch(
       r.head,
       r.methodStart,
       r.methodEnd,
@@ -1420,7 +1415,7 @@ export class HttpHandler {
         get < toI32(this.router.methodStart.length) &&
         get < toI32(this.router.methodEnd.length)
       ) {
-        const viaGet: i32 = this.router.match(
+        const viaGet: i32 = this.router.tryMatch(
           this.router.methodBytes,
           this.router.methodStart[get],
           this.router.methodEnd[get],
@@ -1435,7 +1430,9 @@ export class HttpHandler {
       }
     }
     r.route = route
-    r.paramCount = route >= 0 ? this.router.paramCount(route) : 0
+    // A route `tryMatch` answered is one the table holds, so the count is never -1.
+    const count: i32 = route >= 0 ? this.router.tryParamCount(route) : 0
+    r.paramCount = count > 0 ? count : 0
   }
 
   /** Body bytes: appended to the request's body, which the carrier's cap bounds. */
@@ -2073,7 +2070,9 @@ export class HttpHandler {
       const end: i32 = handlerAdd(off, len)
       if (off < 0 || off > end || end > toI32(buf.length)) {
         this.abandon(r)
-        return this.refused(`HttpHandler.write: the window ${off} + ${len} is outside its ${buf.length} bytes`)
+        return this.refused(
+          `HttpHandler.write: the window ${off} + ${len} is outside its ${buf.length} bytes`
+        )
       }
       taken = conn.write(buf, off, end - off)
       if (taken === H1_AGAIN) {
@@ -2550,7 +2549,7 @@ export class HttpHandler {
     for (let m: i32 = 0; m < methods && m < toI32(starts.length) && m < toI32(ends.length); m++) {
       const start: i32 = starts[m]
       const end: i32 = ends[m]
-      const route: i32 = router.match(
+      const route: i32 = router.tryMatch(
         router.methodBytes,
         start,
         end,

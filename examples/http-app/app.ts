@@ -5,7 +5,7 @@
 import { JsonWriter, jsonField } from "nish/json"
 import { HttpHandler, HttpRequest } from "nish/net/handler"
 import { http1Text } from "nish/net/http1-codec"
-import { ROUTER_METHOD_NOT_ALLOWED, Router, RouterLimits } from "nish/net/router"
+import { ROUTER_METHOD_NOT_ALLOWED, Router, RouterLimits, routerChecked } from "nish/net/router"
 import { STATIC_NOT_FOUND, StaticFiles, StaticLimits } from "nish/net/static"
 import { Notes } from "./notes"
 
@@ -302,9 +302,8 @@ export const serveTurn = (app: App, timeoutMs: i32): void => {
   }
 }
 
-/** The API's routes, added in the order of their constants. */
-export const appRoutes = (): Router => {
-  const router = new Router(new RouterLimits())
+/** Adds the API's routes to `router`, in the order of their constants. */
+const addRoutes = (router: Router): Router => {
   router.add("GET", "/health")
   router.add("GET", "/notes")
   router.add("POST", "/notes")
@@ -312,4 +311,16 @@ export const appRoutes = (): Router => {
   router.add("DELETE", "/notes/:id")
   router.add("GET", "/static/*")
   return router
+}
+
+/** The API's routes, added in the order of their constants. */
+export const appRoutes = (): Router => addRoutes(new Router(new RouterLimits()))
+
+/** The API's routes under limits `routerChecked` passed, or the limit it refused. */
+export const tryAppRoutes = (): Result<Router, string> => {
+  const made: Result<Router, string> = routerChecked(new RouterLimits())
+  if (!made.ok) {
+    return Err(made.error)
+  }
+  return Ok(addRoutes(made.value))
 }

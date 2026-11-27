@@ -1,17 +1,14 @@
 // Opt-out (`--allow-panics`): it answers through the `try` calls of
-// `nish/net/handler`, `nish/net/serve` and `nish/net/static`, and still
-// reaches: the cap check of `Http1Connection`'s constructor
-// (std/net/http1-server.ts:499:5), through every answer, `wait`, `next` and
-// `drain`; the limits panic of the `HttpHandler` constructor
-// (std/net/handler.ts:934:7), which `openHttpHandler` calls only once the
-// limits passed the same check; `std/net/router`'s contract panics
-// (std/net/router.ts:1290:3, :1304:5), through `Router`, `add` and
-// `tryRefuse`; and a `nish/net/static` slice (std/net/static.ts:221:20). The
-// config and the limits are mutable classes stored as given, and the router's
-// panics are not window guards, so no caller's proof discharges them (only a
-// guard's window is, the `window` contract in docs/LANGUAGE.md, "Panic
-// sites", #2296). Once the panics above are gone, build this program without
-// `--allow-panics`.
+// `nish/net/handler`, `nish/net/serve` and `nish/net/static`, routes through
+// `routerChecked` and `Router.tryMatch`, and still reaches: the chunk-size
+// digit index of `std/net/http1-codec` (std/net/http1-codec.ts:2536:5),
+// through every answer; the limit panic of `HttpBodyDecoder`'s constructor
+// (std/net/http-compress.ts:1150:7) and the `std/compress` decoders behind
+// it, through `openHttpHandler`; and `copyBytes`'s range panic
+// (std/bytes.ts:526:5), through `HttpHandler.wait` and
+// `StaticFiles.tryServeHandler`. None is a window guard, so no caller's proof
+// discharges it (docs/LANGUAGE.md, "Panic sites", #2296). Once they are gone,
+// build this program without `--allow-panics`.
 //
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
@@ -41,7 +38,7 @@ import { HttpHandler, HandlerLimits, openHttpHandler } from "nish/net/handler"
 import { Router } from "nish/net/router"
 import { netClose, tcpListen } from "nish:net"
 import { monotonicNanos, readSignal, signalFd } from "nish:process"
-import { App, appRoutes, configure, serveTurn } from "./app"
+import { App, configure, serveTurn, tryAppRoutes } from "./app"
 
 /** The handler's watched-descriptor id for the signal pipe. */
 const SIGNALS: i32 = 0
@@ -73,7 +70,14 @@ export const main = (): i32 => {
     netClose(listener)
     return 1
   }
-  const router: Router = appRoutes()
+  const routes: Result<Router, string> = tryAppRoutes()
+  if (routes.isErr()) {
+    console.error(`http-app: ${routes.error}`)
+    netClose(signals)
+    netClose(listener)
+    return 1
+  }
+  const router: Router = routes.value
   const opened: Result<HttpHandler, string> = openHttpHandler(new HandlerLimits(), listener, router)
   if (opened.isErr()) {
     console.error(`http-app: ${opened.error}`)
