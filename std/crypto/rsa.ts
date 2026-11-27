@@ -207,14 +207,16 @@ const rsaBitLength = (v: u8[]): i32 => {
     return -1
   }
   const top: i32 = toI32(v[0])
-  let topBits: i32 = 0
+  // The leading zero bits of the top byte, eight for a zero byte.
+  let missing: i32 = 8
   for (let b: i32 = 0; b < 8; b++) {
     if (top >> b !== 0) {
-      topBits = b + 1
+      missing = 7 - b
     }
   }
-  // At most (2^28 - 2) 8 + 8, below 2^31, so the u32 sum is the count.
-  return toI32(toU32(length - 1) * 8 + toU32(topBits))
+  // The masks keep what the checks above already hold (fewer than 2^28 bytes,
+  // at most eight missing bits), and let src/bounds.ts prove the count fits.
+  return (length & 0x0fffffff) * 8 - (missing & 0xf)
 }
 
 /**

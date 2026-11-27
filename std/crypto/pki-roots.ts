@@ -202,11 +202,14 @@ const pkiRootsSplit = (load: PkiRootsLoad, text: string): void => {
       if (toI32(text.charCodeAt(lineEnd)) === 10) {
         break
       }
-      // Unsigned: lineEnd is below text.length, so it cannot wrap.
-      lineEnd = toI32(toU32(lineEnd) + 1)
+      // Below text.length, so the next index fits an `i32`.
+      lineEnd = lineEnd + 1
     }
-    // Unsigned: lineEnd is below n on that side, so it cannot wrap.
-    const next: i32 = lineEnd < n ? toI32(toU32(lineEnd) + 1) : n
+    let next: i32 = n
+    if (lineEnd >= 0 && lineEnd < n) {
+      // Below n, so the next index fits an `i32`.
+      next = lineEnd + 1
+    }
     // A carriage return, space or tab before the line feed is no part of the
     // line, so a BEGIN with trailing whitespace still opens a block and is
     // counted when `pemToDer` refuses it, rather than lost unseen.
