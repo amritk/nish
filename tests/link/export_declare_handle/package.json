@@ -1,0 +1,7 @@
+{
+  "name": "export-declare-handle",
+  "private": true,
+  "nish": {
+    "link": { "sources": ["c/counter.c"] }
+  }
+}
