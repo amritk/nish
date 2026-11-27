@@ -29741,9 +29741,17 @@ if (dealtHere("releaseChecks")) {
   //   <!-- nish:err-body NL2188 --> the same, wrapped in a `main` body
   //
   // Anything after the code is passed to the CLI as flags (`--number-mode f64`).
-  // A page is held to no panic like any program: a snippet that keeps a panic
-  // site passes `--allow-panics`, and the line above its marker says why,
-  // `<!-- allow-panics: does integer arithmetic nothing bounds -->`.
+  // A page is held to no panic like any program, and its examples are what a
+  // reader learns to write, so a panic site in the snippet's own code is fixed
+  // with a guard the checker reads. A snippet still opts out with
+  // `--allow-panics` for one of four reasons, which the line above its marker
+  // names in `; `-separated clauses: it calls `std/` code that keeps a panic
+  // site (`calls \`std/sqlite.ts\` code that keeps panic sites no proof
+  // removes yet`), it shows a panic on purpose (a clause starting `shows `),
+  // the checker reads no guard a reader would write there (a clause ending
+  // ` yet`), or the language has no guard for the site (a clause ending
+  // `which nothing proves away`). A snippet whose own code still panics names
+  // one of the last three.
   // A marked fence with a path after its language (```ts geometry.ts) is one file
   // of a program of several, and the site shows the path as its title: a run of
   // them in one section (no heading between them) is written out as one
@@ -29797,6 +29805,16 @@ if (dealtHere("releaseChecks")) {
         return optsOut && !/^<!-- allow-panics: \S.* -->$/.test(lines[i - 1] ?? "") ? [i + 1] : []
       })
     }
+    /**
+     * Whether an opt-out's reason accounts for a panic site in the snippet's own
+     * code: a clause that shows the panic on purpose, names a guard the checker
+     * does not read yet, or a site no guard removes. "does integer arithmetic
+     * nothing bounds" is none of them, because a reader can bound it.
+     */
+    const excusesOwnPanic = (reason) =>
+      reason
+        .split("; ")
+        .some((clause) => clause.startsWith("shows ") || (!clause.includes("`std/") && / yet$/.test(clause)) || clause.endsWith("which nothing proves away"))
     const MARKED_FENCE = /^```(ts|json)(?:\s+(\S+))?\s*$/
 
     /**
@@ -30196,6 +30214,19 @@ if (dealtHere("releaseChecks")) {
         ["<!-- nish:ok --allow-panics -->", "<!-- allow-panics: it indexes -->", "<!-- nish:ok --allow-panics -->"].join("\n")
       )
       check("docs: an --allow-panics marker with no reason above it is reported", optOuts.join(",") === "1", JSON.stringify(optOuts))
+      const verdicts = [
+        "shows the overflow panic that `square(46341)` stops with",
+        "indexes module storage, which no guard the checker reads proves in range yet",
+        "calls `writeFileSync`, which exits on failure and which nothing proves away",
+        "does integer arithmetic nothing bounds",
+        "calls `std/sqlite.ts` code that keeps panic sites no proof removes yet",
+        "does integer arithmetic nothing bounds; calls `std/threads.ts` code that keeps panic sites no proof removes yet",
+      ].map(excusesOwnPanic)
+      check(
+        "docs: an opt-out reason excuses the snippet's own panic only when it shows it, names a checker gap, or a site nothing proves away",
+        verdicts.join(",") === "true,true,true,false,false,false",
+        verdicts.join(",")
+      )
     }
 
     for (const page of docPages) {
@@ -30259,6 +30290,16 @@ if (dealtHere("releaseChecks")) {
               `${rel}:${s.line}: its --allow-panics opt-out is still needed`,
               bare.some((b) => b.run.status !== 0 && b.errors.some((e) => NO_PANIC_CODES.includes(e.code))),
               "it builds without the flag: drop --allow-panics from its marker, the `<!-- allow-panics: -->` line above, and the page's words about it"
+            )
+            // The opt-out is for the code a reader cannot change: a panic
+            // site in the snippet's own code gets a guard, unless the reason
+            // says why no guard fits.
+            const own = bare.flatMap((b) => b.errors.filter((e) => e.code === "NL2457"))
+            const reason = /^<!-- allow-panics: (.*) -->$/.exec(text.split("\n")[s.line - 3] ?? "")?.[1] ?? ""
+            check(
+              `${rel}:${s.line}: its own code is held to no panic, or its reason says why no guard fits`,
+              own.length === 0 || excusesOwnPanic(reason),
+              `NL2457 at ${[...new Set(own.map((e) => `${e.file ? path.basename(e.file) : ""}:${e.line} ${/^`([^`]+)`/.exec(e.message)?.[1] ?? ""}`))].join(", ")}: guard the site, or give a reason clause starting \`shows \`, ending \` yet\` or ending \`which nothing proves away\``
             )
           }
         } else {

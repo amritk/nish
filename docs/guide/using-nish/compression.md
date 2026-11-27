@@ -17,16 +17,17 @@ The examples on this page build with
 `nish/compress/gzip` and `nish/compress/deflate` keep only the panics of their
 contract (a window outside its buffer, a level outside 0 to 9, a negative
 `limit`, a `commit` of more than `inputRoom()` bytes, a `read` with no room),
-so a call to them is refused by default. In your own code, an array whose
-length is a literal, an index tested against `length`, a sum a guard bounds and
-an error answer in place of `panic` each build under the default.
+so a call to them is refused by default. The code around the calls tests what
+they answer instead: a size of -1 for a body too large to bound, an end
+that never passes the buffer it was written into, and a count of bytes no
+larger than the room the call was given, before it is added to a total.
 
 Every call works on buffers you own: the input is a window `src[off .. off +
 len)`, the output goes into `out` from `at`, and the answer is where the output
 ends. Build the compressor once and keep it — it holds its tables, about
 330 KB — and a call allocates nothing:
 
-<!-- allow-panics: builds an array whose length it does not bound; calls `std/compress/gzip.ts` and `std/compress/deflate.ts` code that keeps only its contract's panics (a window outside its buffer, a level outside 0 to 9, a negative `limit`, a `commit` of more than `inputRoom()` bytes, a `read` with no room) -->
+<!-- allow-panics: calls `std/compress/gzip.ts` and `std/compress/deflate.ts` code that keeps only its contract's panics (a window outside its buffer, a level outside 0 to 9, a negative `limit`, a `commit` of more than `inputRoom()` bytes, a `read` with no room) -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DEFLATE_FAST, compressBound } from "nish/compress/deflate";
@@ -43,7 +44,11 @@ export const main = (): number => {
   const n: i32 = toI32(body.length);
 
   const gz = new GzipCompressor(DEFLATE_FAST); // once
-  const out: u8[] = new Array<u8>(compressBound(n)); // once, for the largest body
+  const room: i32 = compressBound(n); // -1 for a body too large to bound
+  if (room < 0) {
+    return 1;
+  }
+  const out: u8[] = new Array<u8>(room); // once, for the largest body
   const end: i32 = gz.compress(body, 0, n, out, 0);
   console.log(`${n} bytes -> ${end}`);
 
@@ -135,7 +140,7 @@ for a `len` over 2,145,000,000, as `gzipFixedBound(n)` is for an `n` over
 `finish` answer `GZIP_ERR_FINISHED` and take nothing, until `start` begins
 another body.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/compress/gzip.ts` and `std/compress/deflate.ts` code that keeps only its contract's panics (a window outside its buffer, a level outside 0 to 9, a negative `limit`, a `commit` of more than `inputRoom()` bytes, a `read` with no room) -->
+<!-- allow-panics: calls `std/compress/gzip.ts` and `std/compress/deflate.ts` code that keeps only its contract's panics (a window outside its buffer, a level outside 0 to 9, a negative `limit`, a `commit` of more than `inputRoom()` bytes, a `read` with no room) -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { GzipReader, GzipWriter, GZIP_END, GZIP_NEED_INPUT } from "nish/compress/gzip";
@@ -143,19 +148,24 @@ import { GzipReader, GzipWriter, GZIP_END, GZIP_NEED_INPUT } from "nish/compress
 export const main = (): number => {
   const w = new GzipWriter(6);
   const stream: u8[] = [];
-  const piece: u8[] = new Array<u8>(w.bound(1000));
+  const room: i32 = w.bound(1000);
+  if (room < 0) {
+    return 1;
+  }
+  const piece: u8[] = new Array<u8>(room);
   const line: u8[] = [];
   for (let i: i32 = 0; i < 1000; i++) {
     line.push(toU8(97 + (i % 26)));
   }
   for (let k: i32 = 0; k < 300; k++) {
     const end: i32 = w.write(line, 0, 1000, piece, 0);
-    for (let i: i32 = 0; i < end; i++) {
+    // `end` never passes `piece.length`; the second test proves it.
+    for (let i: i32 = 0; i < end && i < piece.length; i++) {
       stream.push(piece[i]);
     }
   }
   const last: i32 = w.finish(piece, 0);
-  for (let i: i32 = 0; i < last; i++) {
+  for (let i: i32 = 0; i < last && i < piece.length; i++) {
     stream.push(piece[i]);
   }
 
@@ -167,9 +177,20 @@ export const main = (): number => {
   while (true) {
     const n: i32 = r.read(out, 0, 4096);
     if (n > 0) {
-      total += n;
-    } else if (n === GZIP_NEED_INPUT && fed < toI32(stream.length)) {
-      fed += r.feed(stream, fed, Math.min(500, toI32(stream.length) - fed));
+      // `read` answers at most the 4096 bytes of room it was given, and the
+      // reader stops at its limit, so these tests bound the sum.
+      if (n > 4096 || total > 1000000) {
+        console.log("the body is larger than its limit");
+        return 1;
+      }
+      total = total + n;
+    } else if (n === GZIP_NEED_INPUT && fed >= 0 && fed < toI32(stream.length)) {
+      // `feed` takes at most the 500 bytes it is offered.
+      const took: i32 = r.feed(stream, fed, Math.min(500, toI32(stream.length) - fed));
+      if (took < 0 || took > 500 || fed > 1000000000) {
+        return 1;
+      }
+      fed = fed + took;
     } else if (n === GZIP_NEED_INPUT) {
       r.endInput();
     } else {
@@ -215,7 +236,7 @@ output has no room for it yet (`H1_WRITE` says when to call again) and
 hold. On HTTP/2 and HTTP/3, read the field yourself and add the fields the
 compressor builds:
 
-<!-- allow-panics: calls `panic` -->
+<!-- allow-panics: calls `std/net/http-compress.ts` code that keeps or reaches panic sites (in `std/compress/gzip.ts`) no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DEFLATE_FAST } from "nish/compress/deflate";
@@ -319,7 +340,7 @@ about a third larger. Larger bodies use the level you gave. To force one
 encoder for every size, set `encoder` to `HTTP_ENCODER_FIXED` or
 `HTTP_ENCODER_LEVEL`.
 
-<!-- allow-panics: calls `panic` -->
+<!-- allow-panics: calls `std/net/http-compress.ts` code that keeps or reaches panic sites (in `std/compress/gzip.ts`) no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DEFLATE_FAST } from "nish/compress/deflate";
