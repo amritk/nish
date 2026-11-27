@@ -16,18 +16,20 @@ the [HTTP client](http-client.md) instead.
 
 The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/upstream`,
-`nish/net/handler`, `nish/net/router`, `nish/net/outbound` and the JSON reads
-keep panic sites no proof removes yet, so a call to them is refused by default
-until the standard library is made panic-free.
+`nish/net/handler` and `nish/net/outbound` keep panic sites no proof removes
+yet, so a call to them is refused by default until the standard library is
+made panic-free. The code around the calls builds under the default: it makes
+the router with `routerChecked` and the handler with `openHttpHandler`, which
+give `Err` for limits they refuse, as [an API server](api-server.md) shows.
 
 An `Upstream` is a pool of kept-alive connections to one origin, registered on
 the handler's loop. Make it once at start-up, beside the handler:
 
-<!-- allow-panics: calls `std/net/handler.ts`, `std/net/router.ts`, `std/net/upstream.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/handler.ts` and `std/net/upstream.ts` code that keeps panic sites, and reaches those of `std/net/http-compress.ts` and `std/bytes.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { HandlerLimits, HttpHandler } from "nish/net/handler";
-import { Router, RouterLimits } from "nish/net/router";
+import { HandlerLimits, openHttpHandler } from "nish/net/handler";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { UPSTREAM_E_NONE, UPSTREAM_E_TIMEOUT, Upstream, UpstreamLimits } from "nish/net/upstream";
 import { tcpListen } from "nish:net";
 
@@ -42,14 +44,24 @@ const bytesOf = (text: string): u8[] => {
 };
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    console.error(table.error);
+    return 1;
+  }
+  const router = table.value;
   router.add("GET", "/me");
   const listener: i32 = tcpListen("127.0.0.1", 8080, 1024);
   if (listener < 0) {
     console.error(`cannot listen: ${listener}`);
     return 1;
   }
-  const h = new HttpHandler(new HandlerLimits(), listener, router);
+  const opened = openHttpHandler(new HandlerLimits(), listener, router);
+  if (opened.isErr()) {
+    console.error(opened.error);
+    return 1;
+  }
+  const h = opened.value;
   const users = new Upstream(h, "http://127.0.0.1:9000", new UpstreamLimits());
   if (users.error !== UPSTREAM_E_NONE) {
     console.error(users.errorText);

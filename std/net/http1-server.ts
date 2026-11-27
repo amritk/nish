@@ -3843,7 +3843,7 @@ export class Http1TlsServer {
    * Signs `slot`'s CertificateVerify with `key`, as `TlsTcpServer.signP256` does. Answers the interest.
    *
    * @param slot the slot whose handshake waits for its signature
-   * @param key the certificate's P-256 private key, which stays the caller's to wipe
+   * @param key the certificate's private key, P-256 or RSA as `signatureScheme` says, which stays the caller's to wipe
    * @returns the TLS interest bits the slot now waits for (`H1_WANT_` values), with `TLS_RECORD_DONE` once it should be closed
    */
   signP256(slot: i32, key: Secret<u8[]>): i32 {

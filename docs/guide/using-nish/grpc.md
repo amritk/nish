@@ -18,19 +18,22 @@ file.
 ## A first service
 
 This service answers `GetSum` from `message SumRequest { int32 a = 1; int32 b
-= 2; }` with `message SumReply { int32 result = 1; }`. It builds with
+= 2; }` with `message SumReply { int32 result = 1; }`, or with
+`OUT_OF_RANGE` when the sum does not fit an `int32`. It builds with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/http-server`
-and `nish/net/router` keep panic sites no proof removes yet, so a call to them
-is refused by default until the standard library is made panic-free.
+and `nish/net/grpc` keep panic sites no proof removes yet, so a call to them
+is refused by default until the standard library is made panic-free. The
+service's own code needs no such flag: it builds its route table with
+`routerChecked` and adds in `i64`, where two `int32`s always fit.
 
-<!-- allow-panics: calls `std/net/http-server.ts`, `std/net/router.ts`, `std/net/grpc.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/http-server.ts` and `std/net/grpc.ts` code that keeps or reaches panic sites (in `std/net/router.ts` and `std/net/http3-server.ts`) no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { GRPC_CALL, GRPC_INVALID_ARGUMENT, GrpcLimits, GrpcServer } from "nish/net/grpc";
+import { GRPC_CALL, GRPC_INVALID_ARGUMENT, GRPC_OUT_OF_RANGE, GrpcLimits, GrpcServer } from "nish/net/grpc";
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server";
 import { Http2Config } from "nish/net/http2";
 import { PROTO_OK, ProtoReader, ProtoWriter } from "nish/net/protobuf";
-import { Router, RouterLimits } from "nish/net/router";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { tcpListen } from "nish:net";
 
 // The routes, in the order they are added: `add` answers 0.
@@ -51,13 +54,24 @@ const getSum = (grpc: GrpcServer, out: ProtoWriter, r: HttpServerRequest): void 
     grpc.fail(r, GRPC_INVALID_ARGUMENT, "not a SumRequest");
     return;
   }
+  // Two `int32`s always fit an `i64`; the reply's `int32` may not hold their sum.
+  const sum: i64 = toI64(a) + toI64(b);
+  if (sum < toI64(-2147483648) || sum > toI64(2147483647)) {
+    grpc.fail(r, GRPC_OUT_OF_RANGE, "the sum does not fit an int32");
+    return;
+  }
   out.reset();
-  out.int32(1, a + b);
+  out.int32(1, toI32(sum));
   grpc.reply(r, out.buf, 0, out.end);
 };
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    console.error(table.error);
+    return 1;
+  }
+  const router = table.value;
   router.add("POST", "/calc.Calculator/GetSum");
   const listener: i32 = tcpListen("127.0.0.1", 50051, 1024);
   if (listener < 0) {
@@ -206,11 +220,11 @@ that answers yes with `finish`: past the deadline that answers
 whose answer has begun does the same.
 
 This service adds a client-streaming `SumAll`, which replies with the sum of
-every `SumRequest` it is sent, and a server-streaming `Count`, which sends
+every `SumRequest` it is sent (`OUT_OF_RANGE` once it leaves an `int32`), and a server-streaming `Count`, which sends
 `count` replies from `start` up, from `message CountRequest { int32 count =
 1; int32 start = 2; }`:
 
-<!-- allow-panics: calls `std/net/http-server.ts`, `std/net/router.ts`, `std/net/grpc.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/http-server.ts` and `std/net/grpc.ts` code that keeps or reaches panic sites (in `std/net/router.ts` and `std/net/http3-server.ts`) no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import {
@@ -221,13 +235,14 @@ import {
   GRPC_MESSAGE,
   GRPC_MORE,
   GRPC_OK,
+  GRPC_OUT_OF_RANGE,
   GrpcLimits,
   GrpcServer,
 } from "nish/net/grpc";
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server";
 import { Http2Config } from "nish/net/http2";
 import { PROTO_OK, ProtoReader, ProtoWriter } from "nish/net/protobuf";
-import { Router, RouterLimits } from "nish/net/router";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { tcpListen } from "nish:net";
 
 const SUM_ALL: i32 = 0;
@@ -236,51 +251,61 @@ const COUNT: i32 = 1;
 // The most reply bytes one call may have queued before it waits.
 const BUDGET: i32 = 65536;
 
-class Calls {
-  sums: HttpServerRequest[] = [];
-  totals: i32[] = [];
-  counts: HttpServerRequest[] = [];
-  next: i32[] = [];
-  last: i32[] = [];
-  out: ProtoWriter;
+// A client-streaming `SumAll` call, and the total of what it has sent.
+class SumCall {
+  r: HttpServerRequest;
+  total: i32 = 0;
 
-  constructor() {
-    this.out = new ProtoWriter([]);
-  }
-
-  // Drops `sums[k]`, its call over, by moving the last one into its place.
-  dropSum(k: i32): void {
-    const last = this.sums.length - 1;
-    this.sums[k] = this.sums[last];
-    this.totals[k] = this.totals[last];
-    this.sums.pop();
-    this.totals.pop();
-  }
-
-  // Drops `counts[k]`, its call over, the same way.
-  dropCount(k: i32): void {
-    const end = this.counts.length - 1;
-    this.counts[k] = this.counts[end];
-    this.next[k] = this.next[end];
-    this.last[k] = this.last[end];
-    this.counts.pop();
-    this.next.pop();
-    this.last.pop();
+  constructor(r: HttpServerRequest) {
+    this.r = r;
   }
 }
 
-// Reads the messages `sums[k]` has in; true when its call is over.
-const pump = (grpc: GrpcServer, calls: Calls, k: i32): boolean => {
-  const r = calls.sums[k];
+// A server-streaming `Count` call: the next number it sends, and where it stops.
+class CountCall {
+  r: HttpServerRequest;
+  next: i32;
+  last: i32;
+
+  constructor(r: HttpServerRequest, next: i32, last: i32) {
+    this.r = r;
+    this.next = next;
+    this.last = last;
+  }
+}
+
+// Removes `xs[k]`, its call over, by moving the last element into its place.
+const dropAt = <T>(xs: T[], k: i32): void => {
+  if (xs.length > 0) {
+    const moved = xs.pop();
+    if (k >= 0 && k < xs.length) {
+      xs[k] = moved;
+    }
+  }
+};
+
+// Where `r` is in `sums`, or -1.
+const findSum = (sums: SumCall[], r: HttpServerRequest): i32 => {
+  for (let k: i32 = 0; k < sums.length; k++) {
+    if (sums[k].r === r) {
+      return k;
+    }
+  }
+  return -1;
+};
+
+// Reads the messages `call` has in; true when it is over.
+const pump = (grpc: GrpcServer, out: ProtoWriter, call: SumCall): boolean => {
+  const r = call.r;
   while (true) {
     const got = grpc.next(r);
     if (got === GRPC_MORE) {
       return false;
     }
     if (got === GRPC_END) {
-      calls.out.reset();
-      calls.out.int32(1, calls.totals[k]);
-      grpc.reply(r, calls.out.buf, 0, calls.out.end);
+      out.reset();
+      out.int32(1, call.total);
+      grpc.reply(r, out.buf, 0, out.end);
       return true;
     }
     if (got !== GRPC_MESSAGE) {
@@ -289,7 +314,13 @@ const pump = (grpc: GrpcServer, calls: Calls, k: i32): boolean => {
     const msg = new ProtoReader(grpc.messageBytes(r), grpc.messageStart(r), grpc.messageEnd(r));
     while (msg.next()) {
       if (msg.field === 1 || msg.field === 2) {
-        calls.totals[k] = calls.totals[k] + msg.int32();
+        // Two `int32`s always fit an `i64`; the reply's `int32` may not hold it.
+        const sum: i64 = toI64(call.total) + toI64(msg.int32());
+        if (sum < toI64(-2147483648) || sum > toI64(2147483647)) {
+          grpc.fail(r, GRPC_OUT_OF_RANGE, "the sum does not fit an int32");
+          return true;
+        }
+        call.total = toI32(sum);
       }
     }
     if (msg.failed !== PROTO_OK) {
@@ -299,31 +330,31 @@ const pump = (grpc: GrpcServer, calls: Calls, k: i32): boolean => {
   }
 };
 
-// Sends `counts[k]` more replies while its queue is under `BUDGET`; true when its call is over.
-const feed = (grpc: GrpcServer, server: HttpServer, calls: Calls, k: i32): boolean => {
-  const r = calls.counts[k];
+// Sends `call` more replies while its queue is under `BUDGET`; true when it is over.
+const feed = (grpc: GrpcServer, server: HttpServer, out: ProtoWriter, call: CountCall): boolean => {
+  const r = call.r;
   // A client that stopped reading keeps the queue above `BUDGET`, so `send`
   // would never be called to see it hang up or its deadline pass.
   if (server.hungUp(r) || grpc.expired(r)) {
     grpc.finish(r, GRPC_OK, "");
     return true;
   }
-  while (calls.next[k] < calls.last[k] && server.pending(r) <= BUDGET) {
-    calls.out.reset();
-    calls.out.int32(1, calls.next[k]);
-    if (grpc.send(r, calls.out.buf, 0, calls.out.end) === GRPC_ENDED) {
+  for (let n: i32 = call.next; n < call.last && server.pending(r) <= BUDGET; n++) {
+    out.reset();
+    out.int32(1, n);
+    if (grpc.send(r, out.buf, 0, out.end) === GRPC_ENDED) {
       return true;
     }
-    calls.next[k] = calls.next[k] + 1;
+    call.next = n + 1;
   }
-  if (calls.next[k] < calls.last[k]) {
+  if (call.next < call.last) {
     return false;
   }
   grpc.finish(r, GRPC_OK, "");
   return true;
 };
 
-const startCount = (grpc: GrpcServer, calls: Calls, r: HttpServerRequest): void => {
+const startCount = (grpc: GrpcServer, counts: CountCall[], r: HttpServerRequest): void => {
   const msg = new ProtoReader(r.body, grpc.messageStart(r), grpc.messageEnd(r));
   let count: i32 = 0;
   let start: i32 = 0;
@@ -338,13 +369,16 @@ const startCount = (grpc: GrpcServer, calls: Calls, r: HttpServerRequest): void 
     grpc.fail(r, GRPC_INVALID_ARGUMENT, "not a CountRequest");
     return;
   }
-  calls.counts.push(r);
-  calls.next.push(start);
-  calls.last.push(start + count);
+  counts.push(new CountCall(r, start, start + count));
 };
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    console.error(table.error);
+    return 1;
+  }
+  const router = table.value;
   router.add("POST", "/calc.Calculator/SumAll");
   router.add("POST", "/calc.Calculator/Count");
   const listener: i32 = tcpListen("127.0.0.1", 50051, 1024);
@@ -356,36 +390,37 @@ export const main = (): i32 => {
   server.listenH2c(listener, new Http2Config(), 256);
   server.streamBody(SUM_ALL);
   const grpc = new GrpcServer(server, new GrpcLimits());
-  const calls = new Calls();
+  const out = new ProtoWriter([]);
+  const sums: SumCall[] = [];
+  const counts: CountCall[] = [];
   while (true) {
     server.wait(10);
     while (server.ready()) {
       const r = server.take();
       if (r.route === SUM_ALL) {
-        let k: i32 = calls.sums.indexOf(r);
+        let k: i32 = findSum(sums, r);
         if (k < 0) {
           if (grpc.open(r) !== GRPC_CALL) {
             continue; // `open` has answered it
           }
-          calls.sums.push(r);
-          calls.totals.push(0);
-          k = calls.sums.length - 1;
+          k = toI32(sums.length);
+          sums.push(new SumCall(r));
         }
-        if (pump(grpc, calls, k)) {
-          calls.dropSum(k);
+        if (k < sums.length && pump(grpc, out, sums[k])) {
+          dropAt(sums, k);
         }
       } else if (grpc.call(r) !== GRPC_CALL) {
         continue;
       } else if (r.route === COUNT) {
-        startCount(grpc, calls, r);
+        startCount(grpc, counts, r);
       } else {
         server.refuse(r);
       }
     }
     // Every turn, each server-streaming call sends what its budget allows.
-    for (let k: i32 = calls.counts.length - 1; k >= 0; k--) {
-      if (feed(grpc, server, calls, k)) {
-        calls.dropCount(k);
+    for (let k: i32 = toI32(counts.length) - 1; k >= 0; k--) {
+      if (k < counts.length && feed(grpc, server, out, counts[k])) {
+        dropAt(counts, k);
       }
     }
   }

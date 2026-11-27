@@ -8,6 +8,7 @@
 // `TlsTranscript`; the secrets it derives go through `nish/net/tls/schedule`,
 // whose every step `tests/link/net_tls_rfc8448` pins against RFC 8448.
 import { p256VerifySha256 } from "nish/crypto/p256";
+import { RSA_HASH_SHA256, RsaPublicKey, rsaParsePublicKey, rsaVerifyPss } from "nish/crypto/rsa";
 import { sha256 } from "nish/crypto/sha256";
 import { sha384 } from "nish/crypto/sha512";
 import { x25519BasePlain, x25519Plain } from "../crypto_x25519/plain";
@@ -236,7 +237,7 @@ export class ClientView {
   messages: u8[][];
   clientHandshakeSecret: u8[];
   serverHandshakeSecret: u8[];
-  /** Whether the CertificateVerify's ECDSA signature verifies under the leaf key (`false` when no key was given). */
+  /** Whether the CertificateVerify's signature (ECDSA P-256, or RSA-PSS for scheme 0x0804) verifies under the leaf key (`false` when no key was given). */
   signatureVerifies: boolean = false;
   /** Whether the server's Finished matches the client's own computation. */
   serverFinishedVerifies: boolean = false;
@@ -260,8 +261,9 @@ const SPACES_AND_CONTEXT_HEX: string =
  * transcript before the ServerHello as the client hashes it (the ClientHello;
  * or `message_hash`, the HelloRetryRequest and the second ClientHello).
  * `initial` and `handshake` are the server's output at the two levels after
- * the hello that completed it, and `leafPublic`, when not empty, is the P-256
- * key CertificateVerify must verify under.
+ * the hello that completed it, and `leafPublic`, when not empty, is the key
+ * CertificateVerify must verify under: a P-256 point, or, when the server
+ * signed with `rsa_pss_rsae_sha256`, a PKCS#1 `RSAPublicKey`.
  */
 export const clientFinish = (
   hashLength: i32,
@@ -300,9 +302,18 @@ export const clientFinish = (
       fromHex(SPACES_AND_CONTEXT_HEX),
       transcriptHash(hashLength, cat([before, serverHello, encryptedExtensions, certificate])),
     ]);
-    // CertificateVerify: header (4), scheme (2), length (2), then the DER signature.
-    const rs: u8[] | null = x509DerSignatureRS(bytesFrom(certificateVerify, 8));
-    view.signatureVerifies = rs !== null && p256VerifySha256(leafPublic, content, rs);
+    // CertificateVerify: header (4), scheme (2), length (2), then the signature.
+    const scheme: i32 = toI32(certificateVerify.length) >= 8
+      ? (toI32(certificateVerify[4]) << 8) | toI32(certificateVerify[5])
+      : 0;
+    if (scheme === TLS_SIGNATURE_RSA_PSS_RSAE_SHA256) {
+      const key: RsaPublicKey | null = rsaParsePublicKey(leafPublic);
+      view.signatureVerifies =
+        key !== null && rsaVerifyPss(key, RSA_HASH_SHA256, 32, content, bytesFrom(certificateVerify, 8));
+    } else {
+      const rs: u8[] | null = x509DerSignatureRS(bytesFrom(certificateVerify, 8));
+      view.signatureVerifies = rs !== null && p256VerifySha256(leafPublic, content, rs);
+    }
   }
   const expected: u8[] = tlsFinishedVerifyData(
     hashLength,

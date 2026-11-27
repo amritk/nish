@@ -108,6 +108,7 @@ std/net/http-fields.ts RFC9110
 std/net/http-fields.ts RFC9113
 std/net/http-fields.ts RFC9114
 std/net/http-fields.ts RFC9204
+std/net/http-fields.ts RFC7578 cites: formDataDispositionParse reads the Content-Disposition parameters RFC 7578 Section 4.2 names, for nish/net/multipart alone; it returns a class vector does not call, and contracts/multipart-form-data.json tests what it reads through multipartFieldData and multipartFieldFilename
 std/net/http-server.ts RFC9110
 std/net/http-server.ts RFC9113
 std/net/http-server.ts RFC9114
@@ -248,3 +249,5 @@ std/term-pixels.ts RFC4648
 std/yaml-json.ts RFC8259
 
 std/crypto/x509.ts RFC822 cites: rfc822Name, a subjectAltName form RFC 5280 names after RFC 822; the module checks only that it is an IA5String and parses no address from it
+std/crypto/rsa-sign.ts RFC6979 cites: named for how the PSS salt is derived from the key and message, as RFC 6979 derives an ECDSA nonce; the module implements no part of RFC 6979
+std/crypto/x509.ts RFC8017 cites: names the PKCS#1 RSAPrivateKey a PEM block carries; nish/crypto/rsa-sign's rsaParsePrivateKey parses it, under that module's RFC 8017 spec

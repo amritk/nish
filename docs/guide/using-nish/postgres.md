@@ -25,11 +25,12 @@ The examples on this page build with
 `nish/net/postgres` keeps panic sites no proof removes yet, so a call to it is
 refused by default until the standard library is made panic-free;
 `crypto.getRandomValues` exits the program when the system has no random bytes
-to give, and buffer slices are checked at run time, neither of which a proof
-removes yet. The sums and array sizes in your own code build under the default
-once a guard bounds them, such as a test that a count is below a limit.
+to give, which nothing proves away. The rest of the first example's own code
+builds under the default: `flush` and `fill` test the window the connection
+names, and bound the sum that makes its end, before they hand it to `netWrite`
+or `netRead`.
 
-<!-- allow-panics: calls a file or entropy builtin that exits on failure; slices with bounds it does not test; does integer arithmetic nothing bounds; calls `std/net/postgres.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; calls `std/net/postgres.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import {
@@ -58,6 +59,34 @@ const bytesOf = (text: string): u8[] => {
     out.push(toU8(text.charCodeAt(i)));
   }
   return out;
+};
+
+// Writes what the connection queued, `[outputStart, outputEnd)` of its
+// output buffer, once the tests show the window lies inside it.
+const flush = (fd: i32, conn: PgConnection): i32 => {
+  const out: u8[] = conn.outputBuffer();
+  const start: i32 = conn.outputStart();
+  const end: i32 = conn.outputEnd();
+  if (start < 0 || start > end || end > out.length) {
+    return -1;
+  }
+  return netWrite(fd, out, start, end - start);
+};
+
+// Reads into the connection's room, `inputRoom` bytes at `inputEnd`, once the
+// tests bound the sum and show the room lies inside the input buffer.
+const fill = (fd: i32, conn: PgConnection): i32 => {
+  const into: u8[] = conn.inputBuffer();
+  const at: i32 = conn.inputEnd();
+  const room: i32 = conn.inputRoom();
+  if (at < 0 || at > 1000000000 || room < 0 || room > 1000000000) {
+    return -1;
+  }
+  const end: i32 = at + room;
+  if (at > end || end > into.length) {
+    return -1;
+  }
+  return netRead(fd, into, at, end - at);
 };
 
 export const main = (): i32 => {
@@ -96,14 +125,14 @@ export const main = (): i32 => {
   while (running) {
     // Send what the connection queued.
     while (conn.outputEnd() > conn.outputStart()) {
-      const n = netWrite(fd, conn.outputBuffer(), conn.outputStart(), conn.outputEnd() - conn.outputStart());
+      const n = flush(fd, conn);
       if (n < 0) {
         break;
       }
       conn.sent(n);
     }
     // Read what the server answered, and act on each event.
-    const got = netRead(fd, conn.inputBuffer(), conn.inputEnd(), conn.inputRoom());
+    const got = fill(fd, conn);
     if (got === 0) {
       conn.closed();
     } else if (got > 0) {
@@ -128,7 +157,7 @@ export const main = (): i32 => {
       } else if (event === PG_GROUP_DONE) {
         code = conn.groupFailed ? 1 : 0;
         conn.terminate();
-        netWrite(fd, conn.outputBuffer(), conn.outputStart(), conn.outputEnd() - conn.outputStart());
+        flush(fd, conn);
         running = false;
       } else if (event === PG_FAILED) {
         console.log(`connection failed: ${conn.failure}`);
@@ -1113,7 +1142,7 @@ waits for its turn and reads its answer. Up to `depth` (8 by default, at most
 16) statements from different tasks are in flight on one connection at once,
 and each is parsed once a connection, then only bound and executed:
 
-<!-- allow-panics: calls `panic`; does integer arithmetic nothing bounds; builds an array whose length it does not bound -->
+<!-- allow-panics: calls `std/net/postgres-async.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { spawn } from "nish:async"

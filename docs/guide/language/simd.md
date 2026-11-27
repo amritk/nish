@@ -63,14 +63,11 @@ your package is by default, use a vector access. A
 load or store whose check the guard removes is a proven panic site, so a
 module held to no panic may call a function that uses one. One that
 keeps its check is refused, with advice that names the guard to add:
-`if (i >= 0 && i <= xs.length - 16)` for a `u8x16` read of `xs`. The example
-below adds and indexes with nothing bounding them, so it builds with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); the guards the compile
-errors name, such as `31 < dst.length` before `dst[31]`, build it under the
-default.
+`if (i >= 0 && i <= xs.length - 16)` for a `u8x16` read of `xs`. The copy
+below bounds its loop by both arrays' lengths, which proves every load and
+store, and tests the length before it reads `dst[31]`:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { loadU8x16, store } from "nish:simd";
 
@@ -83,10 +80,12 @@ export const main = (): i32 => {
   for (let i = 0; i < 32; i++) {
     dst.push(0);
   }
-  for (let i = 0; i + 16 <= src.length; i += 16) {
+  for (let i = 0; i <= src.length - 16 && i <= dst.length - 16; i += 16) {
     store(loadU8x16(src, i), dst, i);
   }
-  console.log(dst[31]);
+  if (dst.length > 31) {
+    console.log(dst[31]);
+  }
   return 0;
 };
 ```

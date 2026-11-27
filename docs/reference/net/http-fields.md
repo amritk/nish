@@ -23,6 +23,8 @@ import {
   HTTP_FIELDS_PSEUDO_REPEATED,
   HTTP_FIELDS_PSEUDO_UNKNOWN,
   HttpFields,
+  MediaType,
+  formDataDispositionParse,
   httpDateWrite,
   httpFieldBytes,
   httpFieldConnectionSpecific,
@@ -31,6 +33,8 @@ import {
   httpFieldSensitive,
   httpFieldValueValid,
   httpFieldsCheckOutgoing,
+  mediaTypeParam,
+  mediaTypeParse,
 } from "nish/net/http-fields";
 ```
 
@@ -48,6 +52,12 @@ if (request.readRequest(decoder.names, decoder.values, extendedConnect) === HTTP
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="form​Data​Disposition​Parse" icon="phosphor/regular/function" href="#formdatadispositionparse">
+
+Reads a part's `Content-Disposition` value the way a browser writes one in a `multipart/form-data` body (RFC 7578 §4.2, and HTML's form submission): a disposition type token, then parameters as `mediaTypeParse` reads them, except that a backslash inside quotes is an octet like any other.
+
+</scalar-card>
 
 <scalar-card title="http​Date​Write" icon="phosphor/regular/function" href="#httpdatewrite">
 
@@ -97,9 +107,27 @@ Checks a field section a program is about to send, pseudo-headers left out: ever
 
 </scalar-card>
 
+<scalar-card title="media​Type​Param" icon="phosphor/regular/function" href="#mediatypeparam">
+
+The value of parameter `name` of `m`, its letters compared without case.
+
+</scalar-card>
+
+<scalar-card title="media​Type​Parse" icon="phosphor/regular/function" href="#mediatypeparse">
+
+Reads a `Content-Type` value (RFC 9110 §8.3.1): a `type/subtype` pair of tokens, then parameters, each `; name=value` with optional whitespace around the `;`, the value a token or a quoted string whose backslash takes the next octet as itself.
+
+</scalar-card>
+
 <scalar-card title="Http​Fields" icon="phosphor/regular/cube" href="#httpfields">
 
 One field section read into its shape: the pseudo-headers by name, and the regular fields in order.
+
+</scalar-card>
+
+<scalar-card title="Media​Type" icon="phosphor/regular/cube" href="#mediatype">
+
+A media type or a disposition as `mediaTypeParse` and `formDataDispositionParse` read it: the type and subtype in lowercase, and the parameters in the order they came, each name in lowercase beside its value with any quoting removed.
 
 </scalar-card>
 
@@ -164,6 +192,22 @@ caller supplies the second.
 
 </scalar-detail>
 
+<scalar-detail title="Media types">
+
+`mediaTypeParse` reads a `Content-Type` value (RFC 9110
+§8.3.1): a `type/subtype` pair of tokens, lowercased, then `;`-separated
+parameters whose names are lowercased tokens and whose values are tokens or
+quoted strings, a backslash in one escaping the octet after it. A
+parameter named twice is refused, since two readers could believe
+different ones, and so is a 17th, which keeps that check linear in the
+value. `formDataDispositionParse` reads the `Content-Disposition`
+of a `multipart/form-data` part the same way, except that a backslash in a
+quoted value is a backslash: the HTML form submission algorithm writes `"`
+as `%22` and leaves `\` alone, so `filename="C:\x.txt"` names the file a
+browser sent. `mediaTypeParam` looks a parameter up.
+
+</scalar-detail>
+
 Names and values are octets (`u8[]`), as HPACK and QPACK answer them. A
 section that passes keeps references to the caller's arrays, not copies, so
 it is valid for as long as they are.
@@ -171,10 +215,52 @@ it is valid for as long as they are.
 Private helpers share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
 
-Written from RFC 9110, RFC 9113, RFC 9114 and RFC 8441, not ported from
-another implementation.
+Written from RFC 9110, RFC 9113, RFC 9114, RFC 8441 and the HTML form
+submission algorithm, not ported from another implementation.
 
 ## Functions
+
+### formDataDispositionParse
+
+Reads a part's `Content-Disposition` value the way a browser writes one in
+a `multipart/form-data` body (RFC 7578 §4.2, and HTML's form submission):
+a disposition type token, then parameters as `mediaTypeParse` reads them,
+except that a backslash inside quotes is an octet like any other. A sender
+writes a `"`, CR or LF in a name as `%22`, `%0D` or `%0A`, which are kept
+as given; Windows paths keep their backslashes.
+
+```ts
+const formDataDispositionParse: (
+  value: readonly u8[],
+  from: i32,
+  to: i32,
+) => MediaType | null
+```
+
+<scalar-field name="value" type="readonly u8[]" required>
+
+the octets that hold the field value
+
+</scalar-field>
+
+<scalar-field name="from" type="i32" required>
+
+where the value starts in `value`
+
+</scalar-field>
+
+<scalar-field name="to" type="i32" required>
+
+where it ends, one past its last octet
+
+</scalar-field>
+
+<scalar-field name="returns" type="MediaType | null">
+
+the disposition, its type in `type` and `subtype` empty, or null
+  on the shapes `mediaTypeParse` refuses past the type
+
+</scalar-field>
 
 ### httpDateWrite
 
@@ -414,6 +500,89 @@ the value for each name, at the same index
 
 </scalar-field>
 
+### mediaTypeParam
+
+The value of parameter `name` of `m`, its letters compared without case.
+
+```ts
+const mediaTypeParam: (
+  m: MediaType,
+  name: string,
+) => string | null
+```
+
+<scalar-field name="m" type="MediaType" required>
+
+a media type or disposition `mediaTypeParse` or
+  `formDataDispositionParse` answered
+
+</scalar-field>
+
+<scalar-field name="name" type="string" required>
+
+the parameter's name, in any case
+
+</scalar-field>
+
+<scalar-field name="returns" type="string | null">
+
+its value, quotes removed, or null when `m` has no such parameter
+
+</scalar-field>
+
+### mediaTypeParse
+
+Reads a `Content-Type` value (RFC 9110 §8.3.1): a `type/subtype` pair of
+tokens, then parameters, each `; name=value` with optional whitespace
+around the `;`, the value a token or a quoted string whose backslash takes
+the next octet as itself. Whitespace may also open and close the value.
+Type, subtype and parameter names are answered in lowercase; values as
+given, less their quoting.
+
+<scalar-code-group>
+
+```ts example.ts
+const m: MediaType | null = mediaTypeParse(value, 0, toI32(value.length));
+// m.type === "multipart", mediaTypeParam(m, "boundary") === "xyz"
+```
+
+</scalar-code-group>
+
+```ts
+const mediaTypeParse: (
+  value: readonly u8[],
+  from: i32,
+  to: i32,
+) => MediaType | null
+```
+
+<scalar-field name="value" type="readonly u8[]" required>
+
+the octets that hold the field value
+
+</scalar-field>
+
+<scalar-field name="from" type="i32" required>
+
+where the value starts in `value`
+
+</scalar-field>
+
+<scalar-field name="to" type="i32" required>
+
+where it ends, one past its last octet
+
+</scalar-field>
+
+<scalar-field name="returns" type="MediaType | null">
+
+the media type, or null when the window is not inside `value`, a
+  token is empty or holds a non-`tchar`, a quoted string is not closed or
+  holds a control character, a parameter has no `=`, a parameter name
+  comes twice, or more than 16 parameters come
+
+</scalar-field>
+
 ## Classes
 
 ### HttpFields
@@ -448,6 +617,25 @@ class HttpFields
 | `readRequest(names: u8[][], values: u8[][], extendedConnect: boolean): i32` | Reads a request's field section (RFC 9113 §8.3.1, RFC 9114 §4.3.1). Every request has `:method`. A CONNECT without `:protocol` has `:authority` and neither `:scheme` nor `:path` (RFC 9113 §8.5). An extended CONNECT — `:protocol` present, which only `extendedConnect` allows, the version having sent SETTINGS_ENABLE_CONNECT_PROTOCOL — has all four of the others (RFC 8441 §4). Any other request has `:scheme` and `:path`. A `:path` that does not start with `/` is OPTIONS's `*` or refused, and a `host` field must name `:authority` when both are there. |
 | `readResponse(names: u8[][], values: u8[][]): i32` | Reads a response's field section: exactly one `:status`, and no other pseudo-header (RFC 9113 §8.3.2). |
 | `readTrailers(names: u8[][], values: u8[][]): i32` | Reads a trailer section: regular fields only (RFC 9113 §8.1). |
+
+### MediaType
+
+A media type or a disposition as `mediaTypeParse` and
+`formDataDispositionParse` read it: the type and subtype in lowercase, and
+the parameters in the order they came, each name in lowercase beside its
+value with any quoting removed.
+
+```ts
+class MediaType
+```
+
+| Member | |
+| --- | --- |
+| `new MediaType()` |  |
+| `names: string[]` | The parameter names, in lowercase, in the order they came. |
+| `subtype: string` | The subtype, `html` in `text/html`, in lowercase; empty for a disposition. |
+| `type: string` | The type, `text` in `text/html`, or a disposition's type, in lowercase. |
+| `values: string[]` | The parameter values, `values[k]` beside `names[k]`, quotes removed. |
 
 ## Constants
 

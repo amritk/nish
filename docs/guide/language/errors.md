@@ -58,13 +58,10 @@ nothing to hand back on success returns `Result<void, E>` and succeeds with
 | `r.expect(message)` | the `T`, or else print `message` and exit with status 1; refused by default, built under `--allow-panics` |
 
 An `expect` can end the program and no proof removes it, so by default the
-compiler refuses it, and this example builds with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do). Testing `r.isOk()` before
-`r.value`, or `unwrapOr`, as the example's other lines do, builds under the
-default:
+compiler refuses it, as it does a [`panic`](#when-failure-is-not-an-option-panic).
+Testing `r.isOk()` before `r.value`, or `unwrapOr`, builds under the default:
 
-<!-- allow-panics: unwraps a `Result` with `expect` -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const checkAge = (age: i32): Result<i32, string> => {
   if (age < 0) {
@@ -79,7 +76,6 @@ export const main = (): i32 => {
     console.log(`${r.value}`); // 30
   }
   console.log(`${checkAge(-1).unwrapOr(0)}`); // 0
-  console.log(`${checkAge(7).expect("7 is an age")}`); // 7
   return 0;
 };
 ```
@@ -295,7 +291,7 @@ certain succeeded, and it insists on a reason, which is why there is no
 compiler refuses both, and the program builds only with `--allow-panics`;
 return a `Result` instead where the program should build under the default.
 
-<!-- allow-panics: calls `panic` -->
+<!-- allow-panics: shows a function that ends the program with `panic` -->
 <!-- nish:ok --allow-panics -->
 ```ts
 const daysIn = (month: i32): i32 => {

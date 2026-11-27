@@ -60,25 +60,26 @@ Both arms of `c ? a : b` must have the same type.
 ## Loops
 
 `while`, `do … while`, `for (init; cond; update)` and `for (const x of xs)`
-are all there, with `break` and `continue`. Several examples on this page do
-`i32` arithmetic nothing bounds, so they build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); why, and the guard that
-builds them under the default, are in [Checked arithmetic](#checked-arithmetic)
-below:
+are all there, with `break` and `continue`. The arithmetic in them is
+[checked](#checked-arithmetic), so each loop below keeps its numbers in a
+range the compiler can see: a cap in the loop's condition, or a test on each
+value before it is added:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 export const main = (): i32 => {
   let steps = 0;
   let n = 27;
-  while (n !== 1) {
+  while (n !== 1 && steps < 1000) {
+    if (n < 1 || n > 700000000) {
+      return 1;   // `3 * n + 1` would not fit an i32
+    }
     n = n % 2 === 0 ? n / 2 : 3 * n + 1;
     steps++;
   }
 
   let odd = 0;
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 10 && odd < 1000; i++) {
     if (i % 2 === 0) {
       continue;
     }
@@ -87,6 +88,9 @@ export const main = (): i32 => {
 
   let total = 0;
   for (const x of [5, 10, 15]) {
+    if (x < 0 || x > 1000 || total > 1000000) {
+      return 1;
+    }
     total = total + x;
   }
 
@@ -173,27 +177,28 @@ export const main = (): i32 => {
 A clause with statements falls through the same way, so leaving out a
 `break` runs the next clause as well:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-const points = (stars: i32): i32 => {
-  let total = 0;
+const medals = (stars: i32): string => {
+  const won: string[] = [];
   switch (stars) {
     case 3:
-      total += 100;
+      won.push("gold");
     case 2:
-      total += 10;
+      won.push("silver");
     case 1:
-      total += 1;
+      won.push("bronze");
       break;
     default:
-      total = -1;
+      won.push("none");
   }
-  return total;
+  return won.join(" ");
 };
 
 export const main = (): i32 => {
-  console.log(`${points(3)} ${points(1)} ${points(7)}`);   // 111 1 -1
+  console.log(medals(3));   // gold silver bronze
+  console.log(medals(1));   // bronze
+  console.log(medals(7));   // none
   return 0;
 };
 ```
@@ -263,17 +268,18 @@ never reported unread, which is how a loop that only counts its turns is
 written. Copy a value to a second `const` to compare it with itself. On
 `f32` and `f64`, `x !== x` stays the test for NaN:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 export const main = (): i32 => {
   let turns = 0;
   for (const _item of [1, 2, 3]) {
-    turns++;
+    if (turns < 1000000) {
+      turns++;
+    }
   }
   const zero: f64 = toF64(0);
   const nan: f64 = zero / zero;
-  console.log(`${turns} ${nan !== nan}`);
+  console.log(`${turns} ${nan !== nan}`);   // 3 true
   return 0;
 };
 ```
@@ -292,7 +298,7 @@ prove it. Under `--allow-panics` the check is built in instead, and a result
 that does not fit stops the program with a message on stderr and exit
 status 1. It never wraps silently, and it is never undefined behaviour:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- allow-panics: shows the overflow panic that `square(46341)` stops with -->
 <!-- nish:ok --allow-panics -->
 ```ts
 const square = (n: i32): i32 => n * n;
@@ -312,6 +318,20 @@ divisor is proved safe, and under `--allow-panics` a zero divisor prints
 `attempt to divide by zero`. The check costs a compare and a branch, and the
 compiler removes it wherever it can prove the result fits, such as a loop
 counter under `i < n`.
+
+To build `square` under the default, give the answer a type every result
+fits: an `i32` squared always fits an `i64`, so widening both sides first
+leaves nothing to check:
+
+<!-- nish:ok -->
+```ts
+const square = (n: i32): i64 => toI64(n) * toI64(n);
+
+export const main = (): i32 => {
+  console.log(`${square(46341)}`);   // 2147488281
+  return 0;
+};
+```
 
 When wrapping is what you want — a hash, a checksum, a random-number
 generator — use an unsigned type, whose arithmetic always wraps, or the
