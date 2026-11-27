@@ -12180,6 +12180,7 @@ const RSA_PSS_SERVER_DECLARED = [
   ...[
     "tests/link/crypto_rsa_sign/main.ts",
     "tests/link/crypto_rsa_sign_f64/main.ts",
+    "tests/link/crypto_rsa_sign_interop/main.ts",
     "tests/link/net_tls_rsa_server/main.ts",
   ].map((program) => ({
     program,

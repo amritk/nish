@@ -428,8 +428,8 @@ the record that found it. The notes below the table name each such finding.
     are not counted. RSA-2 and RSA-5 are properties checked and found to hold.
     RSA-S1 to RSA-S6 cover RSA-PSS signing. RSA-S4 (Low), the key's bounds and
     strict DER, is fixed by design. RSA-S5 (Low), what a wipe cannot reach,
-    is recorded. RSA-S1 to RSA-S3 are properties, and RSA-S6 is a recorded
-    test gap. None is counted.
+    is recorded. RSA-S1 to RSA-S3 are properties, and RSA-S6 is a test gap,
+    closed by vectors from NIST, OpenSSL, Go and pyca. None is counted.
 24. PKI-18 (Medium) and PKI-21 to PKI-24 (Low) were found by running the
     module against x509-limbo and are fixed: a root's own constraints, a
     root checked as an issuer, key identifiers, the leaf's server profile and
