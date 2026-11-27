@@ -257,6 +257,24 @@ export const trim = (text: string): string => trimEnd(trimStart(text))
 export const contains = (haystack: string, needle: string): boolean => toI32(haystack.indexOf(needle)) >= 0
 
 /**
+ * Where the `count` bytes from `at` end, `at + count`, when they end by
+ * `length`; `-1` when any of the three is negative or they run past it. Written as
+ * differences, each of which `src/bounds.ts` proves, so the end needs no
+ * overflow check and no cast through `u32`.
+ */
+const textSpanEnd = (length: i32, at: i32, count: i32): i32 => {
+  if (length < 0 || at < 0 || count < 0) {
+    return -1
+  }
+  const room: i32 = length - at
+  if (room < 0) {
+    return -1
+  }
+  const gap: i32 = room - count
+  return gap < 0 ? -1 : length - gap
+}
+
+/**
  * The pieces of `text` between the occurrences of `sep`: JavaScript's
  * `text.split(sep)` for a separator that is not empty. A separator at the
  * start, at the end or next to another gives an empty piece, so
@@ -312,9 +330,12 @@ export const split = (text: string, sep: string): string[] => {
     if (start >= 0 && start < length && at >= 0 && at < length) {
       parts.push(text.substring(start, at))
     }
-    // A hit is a whole separator that ends by `length`, so the sum is at
-    // most `length`: it neither wraps a `u32` nor leaves an `i32`.
-    start = toI32(toU32(at) + toU32(sepLength))
+    // A hit is a whole separator that ends by `length`, so its end is never
+    // `-1`; the test is what keeps `start` a position in `text`.
+    start = textSpanEnd(length, at, sepLength)
+    if (start < 0) {
+      return parts
+    }
   }
 }
 
@@ -372,9 +393,12 @@ export const splitLimit = (text: string, sep: string, limit: i32): string[] => {
     if (toI32(parts.length) === limit) {
       return parts
     }
-    // A hit is a whole separator that ends by `length`, so the sum is at
-    // most `length`: it neither wraps a `u32` nor leaves an `i32`.
-    start = toI32(toU32(at) + toU32(sepLength))
+    // A hit is a whole separator that ends by `length`, so its end is never
+    // `-1`; the test is what keeps `start` a position in `text`.
+    start = textSpanEnd(length, at, sepLength)
+    if (start < 0) {
+      return parts
+    }
   }
 }
 
@@ -600,9 +624,13 @@ export const replaceAll = (text: string, needle: string, replacement: string): s
       return parts.join(replacement)
     }
     parts.push(rest.substring(0, at))
-    // A hit is a whole `needle` inside `rest`, so the sum is at most
-    // `rest.length`: it neither wraps a `u32` nor leaves an `i32`.
-    rest = rest.substring(toI32(toU32(at) + toU32(needleLength)), toI32(rest.length))
+    // A hit is a whole `needle` inside `rest`, so its end is never `-1`; the
+    // test is what keeps the cut inside `rest`.
+    const after: i32 = textSpanEnd(toI32(rest.length), at, needleLength)
+    if (after < 0) {
+      return parts.join(replacement)
+    }
+    rest = rest.substring(after, toI32(rest.length))
   }
 }
 
