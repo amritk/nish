@@ -183,7 +183,7 @@ function ArenaDb.query(this: ArenaDb, h: HttpServer, r: HttpServerRequest, min: 
   calls: ArenaDb.sendEmpty ArenaJob.constructor llvm.smax.i64 llvm.smin.i64 nish.JsonWriter.beginArray nish.JsonWriter.beginObject nish.JsonWriter.key nish.JsonWriter.reset nish.PgPool.request nish_alloc_struct nish_array_grow nish_panic_index
   pointer this: size=112 writesThrough=false captured=false passedTo=ArenaDb.sendEmpty#0 ArenaDb.sendEmpty#0 ArenaDb.sendEmpty#0
   pointer h: size=568 writesThrough=true captured=false passedTo=ArenaDb.sendEmpty#1 ArenaDb.sendEmpty#1 ArenaDb.sendEmpty#1
-  pointer r: size=200 writesThrough=true captured=true passedTo=ArenaDb.sendEmpty#2 ArenaDb.sendEmpty#2 ArenaDb.sendEmpty#2
+  pointer r: size=224 writesThrough=true captured=true passedTo=ArenaDb.sendEmpty#2 ArenaDb.sendEmpty#2 ArenaDb.sendEmpty#2
   stackSites=0 stackLocals=0
   local -8:11 pool: PgPool | null (const)
   callee -6:7 ArenaDb.sendEmpty -> @ArenaDb.sendEmpty
@@ -428,6 +428,6 @@ function ArenaDb.sendEmpty(this: ArenaDb, h: HttpServer, r: HttpServerRequest): 
   calls: nish.HttpServer.send
   pointer this: size=112 writesThrough=false captured=false
   pointer h: size=568 writesThrough=true captured=false passedTo=nish.HttpServer.send#0
-  pointer r: size=200 writesThrough=true captured=true passedTo=nish.HttpServer.send#1
+  pointer r: size=224 writesThrough=true captured=true passedTo=nish.HttpServer.send#1
   stackSites=0 stackLocals=0
   callee +0:5 HttpServer.send -> @nish.HttpServer.send
