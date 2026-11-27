@@ -11018,44 +11018,46 @@ function base64urlEncode(data: u8[]): string -> @nish.base64urlEncode [exported]
   callee +12:38 base64urlCharOf -> @nish.base64urlCharOf
   callee +18:36 base64urlCharOf -> @nish.base64urlCharOf
 function base64urlDecode(text: string): u8[] | null -> @nish.base64urlDecode [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.base64Put nish.base64urlSextetOf nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.base64Put nish.base64urlSextetOf
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 tail: i32 (const)
-  local +10:9 out: u8[] (const)
-  local +14:7 bad: i32 (let)
-  local +25:9 full: u32 (const)
-  local +26:7 j: i32 (let)
-  local +27:12 k: u32 (let)
-  local +28:11 i0: i32 (const)
-  local +29:11 i1: i32 (const)
-  local +30:11 i2: i32 (const)
-  local +31:11 i3: i32 (const)
-  local +32:11 s0: i32 (const)
-  callee +32:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +33:11 s1: i32 (const)
-  callee +33:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +34:11 s2: i32 (const)
-  callee +34:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +35:11 s3: i32 (const)
-  callee +35:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +37:11 word: i32 (const)
-  callee +38:9 base64Put -> @nish.base64Put
-  callee +39:9 base64Put -> @nish.base64Put
-  callee +40:9 base64Put -> @nish.base64Put
-  local +46:11 i0: i32 (const)
-  local +47:11 i1: i32 (const)
-  local +48:11 i2: i32 (const)
-  local +49:11 s0: i32 (const)
-  callee +49:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +50:11 s1: i32 (const)
-  callee +50:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +53:11 s2: i32 (const)
-  callee +53:55 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +55:11 word: i32 (const)
-  callee +56:9 base64Put -> @nish.base64Put
-  callee +58:7 base64Put -> @nish.base64Put
+  local +12:7 short: i32 (let)
+  local +16:9 whole: i32 (const)
+  local +17:9 out: u8[] (const)
+  local +21:7 bad: i32 (let)
+  local +32:9 full: u32 (const)
+  local +33:7 j: i32 (let)
+  local +34:12 k: u32 (let)
+  local +35:11 i0: i32 (const)
+  local +36:11 i1: i32 (const)
+  local +37:11 i2: i32 (const)
+  local +38:11 i3: i32 (const)
+  local +39:11 s0: i32 (const)
+  callee +39:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +40:11 s1: i32 (const)
+  callee +40:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +41:11 s2: i32 (const)
+  callee +41:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +42:11 s3: i32 (const)
+  callee +42:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +44:11 word: i32 (const)
+  callee +45:9 base64Put -> @nish.base64Put
+  callee +46:9 base64Put -> @nish.base64Put
+  callee +47:9 base64Put -> @nish.base64Put
+  local +53:11 i0: i32 (const)
+  local +54:11 i1: i32 (const)
+  local +55:11 i2: i32 (const)
+  local +56:11 s0: i32 (const)
+  callee +56:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +57:11 s1: i32 (const)
+  callee +57:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +60:11 s2: i32 (const)
+  callee +60:55 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +62:11 word: i32 (const)
+  callee +63:9 base64Put -> @nish.base64Put
+  callee +65:7 base64Put -> @nish.base64Put
 function base64StdPadCharOf(v: i32): i32 -> @nish.base64StdPadCharOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: v
@@ -11129,21 +11131,23 @@ function base64StdPadDecodedLength(text: u8[], start: i32, length: i32): i32 -> 
   local +11:11 v: i32 (const)
   callee +11:20 base64StdPadSextetOf -> @nish.base64StdPadSextetOf
 function base64StdPadDecode(text: string): u8[] | null -> @nish.base64StdPadDecode [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.base64Put nish.base64StdPadSextetOf nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.base64Put nish.base64StdPadSextetOf
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +5:7 pad: u32 (let)
-  local +9:9 chars: i32 (const)
-  local +10:9 out: u8[] (const)
-  local +11:7 bad: i32 (let)
-  local +12:7 acc: i32 (let)
-  local +13:7 bits: u32 (let)
-  local +14:7 j: i32 (let)
-  local +17:12 k: i32 (let)
-  local +18:11 v: i32 (const)
-  callee +18:20 base64StdPadSextetOf -> @nish.base64StdPadSextetOf
-  callee +24:11 base64Put -> @nish.base64Put
+  local +9:7 pad: u32 (let)
+  local +16:7 last: i32 (let)
+  local +23:9 whole: i32 (const)
+  local +24:9 out: u8[] (const)
+  local +25:9 chars: i32 (const)
+  local +26:7 bad: i32 (let)
+  local +27:7 acc: i32 (let)
+  local +28:7 bits: u32 (let)
+  local +29:7 j: i32 (let)
+  local +32:12 k: i32 (let)
+  local +33:11 v: i32 (const)
+  callee +33:20 base64StdPadSextetOf -> @nish.base64StdPadSextetOf
+  callee +39:11 base64Put -> @nish.base64Put
 module std/crypto/sha1.ts [package nish]
 const SHA1_SIZE: i32 = 20 [exported]
 const SHA1_BLOCK: i32 = 64 [exported]
@@ -37280,7 +37284,7 @@ function derToPem(der: u8[], label: string): string -> @nish.derToPem [exported]
   local +3:7 at: i32 (let)
   local +6:11 end: i32 (const)
 function pemToDer(pem: string, label: string): u8[][] | null -> @nish.pemToDer [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.base64StdPadDecode nish.x509EndsWith nish.x509StartsWith nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
@@ -37388,7 +37392,7 @@ function x509FirstBlock(blocks: u8[][]): u8[] -> @nish.x509FirstBlock
   stackSites=0 stackLocals=0
   local +0:14 block: u8[] (const)
 function x509ParseP256PrivateKey(pem: string): Secret<u8[]> | null -> @nish.x509ParseP256PrivateKey [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.pemToDer
   escaping: pem
   calls: nish.pemToDer nish.x509FirstBlock nish.x509Pkcs8Key nish.x509Sec1Key nish.x509WipeBlocks
