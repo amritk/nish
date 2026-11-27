@@ -11749,7 +11749,7 @@ const HTTP1_TICK = "Http1Server.tick"
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
 
 /** WP80 S8's release-note words, a checked HTTP/1 server config and the twins the server examples call. */
-const CHECKED_CONFIG = "a checked HTTP/1 server config"
+const CHECKED_CONFIG = "Http1Server caps once"
 const checkedConfig = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: CHECKED_CONFIG, why }))
