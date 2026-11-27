@@ -390,6 +390,10 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
         "a size-0 binding reached the device and the process lived",
       ],
       [
+        "gfx: nishgfx_buffer_new builds a buffer from scalars that takes a write, and a bad usage is one validation report",
+        "buffer_new from scalars takes a write, and a bad usage is one validation report",
+      ],
+      [
         "gfx: offscreen_create refuses 0 and 16385 a side and hands 16384 to the device",
         "offscreen refuses 0 and 16385, hands 16384 to the device",
       ],

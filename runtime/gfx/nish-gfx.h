@@ -305,6 +305,19 @@ uint32_t nishgfx_errors_dropped(NishGfxDevice *device);
  */
 NishGfxBuffer *nishgfx_buffer_create(NishGfxDevice *device, const NishGfxBufferDesc *desc, const char *label);
 /**
+ * Create a buffer from scalars: nishgfx_buffer_create with the descriptor
+ * built here, for a caller that cannot build a NishGfxBufferDesc.
+ *
+ * @param device the device it lives on
+ * @param size its size in bytes
+ * @param usage WGPUBufferUsage bits
+ * @param mapped_at_creation nonzero to start it mapped
+ * @param label a debug label, or null
+ * @returns the buffer, or null when wgpu-native answers none
+ */
+NishGfxBuffer *nishgfx_buffer_new(NishGfxDevice *device, uint64_t size, uint32_t usage,
+                                  uint32_t mapped_at_creation, const char *label);
+/**
  * Release a buffer.
  *
  * @param buffer the buffer to release

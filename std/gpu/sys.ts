@@ -280,6 +280,18 @@ export declare function nishgfx_errors_dropped(device: NishGfxDevice): u32
  */
 declare function nishgfx_buffer_create(device: NishGfxDevice, desc: NishGfxBufferDesc, label: string | null): NishGfxBuffer | null
 /**
+ * Create a buffer from scalars: nishgfx_buffer_create with the descriptor
+ * built here, for a caller that cannot build a NishGfxBufferDesc.
+ *
+ * @param device the device it lives on
+ * @param size its size in bytes
+ * @param usage WGPUBufferUsage bits
+ * @param mapped_at_creation nonzero to start it mapped
+ * @param label a debug label, or null
+ * @returns the buffer, or null when wgpu-native answers none
+ */
+export declare function nishgfx_buffer_new(device: NishGfxDevice, size: u64, usage: u32, mapped_at_creation: u32, label: string | null): NishGfxBuffer | null
+/**
  * Release a buffer.
  *
  * @param buffer the buffer to release

@@ -696,6 +696,12 @@ NishGfxBuffer *nishgfx_buffer_create(NishGfxDevice *dev, const NishGfxBufferDesc
   return b;
 }
 
+NishGfxBuffer *nishgfx_buffer_new(NishGfxDevice *dev, uint64_t size, uint32_t usage, uint32_t mapped_at_creation,
+                                  const char *label) {
+  NishGfxBufferDesc d = {size, usage, mapped_at_creation};
+  return nishgfx_buffer_create(dev, &d, label);
+}
+
 void nishgfx_buffer_release(NishGfxBuffer *b) {
   if (b == NULL) return;
   wgpuBufferRelease(b->buffer);
