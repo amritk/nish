@@ -93,7 +93,6 @@ import {
   kittyFrame,
   scaleFramebuffer,
   sixelFrame,
-  tryFramebuffer,
 } from "nish/term-pixels"
 
 /** The kitty image id a `Terminal` draws its framebuffer as. */
@@ -359,24 +358,19 @@ export class Terminal {
    * @param cols The terminal's columns.
    * @param rows The terminal's rows.
    * @param held The events that arrived during the probe, which `readEvents` hands over first.
-   * @param framebuffer The pixels the program draws into, already at the options' size.
    */
-  constructor(
-    options: TerminalOptions,
-    caps: TermCaps,
-    cols: i32,
-    rows: i32,
-    held: TermEvent[],
-    framebuffer: Framebuffer,
-  ) {
+  constructor(options: TerminalOptions, caps: TermCaps, cols: i32, rows: i32, held: TermEvent[]) {
     this.options = options
     this.caps = caps
     this.palette256 = !caps.trueColor
     this.screen = new Screen(cols, rows, this.palette256)
     this.screen.sync = false
     this.canvas = new Canvas(this.screen)
-    this.framebuffer = framebuffer
-    this.scaled = new Framebuffer()
+    const fbW: i32 =
+      options.framebufferWidth > 0 && options.framebufferHeight > 0 ? options.framebufferWidth : 0
+    const fbH: i32 = fbW > 0 ? options.framebufferHeight : 0
+    this.framebuffer = new Framebuffer(fbW, fbH)
+    this.scaled = new Framebuffer(0, 0)
     this.pixels = new PixelBytes(4096)
     this.decoder = new KeyDecoder(TERM_IO_ESCAPE_MS)
     this.keys = new KeyState()
@@ -486,7 +480,7 @@ export class Terminal {
       this.focusOn = true
       this.turnOn("\x1b[?1004h")
     }
-    if (this.graphics === GRAPHICS_KITTY && this.framebuffer.pixelWidth() > 0) {
+    if (this.graphics === GRAPHICS_KITTY && this.framebuffer.width > 0) {
       // Before the first frame, so a panic mid-image deletes it.
       this.kittyImage = true
       setTerminalRestore(this.restoreString())
@@ -791,19 +785,19 @@ export class Terminal {
       this.rectCols === this.screen.width &&
       this.rectRows === this.screen.height &&
       this.rectBackend === backend &&
-      this.rectWidth === fb.pixelWidth() &&
-      this.rectHeight === fb.pixelHeight()
+      this.rectWidth === fb.width &&
+      this.rectHeight === fb.height
     ) {
       return
     }
     this.rectCols = this.screen.width
     this.rectRows = this.screen.height
     this.rectBackend = backend
-    this.rectWidth = fb.pixelWidth()
-    this.rectHeight = fb.pixelHeight()
+    this.rectWidth = fb.width
+    this.rectHeight = fb.height
     this.rect = fitFramebuffer(
-      fb.pixelWidth(),
-      fb.pixelHeight(),
+      fb.width,
+      fb.height,
       this.screen.width,
       this.screen.height,
       this.cellWidthPx,
@@ -860,14 +854,12 @@ export class Terminal {
     }
     let withPixels: boolean = false
     const fb: Framebuffer = this.framebuffer
-    if (fb.pixelWidth() > 0) {
+    if (fb.width > 0) {
       this.fit(backend)
       let src: Framebuffer = fb
       if (d.resolutionDivisor > 1) {
-        // The controller's divisor is 2 or 4, so `scaleFramebuffer` takes it.
-        if (scaleFramebuffer(fb, d.resolutionDivisor, this.scaled).isOk()) {
-          src = this.scaled
-        }
+        scaleFramebuffer(fb, d.resolutionDivisor, this.scaled)
+        src = this.scaled
       }
       if (backend === GRAPHICS_KITTY) {
         this.pixels.reset()
@@ -920,20 +912,12 @@ const termIoRefusal = (): string => {
  * panic or be signalled before `close`.
  *
  * @param options What to turn on, and how to pace frames.
- * @returns The open terminal, or an `Err` saying why not: stdin or stdout is not a terminal, the
- *   options ask for a framebuffer size `tryFramebuffer` refuses, or raw mode was refused.
+ * @returns The open terminal, or an `Err` saying why not: stdin or stdout is not a terminal, or raw mode was refused.
  */
 export const openTerminal = (options: TerminalOptions): Result<Terminal, string> => {
   const refused: string = termIoRefusal()
   if (refused !== "") {
     return Err(refused)
-  }
-  const fbW: i32 =
-    options.framebufferWidth > 0 && options.framebufferHeight > 0 ? options.framebufferWidth : 0
-  const fbH: i32 = fbW > 0 ? options.framebufferHeight : 0
-  const framebuffer: Result<Framebuffer, string> = tryFramebuffer(fbW, fbH)
-  if (framebuffer.isErr()) {
-    return Err(framebuffer.error)
   }
   if (setRawMode(true) !== 0) {
     return Err("the terminal refused raw mode")
@@ -972,7 +956,7 @@ export const openTerminal = (options: TerminalOptions): Result<Terminal, string>
   if (!finished) {
     probe.finish(termIoNowMs())
   }
-  const term: Terminal = new Terminal(options, probe.result(), cols, rows, probe.heldEvents(), framebuffer.value)
+  const term: Terminal = new Terminal(options, probe.result(), cols, rows, probe.heldEvents())
   term.enable()
   return Ok(term)
 }

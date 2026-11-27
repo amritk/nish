@@ -84,7 +84,7 @@ export class View {
 
   /** A view of an empty framebuffer; `viewFor` points it at a real one. */
   constructor() {
-    this.fb = new Framebuffer()
+    this.fb = new Framebuffer(0, 0)
     this.scale = 0.0
     this.offsetX = 0.0
     this.offsetY = 0.0
@@ -103,8 +103,8 @@ export class View {
  * frame costs no allocation.
  */
 export const viewFor = (view: View, fb: Framebuffer, shakeX: f64, shakeY: f64): void => {
-  const w: f64 = toF64(fb.pixelWidth())
-  const h: f64 = toF64(fb.pixelHeight())
+  const w: f64 = toF64(fb.width)
+  const h: f64 = toF64(fb.height)
   const scale: f64 = Math.min(w / WORLD_W, h / WORLD_H)
   const baseX: f64 = Math.floor((w - WORLD_W * scale) / 2.0)
   const baseY: f64 = Math.floor((h - WORLD_H * scale) / 2.0)
@@ -177,28 +177,28 @@ export const outBounce = (t: f64): f64 => {
 /** Every pixel of the framebuffer, as a vertical gradient from `top` to `bottom`: the background. */
 export const gradient = (view: View, top: i32, bottom: i32): void => {
   const fb: Framebuffer = view.fb
-  rasterGradient(rasterFrame(fb.pixelData()), fb.pixelWidth(), fb.pixelHeight(), top, bottom)
+  rasterGradient(rasterFrame(fb.pixels), fb.width, fb.height, top, bottom)
 }
 
 /** Paint the framebuffer outside the unshaken world with `colour`, hiding anything a shake pushed over the edge. */
 export const fillLetterbox = (view: View, colour: i32): void => {
   const fb: Framebuffer = view.fb
-  rasterRect(rasterFrame(fb.pixelData()), fb.pixelWidth(), fb.pixelHeight(), 0, 0, fb.pixelWidth(), view.top, colour, RASTER_SOLID)
+  rasterRect(rasterFrame(fb.pixels), fb.width, fb.height, 0, 0, fb.width, view.top, colour, RASTER_SOLID)
   rasterRect(
-    rasterFrame(fb.pixelData()),
-    fb.pixelWidth(),
-    fb.pixelHeight(),
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
     0,
     view.bottom,
-    fb.pixelWidth(),
-    fb.pixelHeight(),
+    fb.width,
+    fb.height,
     colour,
     RASTER_SOLID
   )
   rasterRect(
-    rasterFrame(fb.pixelData()),
-    fb.pixelWidth(),
-    fb.pixelHeight(),
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
     0,
     view.top,
     view.left,
@@ -207,12 +207,12 @@ export const fillLetterbox = (view: View, colour: i32): void => {
     RASTER_SOLID
   )
   rasterRect(
-    rasterFrame(fb.pixelData()),
-    fb.pixelWidth(),
-    fb.pixelHeight(),
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
     view.right,
     view.top,
-    fb.pixelWidth(),
+    fb.width,
     view.bottom,
     colour,
     RASTER_SOLID
@@ -221,7 +221,7 @@ export const fillLetterbox = (view: View, colour: i32): void => {
 
 /** The pixel rectangle `x0..x1` × `y0..y1` (exclusive) filled with `colour`. */
 const solidRect = (fb: Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, colour: i32): void => {
-  rasterRect(rasterFrame(fb.pixelData()), fb.pixelWidth(), fb.pixelHeight(), x0, y0, x1, y1, colour, RASTER_SOLID)
+  rasterRect(rasterFrame(fb.pixels), fb.width, fb.height, x0, y0, x1, y1, colour, RASTER_SOLID)
 }
 
 /** The world rectangle at `x`, `y` (its top-left) of `w` × `h`, filled with `colour`. */
@@ -239,7 +239,7 @@ export const blendRect = (view: View, x: f64, y: f64, w: f64, h: f64, colour: i3
   const y0: i32 = rasterPixel(pixelY(view, y) + 0.5)
   const x1: i32 = rasterPixel(pixelX(view, x + w) + 0.5)
   const y1: i32 = rasterPixel(pixelY(view, y + h) + 0.5)
-  rasterRect(rasterFrame(fb.pixelData()), fb.pixelWidth(), fb.pixelHeight(), x0, y0, x1, y1, colour, rasterWeight(t))
+  rasterRect(rasterFrame(fb.pixels), fb.width, fb.height, x0, y0, x1, y1, colour, rasterWeight(t))
 }
 
 /**
@@ -279,9 +279,9 @@ export const disc = (view: View, cx: f64, cy: f64, r: f64, colour: i32): void =>
 export const discAlpha = (view: View, cx: f64, cy: f64, r: f64, colour: i32, alpha: f64): void => {
   const fb: Framebuffer = view.fb
   rasterDisc(
-    rasterFrame(fb.pixelData()),
-    fb.pixelWidth(),
-    fb.pixelHeight(),
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
     pixelX(view, cx),
     pixelY(view, cy),
     r * view.scale,
@@ -298,9 +298,9 @@ export const discAlpha = (view: View, cx: f64, cy: f64, r: f64, colour: i32, alp
 export const glow = (view: View, cx: f64, cy: f64, r: f64, colour: i32, strength: f64): void => {
   const fb: Framebuffer = view.fb
   rasterGlow(
-    rasterFrame(fb.pixelData()),
-    fb.pixelWidth(),
-    fb.pixelHeight(),
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
     pixelX(view, cx),
     pixelY(view, cy),
     r * view.scale,
@@ -316,9 +316,9 @@ export const glow = (view: View, cx: f64, cy: f64, r: f64, colour: i32, strength
 export const drawTrail = (view: View, trail: RasterTrail, r: f64, colour: i32, alpha: f64): void => {
   const fb: Framebuffer = view.fb
   rasterTrail(
-    rasterFrame(fb.pixelData()),
-    fb.pixelWidth(),
-    fb.pixelHeight(),
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
     trail,
     r,
     colour,
@@ -350,7 +350,7 @@ export const drawText = (view: View, x: f64, y: f64, scale: i32, text: string, c
   const fb: Framebuffer = view.fb
   const px: i32 = rasterPixel(pixelX(view, x) + 0.5)
   const py: i32 = rasterPixel(pixelY(view, y) + 0.5)
-  rasterText(rasterFrame(fb.pixelData()), fb.pixelWidth(), fb.pixelHeight(), px, py, scale, text, colour)
+  rasterText(rasterFrame(fb.pixels), fb.width, fb.height, px, py, scale, text, colour)
 }
 
 /** `drawText` over a copy in `shadow` one font pixel down and to the right, which keeps it legible on anything. */
@@ -367,8 +367,8 @@ export const drawTextShadow = (
   const px: i32 = rasterPixel(pixelX(view, x) + 0.5)
   const py: i32 = rasterPixel(pixelY(view, y) + 0.5)
   const drop: i32 = Math.min(scale, RASTER_MAX_TEXT_SCALE)
-  rasterText(rasterFrame(fb.pixelData()), fb.pixelWidth(), fb.pixelHeight(), px + drop, py + drop, scale, text, shadow)
-  rasterText(rasterFrame(fb.pixelData()), fb.pixelWidth(), fb.pixelHeight(), px, py, scale, text, colour)
+  rasterText(rasterFrame(fb.pixels), fb.width, fb.height, px + drop, py + drop, scale, text, shadow)
+  rasterText(rasterFrame(fb.pixels), fb.width, fb.height, px, py, scale, text, colour)
 }
 
 /** `text` centred on world `cx` with its top at `y`, over a shadow unless `shadow` is `NO_SHADOW`. */
@@ -386,9 +386,9 @@ export const drawTextCentred = (
   const py: i32 = rasterPixel(pixelY(view, y) + 0.5)
   if (shadow !== NO_SHADOW) {
     const drop: i32 = Math.min(scale, RASTER_MAX_TEXT_SCALE)
-    rasterText(rasterFrame(fb.pixelData()), fb.pixelWidth(), fb.pixelHeight(), px + drop, py + drop, scale, text, shadow)
+    rasterText(rasterFrame(fb.pixels), fb.width, fb.height, px + drop, py + drop, scale, text, shadow)
   }
-  rasterText(rasterFrame(fb.pixelData()), fb.pixelWidth(), fb.pixelHeight(), px, py, scale, text, colour)
+  rasterText(rasterFrame(fb.pixels), fb.width, fb.height, px, py, scale, text, colour)
 }
 
 // ---- Particles -------------------------------------------------------------
@@ -409,9 +409,9 @@ export const stepParticles = (pool: RasterParticles, gravity: f64, drag: f64): v
 export const drawParticles = (view: View, pool: RasterParticles, alpha: f64): void => {
   const fb: Framebuffer = view.fb
   rasterParticles(
-    rasterFrame(fb.pixelData()),
-    fb.pixelWidth(),
-    fb.pixelHeight(),
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
     pool,
     alpha,
     view.scale,

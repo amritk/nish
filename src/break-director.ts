@@ -602,10 +602,8 @@ export const sizeBreakFramebuffer = (d: BreakDirector, fb: Framebuffer, roomW: i
     w = roomW
     h = (w * 9) / 16
   }
-  // A size `resize` refuses (negative, or past 2^31 - 1 pixels) leaves the
-  // framebuffer as it was; the room and the resolution steps never make one.
-  if ((fb.pixelWidth() !== w || fb.pixelHeight() !== h) && fb.resize(w, h).isErr()) {
-    return
+  if (fb.width !== w || fb.height !== h) {
+    fb.resize(w, h)
   }
 }
 
@@ -644,8 +642,8 @@ const directorDrawText = (d: BreakDirector, fb: Framebuffer, stats: TermStats): 
       11.0,
       scale,
       d.terminal
-        ? `${breakGraphicsLabel(stats.backend)} ${fb.pixelWidth()}x${fb.pixelHeight()} ${fps === 0 ? "auto" : `${fps}`}fps`
-        : `${fb.pixelWidth()}x${fb.pixelHeight()}`,
+        ? `${breakGraphicsLabel(stats.backend)} ${fb.width}x${fb.height} ${fps === 0 ? "auto" : `${fps}`}fps`
+        : `${fb.width}x${fb.height}`,
       rasterRgb(200, 200, 200),
       shadow
     )

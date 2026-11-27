@@ -122,9 +122,9 @@ export const base64EncodeIfFits = (src: u8[], off: i32, len: i32, dst: u8[], at:
   if (off < 0 || len < 0 || off > srcLength - len) {
     return -1
   }
-  // Four characters for every three bytes, in i64, where no count overflows.
-  const need: i64 = ((toI64(len) + toI64(2)) / toI64(3)) * toI64(4)
-  if (at < 0 || need > toI64(dstLength - at)) {
+  // Four characters for every three bytes, in f64, where no count overflows.
+  const need: f64 = Math.ceil(toF64(len) / 3.0) * 4.0
+  if (at < 0 || need > toF64(dstLength - at)) {
     return -1
   }
   // A local, so that `abc.length >= 64` below is a fact about the string each

@@ -1,9 +1,18 @@
+// Opt-out (`--allow-panics`), recorded against #2208, for the std sites left
+// between this file and the no-panic default; it keeps none of its own:
+// `fb.set` reaches the `panic` `Framebuffer.set` keeps in std/term-pixels.ts
+// for a pixel store out of step with its size, and `runTerminal` reaches a
+// `slice` site in std/term-io.ts (#2385). The compiler names one site per
+// call. Follow-up: make both calls panic-free, then build this file without
+// `--allow-panics`.
+//
 // What `nish/term-io` found out about this terminal, and how its frame loop
 // settled: attach the output to a bug report about a terminal that draws
 // wrong. It opens the terminal, presents a moving picture for five seconds,
 // closes it, and prints every `TermCaps` field and one stats line per second.
-//   nish run examples/term-probe.ts
+//   nish run --allow-panics examples/term-probe.ts
 // Off a terminal it refuses, as the smoke run's /dev/null stdin is:
+// smoke: args --allow-panics
 // smoke: exit 1
 import { monotonicNanos } from "nish:process"
 import { TermCaps } from "nish/term-probe"
@@ -46,8 +55,8 @@ const render = (p: Probe, frame: Frame): void => {
   p.frames = p.frames + toU32(1)
   const fb = frame.framebuffer
   fb.fill(BACKGROUND)
-  const width: i32 = fb.pixelWidth()
-  const height: i32 = fb.pixelHeight()
+  const width: i32 = fb.width
+  const height: i32 = fb.height
   // The options ask for 320 by 180, so these tests always hold: they are the
   // bounds that prove the band's arithmetic cannot overflow or divide by 0.
   if (width > 20 && height >= 0 && height <= 180) {
