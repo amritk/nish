@@ -44,7 +44,7 @@ Terminal output and input, a step's input with no terminal, and command-line par
 
 <scalar-card title="Graphics and sound" icon="phosphor/regular/paint-brush" href="#graphics-and-sound">
 
-Drawing into a frame of pixels and making short sounds: 2 modules.
+Drawing into a frame of pixels and making short sounds: 3 modules.
 
 </scalar-card>
 
@@ -169,6 +169,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 
 | Module | |
 | --- | --- |
+| [`nish/gpu/sys`](gpu/sys.md) |  |
 | [`nish/raster`](raster.md) | Software drawing into a frame of `0xRRGGBB` pixels: colour arithmetic, rectangles, anti-aliased discs, additive glows, a vertical gradient, a 5×7 pixel font, and two fixed pools that move and draw themselves (a particle pool and a trail). |
 | [`nish/synth`](synth.md) | Short sounds made from nothing: square, triangle and noise voices with a pitch slide and a decaying envelope, mixed into an array of `f64` samples. |
 

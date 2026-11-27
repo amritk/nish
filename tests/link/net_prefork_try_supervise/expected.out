@@ -1,0 +1,12 @@
+PASS  a tick of 0
+PASS  UDP without a port
+PASS  workers below 0
+PASS  a backoff cap below the backoff
+PASS  a port above 65535
+PASS  listen flags not 0 or 2
+PASS  a service worker not below the count
+PASS  UDP with more than 255 workers
+PASS  no channel woke the program
+PASS  tryPreforkWorkers answers a worker
+PASS  with the worker's index
+nish/net/prefork tryPreforkSupervise: 11 passed, 0 failed, 0 skipped

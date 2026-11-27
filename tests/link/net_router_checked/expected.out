@@ -1,0 +1,8 @@
+refused: RouterLimits.maxSegments: 0 is outside 1 to 256
+refused: RouterLimits.maxMethods: 65 is outside 1 to 64
+inside: route 0, 1 param at 7 to 8
+past the end: not found
+negative method start: not found
+negative target start: not found
+reversed target: not found
+off the table: -1, -1

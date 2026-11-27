@@ -1,4 +1,4 @@
-// WP27 S4.1: A layout is lent only to a `declare function`, never through an exported signature.
+// WP27 S4.1: A layout is lent only to its own module's `declare function`s, never through an exported signature.
 declare class Point {
   x: i32
 }

@@ -2641,11 +2641,12 @@ const checkSurvivingRangeCheck = (walk: PerfWalk, value: Node): void => {
  *
  * A `declare function` is silent too, and testing `exported` is not enough to
  * get that right. A foreign declaration is external because C defines it, not
- * because this module withheld an `export` — and `export declare function` is
- * refused outright, so `exported` is *always* false for one. Both rewrites the
- * message names are therefore unavailable: exporting it is an error, and
- * dropping the flag would not make it `internal`, because there is no body here
- * to give linkage to. The IR says as much — the `declare` line is the same
+ * because this module withheld an `export` — and an `export declare function`
+ * (WP89 S3b) only lends the binding to the modules that import it, so
+ * `exported` says nothing about its linkage. Both rewrites the message names
+ * are therefore unavailable: exporting it still defines nothing, and dropping
+ * the flag would not make it `internal`, because there is no body here to give
+ * linkage to. The IR says as much — the `declare` line is the same
  * under the flag as under the default, and a program whose only functions are
  * its entry and the declaration comes out byte for byte identical either way,
  * so the warning would be naming a cost that is not being paid. `foreign()` is

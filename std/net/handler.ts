@@ -1121,19 +1121,23 @@ export class HttpHandler {
     for (let s: i32 = 0; s < toI32(open.length) && s < toI32(current.length); s++) {
       const isOpen: boolean = open[s]
       const idle: boolean = current[s] === -1
-      if (
-        isOpen &&
-        this.server.holds(s) &&
-        idle &&
-        (this.server.resting(s) || !this.server.connection(s).wantsWrite())
-      ) {
+      if (isOpen && this.server.holds(s) && idle && (this.server.resting(s) || !this.owesOutput(s))) {
         this.closeSlot(s)
       } else if (isOpen && this.server.holds(s)) {
         // Its exchange is its last: the answer says `Connection: close` if
         // it is not yet started, and no pipelined request is read behind it.
-        this.server.connection(s).closeAfter = true
+        const conn: Http1Connection | null = this.server.tryConnection(s)
+        if (conn !== null) {
+          conn.closeAfter = true
+        }
       }
     }
+  }
+
+  /** Whether `slot`'s connection has output waiting for its socket; false when the server gives it none. */
+  private owesOutput(slot: i32): boolean {
+    const conn: Http1Connection | null = this.server.tryConnection(slot)
+    return conn !== null && conn.wantsWrite()
   }
 
   /** Takes every waiting connection. */
@@ -1179,8 +1183,10 @@ export class HttpHandler {
         continue
       }
       owing[slot] = false
-      if (open[slot] && this.server.holds(slot)) {
-        this.settle(slot, this.server.connection(slot))
+      const conn: Http1Connection | null =
+        open[slot] && this.server.holds(slot) ? this.server.tryConnection(slot) : null
+      if (conn !== null) {
+        this.settle(slot, conn)
       }
     }
   }
@@ -1200,7 +1206,12 @@ export class HttpHandler {
    * the send waits for `flush`, so the answers behind this one go out with it.
    */
   private drive(slot: i32): void {
-    const conn: Http1Connection = this.server.connection(slot)
+    const conn: Http1Connection | null = this.server.tryConnection(slot)
+    if (conn === null) {
+      // The server could build no connection for it: nothing to drive.
+      this.closeSlot(slot)
+      return
+    }
     let event: i32 = this.unended(slot) ? H1_NEED_MORE : this.server.next(slot)
     while (event !== H1_NEED_MORE && event !== H1_ERROR) {
       if (event === H1_REQUEST) {
@@ -1388,7 +1399,7 @@ export class HttpHandler {
    */
   private route(r: HttpRequest): void {
     const params: i32[] = r.params
-    let route: i32 = this.router.match(
+    let route: i32 = this.router.tryMatch(
       r.head,
       r.methodStart,
       r.methodEnd,
@@ -1404,7 +1415,7 @@ export class HttpHandler {
         get < toI32(this.router.methodStart.length) &&
         get < toI32(this.router.methodEnd.length)
       ) {
-        const viaGet: i32 = this.router.match(
+        const viaGet: i32 = this.router.tryMatch(
           this.router.methodBytes,
           this.router.methodStart[get],
           this.router.methodEnd[get],
@@ -1419,7 +1430,9 @@ export class HttpHandler {
       }
     }
     r.route = route
-    r.paramCount = route >= 0 ? this.router.paramCount(route) : 0
+    // A route `tryMatch` answered is one the table holds, so the count is never -1.
+    const count: i32 = route >= 0 ? this.router.tryParamCount(route) : 0
+    r.paramCount = count > 0 ? count : 0
   }
 
   /** Body bytes: appended to the request's body, which the carrier's cap bounds. */
@@ -1539,11 +1552,15 @@ export class HttpHandler {
 
   /** Hands the carrier as much of `r`'s pending bytes as it takes. */
   private pushPending(r: HttpRequest, conn: Http1Connection): void {
-    const left: i32 = handlerSub(r.pendingEnd, r.pendingStart)
-    if (left === 0) {
+    const pending: u8[] = r.pending
+    const start: i32 = r.pendingStart
+    const end: i32 = r.pendingEnd
+    // `keep` holds `start <= end <= pending.length`; the test says so where
+    // the checker reads it, and an empty window has nothing to hand over.
+    if (start < 0 || start >= end || end > toI32(pending.length)) {
       return
     }
-    const taken: i32 = conn.write(r.pending, r.pendingStart, left)
+    const taken: i32 = conn.write(pending, start, end - start)
     if (taken > 0) {
       r.pendingStart = handlerAdd(r.pendingStart, taken)
     }
@@ -1854,7 +1871,11 @@ export class HttpHandler {
    * @returns true once `r`'s connection is closed or reused, or its peer's stream has ended
    */
   hungUp(r: HttpRequest): boolean {
-    return !this.live(r) || this.server.connection(r.slot).ended()
+    if (!this.live(r)) {
+      return true
+    }
+    const conn: Http1Connection | null = this.server.tryConnection(r.slot)
+    return conn === null || conn.ended()
   }
 
   /** Whether `r`'s connection is the one it was read on, still open. */
@@ -1941,10 +1962,10 @@ export class HttpHandler {
       return this.refused(`HttpHandler.start: body length ${bodyLength}`)
     }
     r.state = HANDLER_STREAMING
-    if (!this.live(r)) {
+    const conn: Http1Connection | null = this.live(r) ? this.server.tryConnection(r.slot) : null
+    if (conn === null) {
       return HANDLER_DROPPED
     }
-    const conn: Http1Connection = this.server.connection(r.slot)
     const framing: i32 = status === 204 || status === 304 ? HTTP1_NO_BODY : bodyLength
     let outNames: u8[][] = names
     let outValues: u8[][] = values
@@ -2029,10 +2050,10 @@ export class HttpHandler {
       this.abandon(r)
       return this.refused(`HttpHandler.write: the window ${off} + ${len} is outside its ${buf.length} bytes`)
     }
-    if (!this.live(r)) {
+    const conn: Http1Connection | null = this.live(r) ? this.server.tryConnection(r.slot) : null
+    if (conn === null) {
       return HANDLER_DROPPED
     }
-    const conn: Http1Connection = this.server.connection(r.slot)
     // The carrier checks the length of what it takes; what is pending it has
     // not seen, so the check counts it here.
     const owed: i32 = handlerSub(conn.responseLeft, handlerSub(r.pendingEnd, r.pendingStart))
@@ -2044,7 +2065,16 @@ export class HttpHandler {
     }
     let taken: i32 = 0
     if (r.pendingEnd === r.pendingStart) {
-      taken = conn.write(buf, off, len)
+      // `handlerOutside` refused this window above; the test is here again,
+      // next to the call, where the checker reads it.
+      const end: i32 = handlerAdd(off, len)
+      if (off < 0 || off > end || end > toI32(buf.length)) {
+        this.abandon(r)
+        return this.refused(
+          `HttpHandler.write: the window ${off} + ${len} is outside its ${buf.length} bytes`
+        )
+      }
+      taken = conn.write(buf, off, end - off)
       if (taken === H1_AGAIN) {
         taken = 0
       } else if (taken < 0) {
@@ -2112,12 +2142,12 @@ export class HttpHandler {
     if (r.state !== HANDLER_STREAMING) {
       return this.refused(`HttpHandler.end: the response is not started (state ${r.state})`)
     }
-    if (!this.live(r)) {
+    const slot: i32 = r.slot
+    const conn: Http1Connection | null = this.live(r) ? this.server.tryConnection(slot) : null
+    if (conn === null) {
       this.release(r)
       return HANDLER_DROPPED
     }
-    const slot: i32 = r.slot
-    const conn: Http1Connection = this.server.connection(slot)
     const short: i32 = handlerSub(conn.responseLeft, handlerSub(r.pendingEnd, r.pendingStart))
     if (conn.responseFraming >= 0 && short > 0 && !conn.responseEmpty) {
       this.abandon(r)
@@ -2519,7 +2549,7 @@ export class HttpHandler {
     for (let m: i32 = 0; m < methods && m < toI32(starts.length) && m < toI32(ends.length); m++) {
       const start: i32 = starts[m]
       const end: i32 = ends[m]
-      const route: i32 = router.match(
+      const route: i32 = router.tryMatch(
         router.methodBytes,
         start,
         end,

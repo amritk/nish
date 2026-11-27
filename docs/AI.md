@@ -349,7 +349,10 @@ where it can prove the result fits — a loop counter under `i < n`, a byte
 widened with `toI32`, an `integer<Lo, Hi>`, a value masked with `& c`. Arithmetic
 that is *meant* to wrap — a hash, a PRNG, a checksum — goes in `u32` or `u64`,
 which always wrap and are never checked; convert back with `toI32` (free), or
-call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site.
+call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site. Never cast an
+`i32` through `u32` and back just to make it wrap (`toI32(toU32(a) + toU32(b))`):
+that hides an overflow the compiler would have caught, where a `wrapping*` call
+says the wrap is meant.
 
 <!-- nish:ok -->
 ```ts
@@ -1617,6 +1620,12 @@ export const main = (): i32 => {
   may not keep the address. It stays in its module: no exported signature
   holds one, however deep (NL2746, NL2756), and a page module (freestanding
   wasm, `--emit-dts`) refuses one (NL2757).
+- **One module may export its bindings.** `export declare function` and an
+  opaque `export declare class Handle {}` are imported by name like any
+  export; each module that calls one is charged `ffi`. A `declare class` with
+  fields is never exported (NL2746), nor is a function whose signature holds
+  one (NL2756), and a binding is not re-exported. `nish c-import` writes
+  `export` on every binding that may cross.
 
 <!-- nish:ok -->
 ```ts

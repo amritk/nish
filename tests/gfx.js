@@ -190,6 +190,39 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
     answers.map((a) => `${a.name}: build.sh ${a.sh}, callsGfx ${a.ts}`).join("; ")
   )
 
+  // ---- std/gpu/sys.ts is c-import's binding of the shim, as it stands -------------
+  // The module is written by the command on its own `Regenerate:` line, run
+  // from std/gpu/. That command runs again here into a scratch file, and any
+  // byte that differs from the checked-in module turns this red, the way
+  // `node scripts/gen-reference.mjs --check` holds docs/reference/.
+  const sysFile = path.join(root, "std", "gpu", "sys.ts")
+  const sysText = fs.existsSync(sysFile) ? fs.readFileSync(sysFile, "utf8") : ""
+  const regenLine = /^\/\/ Regenerate: nish (c-import .*) -o sys\.ts$/m.exec(sysText)
+  const regenDir = path.join(dir, "sys")
+  fs.mkdirSync(regenDir)
+  const regen = regenLine
+    ? spawnSync(nish, [...regenLine[1].split(" "), "-o", path.join(regenDir, "sys.ts")], {
+        cwd: path.dirname(sysFile),
+        encoding: "utf8",
+      })
+    : null
+  const regenText = regen?.status === 0 ? fs.readFileSync(path.join(regenDir, "sys.ts"), "utf8") : null
+  let regenWhy = "it differs: run the Regenerate line from std/gpu/"
+  if (regen === null) {
+    regenWhy = "std/gpu/sys.ts has no `// Regenerate: nish c-import ... -o sys.ts` line"
+  } else if (regenText === null) {
+    regenWhy = shown(regen)
+  }
+  check(
+    "gfx: std/gpu/sys.ts is what nish c-import writes from runtime/gfx/nish-gfx.h and its overrides",
+    regenLine !== null &&
+      regenLine[1].startsWith(
+        "c-import ../../runtime/gfx/nish-gfx.h --overrides ../../runtime/gfx/nish-gfx.overrides.json "
+      ) &&
+      regenText === sysText,
+    regenWhy
+  )
+
   // ---- what scripts/fetch-gfx.sh counts as installed -------------------------------
   // A copy of the script runs in a scratch root (it works from its own `..`)
   // with a PATH that holds the few tools its "already there" test reads and no
@@ -422,4 +455,37 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
     ran.status === 0 && ran.stdout === "instance\n",
     shown(ran)
   )
+
+  // examples/gfx/clear.ts, through std/gpu/sys.ts: six offscreen frames, each
+  // cleared to its own colour and read back. Frame f clears to red f/5 and
+  // green (5 - f)/5, whose unorm bytes round exactly; the program prints each
+  // frame's first pixel and whether every pixel matches it. It answers 77 when
+  // no adapter answers, as the C triangle does.
+  const clearExe = path.join(dir, "clear")
+  const clearLinked = spawnSync(
+    nish,
+    [path.join(root, "examples", "gfx", "clear.ts"), "--link", clearExe, "--profile", "debug"],
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NISH_GFX_PREFIX: prefix },
+    }
+  )
+  const cleared =
+    clearLinked.status === 0
+      ? spawnSync(clearExe, ["--offscreen"], { encoding: "utf8", timeout: 120000 })
+      : clearLinked
+  if (clearLinked.status === 0 && cleared.status === 77) {
+    skip(`gfx: no GPU adapter answered (${cleared.stdout.trim()}), so examples/gfx/clear.ts is not drawn`)
+  } else {
+    const byte = (x) => Math.round(x * 255)
+    const expected = [0, 1, 2, 3, 4, 5]
+      .map((f) => `frame ${f}: ${byte(f / 5)},${byte((5 - f) / 5)},0,255 on every pixel\n`)
+      .join("")
+    check(
+      "gfx: examples/gfx/clear.ts clears six offscreen frames to their own colours and reads each back on every pixel",
+      cleared.status === 0 && cleared.stdout === expected,
+      `${shown(cleared)}\nexpected:\n${expected}`
+    )
+  }
 }

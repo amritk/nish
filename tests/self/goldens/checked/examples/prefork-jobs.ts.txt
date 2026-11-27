@@ -867,6 +867,13 @@ function preforkWorkers(args: string[]): i32 -> @nish.preforkWorkers [exported]
   pointer args: size=0 writesThrough=true captured=false passedTo=nish.preforkWith#0
   stackSites=0 stackLocals=0
   callee +0:56 preforkWith -> @nish.preforkWith
+function tryPreforkWorkers(args: string[]): Result<i32, string> -> @nish.tryPreforkWorkers [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  sharedWrite: via nish.tryPreforkWith
+  calls: nish.tryPreforkWith nish_alloc_struct
+  pointer args: size=0 writesThrough=true captured=false passedTo=nish.tryPreforkWith#0
+  stackSites=0 stackLocals=0
+  callee +0:3 tryPreforkWith -> @nish.tryPreforkWith
 function preforkSupervise<u8[], preforkDiscard>(args: string[], config: PreforkConfig, state: u8[], onChannel: void): i32 -> @nish.preforkSupervise$arr.u8$fn.19.nish.preforkDiscard [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.preforkRun$arr.u8$fn.19.nish.preforkDiscard

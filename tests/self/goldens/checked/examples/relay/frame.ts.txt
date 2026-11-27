@@ -61,7 +61,7 @@ function relayU64(buf: u8[], at: i32): i64 -> @relayU64
   callee +0:47 relayU32 -> @relayU32
   callee +0:68 relayU32 -> @relayU32
 function relayString(f: RelayFrame, buf: u8[], at: i32, end: i32): i32 -> @relayString
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: at
   calls: nish.websocketIsUtf8

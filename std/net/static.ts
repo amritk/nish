@@ -213,12 +213,16 @@ const staticCap = (size: i32): i32 => {
 
 /** Reads `size` bytes of `fd` from its start into `into`: false when a read fails or `into` is short. */
 const staticReadAll = (fd: i32, into: u8[], size: i32): boolean => {
-  if (size > toI32(into.length)) {
-    return false
-  }
   let got: i32 = 0
   while (got < size) {
-    const n: i32 = fileReadAt(fd, into, got, staticSub(size, got), toI64(got))
+    // `got` only grows from 0, by reads short of `size - got`, so the exit
+    // is taken only for a short `into`; it is where the prover reads both.
+    const at: i32 = got
+    const pos: i64 = toI64(at)
+    if (at < 0 || at > size || size > toI32(into.length)) {
+      return false
+    }
+    const n: i32 = fileReadAt(fd, into, at, size - at, pos)
     if (n <= 0) {
       return false
     }
@@ -1363,9 +1367,16 @@ export class StaticFiles {
     if (this.slot >= 0) {
       return toI32(left)
     }
-    const n: i32 = left > toI64(STATIC_CHUNK) ? STATIC_CHUNK : toI32(left)
-    const got: i32 = fileReadAt(this.fd, this.chunk, 0, n, pos)
+    // `chunk` is `STATIC_CHUNK` bytes from the constructor; were it shorter,
+    // the file would go in shorter pieces. `pos` is short of `to` in every
+    // caller, so `left` is not negative.
     const chunk: u8[] = this.chunk
+    const room: i32 = toI32(chunk.length)
+    const n: i32 = left > toI64(room) ? room : toI32(left)
+    if (n < 0 || n > toI32(chunk.length)) {
+      return 0
+    }
+    const got: i32 = fileReadAt(this.fd, chunk, 0, n, pos)
     for (let k: i32 = 0; k < n && k < toI32(chunk.length); k++) {
       if (k >= got) {
         chunk[k] = 0

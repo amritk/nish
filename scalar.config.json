@@ -1453,6 +1453,27 @@
                     "type": "group",
                     "title": "Graphics and sound",
                     "children": {
+                      "/gpu": {
+                        "type": "group",
+                        "title": "gpu",
+                        "children": {
+                          "/sys": {
+                            "type": "page",
+                            "title": "sys",
+                            "filepath": "docs/reference/gpu/sys.md",
+                            "head": {
+                              "title": "sys · Nish",
+                              "meta": [{ "property": "og:title", "content": "sys" }],
+                              "links": [
+                                {
+                                  "rel": "canonical",
+                                  "href": "https://nishlang.com/reference/library/gpu/sys"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      },
                       "/raster": {
                         "type": "page",
                         "title": "raster",

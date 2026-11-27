@@ -339,6 +339,9 @@ const slugOfHeading = (heading, site) => {
     : s.replace(/[^\p{L}\p{N}\p{M}\p{Pc}\- ]/gu, "").replace(/ /g, "-")
 }
 
+/** An explicit anchor on its own line, for a heading the two sites would give different IDs. */
+const anchorLine = (id) => `<a id="${id}" style="scroll-margin-top: 65px"></a>`
+
 /**
  * Each heading of a Markdown text, outside fences: its line index, level and
  * slugs on GitHub and the docs site (null below level 4, which gets no ID there),
@@ -1151,21 +1154,31 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fall
   // Each card links to its member's own `### name` heading, the first one
   // after the previous card's: `sha256` and `Sha256` share a slug, and the
   // second is numbered (`#sha256-1`), the same on GitHub and the docs site.
+  // A heading the sites slug apart (the docs site drops `_`, GitHub keeps
+  // it) gets GitHub's slug as an explicit `<a id>` above it, as the spec
+  // pages write it, and its card links to that.
   const lines = draft.split("\n")
   const hs = headings(draft)
+  const explicit = new Map()
   let at = 0
   const anchors = sections.map((m) => {
     while (at < hs.length && lines[hs[at].index] !== `### ${m.name}`) {
       at++
     }
     const h = hs[at++]
-    if (!h || h.github !== h.site) {
-      throw new Error(`${page}: no heading both sites give one anchor for the card of ${m.name}`)
+    if (!h) {
+      throw new Error(`${page}: no \`### ${m.name}\` heading for its card`)
+    }
+    if (h.github !== h.site) {
+      explicit.set(h.index, h.github)
     }
     return h.github
   })
+  const anchored = lines.flatMap((line, i) =>
+    explicit.has(i) ? [anchorLine(explicit.get(i)), "", line] : [line]
+  )
   let n = 0
-  const text = codeGroups(draft.replaceAll(`href="#${CARD}"`, () => `href="#${anchors[n++]}"`))
+  const text = codeGroups(anchored.join("\n").replaceAll(`href="#${CARD}"`, () => `href="#${anchors[n++]}"`))
   return { text, lead: lead || intro }
 }
 
@@ -1391,7 +1404,7 @@ const AREAS = [
     about: "Drawing into a frame of pixels and making short sounds",
     key: "/graphics/..",
     icon: "paint-brush",
-    names: ["raster", "synth"],
+    names: ["raster", "synth", "gpu"],
   },
   {
     title: "Concurrency",
@@ -1717,7 +1730,7 @@ const renderLanguage = (link) => {
         inFence = !inFence
       }
       if (anchors.has(i)) {
-        text.push(`<a id="${anchors.get(i)}" style="scroll-margin-top: 65px"></a>`, "")
+        text.push(anchorLine(anchors.get(i)), "")
       }
       if (inFence) {
         text.push(line)
