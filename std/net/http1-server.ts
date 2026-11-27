@@ -3281,7 +3281,7 @@ export class Http1Server {
         break
       }
       moved = true
-      conn.feed(scratch, 0, n)
+      conn.feed(scratch, toI32(0), n)
       // A short read emptied the socket. The loop's readiness is
       // level-triggered, so more input, or the peer's close, wakes it again;
       // reading once more here would only answer -11, at the price of a
