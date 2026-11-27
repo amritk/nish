@@ -12,7 +12,6 @@
 4 src/constants.ts
 1 src/emit-ops.ts
 8 std/compress/deflate.ts
-5 std/crypto/base64url.ts
 5 std/crypto/jwt.ts
 1 std/crypto/p256.ts
 2 std/crypto/pki-roots.ts
