@@ -36,8 +36,6 @@
  * Written from the specification, not ported from another implementation.
  */
 
-import { wipe } from "nish:secret"
-
 /** The length of a digest in bytes (FIPS 180-4 §1, "Message Digest Size"). */
 export const SHA256_SIZE: i32 = 32
 
