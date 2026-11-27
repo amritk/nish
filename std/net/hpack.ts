@@ -414,31 +414,27 @@ const hpackDynamicIndex = (index: i32): i32 => {
 }
 
 /**
- * `off + len` when `buf[off, off + len)` lies inside `buf`, else -1. Each step subtracts a non-negative
- * value from one no larger than `buf.length`, so no sum here can overflow.
+ * `off + len` when `buf[off, off + len)` lies inside `buf`, else -1. The sum is taken in `i64`, where two
+ * `i32`s cannot overflow; one no larger than `buf.length` fits an `i32` again.
  */
 const hpackWindowEnd = (buf: u8[], off: i32, len: i32): i32 => {
-  if (off < 0 || len < 0) {
+  const end: i64 = toI64(off) + toI64(len)
+  if (off < 0 || len < 0 || end > toI64(buf.length)) {
     return -1
   }
-  const size: i32 = toI32(buf.length)
-  const room: i32 = size - off
-  if (room < 0) {
-    return -1
-  }
-  const gap: i32 = room - len
-  let end: i32 = -1
-  if (gap >= 0) {
-    end = size - gap
-  }
-  return end
+  return toI32(end)
+}
+
+/** The panic of `hpackCheckWindow`, kept out of it so that the check itself stays small enough to inline. */
+const hpackWindowPanic = (what: string, buf: u8[], off: i32, len: i32): void => {
+  panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${toI32(buf.length)} bytes`)
 }
 
 /** Panics unless `[off, off + len)` lies inside `buf`, and answers the window's end, `off + len`. */
 const hpackCheckWindow = (what: string, buf: u8[], off: i32, len: i32): i32 => {
   const end: i32 = hpackWindowEnd(buf, off, len)
   if (end < 0) {
-    panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${toI32(buf.length)} bytes`)
+    hpackWindowPanic(what, buf, off, len)
   }
   return end
 }
@@ -486,7 +482,7 @@ export class HpackHuffman {
    * Where each length's symbols start in `symbols`, by length.
    * @internal Read by `hpackHuffmanDecode`; not for callers.
    */
-  baseRank: i32[]
+  baseRank: u32[]
 
   /** Rebuilds the code from Appendix B's 257 code lengths. Build one and reuse it: each build allocates. */
   constructor() {
@@ -497,28 +493,25 @@ export class HpackHuffman {
     this.symbols = new Array<i32>(257)
     this.firstCode = new Array<i32>(31)
     this.countAt = new Array<i32>(31)
-    this.baseRank = new Array<i32>(31)
+    this.baseRank = new Array<u32>(31)
     // Every bound below is the array's own length, which the constants fix at 257 symbols and 31 code
     // lengths, so no test ever stops a loop early.
     const table: string = HPACK_HUFFMAN_LENGTHS
     for (let sym: i32 = 0; sym < toI32(this.lengths.length) && sym < toI32(table.length); sym += 1) {
       this.lengths[sym] = toI32(table.charCodeAt(sym)) - 60
     }
-    // How many symbols each length has. Appendix B's lengths are 5 to 30, so every one lands in a row.
+    // How many symbols each length has, counted in the unsigned `baseRank` rows, which 257 symbols cannot
+    // wrap. Appendix B's lengths are 5 to 30, so every one lands in a row.
     for (let sym: i32 = 0; sym < toI32(this.lengths.length); sym += 1) {
       const len: i32 = this.lengths[sym]
-      // Appendix B gives no length more than 257 symbols, so the literal test never stops a count; it is
-      // what proves the increment cannot overflow.
-      if (len >= 0 && len < toI32(this.countAt.length)) {
-        const count: i32 = this.countAt[len]
-        if (count >= 0 && count < 257) {
-          this.countAt[len] = count + 1
-        }
+      if (len >= 0 && len < toI32(this.baseRank.length)) {
+        this.baseRank[len] += 1
       }
     }
     // Canonical order is by length, then by symbol: each length's first code and rank follow from the
     // counts of the shorter ones. Unsigned: the code is below 2^30 and the rank at most 257, so neither
-    // can wrap. Each count goes back to 0, to count again as the pass after hands the codes out.
+    // can wrap. Each count becomes its length's first rank, the next slot of `symbols` the pass after
+    // fills.
     let code: u32 = 0
     let rank: u32 = 0
     for (
@@ -529,39 +522,45 @@ export class HpackHuffman {
       len < toI32(this.countAt.length);
       len += 1
     ) {
+      const count: u32 = this.baseRank[len]
       this.firstCode[len] = toI32(code)
-      this.baseRank[len] = toI32(rank)
-      const count: u32 = toU32(this.countAt[len])
-      this.countAt[len] = 0
+      this.baseRank[len] = rank
+      this.countAt[len] = toI32(rank)
       code = (code + count) << 1
       rank += count
     }
-    // Walking the symbols in order hands each length its codes in symbol order, as the canonical code
-    // does, and leaves every count as it was. Appendix B has 257 symbols, so the rank never reaches
-    // past `symbols`.
+    // Walking the symbols in order hands each length its slots of `symbols` and its codes in symbol
+    // order, as the canonical code does, with the count holding the next slot and the first code the next
+    // code. Appendix B has 257 symbols and codes below 2^30, so the tests never refuse a symbol; they are
+    // what keep the slot in `symbols` and prove the increments cannot overflow.
     for (let sym: i32 = 0; sym < toI32(this.lengths.length) && sym < toI32(this.codes.length); sym += 1) {
       const len: i32 = this.lengths[sym]
-      if (
-        len >= 5 &&
-        len <= HPACK_HUFFMAN_MAX_BITS &&
-        len < toI32(this.firstCode.length) &&
-        len < toI32(this.baseRank.length) &&
-        len < toI32(this.countAt.length)
-      ) {
-        // The rank and the count are at most 257 and the first code below 2^30, for Appendix B's fixed
-        // lengths, so the literal tests never refuse a symbol; they are what prove the sums cannot overflow.
-        const done: i32 = this.countAt[len]
-        const base: i32 = this.baseRank[len]
-        const first: i32 = this.firstCode[len]
-        if (done >= 0 && done <= 257 && base >= 0 && base <= 257 && first >= 0 && first < 1073741824) {
-          const at: i32 = base + done
-          if (at < toI32(this.symbols.length)) {
-            this.codes[sym] = first + done
-            this.symbols[at] = sym
-            this.countAt[len] = done + 1
-          }
+      if (len >= 5 && len < toI32(this.countAt.length) && len < toI32(this.firstCode.length)) {
+        const at: i32 = this.countAt[len]
+        const next: i32 = this.firstCode[len]
+        if (at >= 0 && at < toI32(this.symbols.length) && next < 1073741824) {
+          this.symbols[at] = sym
+          this.codes[sym] = next
+          this.countAt[len] = at + 1
+          this.firstCode[len] = next + 1
         }
       }
+    }
+    // The same walk over the lengths as above puts each first code back, and each count, from the slot
+    // past its run less the run's first rank. Unsigned, as above.
+    code = 0
+    rank = 0
+    for (
+      let len: i32 = 5;
+      len <= HPACK_HUFFMAN_MAX_BITS && len < toI32(this.firstCode.length) && len < toI32(this.countAt.length);
+      len += 1
+    ) {
+      const end: u32 = toU32(this.countAt[len])
+      const count: u32 = end - rank
+      this.firstCode[len] = toI32(code)
+      this.countAt[len] = toI32(count)
+      code = (code + count) << 1
+      rank = end
     }
   }
 }
@@ -687,21 +686,13 @@ export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i3
         ) {
           return HPACK_ERR_HUFFMAN_PADDING
         }
-        // `bits` is at most 30 here, so the code fits an `i32`, and the difference below is taken only
-        // when it is ordered.
-        const c: i32 = toI32(code)
-        const first: i32 = h.firstCode[row]
-        if (first >= 0 && c >= first && c - first < h.countAt[row]) {
-          // An intact table's ranks and counts are at most 257, so `at` and the rank both are: the literal
-          // test refuses only a table cut short, and is what proves the sum cannot overflow. A slot past
-          // `symbols` matches no code.
-          const at: i32 = c - first
-          const base: i32 = h.baseRank[row]
-          if (base < 0 || base > 257 || at > 257) {
-            return HPACK_ERR_HUFFMAN_PADDING
-          }
-          const slot: i32 = base + at
-          if (slot < 0 || slot >= toI32(h.symbols.length)) {
+        // The difference is taken in `i64`, where it cannot overflow: the code is under 2^30 and every
+        // table entry an `i32`. Past the test `at` is in `[0, 2^31)`, which `toU32` keeps whole, and the
+        // slot is `u32` like the rank it starts from; a slot outside `symbols` matches no code.
+        const at: i64 = toI64(code) - toI64(h.firstCode[row])
+        if (at >= 0 && at < toI64(h.countAt[row])) {
+          const slot: u32 = h.baseRank[row] + toU32(at)
+          if (slot >= toU32(h.symbols.length)) {
             return HPACK_ERR_HUFFMAN_PADDING
           }
           const sym: i32 = h.symbols[slot]
