@@ -11760,6 +11760,78 @@ const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
 /** The changelog words of WP90 S1, the multipart/form-data reader. */
 const MULTIPART_BODIES = "multipart/form-data bodies"
 
+/** The changelog words of examples-strict S1, indexes into module storage. */
+const STORAGE_INDEX = "prove index sites into module storage"
+/** Why each module examples-strict S1 moves writes different IR. */
+const STORAGE_INDEX_WHY = {
+  "manifest.ll":
+    "src/manifest.ts compares its nesting depth with a constant before it adds one, which now orders the two, so the manifest.ll module drops those overflow checks and renumbers its values",
+  "proto-parse.ll":
+    "src/proto-parse.ts compares its nesting depth with a constant before it adds one, which now orders the two, so the proto-parse.ll module drops those overflow checks and renumbers its values",
+  "lexer.ll":
+    "src/lexer.ts compares a character code with a folded module constant before it subtracts, which now orders the two, so the lexer.ll module drops those overflow checks and renumbers its values",
+}
+const storageIndex = () => [
+  ...Object.entries({
+    "src/build-cache.ts": ["manifest.ll"],
+    "src/capability-report.ts": ["manifest.ll"],
+    "src/compilation.ts": ["manifest.ll"],
+    "src/compile.ts": ["manifest.ll", "proto-parse.ll"],
+    "src/dump-checked.ts": ["manifest.ll"],
+    "src/dump.ts": ["manifest.ll"],
+    "src/emit-ts-control.ts": ["manifest.ll"],
+    "src/emit-ts-edits.ts": ["manifest.ll"],
+    "src/emit-ts-numbers.ts": ["manifest.ll"],
+    "src/emit-ts-records.ts": ["manifest.ll"],
+    "src/emit-ts-storage.ts": ["manifest.ll"],
+    "src/emit-ts-strings.ts": ["manifest.ll"],
+    "src/emit-ts.ts": ["manifest.ll"],
+    "src/fault-contract.ts": ["lexer.ll"],
+    "src/fix.ts": ["manifest.ll"],
+    "src/interop-abi.ts": ["manifest.ll"],
+    "src/interop-dts.ts": ["manifest.ll"],
+    "src/interop-header.ts": ["manifest.ll"],
+    "src/interop-napi.ts": ["manifest.ll"],
+    "src/interop-wasm.ts": ["manifest.ll"],
+    "src/manifest.ts": ["manifest.ll"],
+    "src/module-twins.ts": ["lexer.ll"],
+    "src/proto-cli.ts": ["lexer.ll", "manifest.ll", "proto-parse.ll"],
+    "src/proto-emit.ts": ["lexer.ll", "proto-parse.ll"],
+    "src/proto-lex.ts": ["lexer.ll"],
+    "src/proto-parse.ts": ["lexer.ll", "proto-parse.ll"],
+    "src/run-cache.ts": ["manifest.ll"],
+    "src/upgrade.ts": ["manifest.ll"],
+    "src/watch.ts": ["manifest.ll"],
+    "src/window-contract.ts": ["lexer.ll"],
+    "tests/cases/const_array_numeric.ts": ["const_array_numeric.ll"],
+    "tests/cases/storage_attributes.ts": ["storage_attributes.ll"],
+    "tests/cases/storage_lend.ts": ["storage_lend.ll"],
+    "tests/cases/storage_module.ts": ["storage_module.ll"],
+    "tests/differential/corpus/const_module.ts": ["const_module.ll"],
+    "tests/differential/corpus/const_modules/main.ts": ["main.ll"],
+    "tests/link/module_target_std_twin/main.ts": ["lexer.ll", "manifest.ll"],
+    "tests/link/module_target_twin/main.ts": ["lexer.ll"],
+    "tests/link/storage_import_record/main.ts": ["cells.ll", "main.ll"],
+    "tests/link/storage_lend_import/main.ts": ["main.ll"],
+    "tests/link/storage_parallel_read/main.ts": ["main.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: STORAGE_INDEX,
+      why:
+        STORAGE_INDEX_WHY[file] ??
+        `the program indexes module storage or compares with a constant, which src/bounds.ts now proves, so ${file} drops those index or overflow checks and renumbers its values`,
+    }))
+  ),
+  {
+    program: "tests/cases/deny_panics_storage_index.ts",
+    file: "exit",
+    changelog: STORAGE_INDEX,
+    why: "the program indexes module storage under --deny-panics with every index bounded, which the candidate proves and the reference refuses as a site that may panic",
+  },
+]
+
 /** WP80 S8's release-note words, a checked HTTP/1 server config and the twins the server examples call. */
 const CHECKED_CONFIG = "Http1Server caps once"
 const checkedConfig = (why, filesByProgram) =>
@@ -14015,6 +14087,7 @@ const DECLARED = [
   ...typedBuffers(),
   ...targetFiles(),
   ...exportedBindings(),
+  ...storageIndex(),
   {
     program: "tests/link/net_grpc/main.ts",
     file: "exit",
