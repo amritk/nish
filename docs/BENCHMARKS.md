@@ -3090,7 +3090,7 @@ At `e66cf339`, `node bench/http1-parse/run.mjs` refused to run: since #1460 the 
 | | |
 | --- | --- |
 | Date | 2026-11-27 |
-| Sources | library and runtime: `main` at `9533b5d5`. Bench code: `bench/techempower/json-ab.sh` and the fixed `bench/http1-parse`, both added by the squash commit of PR #PRNUM. Base: `b49794d8`'s `std/`, `runtime/` and `scripts/`, built by the same compiler as `main` (not by its own, as in the run above) |
+| Sources | library and runtime: `main` at `9533b5d5`. Bench code: `bench/techempower/json-ab.sh` and the fixed `bench/http1-parse`, both added by the squash commit of [#2382](https://github.com/amritk/nish/pull/2382). Base: `b49794d8`'s `std/`, `runtime/` and `scripts/`, built by the same compiler as `main` (not by its own, as in the run above) |
 | nish | `build/nish` from `npm run build` at `9533b5d5` |
 | CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, a shared cloud VM, no hardware performance counters |
 | OS | linux 6.18.44-fc-v880 (x64) |
