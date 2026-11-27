@@ -1110,6 +1110,20 @@ const assignedTo = (walk: HandleWalk, member: Node): Node | null => {
     : null
 }
 
+/**
+ * A write of an owned child field as a statement of its own, whose value the
+ * visit of its target checks: the assignment has the child's type, and names
+ * nothing a later read could reach.
+ */
+const childWrite = (walk: HandleWalk, node: Node): boolean => {
+  const stmt = walk.parent(1)
+  if (stmt === null || stmt.kind !== NodeKind.ExprStmt || node.kind !== NodeKind.Binary || node.text !== "=") {
+    return false
+  }
+  const target = node.children[0]
+  return target.kind === NodeKind.Member && ownedMember(walk, target) !== null
+}
+
 const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
   if (isTypeNode(node.kind)) {
     return
@@ -1148,7 +1162,15 @@ const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
         node.kind === NodeKind.New || node.kind === NodeKind.Call || node.kind === NodeKind.Conditional
       const named =
         node.kind === NodeKind.Ident || node.kind === NodeKind.This || node.kind === NodeKind.Member
-      admitted = fresh ? freshAdmitted(walk, node, depth) : named && namedAdmitted(walk, node, type, depth)
+      // A `null` a nullable handle is compared with, or a factory returns,
+      // names no handle at all.
+      admitted =
+        node.kind === NodeKind.Null ||
+        (fresh
+          ? freshAdmitted(walk, node, depth)
+          : named
+            ? namedAdmitted(walk, node, type, depth)
+            : childWrite(walk, node))
     } else if (result !== null) {
       admitted = resultAdmitted(walk, node, depth)
     }
