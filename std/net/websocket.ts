@@ -427,7 +427,8 @@ const websocketReserve = (d: WsDecoder, len: i32): boolean => {
     return true
   }
   const live: i32 = end - start
-  if (toI64(len) > toI64(2147483647) - toI64(live)) {
+  const most: i32 = 2147483647
+  if (toI64(len) > toI64(most) - toI64(live)) {
     return false
   }
   const need: i32 = websocketAdd(live, len)
