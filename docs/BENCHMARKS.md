@@ -3527,6 +3527,34 @@ ns per request, median (min–max) and ratio of medians to `old`. `idle` shows n
 What the layout does measurably reduce is lines touched. Under cachegrind, an idle request misses D1 10.95 times on `main` and 9.01 on this layout, and LL 0 times on both, because the pool fits in LL. The count is the difference between 100,000 and 0 requests over 10,000 connections. In `idle-dram`, with the eviction sweep's own misses left out, it misses LL 10.94 times on `main` and 9.00 on this layout. The saving is in `Http1Connection.feed` (2.38 to 0.75 read misses) and in the write misses of `unpark`, `http1Next` and `Http1Connection.next`; `http1Next` and `inputRoom` take on 0.44 and 0.25 read misses. Reading straight into the lent `parser.buf` (`direct`) saves no misses.
 <!-- http-conn:end -->
 
+<!-- http-conn-hot-block:begin -->
+## Http1Connection with a parked flag in its hot block
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. Issue #1225's first hot-block idea, a parked flag on `Http1Connection`, measured with `bench/http1-conn` against `main`: no gain, not adopted. Its second idea, a slot-indexed struct-of-arrays block on `Http1Server`, was not built and not measured: `Http1Server` already keeps a resting slot in five slot-indexed arrays (`fds`, `at`, `rested`, `restedMss`, `owner`) and lends a readable slot its most recently used spare connection, so a request already finds its connection warm. [bench/http1-conn/README.md](https://github.com/amritk/nish/blob/main/bench/http1-conn/README.md), "Measured: a parked flag in the hot block; a slot-indexed block not built", has the misses per function.
+
+| | |
+| --- | --- |
+| Date | 2026-11-27 |
+| nish | `main` at 3a5bbbaf (`old`, and its bench code) against 3a5bbbaf with `bench/http1-conn/parked-flag.patch` applied (`new`; the patch lands with this record), `--profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores on a shared cloud VM (L1d 48 KiB and L2 2 MiB a core, L3 260 MiB), pinned to core 1 |
+| Runs | 15 interleaved rounds, each the fastest of 5 batches; 200,000 requests a batch, 20,000 in the `-dram` shapes, which sweep a 1 GiB eviction ring between requests; cold, idle and direct over 10,000 connections |
+| Command | `git apply bench/http1-conn/parked-flag.patch`, `node bench/http1-conn/run.mjs --connections 10000 --rounds 15 --base 3a5bbbaf`, then `bash bench/http1-conn/misses.sh` |
+
+| shape | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| hot | 243.0 (228.9–321.8) | 289.3 (229.4–319.6) 1.191 | 236.4 (220.2–302.1) 0.973 |
+| cold | 294.1 (273.6–360.9) | 284.1 (269.9–356.3) 0.966 | 317.2 (249.0–347.1) 1.079 |
+| idle | 398.6 (330.9–485.7) | 386.0 (332.3–426.9) 0.968 | 398.5 (320.3–415.9) 1.000 |
+| direct | 406.1 (317.6–423.7) | 360.5 (320.1–417.6) 0.888 | 345.5 (304.9–409.0) 0.851 |
+| idle-dram | 662.9 (612.1–755.2) | 651.3 (618.3–778.5) 0.983 | 623.6 (567.8–728.1) 0.941 |
+| direct-dram | 645.4 (588.4–702.3) | 640.8 (586.1–792.2) 0.993 | 596.6 (551.1–727.3) 0.924 |
+| peak RSS per idle connection, bytes | 1105 (1105–1107) | 1106 (1105–1107) | 1105 (1105–1109) |
+
+ns per request, median (min–max) and ratio of medians to `old`; the RSS row is the median (min–max) of 5 runs of 10,000 connections less 0, each after 1 request with `idleInput` on, so an idle connection is about 1.1 KiB on both builds. Each shape's band is its own `old′` ratio (the same binary as `old`): hot ±19.1%, cold ±3.4%, idle ±3.2%, direct ±11.2%, idle-dram ±1.7%, direct-dram ±0.7%. `new` is inside its band in `hot` and in `idle` (1.000, the shape `Http1Server`'s readable path takes), and outside it in `cold` (+7.9%), `direct`, `idle-dram` and `direct-dram` (−14.9%, −5.9% and −7.6%). One `old′` a shape on a shared VM is a single sample of the noise and the moves go both ways, so the wall times do not decide; the cachegrind totals below carry the no-gain verdict.
+
+Under cachegrind (100,000 requests less 0 over 10,000 connections) an idle request misses D1 15.28 times on `main` and 15.27 with the flag: read misses fall from 12.05 to 10.67 and write misses rise from 3.23 to 4.60. The flag spares `inputRoom` its read of the parser, but `unpark` still writes `parser.buf`, so the same line misses one call later as a write. `direct` gives the same totals. In `idle-dram` (20,000 requests) both builds miss LL 33,856,519 times in all. `cold` was not run under cachegrind.
+<!-- http-conn-hot-block:end -->
+
 <!-- http-idle-bytes:begin -->
 ## What an idle keep-alive connection costs Http1Server
 
