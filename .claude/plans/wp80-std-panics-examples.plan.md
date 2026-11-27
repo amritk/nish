@@ -116,23 +116,38 @@ stages:
       - id: s6-optout
         content: After #2206, #2207 and #2208, drop the opt-out headers and smoke args of histogram-atomic, merge-patch, prefork-jobs, file-server, prefork-server and http-app, and the guide markers and sentences about them; histogram-atomic and prefork-jobs are freed, merge-patch moved to S7 and file-server, prefork-server and http-app to S8 on the owner's decision on #2209 — see WP80 S6
         status: completed
+  - id: s10-window-forward
+    title: WP80 S10 — window contracts that forward from free functions, arrow consts and fixed-width lengths
+    goal: src/window-contract.ts forwards a window contract beyond a method whose arguments are named parameters - a free function or arrow const whose first statement calls a window guard forwards it, a literal fixed-width length such as (b, off, 4) forwards as that constant, and the guard's window is in scope for the forwarding body's own indexes - so std/bytes's fixed-width getters and setters can carry the check to their callers, with no instruction count raised.
+    verification: node tests/run.js window_contract && node tests/run.js link && node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js wasi && node tests/self/goldens.js && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && NISH=build/nish bash docs/cookbook/regen.sh --check && node tests/nish-cmp.js --no-sidecars
+    issue: 2398
+    todos:
+      - id: s10-forward
+        content: Extend noteWindowForward in src/window-contract.ts (today ROLE_METHOD only, :262, with Ident-only arguments, :304) so a free function or arrow-const whose first statement calls a window guard forwards the contract, a literal integer length argument forwards as that constant, and an index the forwarding body takes inside the guarded window (b[off], b[off + 3] after a guard of length 4) is proved from the guard - see WP80 S10
+        status: pending
+      - id: s10-tests
+        content: Add tests/link/window_contract_* cases - a free-function forward, an arrow-const forward, a literal-length forward proved by its caller's test, one left unproven, and a negative per new refusal or diagnostic - each with its golden .ll, llvm-as pass and native round trip; show the IR in the PR body - see WP80 S10
+        status: pending
+      - id: s10-docs
+        content: Update the window contract rule in docs/LANGUAGE.md and its guide page, regenerate docs/reference, the checked goldens and docs/IR_COOKBOOK.md, and add the nish-cmp DECLARED and file exit entries the PR's IR moves need - see WP80 S10
+        status: pending
   - id: s7-bytes-windows
-    title: WP80 S7 — window contracts for std/bytes, freeing merge-patch and the byte-order guide snippet
-    goal: std/bytes checks each window through a window guard the prover reads as a contract, so a caller that tests its window discharges the check at its call, and examples/merge-patch.ts and the byte-order snippet in the standard-library guide build without --allow-panics, with no instruction count raised.
+    title: WP80 S7 — window contracts for std/bytes's fixed-width getters and setters, freeing the byte-order guide snippet
+    goal: std/bytes's fixed-width getters and setters check their window through a window guard that S10's forwarding carries to each caller, so a caller that tests its window discharges the check, and the byte-order snippet in the standard-library guide builds without --allow-panics, with no instruction count raised. merge-patch keeps its opt-out, its header naming what proving bytesUtf8End costs.
     verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js json && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/nish-cmp.js --no-sidecars
     issue: 2356
     todos:
       - id: s7-fix
-        content: Give std/bytes.ts's fixed-width getters and setters (getU16LE, getU32BE, setU32LE and their siblings) and bytesUtf8End's walk a window guard of the shape docs/LANGUAGE.md's window contract names, so the check moves to each caller and a caller's own test proves it (std/bytes.ts:92, :125, :273 and :592:27 are the sites the snippet and merge-patch reach today; others may appear after each fix) — see WP80 S7
+        content: After S10 merges, give std/bytes.ts's fixed-width getters and setters (getU16LE, getU32BE, setU32LE and their siblings; std/bytes.ts:92, :124, :273 are the sites the snippet reaches today) a window guard call S10 forwards, so the check moves to each caller and a caller's own test proves it; bytesUtf8End is left as it is - see WP80 S7
         status: pending
       - id: s7-optout
-        content: Drop the opt-out header and smoke args of examples/merge-patch.ts, and the allow-panics marker of the byte-order snippet in docs/guide/using-nish/standard-library.md with its sentence that a guard in your own loop does not yet remove the checks, rewritten to show the guard that does — see WP80 S7
+        content: Drop the allow-panics marker of the byte-order snippet in docs/guide/using-nish/standard-library.md with its sentence that a guard in your own loop does not yet remove the checks, rewritten to show the guard that does; keep merge-patch's opt-out and rewrite its header to name the cost of proving bytesUtf8End (+0.436% on std-json-typed, over its tolerance) - see WP80 S7
         status: pending
       - id: s7-pins
-        content: Regenerate the pinned std/bytes.ts line numbers, the checked goldens and docs/reference, and add the nish-cmp DECLARED and file exit entries the PR's IR moves need — see WP80 S7
+        content: Regenerate the pinned std/bytes.ts line numbers, the checked goldens and docs/reference, and add the nish-cmp DECLARED and file exit entries the PR's IR moves need - see WP80 S7
         status: pending
       - id: s7-ratchet
-        content: Lower tests/std-panics.json to the new exact bytes count and lower each instruction count that fell to CI's figure, with the before and after table in the PR body; std-json-typed may not rise — see WP80 S7
+        content: Lower tests/std-panics.json to the new exact bytes count and lower each instruction count that fell to CI's figure, with the before and after table in the PR body; no count may rise - see WP80 S7
         status: pending
   - id: s8-http1-checked-config
     title: WP80 S8 — a checked HTTP/1 server config and constructor twins, freeing file-server, prefork-server and http-app
@@ -142,21 +157,45 @@ stages:
     todos:
       - id: s8-config
         content: Add a checked Http1Config snapshot, built by a Result-returning constructor that runs http1ServerConfigFault once and keeps a copy the caller cannot change, and an Http1Connection constructor twin that takes it, so the cap check at std/net/http1-server.ts:499:5 is not reached from a server that built its config the checked way — see WP80 S8
-        status: pending
+        status: completed
       - id: s8-twins
         content: Add checked twins for the other constructor and contract panics the three examples reach - the HttpHandler limits check (handlerCheckLimits, std/net/handler.ts:934:7; openHttpHandler is the Result form), the Router contracts routerOutside and routerNoRoute (std/net/router.ts:1289, :1290, :1304) and preforkSupervise's panic through preforkWorkers (std/net/prefork.ts:1392:5; tryPreforkWith is the Result form) - and clear respondEncoded, HttpHandler.put and HttpServer.carry, the explicit panics S4 lists as not kept — see WP80 S8
-        status: pending
+        status: completed
       - id: s8-windows
         content: Clear the window sites the examples reach outside http1-server - websocketIsUtf8's inline window check (std/net/websocket.ts:267:5) as a window guard, staticReadAll's slice (std/net/static.ts:221:20), and file-server's own write at examples/file-server.ts:126:23 of a length fileReadAt returned - each with a proof or a Result, never a made-up value — see WP80 S8
-        status: pending
+        status: completed
       - id: s8-optout
-        content: Move examples/file-server.ts, examples/prefork-server.ts and examples/http-app onto the checked forms, drop their opt-out headers and smoke args and the ALLOW_PANICS their tests/run.js builds pass, and drop every guide marker and sentence the stale opt-out check reports freed (the prefork snippets in docs/guide/using-nish/networking.md and docs/guide/using-nish/api-server.md among them) — see WP80 S8
-        status: pending
+        content: Move examples/file-server.ts, examples/prefork-server.ts and examples/http-app onto the checked forms, drop their opt-out headers and smoke args and the ALLOW_PANICS their tests/run.js builds pass, and drop every guide marker and sentence the stale opt-out check reports freed (the prefork snippets in docs/guide/using-nish/networking.md and docs/guide/using-nish/api-server.md among them); file-server and prefork-server were freed by #2370, and http-app moved to S9 on the owner's decision on #2128 — see WP80 S8
+        status: completed
       - id: s8-pins
         content: Regenerate the pinned std/net line numbers, the checked goldens and docs/reference, update the guide pages of each new export, and add the nish-cmp DECLARED and file exit entries the PR's IR moves need — see WP80 S8
-        status: pending
+        status: completed
       - id: s8-ratchet
         content: Lower tests/std-panics.json to the new exact per-module counts and lower each instruction count that fell to CI's figure, with the before and after table in the PR body — see WP80 S8
+        status: completed
+  - id: s9-http-app-residual
+    title: WP80 S9 — what http-app still reaches in handler, static, http-compress and http1-codec, freeing http-app
+    goal: examples/http-app builds without --allow-panics - the try paths copy through tryCopyBytes, openHttpHandler refuses a bad limit before it builds a body decoder, and the chunk-size digit index is proved or answered with a Result - with no src/ change and no instruction count raised.
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js net && node tests/run.js net_static && node tests/run.js http-app && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/nish-cmp.js --no-sidecars
+    issue: 2399
+    todos:
+      - id: s9-copy
+        content: Route the try paths of std/net/handler.ts (HttpHandler.wait) and std/net/static.ts (StaticFiles.tryServeHandler) through tryCopyBytes instead of copyBytes, so copyBytes's range panic (std/bytes.ts:526:5) is not reached; std/bytes.ts itself is not changed - see WP80 S9
+        status: pending
+      - id: s9-decoder
+        content: Make openHttpHandler refuse a bad limit before it builds HttpBodyDecoder, or build it through a checked twin, so the constructor's limit panic (std/net/http-compress.ts:1150:7) is not reached from the Result form; a std/compress site still reached after that is reported, not fixed - it is outside this stage - see WP80 S9
+        status: pending
+      - id: s9-chunk
+        content: Prove the chunk-size digit index of std/net/http1-codec.ts (:2536:5), or answer it with a Result the server already maps to a 400, never a made-up value - see WP80 S9
+        status: pending
+      - id: s9-optout
+        content: Drop http-app's opt-out header, its smoke args and the ALLOW_PANICS its tests/run.js build passes, and every guide marker and sentence the stale opt-out check reports freed (docs/guide/using-nish/api-server.md among them) - see WP80 S9
+        status: pending
+      - id: s9-pins
+        content: Regenerate the pinned std/net line numbers, the checked goldens and docs/reference, and add the nish-cmp DECLARED and file exit entries the PR's IR moves need - see WP80 S9
+        status: pending
+      - id: s9-ratchet
+        content: Lower tests/std-panics.json to the new exact per-module counts and lower each instruction count that fell to CI's figure, with the before and after table in the PR body; no count may rise - see WP80 S9
         status: pending
 ---
 
@@ -219,7 +258,7 @@ Added on the owner's decision on #2204: the `src/` prover gaps the earlier stage
 
 One exception to rule 6, accepted on #2204: the router rework (plain guards and clamps in place of wrap helpers, so router.ts keeps only its six kept explicit panics) raises std-router by about 4.3% of instructions. Its count is written from the run that measured it and replaced with CI's printed figure once the bench shard prints it.
 
-## WP80 S7 — window contracts for std/bytes, freeing merge-patch and the byte-order guide snippet
+## WP80 S7 — window contracts for std/bytes's fixed-width getters and setters, freeing the byte-order guide snippet
 
 Split from S6 (#2209) on the owner's decision of 2026-11-27. #2321 made a window guard a contract: a call to a free `void` function whose body is exactly `const size: i32 = toI32(buf.length)` then `if (off < 0 || len < 0 || off > size || len > size - off) { panic(m) }` has its check recorded at the call, and a caller that tests the window proves it there (`docs/LANGUAGE.md`, the `window` contract; `tests/link/window_contract_*`). std/bytes does not use that shape yet, so its checks stay inside the module and every caller answers for them.
 
@@ -229,6 +268,34 @@ What still opts out on 09a6f22a8, and why:
 - **The byte-order snippet** in `docs/guide/using-nish/standard-library.md` (its `allow-panics` marker cites `std/bytes.ts`): it calls `getU32BE`, `setU32LE` and `getU16LE` (std/bytes.ts:125, :273, :92). The prose after it says a guard in your own loop, such as `off + 3 < b.length`, does not yet remove these checks. That sentence changes to show the guard that now does.
 
 The diagnostic names only the first site per call, so more std/bytes sites may appear after each fix. Rule 6 holds: no count in `bench/instructions.json` may rise, std-json-typed included.
+
+**Narrowed on the owner's decision on #2128.** The first attempt (#2369) found two gaps. First, the getters are arrow consts that index inline, and `noteWindowForward` forwards only from a method whose guard arguments are named parameters (`src/window-contract.ts:262`, `:304`), so S10 does that prover work first. Second, proving `bytesUtf8End` cost +0.436% on std-json-typed, over its tolerance. S7 is now the fixed-width getters, the setters and the byte-order snippet. It is built after S10 merges, from a fresh `main`. merge-patch keeps its opt-out, and its header names that cost. #2369 is closed unmerged; S7 starts from `main`, not from its branch.
+
+Owns: `std/bytes.ts`, the callers of its getters and setters that a pin or a proof moves (the DNS and postgres call sites among them), `docs/guide/using-nish/standard-library.md`, `examples/merge-patch.ts`, and its own entries in the shared files.
+
+## WP80 S9 — what http-app still reaches in handler, static, http-compress and http1-codec, freeing http-app
+
+Added on the owner's decision on #2128. #2370 (S8) freed file-server and prefork-server. http-app still reaches three sites, which its header names on dd2b7abb:
+
+- `copyBytes`'s range panic (`std/bytes.ts:526:5`), through `HttpHandler.wait` and `StaticFiles.tryServeHandler`. The `try` paths call `tryCopyBytes` instead. `std/bytes.ts` belongs to S7, so this stage does not change it.
+- The limit panic of `HttpBodyDecoder`'s constructor (`std/net/http-compress.ts:1150:7`), through `openHttpHandler`. `openHttpHandler` refuses a bad limit before it builds the decoder, or builds it through a checked twin. If a `std/compress` decoder site is still reached after that, the worker reports it and does not fix it, because that file is outside this stage's Owns.
+- The chunk-size digit index (`std/net/http1-codec.ts:2536:5`), which every answer reaches. It gets a proof or a Result. It never gets a made-up value.
+
+Once they are gone, http-app's opt-out header, its smoke args and the `ALLOW_PANICS` its `tests/run.js` build passes are dropped, along with the guide markers the stale opt-out check reports freed. There is no `src/` change. A new export is public std API, so it lands with its doc comment, `@param`, `@returns` and reference page.
+
+Owns: `std/net/handler.ts`, `std/net/static.ts`, `std/net/http-compress.ts`, `std/net/http1-codec.ts`, `examples/http-app/**`, the guide pages of their markers (`docs/guide/using-nish/api-server.md`), and its own entries in the shared files. S9 runs at the same time as S10, and their Owns are disjoint.
+
+## WP80 S10 — window contracts that forward from free functions, arrow consts and fixed-width lengths
+
+Added on the owner's decision on #2128. Today `noteWindowForward` (`src/window-contract.ts`) records a forward only for `ROLE_METHOD` (`:262`), and only when the guard's arguments are the method's named parameters (`:304`). std/bytes's fixed-width getters are arrow consts that index inline (`export const getU16LE = (b: u8[], off: i32): u16 => toU16(b[off]) | (toU16(b[off + 1]) << 8)`, `std/bytes.ts:92`). For S7 to move their checks to the caller, this stage makes three things hold:
+
+1. A free function or arrow const whose first statement calls a window guard forwards the contract, as a method does today.
+2. A literal integer length argument (`bytesWindow(b, off, 4)`) forwards as that constant, so a caller's `off + 4 <= b.length` test discharges it.
+3. An index the forwarding body takes inside the guarded window (`b[off]` through `b[off + 3]` after a guard of length 4) is proved from the guard, so the body keeps no site of its own.
+
+Each new shape gets its `tests/link/window_contract_*` case (proved and unproven), and each new refusal or diagnostic gets a negative. The `docs/LANGUAGE.md` window rule and its guide page are updated. The checked goldens, `docs/reference` and `docs/IR_COOKBOOK.md` are regenerated. Before pushing, the stage runs `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`) and `node tests/run.js performance`. The rolling freeze holds: `src/` uses no construct the seed lacks. Rule 6 holds: no count in `bench/instructions.json` may rise.
+
+Owns: `src/window-contract.ts` and the `src/` files its change needs (`src/bounds.ts` if the in-window index proof lives there), `docs/LANGUAGE.md`'s window rule, its guide page, new `tests/link/window_contract_*` cases, and its own entries in the shared files. It touches no `std/` file.
 
 ## WP80 S8 — a checked HTTP/1 server config and constructor twins, freeing file-server, prefork-server and http-app
 
