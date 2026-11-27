@@ -263,25 +263,31 @@ const PG_ASYNC_SEQ_MASK: i32 = PG_ASYNC_SEQ_WRAP - 1
 const PG_ASYNC_QUEUE_MASK: i32 = PG_ASYNC_QUEUE_WRAP - 1
 
 /**
- * `n` plus one, wrapped below `mask` plus one, a power of two: for `n` below
- * that wrap it is `(n + 1) % wrap`. The sum is `u32`, which wraps by
- * definition, so it needs no overflow check.
+ * `n` plus one, wrapped below `mask` plus one, a power of two: `(n + 1) %
+ * wrap` for `n` below that wrap. A count at or past the mask, or below 0,
+ * which no step makes, starts again at 0.
  */
-const pgAsyncStep = (n: i32, mask: i32): i32 => toI32((toU32(n) + toU32(1)) & toU32(mask))
+const pgAsyncStep = (n: i32, mask: i32): i32 => (n >= 0 && n < mask ? n + 1 : 0)
 
 /**
  * How far `from` is behind `to`, two counts that wrap below `mask` plus one,
- * a power of two: `(to - from + wrap) % wrap` for counts below the wrap,
- * taken in `u32`, which wraps by definition.
+ * a power of two: `(to - from + wrap) % wrap` for counts below the wrap. Both
+ * are at least 0, so their difference is exact before the mask takes it; a
+ * negative count, which no step makes, is no distance.
  */
-const pgAsyncGap = (to: i32, from: i32, mask: i32): i32 => toI32((toU32(to) - toU32(from)) & toU32(mask))
+const pgAsyncGap = (to: i32, from: i32, mask: i32): i32 => {
+  if (to < 0 || from < 0) {
+    return 0
+  }
+  return (to - from) & mask
+}
 
 /**
- * Where wake `w`'s socket pair starts in `wakes`, `2w`: in `u32` the double
- * wraps rather than checks, and a wake past 2^30 comes out negative, which
- * every caller checks against `wakes` before it reads.
+ * Where wake `w`'s socket pair starts in `wakes`, `2w`: -1 for a wake below 0
+ * or at 2^30 or past it, which every caller checks against `wakes` before it
+ * reads.
  */
-const pgAsyncPair = (w: i32): i32 => toI32(toU32(w) * toU32(2))
+const pgAsyncPair = (w: i32): i32 => (w >= 0 && w < 1073741824 ? w * 2 : -1)
 
 /** `n` plus one, held at the `i32` ceiling: a statistic that counts on, never back. */
 const pgAsyncCount = (n: i32): i32 => (n < 2147483647 ? n + 1 : n)
@@ -888,8 +894,8 @@ const pgAsyncStartup = async (conn: PgConnection, fd: i32, began: i64, waitMs: i
       if (start < 0 || end <= start) {
         break
       }
-      // Both are at least 0 and `end` is past `start`, so the `u32` difference is exact.
-      const n: i32 = netWrite(fd, conn.outputBuffer(), start, toI32(toU32(end) - toU32(start)))
+      // Both are at least 0 and `end` is past `start`, so the difference is exact.
+      const n: i32 = netWrite(fd, conn.outputBuffer(), start, end - start)
       if (n === PG_ASYNC_AGAIN) {
         const waited: boolean = await pgAsyncWaitUntil(fd, true, began, waitMs)
         if (!waited) {
@@ -957,9 +963,10 @@ const pgAsyncWaitUntil = async (fd: i32, write: boolean, began: i64, waitMs: i32
 
 /** Milliseconds since `began`, a `monotonicNanos` reading. */
 const pgAsyncSince = (began: i64): i32 => {
-  // `u64` arithmetic wraps rather than checks; a clock read after `began`
-  // is never behind it, so the difference is the real one.
-  const ms: i64 = toI64((toU64(monotonicNanos()) - toU64(began)) / toU64(1000000))
+  // A clock read after `began` is never behind it; a reading that is, or a
+  // negative one, counts as no time.
+  const now: i64 = monotonicNanos()
+  const ms: i64 = began >= 0 && now >= 0 && now >= began ? (now - began) / toI64(1000000) : toI64(0)
   return ms > toI64(1073741823) ? 1073741823 : toI32(ms)
 }
 
@@ -1060,8 +1067,8 @@ const pgAsyncWakePool = (pool: PgAsyncPool): void => {
   wake = wake > PG_ASYNC_LANES ? PG_ASYNC_LANES : wake
   for (let k: i32 = 0; k < wake; k++) {
     // The queue lane of the `k`th task waiting, after the pool's own wake.
-    const lane: u32 = (toU32(pool.seatHead) + toU32(k)) & toU32(PG_ASYNC_LANES - 1)
-    pgAsyncSignal(pool, toI32(toU32(PG_ASYNC_POOL_WAKE + 1) + lane))
+    const lane: i32 = ((pool.seatHead & (PG_ASYNC_LANES - 1)) + (k & (PG_ASYNC_LANES - 1))) & (PG_ASYNC_LANES - 1)
+    pgAsyncSignal(pool, PG_ASYNC_POOL_WAKE + 1 + lane)
   }
 }
 
@@ -1181,16 +1188,16 @@ export const pgAsyncClaim = async (pool: PgAsyncPool): Promise<i32> => {
       }
       live = true
       if (toI32(pool.claimed[s]) === 0 && pool.seated[s] === 0 && pool.doomAt[s] < 0) {
-        // The claim count wraps below 2^24, so in `u32` the ticket, the count
-        // times 64 slots plus the slot, is exact and below 2^30.
-        const claim: u32 = (toU32(pool.claims[s]) + toU32(1)) & toU32(PG_ASYNC_CLAIM_MASK)
+        // The claim count wraps below 2^24, so the ticket, the count times 64
+        // slots plus the slot, is below 2^30.
+        const claim: i32 = pgAsyncStep(pool.claims[s], PG_ASYNC_CLAIM_MASK) & PG_ASYNC_CLAIM_MASK
         pool.claimed[s] = 1
-        pool.claims[s] = toI32(claim)
+        pool.claims[s] = claim
         if (waited) {
           // Another waiter may find room this one did not take.
           pgAsyncWakePool(pool)
         }
-        return toI32(claim * toU32(PG_ASYNC_MAX_SIZE) + toU32(s))
+        return claim * PG_ASYNC_MAX_SIZE + (s & (PG_ASYNC_MAX_SIZE - 1))
       }
     }
     if (!live) {
@@ -1374,9 +1381,9 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
         ? pgAsyncGap(queued, pool.seatHead, PG_ASYNC_QUEUE_MASK) < free
         : pool.seatHead === pool.seatTail
     if (best >= 0 && turn) {
-      // `best` is below 64 and `statement` below 64, so in `u32` these
-      // offsets are exact; each is then checked against its arrays.
-      const known: i32 = toI32(toU32(best) * toU32(PG_ASYNC_MAX_STATEMENTS) + toU32(statement))
+      // `best` is below 64 and `statement` below 64, so the offset is exact;
+      // it is then checked against its array.
+      const known: i32 = (best & (PG_ASYNC_MAX_SIZE - 1)) * PG_ASYNC_MAX_STATEMENTS + (statement & (PG_ASYNC_MAX_STATEMENTS - 1))
       for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
         const seat: i32 = pgAsyncSeatAt(best, k)
         if (
@@ -1400,8 +1407,8 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
           continue
         }
         // The seat claim count wraps below 2^20, so the ticket, the count
-        // times 1024 seats plus the seat, is exact in `u32` and below 2^30.
-        const claim: u32 = (toU32(pool.seatClaims[seat]) + toU32(1)) & toU32(PG_ASYNC_SEAT_MASK)
+        // times 1024 seats plus the seat, is below 2^30.
+        const claim: i32 = pgAsyncStep(pool.seatClaims[seat], PG_ASYNC_SEAT_MASK) & PG_ASYNC_SEAT_MASK
         pool.seatUsed[seat] = 1
         pool.seatWaiting[seat] = 0
         pool.seatSeq[seat] = pool.nextSeq[best]
@@ -1411,10 +1418,10 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
         pool.nextSeq[best] = pgAsyncStep(pool.nextSeq[best], PG_ASYNC_SEQ_MASK)
         pool.seated[best] = pgAsyncCount(pool.seated[best])
         pool.writing[best] = 1
-        pool.seatClaims[seat] = toI32(claim)
+        pool.seatClaims[seat] = claim
         // The next in the queue may find a seat this one did not take.
         pgAsyncUnqueue(pool, queued)
-        return toI32(claim * toU32(PG_ASYNC_SEATS) + toU32(seat))
+        return claim * PG_ASYNC_SEATS + (seat & (PG_ASYNC_SEATS - 1))
       }
     }
     if (!live) {
@@ -1439,7 +1446,7 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
     // A queued task waits on its queue lane, after the pool's own wake.
     const w: i32 =
       queued >= 0
-        ? toI32(toU32(PG_ASYNC_POOL_WAKE + 1) + (toU32(queued) & toU32(PG_ASYNC_LANES - 1)))
+        ? PG_ASYNC_POOL_WAKE + 1 + (queued & (PG_ASYNC_LANES - 1))
         : PG_ASYNC_POOL_WAKE
     pool.waits = pgAsyncCount(pool.waits)
     await pgAsyncPark(pool, w, left)
@@ -1509,8 +1516,13 @@ export const pgAsyncSend = async (pool: PgAsyncPool, ticket: i32, params: PgAsyn
   }
   let sent: i32 = 0
   while (sent >= 0 && sent < toI32(out.length)) {
-    // Both are at least 0 and `sent` is short of the end, so the `u32` difference is exact.
-    const n: i32 = netWrite(fd, out, sent, toI32(toU32(toI32(out.length)) - toU32(sent)))
+    // Both are at least 0 and `sent` is short of the end, so the difference is exact.
+    const total: i32 = toI32(out.length)
+    let rest: i32 = 0
+    if (sent >= 0 && total >= 0) {
+      rest = total - sent
+    }
+    const n: i32 = netWrite(fd, out, sent, rest)
     if (n === PG_ASYNC_AGAIN) {
       const waited: boolean = await writable(fd)
       const failed: i32 = pgAsyncWaitFailure(waited)
@@ -1549,10 +1561,15 @@ const pgAsyncAhead = (served: i32, seq: i32): i32 => pgAsyncGap(seq, served, PG_
 
 /**
  * Where slot `s`'s `k`th seat is in the seat arrays, `s * PG_ASYNC_MAX_DEPTH
- * + k`: in `u32` the sum wraps rather than checks, and every caller checks
- * the seat against the arrays it reads.
+ * + k`: -1 for a slot or depth out of range, and every caller checks the
+ * seat against the arrays it reads.
  */
-const pgAsyncSeatAt = (s: i32, k: i32): i32 => toI32(toU32(s) * toU32(PG_ASYNC_MAX_DEPTH) + toU32(k))
+const pgAsyncSeatAt = (s: i32, k: i32): i32 => {
+  if (s < 0 || s >= PG_ASYNC_MAX_SIZE || k < 0 || k >= PG_ASYNC_MAX_DEPTH) {
+    return -1
+  }
+  return (s & (PG_ASYNC_MAX_SIZE - 1)) * PG_ASYNC_MAX_DEPTH + (k & (PG_ASYNC_MAX_DEPTH - 1))
+}
 
 /**
  * Whether seat `seat`'s answer is lost: its connection failed at or before
@@ -1801,8 +1818,8 @@ const pgAsyncRoom = (pool: PgAsyncPool, s: i32, input: u8[]): i32 => {
   }
   let room: i32 = end
   if (start > 0) {
-    // In `u32`: `end` is at or past `start`, so the difference is the bytes kept.
-    room = toI32(toU32(end) - toU32(start))
+    // `end` is at or past `start`, so the difference is the bytes kept.
+    room = end - start
     if (!tryCopyBytes(input, 0, input, start, room)) {
       return -1
     }
@@ -1995,8 +2012,8 @@ const pgAsyncPlain = (pool: PgAsyncPool, s: i32): boolean => {
     if (size < 4 || size >= left) {
       return false
     }
-    // In `u32`: the frame ends at or before `stop`, so the sum cannot wrap.
-    const next: i32 = toI32(toU32(at) + toU32(1) + toU32(size))
+    // In i64: the frame ends before `stop`, so the sum fits an i32.
+    const next: i32 = toI32(toI64(at) + toI64(1) + toI64(size))
     if (type === 90) {
       return next === stop && size === 5 && toI32(input[at + 5]) === PG_ASYNC_IDLE
     }
@@ -2119,8 +2136,8 @@ const pgAsyncScan = (pool: PgAsyncPool, s: i32): boolean => {
       return false
     }
     const type: i32 = toI32(input[at])
-    // In `u32`: the frame ends at or before `end`, so the sum cannot wrap.
-    at = toI32(toU32(at) + toU32(1) + toU32(size))
+    // In i64: the frame ends at or before `end`, so the sum fits an i32.
+    at = toI32(toI64(at) + toI64(1) + toI64(size))
     if (type === 49) {
       pool.inParsed[s] = 1
     }
@@ -2308,8 +2325,11 @@ export const pgAsyncAnswer = async (pool: PgAsyncPool, ticket: i32, turn: i32): 
   const fd: i32 = pool.fds[s]
   const from: i32 = pool.inStart[s]
   const to: i32 = pool.inAnswer[s] >= 0 ? pool.inAnswer[s] : pool.inEnd[s]
-  // In `u32`: `to` is at or past `from` here, so the difference is the bytes.
-  const count: i32 = from >= 0 && from <= to && to <= toI32(input.length) ? toI32(toU32(to) - toU32(from)) : 0
+  // `to` is at or past `from` here, so the difference is the bytes.
+  let count: i32 = 0
+  if (from >= 0 && from <= to && to <= toI32(input.length)) {
+    count = to - from
+  }
   if (count < 0 || count > 65535) {
     // Not reached: an input is `PG_ASYNC_INPUT_SIZE` bytes. `pgAsyncZeroed`
     // would build a longer one by `push`, which the spawn rules read as
@@ -2451,8 +2471,13 @@ export const pgAsyncQuery = async (
   }
   let sent: i32 = 0
   while (sent >= 0 && sent < toI32(out.length)) {
-    // In `u32`: `sent` is below the `length` here, so the difference is the rest.
-    const n: i32 = netWrite(fd, out, sent, toI32(toU32(out.length) - toU32(sent)))
+    // `sent` is at least 0 and below the `length` here, so the difference is the rest.
+    const total: i32 = toI32(out.length)
+    let rest: i32 = 0
+    if (sent >= 0 && total >= 0) {
+      rest = total - sent
+    }
+    const n: i32 = netWrite(fd, out, sent, rest)
     if (n === PG_ASYNC_AGAIN) {
       const waited: boolean = await writable(fd)
       const failed: i32 = pgAsyncWaitFailure(waited)
