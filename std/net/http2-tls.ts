@@ -399,8 +399,8 @@ export class Http2TlsServer {
       if (start < 0 || end < start) {
         break
       }
-      // `start` is 0 or more and `end` at least `start`, so the unsigned difference is the held byte count.
-      const n: i32 = this.tls.write(slot, conn.output, start, toI32(toU32(end) - toU32(start)))
+      // `start` is 0 or more and `end` at least `start`, so the difference is the held byte count and fits.
+      const n: i32 = this.tls.write(slot, conn.output, start, end - start)
       if (n <= 0) {
         break
       }
