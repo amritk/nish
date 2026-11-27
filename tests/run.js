@@ -6499,7 +6499,7 @@ if (dealtHere("performance")) {
   // compiling fails too, until it comes off the list and the gate holds it.
   const PERF_GATE_REFUSED = new Map([
     ["examples/argv.ts f64", "NL2140"], // `main` answers `number`, which is f64 there
-    ["examples/arrays.ts f64", "NL2021"], // `i * i` is f64 there, and `out` is an Int32Array
+    ["examples/arrays.ts f64", "NL2100"], // `squares`' `i` is f64 there, and its bound `len` an i32
     ["examples/hello.ts f64", "NL2140"],
     ["examples/multi/main.ts f64", "NL2140"],
     ["examples/nbody.ts i32", "NL2008"], // written for f64 (its `// smoke: args` line): `Math.sqrt` of an i32

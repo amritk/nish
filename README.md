@@ -69,13 +69,12 @@ for (const side of sides) {
 }
 ```
 
-`examples/add.ts` adds two `number`s (32-bit integers by
-default). The sum can leave the `i32` range, so `add` answers a `Result`
-whose `Err` arm is the overflow check, and the compiler's default, which
+`examples/add.ts` adds two 32-bit integers. The sum can leave the `i32`
+range, so `add` answers a `Result` whose `Err` arm is the overflow check, and the compiler's default, which
 holds a package to no panic, builds it as it is:
 
 ```ts
-export const add = (a: number, b: number): Result<number, number> => {
+export const add = (a: i32, b: i32): Result<i32, i32> => {
   const sum: i64 = toI64(a) + toI64(b)
   if (sum > 2147483647) {
     return Err(1)

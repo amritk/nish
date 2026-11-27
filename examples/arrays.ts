@@ -31,6 +31,9 @@ import { exit } from "nish:process"
 // 2^63 - 1 and -2^63, spelled with products of 2^52 since a literal stops at 2^53.
 const I64_MAX: i64 = 4503599627370496 * 1024 - 1 + 4503599627370496 * 1024
 const I64_MIN: i64 = -I64_MAX - 1
+// The `Err` codes, typed so a literal means i32 in both number modes.
+const ABOVE: i32 = 1
+const BELOW: i32 = -1
 
 /** Sum of a Float64Array: the host passes the whole buffer once. */
 export const sumF64 = (xs: Float64Array): f64 => {
@@ -47,10 +50,10 @@ export const sumI32 = (xs: Int32Array): Result<i32, i32> => {
   for (const x of xs) {
     const wide: i64 = toI64(total) + toI64(x)
     if (wide > 2147483647) {
-      return Err(1)
+      return Err(ABOVE)
     }
     if (wide < -2147483648) {
-      return Err(-1)
+      return Err(BELOW)
     }
     total = toI32(wide)
   }
