@@ -9,14 +9,9 @@ write instead.
 
 ## What carries over
 
-Most everyday TypeScript compiles as it is. Nothing bounds the counter and
-the sums below, so the compiler cannot prove they fit an `i32` and this example
-builds with [`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do);
-bounding the operands, as the compile error suggests, builds it under the
-default:
+Most everyday TypeScript compiles as it is:
 
-<!-- allow-panics: its counter and sums are not bounded, which the text below explains -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 interface Point {
   x: i32;
@@ -28,19 +23,15 @@ enum Direction {
   Down,
 }
 
-class Counter {
-  count: i32 = 0;
+class Span {
+  low: i32 = 0;
+  high: i32 = 0;
 
   add(n: i32): void {
-    this.count = this.count + n;
+    this.low = n < this.low ? n : this.low;
+    this.high = n > this.high ? n : this.high;
   }
 }
-
-const manhattan = (p: Point): i32 => {
-  const ax = p.x < 0 ? -p.x : p.x;
-  const ay = p.y < 0 ? -p.y : p.y;
-  return ax + ay;
-};
 
 const step = (d: Direction): i32 => {
   switch (d) {
@@ -57,17 +48,18 @@ export const main = (): i32 => {
     { x: 3, y: -4 },
     { x: -1, y: 2 },
   ];
-  const c = new Counter();
+  const span = new Span();
   for (const p of points) {
-    c.add(manhattan(p));
+    span.add(p.x);
+    span.add(p.y);
   }
-  c.add(step(Direction.Up));
-  console.log(`total: ${c.count}`);
+  span.add(step(Direction.Down));
+  console.log(`span: ${span.low} to ${span.high}`);
   return 0;
 };
 ```
 
-That program prints `total: 11`. It uses `const` and `let`, arrow functions,
+That program prints `span: -4 to 3`. It uses `const`, arrow functions,
 interfaces, classes with fields and methods, enums, object and array
 literals, `for...of`, `switch`, the ternary operator and template literals.
 Some come with limits: `for...of` walks an array (or a `Map` or `Set`), a
@@ -79,8 +71,8 @@ enum's value is not a `string`, so `String(r)` gives its text
 ([Enums](../language/types.md#enums)). The [language
 pages](../language/control-flow.md) give the details.
 
-`if`, `while`, `do...while`, `break`, `continue`, `===` and named `import` and
-`export` work too. The package ships type declarations for `i32`, `Result` and
+`let`, `if`, `while`, `do...while`, `break`, `continue`, `===` and named
+`import` and `export` work too. The package ships type declarations for `i32`, `Result` and
 the other built-in names (`runtime/nish.d.ts`), so `tsc` and your editor
 understand a Nish file. The reverse does not hold: `nish` is the authority, as
 the reference's [It is still
@@ -149,8 +141,9 @@ Integer arithmetic is also checked. By default the compiler must prove that
 an `i32` or `i64` result fits, and it refuses the program where it cannot;
 with `--allow-panics` it builds a check instead, and an overflow stops the
 program rather than wrap round, as
-[Your first program](first-program.md#exit-codes) shows. The first example on
-this page adds up a counter nothing bounds, so it builds with that flag. `--number-mode f64`
+[Your first program](first-program.md#exit-codes) shows. A running total of
+values nothing bounds is refused until a guard bounds them, and widening is a
+proof too: `toI64(a) * toI64(b)` always fits an `i64`. `--number-mode f64`
 makes `number` mean `f64` for a whole program, as in JavaScript; an explicit
 `i32` or `f64` means the same in either mode. See
 [Types](../language/types.md), and the reference's

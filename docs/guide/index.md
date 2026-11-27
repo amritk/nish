@@ -74,12 +74,14 @@ browser, and a native build can be called from Node, WebAssembly or C.
 
 ## A first look
 
-<!-- allow-panics: the sum is not bounded, which the text below explains -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const sumOfSquares = (limit: i32): i32 => {
   let total = 0;
   for (let i = 1; i <= limit; i++) {
+    if (i > 1000 || total > 1000000000) {
+      return -1;
+    }
     total = total + i * i;
   }
   return total;
@@ -92,13 +94,14 @@ export const main = (): i32 => {
 ```
 
 `i32` is a 32-bit integer, `export const main` is where the program starts and
-its return value is the exit status. Nothing bounds `total + i * i`, so the
-compiler cannot prove it fits an `i32`, and by default it refuses a program
-that could panic; the error names the guard that would prove it, such as a
-bound on `limit`. `--allow-panics` builds it with the addition checked
-instead: if it overflowed, the program would stop with a message rather than
-wrap round. Save it as `squares.ts` and
-`nish run --allow-panics squares.ts` prints `1² + … + 10² = 385`.
+its return value is the exit status. The test at the top of the loop is what
+lets the compiler prove `total + i * i` fits an `i32`: past it, `i * i` is at
+most a million and `total` at most a billion. By default the compiler refuses
+a program that could panic, such as arithmetic it cannot prove fits, and the
+error names the guard that would prove it; `--allow-panics` builds such a
+program with the check made while it runs instead, stopping it with a message
+rather than wrapping round. Save it as `squares.ts` and `nish run squares.ts`
+prints `1² + … + 10² = 385`.
 
 ## Explore the docs
 

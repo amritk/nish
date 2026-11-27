@@ -11,16 +11,10 @@ built-in module `nish:compact`. The rules are in the reference under
 
 ## Marking a class
 
-Several examples on this page do `i32` arithmetic nothing bounds, so the
-compiler cannot prove it fits and they build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
-as the compile error suggests, builds them under the default.
-
 Import `Compact` and add it to the class's `implements` clause. Nothing else
 in the program changes:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Compact } from "nish:compact";
 
@@ -37,7 +31,7 @@ class Tree implements Compact {
   }
 }
 
-const count = (t: Tree | null): i32 => {
+const count = (t: Tree | null): f64 => {
   if (t === null) {
     return 0;
   }
@@ -156,8 +150,7 @@ itself, a class with a field of it, and an instantiation such as `Box<Cell>`.
 C holds an instance as a handle, passes it back to an exported function, and
 never reads its fields:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Compact } from "nish:compact";
 
@@ -172,14 +165,16 @@ export class Cell implements Compact {
 
 export const push = (value: i32, head: Cell | null): Cell => new Cell(value, head);
 
-export const total = (head: Cell | null): i32 => {
-  let sum = 0;
-  let at = head;
+export const largest = (head: Cell): i32 => {
+  let most = head.value;
+  let at = head.next;
   while (at !== null) {
-    sum = sum + at.value;
+    if (at.value > most) {
+      most = at.value;
+    }
     at = at.next;
   }
-  return sum;
+  return most;
 };
 ```
 
@@ -194,7 +189,7 @@ The header declares `typedef struct Cell Cell;` and
 int main(void) {
   struct Cell *head = NULL;
   for (int32_t i = 1; i <= 4; i++) head = push(i, head);
-  printf("%d\n", total(head)); /* 10 */
+  printf("%d\n", largest(head)); /* 4 */
   return 0;
 }
 ```

@@ -10,14 +10,9 @@ section.
 ## Objects
 
 An object pattern reads fields of a class or interface value. Write a field's
-name to bind it under that name, or `field: name` to rename it. The examples
-on this page do `i32` arithmetic nothing bounds, so the compiler cannot prove
-it fits and they build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
-as the compile error suggests, builds them under the default:
+name to bind it under that name, or `field: name` to rename it:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Point {
   x: i32;
@@ -30,12 +25,12 @@ class Point {
 
 export const main = (): i32 => {
   const { x, y: py } = new Point(3, 4);
-  console.log(`${x * x + py * py}`);
+  console.log(`${x} ${py}`);
   return 0;
 };
 ```
 
-This prints `25`. A name the class does not have is refused, as `p.z` would
+This prints `3 4`. A name the class does not have is refused, as `p.z` would
 be. A name you bind and never read is an error, as for any local; to keep it
 on purpose, rename it inside the pattern, `{ x, y: _y }`.
 
@@ -51,16 +46,14 @@ side once.
 An array pattern reads elements by their position. Leave a position empty to
 skip it:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok-body --allow-panics -->
+<!-- nish:ok-body -->
 ```ts
 const xs: i32[] = [10, 20, 30];
-let [a, , c] = xs;
-a = a + 1;
+const [a, , c] = xs;
 console.log(`${a} ${c}`);
 ```
 
-This prints `11 30`. Each element is checked against the array's length like
+This prints `10 30`. Each element is checked against the array's length like
 `xs[i]` is: the compiler refuses a position it cannot prove in range, and
 under `--allow-panics`, where TypeScript would bind `undefined` for an element
 past the end, Nish stops with `index out of range`, because a name always
@@ -68,8 +61,7 @@ holds a value of its type.
 
 ## In a `for...of`
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Point {
   x: i32;
@@ -82,16 +74,14 @@ class Point {
 
 export const main = (): i32 => {
   const points: Point[] = [new Point(1, 2), new Point(3, 4)];
-  let sum = 0;
   for (const { x, y } of points) {
-    sum = sum + x * y;
+    console.log(`(${x}, ${y})`);
   }
-  console.log(`${sum}`);
   return 0;
 };
 ```
 
-This prints `14`. The walk must be over an array; a `Map`'s entries are
+This prints `(1, 2)` and then `(3, 4)`. The walk must be over an array; a `Map`'s entries are
 `[key, value]` pairs of two types, which Nish does not have, so walk `keys()`
 and call `get` instead ([Maps and sets](maps-and-sets.md)).
 

@@ -263,25 +263,23 @@ only once the program has no other error, so they show up last.
 | `if (c) … else if (c) …`, the same condition again | NL2716 | the condition you meant for the second branch |
 | `u < 0` or `u >= 0` on a `u8`, `u16`, `u32`, `u64` | NL2717 | test before the subtraction that would wrap, or use a signed type |
 
-<!-- allow-panics: it shows NL2712, not a panic site; does integer arithmetic nothing bounds -->
-<!-- nish:err-body NL2712 --allow-panics -->
+<!-- nish:err-body NL2712 -->
 ```ts
-const xs = [3, 4];
+const xs: u8[] = [3, 4];
 let total = 0;
 for (const x of xs) {
-  total = total + x;
+  total = total + toI32(x);
 }
 const average = total / 2;
 console.log(`${total}`);
 ```
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok-body --allow-panics -->
+<!-- nish:ok-body -->
 ```ts
-const xs = [3, 4];
+const xs: u8[] = [3, 4];
 let total = 0;
 for (const x of xs) {
-  total = total + x;
+  total = total + toI32(x);
 }
 const average = total / 2;
 console.log(`${average}`);
@@ -368,16 +366,15 @@ export const fnv1a = (bytes: u8[]): u32 => {
 
 <!-- nish:err NL2231 -->
 ```ts
-const bad = (a: i32, b: i64): i64 => {
+const bad = (a: f32, b: f64): f64 => {
   return a + b;
 };
 ```
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-const good = (a: i32, b: i64): i64 => {
-  return toI64(a) + b;
+const good = (a: f32, b: f64): f64 => {
+  return toF64(a) + b;
 };
 ```
 
@@ -397,10 +394,9 @@ not an `integer<0, 255>` (convert with `toI32`), and a `declare function` may
 not mention a range. Put the range on the value you use, not on a loop
 counter, which has to leave the range to end the loop.
 
-<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-const getByte = (buf: u8[], i: integer<0, 255>): u8 => buf[i];
+const getByte = (buf: u8[], i: integer<0, 255>): u8 => (i < buf.length ? buf[i] : 0);
 
 const sumAll = (buf: u8[]): i32 => {
   let sum = 0;
@@ -550,8 +546,7 @@ reference — never a scalar, which has no null value. It is the same pointer
 (or, for a function reference, the same tag) with `null` as one more value, so
 nothing is boxed.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Node {
   value: i32;
@@ -561,11 +556,16 @@ class Node {
   }
 }
 
+// Values run 0 to 1,000,000, so a total at most 1,000,000,000 has room for one.
 const total = (head: Node | null): i32 => {
   let sum = 0;
   let cur = head;
   while (cur !== null) {
-    sum = sum + cur.value;
+    const v = cur.value;
+    if (v < 0 || v > 1000000 || sum > 1000000000) {
+      return -1;
+    }
+    sum = sum + v;
     cur = cur.next;
   }
   return sum;
@@ -661,14 +661,13 @@ const n = s?.length;
 
 ### Functions
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-const add = (a: i32, b: i32): i32 => {
-  return a + b;
+const add = (a: i32, b: i32): i64 => {
+  return toI64(a) + toI64(b);   // two `i32`s always fit an `i64`
 };
 
-const double = (n: i32): i32 => n * 2;   // a concise body is that one `return`
+const double = (n: i32): i64 => toI64(n) * 2;   // a concise body is that one `return`
 ```
 
 - A function is a **module-level `const` bound to an arrow**. `let` is
@@ -678,7 +677,7 @@ const double = (n: i32): i32 => n * 2;   // a concise body is that one `return`
 - **Every parameter and the return type must be annotated.**
 - **A capture-free top-level function is a value** — a
   [function reference](#function-references): `const h: Op = double`, a field
-  `op: Op`, an `Op[]`, a returned `Op`, where `type Op = (n: i32) => i32`. An
+  `op: Op`, an `Op[]`, a returned `Op`, where `type Op = (n: i32) => i64`. An
   arrow written inside a function is not one: declare it at the top level and
   name it.
 - **Parameters are immutable**: `p = 1`, `p++`, `p += 1` are all rejected. Copy
@@ -764,20 +763,22 @@ export const main = (): i32 => {
   same fields, so implementing your own is refused the same way; import the
   template's `Shape` instead.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-interface Shape { area: i32; }
+interface Shape { area: f64; }
 
 class Circle implements Shape {
-  area: i32;
-  radius: i32;
-  constructor(r: i32) { this.area = 3 * r * r; this.radius = r; }
+  area: f64;
+  radius: f64;
+  constructor(r: f64) { this.area = Math.PI * r * r; this.radius = r; }
 }
 
-const areaOf = <T extends Shape>(s: T): i32 => s.area;   // s.radius would be refused
+const areaOf = <T extends Shape>(s: T): f64 => s.area;   // s.radius would be refused
 
-export const main = (): i32 => areaOf(new Circle(2)) - 12;
+export const main = (): i32 => {
+  console.log(`${areaOf(new Circle(2))}`);   // 12.566370614359172
+  return 0;
+};
 ```
 
 - **Each type parameter is named once**: `<T, T>` is
@@ -882,8 +883,7 @@ They are inferred from the arguments like a generic function's, and each
 (receiver, method type arguments) pair is its own `define`:
 `@Chooser.pick$i32`, `@Box$i32.keep$str`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Chooser {
   flip: boolean = false;
@@ -900,7 +900,8 @@ export const main = (): i32 => {
   const c = new Chooser();
   const word: string = c.pick("left", "right");
   console.log(word);
-  return c.pick(0, 1) + new Box<i32>(7).keep("seven") - 7;
+  console.log(`${c.pick(0, 1)} ${new Box<i32>(7).keep("seven")}`);   // 0 7
+  return 0;
 };
 ```
 
@@ -933,8 +934,7 @@ is a top-level function named at the call, or an arrow written right there, and
 each one is compiled into its **own copy** of the function, with a direct call
 where the parameter is called — there is no function pointer at run time.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const map = <T, U>(xs: T[], f: (x: T) => U): U[] => {
   const out: U[] = [];
@@ -952,11 +952,12 @@ const fold = <T>(xs: T[], f: (acc: T, x: T) => T, identity: T): T => {
   return acc;
 };
 
-const add = (a: i32, b: i32): i32 => a + b;
+const add = (a: f64, b: f64): f64 => a + b;   // an `f64` sum cannot overflow
 
 export const main = (): i32 => {
-  const doubled = map([1, 2, 3], (n) => n * 2);   // U is bound from the body
-  return fold(doubled, add, 0) - 12;              // 0
+  const xs: f64[] = [1, 2, 3];
+  const doubled = map(xs, (n) => n * 2);         // U is bound from the body
+  return fold(doubled, add, 0) === 12 ? 0 : 1;   // 0
 };
 ```
 
@@ -1115,7 +1116,7 @@ else to switch on and no thread count to choose. `parallelMap(src, f)` and
 `parallelFrom(n, f)` answer a new array instead (`f(src[i])`, `f(i)`), under
 the same rules for `f`.
 
-<!-- allow-panics: calls `parallelMapInto`, whose length check no proof removes yet; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMapInto, parallelReduce } from "nish/threads";
@@ -1124,14 +1125,14 @@ const square = (x: f64): f64 => x * x;
 
 export const main = (): i32 => {
   const src: f64[] = [1.0, 2.0, 3.0];
-  const dst: f64[] = [0.0, 0.0, 0.0];                        // at least src.length, or it panics
+  const dst = new Array<f64>(src.length);                    // one slot per element, made once
   parallelMapInto(src, dst, square);
   const total = parallelReduce(dst, (a, b) => a + b, 0.0);   // 14, the same bits on any core count
   return toI32(total);
 };
 ```
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelFrom, parallelMap } from "nish/threads";
@@ -1139,7 +1140,9 @@ import { parallelFrom, parallelMap } from "nish/threads";
 export const main = (): i32 => {
   const names = parallelFrom(3, (i) => `w${i}`);    // each string copied out at the join
   const lens = parallelMap(names, (n) => n.length); // 2 2 2
-  console.log(`${names[2]} ${lens[0]}`);            // w2 2
+  if (names.length > 2 && lens.length > 0) {
+    console.log(`${names[2]} ${lens[0]}`);          // w2 2
+  }
   return 0;
 };
 ```
@@ -1191,24 +1194,35 @@ Different functions at once, one thread each: open a scope with `using`, give
 it tasks with `spawn(entry, arg, dst, at)`, and every task has run and stored
 `entry(arg)` into `dst[at]` when the block ends.
 
-<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { scope } from "nish/threads";
 
-const sumOf = (xs: f64[]): f64 => xs[0] + xs[1];
-const square = (n: i32): i32 => n * n;
+const sumOf = (xs: f64[]): f64 => {
+  let total: f64 = 0;
+  for (const x of xs) {
+    total += x;
+  }
+  return total;
+};
+const square = (n: i32): i64 => toI64(n) * toI64(n);   // an `i32` squared fits an `i64`
 
 export const main = (): i32 => {
   const xs: f64[] = [1.5, 2.5];
-  const sums: f64[] = [0.0];
-  const squares: i32[] = [0];
+  const sums = new Array<f64>(1);
+  const squares = new Array<i64>(1);
   {
     using s = scope();
-    s.spawn(sumOf, xs, sums, 0);
-    s.spawn(square, 12, squares, 0);
+    if (sums.length > 0) {                   // each slot is tested where it is spawned
+      s.spawn(sumOf, xs, sums, 0);
+    }
+    if (squares.length > 0) {
+      s.spawn(square, 12, squares, 0);
+    }
   }                                          // joined here, on every exit
-  console.log(`${sums[0]} ${squares[0]}`);   // 4 144
+  if (sums.length > 0 && squares.length > 0) {
+    console.log(`${sums[0]} ${squares[0]}`); // 4 144
+  }
   return 0;
 };
 ```
@@ -1263,46 +1277,48 @@ export const main = (): i32 => {
 When tasks must update one value, put it in a `Mutex` and reach it only through
 `using g = m.lock()`: the lock is held until that block ends, on every exit.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Mutex, scope } from "nish/threads";
 
-class Tally {
-  bins: i32[];
+class Peaks {
+  top: i32[];
   constructor() {
-    this.bins = [0, 0, 0, 0];
+    this.top = [0, 0, 0, 0];
   }
 }
 
 class Shard {
   xs: i32[];
-  tally: Mutex<Tally>;
-  constructor(xs: i32[], tally: Mutex<Tally>) {
+  peaks: Mutex<Peaks>;
+  constructor(xs: i32[], peaks: Mutex<Peaks>) {
     this.xs = xs;
-    this.tally = tally;
+    this.peaks = peaks;
   }
 }
 
-const binAll = (s: Shard): i32 => {
+// The largest value seen in each of four bins, by its low two bits.
+const binAll = (s: Shard): void => {
   for (const x of s.xs) {
     const bin: i32 = x & 3;
-    using g = s.tally.lock();                  // held to the end of this pass
-    g.value.bins[bin] = g.value.bins[bin] + 1;
+    using g = s.peaks.lock();                  // held to the end of this pass
+    if (bin < g.value.top.length && x > g.value.top[bin]) {
+      g.value.top[bin] = x;
+    }
   }
-  return 0;
 };
 
 export const main = (): i32 => {
-  const tally = new Mutex<Tally>(new Tally()); // a fresh value: `new` or a literal
-  const done: i32[] = [0, 0];
+  const peaks = new Mutex<Peaks>(new Peaks()); // a fresh value: `new` or a literal
   {
     using s = scope();
-    s.spawn(binAll, new Shard([1, 2, 3], tally), done, 0);
-    s.spawn(binAll, new Shard([4, 5, 6], tally), done, 1);
+    s.spawn(binAll, new Shard([1, 2, 3], peaks));
+    s.spawn(binAll, new Shard([4, 5, 6], peaks));
   }
-  using g = tally.lock();                      // after the join: lock freely
-  console.log(`${g.value.bins[1]}`);           // 2
+  using g = peaks.lock();                      // after the join: lock freely
+  if (g.value.top.length > 1) {
+    console.log(`${g.value.top[1]}`);          // 5
+  }
   return 0;
 };
 ```
@@ -1355,24 +1371,26 @@ export const main = (): i32 => {
 };
 ```
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Mutex, MutexGuard } from "nish/threads";
 
 class Stats {
-  count: i32 = 0;
+  best: i32 = 0;
 }
 
-const bump = (g: MutexGuard<Stats>): void => {
-  g.value.count = g.value.count + 1;   // a helper: the block's rules, the block's lock
+const raise = (g: MutexGuard<Stats>, x: i32): void => {
+  if (x > g.value.best) {
+    g.value.best = x;                  // a helper: the block's rules, the block's lock
+  }
 };
 
 export const main = (): i32 => {
   const m = new Mutex<Stats>(new Stats());
   using g = m.lock();
-  bump(g);
-  return g.value.count - 1;            // 0
+  raise(g, 7);
+  console.log(`${g.value.best}`);      // 7
+  return 0;
 };
 ```
 
@@ -1382,8 +1400,7 @@ A shared counter, minimum, maximum or flag is an atomic: `new AtomicI32(0)`,
 `new AtomicI64(toI64(0))`, updated from any task or parallel `f` by one
 indivisible method call.
 
-<!-- allow-panics: calls `parallelMapInto`, whose length check no proof removes yet; does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { AtomicI32, parallelMapInto } from "nish/threads";
 
@@ -1391,8 +1408,11 @@ export const main = (): i32 => {
   const hits = new AtomicI32(0);
   const top = new AtomicI32(0);
   const xs: i32[] = [3, 9, 4];
-  const ys: i32[] = [0, 0, 0];
-  parallelMapInto(xs, ys, (x) => hits.add(1) + top.max(x)); // each answers the old value
+  const ys = new Array<i32>(xs.length);
+  parallelMapInto(xs, ys, (x) => {
+    hits.add(1);
+    return top.max(x);                                      // each answers the old value
+  });
   console.log(`${hits.load()} ${top.load()}`);              // 3 9
   return 0;
 };
@@ -1443,8 +1463,7 @@ When one task produces values and another consumes them, give both a
 `for...of`, which waits for values and ends once every producer has returned.
 Nobody closes a channel.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Channel, scope } from "nish/threads";
 
@@ -1457,32 +1476,36 @@ class Pipe {
   }
 }
 
-const produce = (p: Pipe): i32 => {
-  for (let i: i32 = 1; i <= p.n; i++) {
-    p.ch.send(i);                                 // never waits
+const produce = (p: Pipe): void => {
+  for (let i: i32 = 0; i < p.n; i++) {
+    p.ch.send(i + 1);                             // 1 to n; never waits
   }
-  return p.n;
 };
 
-const consume = (p: Pipe): i32 => {
-  let sum: i32 = 0;
-  for (const x of p.ch) {                         // ends once every sender has returned
-    sum = sum + x;
+const consume = (ch: Channel<i32>): i32 => {
+  let top: i32 = 0;
+  for (const x of ch) {                           // ends once every sender has returned
+    if (x > top) {
+      top = x;
+    }
   }
-  return sum;
+  return top;
 };
 
 export const main = (): i32 => {
-  const sent: i32[] = [0, 0];
-  const sums: i32[] = [0];
+  const tops = new Array<i32>(1);
   const ch = new Channel<i32>();                  // a `const`, right before its scope
   {
     using s = scope();
-    s.spawn(produce, new Pipe(ch, 10), sent, 0);  // every sender first
-    s.spawn(produce, new Pipe(ch, 20), sent, 1);
-    s.spawn(consume, new Pipe(ch, 0), sums, 0);   // then the one receiver
+    s.spawn(produce, new Pipe(ch, 10));           // every sender first
+    s.spawn(produce, new Pipe(ch, 20));
+    if (tops.length > 0) {
+      s.spawn(consume, ch, tops, 0);              // then the one receiver
+    }
   }
-  console.log(`${sums[0]}`);                      // 265
+  if (tops.length > 0) {
+    console.log(`${tops[0]}`);                    // 20
+  }
   return 0;
 };
 ```
@@ -1703,17 +1726,18 @@ export const main = (): i32 => {
 - **A `string` result is copied out of C's `const char *`** into the arena at
   the call, so it lives like any other string and C may reuse its buffer.
   `string | null` maps `NULL` to `null`; a `string` result that comes back
-  `NULL` panics (`ffi-null`). The copy never frees: a result the caller must
-  `free` (`strdup`) is declared `CPtr | null` instead.
+  `NULL` panics (`ffi-null`), so the no-panic default refuses a `string`
+  result: declare it `string | null` and default it with `??`. The copy never
+  frees: a result the caller must `free` (`strdup`) is declared `CPtr | null`
+  instead.
 
-<!-- allow-panics: reads a C pointer that may be `NULL` -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-declare function strerror(errnum: i32): string;
+declare function strerror(errnum: i32): string | null;
 declare function getenv(name: string): string | null;
 
 export const main = (): i32 => {
-  console.log(strerror(2));
+  console.log(strerror(2) ?? "unknown error");
   const home = getenv("HOME");
   console.log(home === null ? "unset" : "set");
   return 0;
@@ -1742,7 +1766,7 @@ export const main = (): i32 => {
   `realpath(path, null)` passes `NULL`; a nullable pointer held in a variable
   is NL2539, so C is never handed a `NULL` by accident.
 
-<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- allow-panics: calls `readCString`, whose `NULL` check no proof removes, even after `p === null` returns -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { readCString } from "nish:unsafe";
@@ -1812,23 +1836,25 @@ emitted and no initialiser runs** — every use lowers to the value itself.
 
 ### Module storage
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- allow-panics: indexes module storage, whose length no proof reads yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 const SCORES = new Int32Array(4);
 
-const sum = (xs: Int32Array): i32 => {
-  let total: i32 = 0;
-  for (let i = 0; i < xs.length; i++) {
-    total += xs[i];
+const largest = (xs: Int32Array): i32 => {
+  let best: i32 = 0;
+  for (const x of xs) {
+    if (x > best) {
+      best = x;
+    }
   }
-  return total;
+  return best;
 };
 
 export const main = (): i32 => {
   SCORES[0] = 30;
   SCORES[3] = 4;
-  console.log(`${sum(SCORES)} ${SCORES[1]}`);   // 34 0
+  console.log(`${largest(SCORES)} ${SCORES[1]}`);   // 30 0
   return 0;
 };
 ```
@@ -1853,8 +1879,7 @@ state a module keeps (there is no top-level `let`).
 
 ### Classes and interfaces
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 interface Shape { width: i32; height: i32; }
 
@@ -1868,12 +1893,12 @@ class Rect implements Shape {
     this.height = height;
   }
 
-  area(): i32 {
-    return this.width * this.height;
+  area(): i64 {
+    return toI64(this.width) * toI64(this.height);   // two `i32`s multiply into an `i64` without overflow
   }
 }
 
-const describe = (s: Shape): i32 => s.width + s.height;
+const describe = (s: Shape): i64 => toI64(s.width) + toI64(s.height);
 
 export const main = (): i32 => {
   const r = new Rect(3, 4);
@@ -1925,16 +1950,17 @@ export const main = (): i32 => {
 
 Index again after the `push` instead of holding the element across it:
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 interface Point { x: i32; }
 
 export const main = (): i32 => {
   const ps: Point[] = [{ x: 1 }];
   ps.push({ x: 2 });
-  ps[0].x = 3;
-  console.log(`${ps[0].x}`);
+  if (ps.length > 0) {
+    ps[0].x = 3;
+    console.log(`${ps[0].x}`);
+  }
   return 0;
 };
 ```
@@ -1947,8 +1973,7 @@ grows, and the blocks it outgrows stay in the arena; a walk over `kids`
 follows two pointers per child where the links follow one. On a 4M-node
 tree the links took 0.52x the memory and 0.68x the time of `kids`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Node {
   kind: i32;
@@ -1973,14 +1998,17 @@ const add = (parent: Node, last: Node | null, kind: i32): Node => {
   return kid;
 };
 
-const sum = (n: Node): i32 => {
-  let s = n.kind;
+const largest = (n: Node): i32 => {
+  let best = n.kind;
   let kid = n.first;
   while (kid !== null) {
-    s = s + sum(kid);
+    const k = largest(kid);
+    if (k > best) {
+      best = k;
+    }
     kid = kid.next;
   }
-  return s;
+  return best;
 };
 
 export const main = (): i32 => {
@@ -1988,7 +2016,7 @@ export const main = (): i32 => {
   const a = add(root, null, 2);
   add(root, a, 3);
   add(a, null, 4);
-  console.log(`${sum(root)}`);
+  console.log(`${largest(root)}`);
   return 0;
 };
 ```
@@ -2004,8 +2032,7 @@ export const main = (): i32 => {
 - `uncheckedGet` / `uncheckedSet` belong in that table's code only: an index
   out of range there is undefined behaviour, not a panic.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { uncheckedGet, uncheckedSet } from "nish:unsafe";
 
@@ -2015,16 +2042,16 @@ class Tokens {
   start: i32[];
   count: i32 = 0;
 
-  constructor(capacity: i32) {
+  constructor(capacity: integer<0, 1048576>) {
     this.kind = new Array<i32>(capacity);
     this.start = new Array<i32>(capacity);
   }
 
   add(kind: i32, start: i32): i32 {
-    if (this.count >= this.kind.length) {
+    const id = this.count;
+    if (id >= this.kind.length) {
       return -1;
     }
-    const id = this.count;
     uncheckedSet(this.kind, id, kind);
     uncheckedSet(this.start, id, start);
     this.count = id + 1;
@@ -2036,11 +2063,13 @@ export const main = (): i32 => {
   const t = new Tokens(3);
   t.add(7, 0);
   t.add(9, 4);
-  let s = 0;
+  let at = -1;
   for (let i = 0; i < t.count; i++) {
-    s = s + uncheckedGet(t.kind, i) * uncheckedGet(t.start, i);
+    if (uncheckedGet(t.kind, i) === 9) {
+      at = uncheckedGet(t.start, i);
+    }
   }
-  console.log(`${s}`);
+  console.log(`${at}`);   // 4
   return 0;
 };
 ```
@@ -2233,8 +2262,7 @@ export const main = (): i32 => (pick(Kind.Array) === Kind.Array ? 0 : 1);
 
 ### Discriminated unions
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 enum Kind {
   Circle,
@@ -2243,12 +2271,12 @@ enum Kind {
 
 class Circle {
   readonly kind: Kind.Circle = Kind.Circle;
-  r: i32 = 3;
+  r: f64 = 3;
 }
 
 class Square {
   readonly kind: Kind.Square = Kind.Square;
-  side: i32 = 4;
+  side: f64 = 4;
 }
 
 type Shape = Circle | Square;
@@ -2257,17 +2285,15 @@ const pick = (round: boolean): Shape => (round ? new Circle() : new Square());
 
 export const main = (): i32 => {
   const shapes: Shape[] = [pick(true), new Square()];
-  let circles = 0;
-  let area = 0;
+  let area: f64 = 0;
   for (const s of shapes) {
     if (s.kind === Kind.Circle) {
-      circles = circles + 1; // `s` is a `Circle` here
-      area = area + 3 * s.r * s.r;
+      area = area + 3 * s.r * s.r;   // `s` is a `Circle` here
     } else {
       area = area + s.side * s.side; // and a `Square` here
     }
   }
-  return circles === 1 && area === 43 ? 0 : 1;
+  return area === 43 ? 0 : 1;
 };
 ```
 
@@ -2483,8 +2509,7 @@ export const main = (): i32 => {
   `break`, `continue`, `process.exit`, an `if` whose branches all return, or an
   infinite loop.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const firstPair = (limit: i32, target: i32): i32 => {
   outer: for (let i: i32 = 0; i < limit; i++) {
@@ -2501,21 +2526,21 @@ const firstPair = (limit: i32, target: i32): i32 => {
 };
 
 const classify = (n: i32): i32 => {
-  let score: i32 = 0;
+  let ran: i32 = 0;   // one bit per case that ran
   switch (n) {
     case 0:
-      score += 10;   // no `break`: falls into `case 1`
+      ran |= 2;       // no `break`: falls into `case 1`
     case 1:
-      score += 1;
+      ran |= 1;
       break;
     default:
-      score = -1;
+      ran = -1;
   }
-  return score;
+  return ran;
 };
 
 export const main = (): i32 => {
-  console.log(`${firstPair(10, 12)} ${classify(0)} ${classify(1)}`);   // 304 11 1
+  console.log(`${firstPair(10, 12)} ${classify(0)} ${classify(1)}`);   // 304 3 1
   return 0;
 };
 ```
@@ -3508,8 +3533,7 @@ guide's [terminal page](guide/using-nish/terminal.md) its walk-through.)
 dispatch. Give each class the interface's fields **first**, `implements` it,
 and write a free function over the interface:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 interface Sized { width: i32; height: i32; }
 
@@ -3523,7 +3547,7 @@ class Photo implements Sized {
   }
 }
 
-const area = (s: Sized): i32 => s.width * s.height;
+const area = (s: Sized): i64 => toI64(s.width) * toI64(s.height);
 
 export const main = (): i32 => {
   console.log(`${area(new Photo(3, 4))}`);

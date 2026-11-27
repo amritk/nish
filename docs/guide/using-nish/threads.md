@@ -50,20 +50,24 @@ before an index, or a bound on a sum, proves those in your own code; so does
 other library calls will build under the default once the standard library is
 made panic-free.
 
-<!-- allow-panics: builds an array whose length it does not bound; calls `parallelMapInto` with no guard that proves `dst` is long enough; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMapInto, parallelReduce } from "nish/threads";
 
+const N: i32 = 3000000;
+
 const square = (x: f64): f64 => x * x;
 
 export const main = (): i32 => {
-  const n: i32 = 3000000;
-  const src = new Array<f64>(n);
+  const src = new Array<f64>(N);
   for (let i: i32 = 0; i < src.length; i++) {
     src[i] = toF64(i % 10);
   }
-  const dst = new Array<f64>(n);
+  const dst = new Array<f64>(N);
+  if (dst.length < src.length) {
+    return 1;
+  }
   parallelMapInto(src, dst, square);
   const total = parallelReduce(dst, (a, b) => a + b, 0.0);
   console.log(`${total}`); // 85500000
@@ -135,8 +139,7 @@ not reach an array `dst` could be, but a table's own arrays are private to it:
 a `Map<string, i32>` beside an `i32[]` `dst` is fine, and a
 `Map<string, i32[]>` is refused, because one of its values could be `dst`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `parallelMapInto` with no guard that proves `dst` is long enough; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { parallelMapInto } from "nish/threads";
 
@@ -147,14 +150,26 @@ class Doc {
   }
 }
 
-const score = (d: Doc): i32 => (d.index.get("a") ?? 0) + d.index.size;
+const score = (d: Doc): i32 => {
+  const hits = d.index.get("a") ?? 0;
+  const keys = d.index.size;
+  if (hits < 0 || hits > 1000000 || keys > 1000000) {
+    return -1; // more than any document here holds
+  }
+  return hits + keys;
+};
 
 export const main = (): i32 => {
   const docs: Doc[] = [new Doc(), new Doc()];
   docs[0].index.set("a", 10);
   const out: i32[] = [0, 0];
+  if (out.length < docs.length) {
+    return 1;
+  }
   parallelMapInto(docs, out, score);
-  console.log(`${out[0]} ${out[1]}`); // 11 0
+  if (out.length > 1) {
+    console.log(`${out[0]} ${out[1]}`); // 11 0
+  }
   return 0;
 };
 ```
@@ -226,7 +241,7 @@ way `Array.from({ length: n }, (_, i) => f(i))` builds one. Each allocates the
 array before it starts and then runs exactly the map above, under the same
 rules for `f`. There is no `dst` to get wrong.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelFrom, parallelMap } from "nish/threads";
@@ -234,7 +249,9 @@ import { parallelFrom, parallelMap } from "nish/threads";
 export const main = (): i32 => {
   const squares = parallelFrom(5, (i) => i * i);       // 0 1 4 9 16
   const shifted = parallelMap(squares, (x) => x + 1);  // 1 2 5 10 17
-  console.log(`${squares[4]} ${shifted[4]}`); // 16 17
+  if (squares.length > 4 && shifted.length > 4) {
+    console.log(`${squares[4]} ${shifted[4]}`); // 16 17
+  }
   return 0;
 };
 ```
@@ -242,7 +259,7 @@ export const main = (): i32 => {
 The answer may be a string or an array of numbers, too; each one is copied out
 of the thread that built it, so it lives as long as the array you get back:
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelFrom, parallelMap } from "nish/threads";
@@ -251,7 +268,9 @@ export const main = (): i32 => {
   const names = parallelFrom(3, (i) => `worker-${i}`);    // worker-0 worker-1 worker-2
   const lengths = parallelMap(names, (s) => s.length);    // 8 8 8
   const tags = parallelMap(names, (s) => s.substring(7)); // 0 1 2
-  console.log(`${names[2]} ${lengths[0]} ${tags[1]}`);    // worker-2 8 1
+  if (names.length > 2 && lengths.length > 0 && tags.length > 1) {
+    console.log(`${names[2]} ${lengths[0]} ${tags[1]}`);  // worker-2 8 1
+  }
   return 0;
 };
 ```
@@ -290,20 +309,31 @@ An arrow passed to one of these four forms may read the `const` locals and the
 parameters of the function it is written in, which is how a scale, an offset
 or a lookup table reaches the body:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { parallelMap } from "nish/threads";
 
 const affine = (xs: i32[], k: i32): i32[] => {
   const b: i32 = 1;
   const table: i32[] = [0, 100, 200];
-  return parallelMap(xs, (x) => x * k + b + table[x % 3]);
+  return parallelMap(xs, (x): i32 => {
+    const t = x % 3;
+    if (t < 0 || t >= table.length) {
+      return -1;
+    }
+    const bias = table[t];
+    if (x < 0 || x > 10000 || k < 0 || k > 10000 || b > 10000 || bias < 0 || bias > 10000) {
+      return -1; // outside what this table is for
+    }
+    return x * k + b + bias;
+  });
 };
 
 export const main = (): i32 => {
   const ys = affine([1, 2, 3], 10);
-  console.log(`${ys[0]} ${ys[1]} ${ys[2]}`); // 111 221 31
+  if (ys.length > 2) {
+    console.log(`${ys[0]} ${ys[1]} ${ys[2]}`); // 111 221 31
+  }
   return 0;
 };
 ```
@@ -336,8 +366,7 @@ export const main = (): i32 => {
   next pass's call comes after it; a loop that declares its own `dst` each pass
   is fine.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { parallelMap, parallelMapInto } from "nish/threads";
 
@@ -345,9 +374,15 @@ export const main = (): i32 => {
   const src: i32[] = [3, 14, 15, 92];
   const weights = parallelMap(src, (x) => x % 13);
   const dst = new Array<i32>(src.length);
-  parallelMapInto(src, dst, (x) => weights[x % 4] + 1); // nothing had `dst` yet
+  if (dst.length < src.length) {
+    return 1;
+  }
+  parallelMapInto(src, dst, (x): i32 => {
+    const w = x % 4;
+    return w >= 0 && w < weights.length ? weights[w] : 0;
+  }); // nothing had `dst` yet
   const kept = dst; // after the call: fine
-  return kept[0];
+  return kept.length > 0 ? kept[0] : 1;
 };
 ```
 
@@ -392,8 +427,7 @@ A scope runs different functions side by side, each on a thread. Open it with
 `using`, hand it tasks with `s.spawn(entry, arg, dst, at)`, and when the block
 ends every task has run and `entry(arg)` is stored in `dst[at]`:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { scope } from "nish/threads";
 
@@ -409,13 +443,13 @@ const countPrimes = (limit: i32): i32 => {
   let count = 0;
   for (let n: i32 = 2; n < limit; n++) {
     let prime = true;
-    for (let d: i32 = 2; d * d <= n; d++) {
+    for (let d: i32 = 2; d < n && d <= n / d; d++) {
       if (n % d === 0) {
         prime = false;
         break;
       }
     }
-    if (prime) {
+    if (prime && count < n) {
       count++;
     }
   }
@@ -428,10 +462,16 @@ export const main = (): i32 => {
   const primes: i32[] = [0];
   {
     using s = scope();
-    s.spawn(sumOf, xs, sums, 0);           // sums[0] = sumOf(xs)
-    s.spawn(countPrimes, 1000, primes, 0); // primes[0] = countPrimes(1000)
-  }                                        // both tasks have run here
-  console.log(`${sums[0]} ${primes[0]}`);  // 7 168
+    if (sums.length > 0) {
+      s.spawn(sumOf, xs, sums, 0);           // sums[0] = sumOf(xs)
+    }
+    if (primes.length > 0) {
+      s.spawn(countPrimes, 1000, primes, 0); // primes[0] = countPrimes(1000)
+    }
+  }                                          // both tasks have run here
+  if (sums.length > 0 && primes.length > 0) {
+    console.log(`${sums[0]} ${primes[0]}`);  // 7 168
+  }
   return 0;
 };
 ```
@@ -515,17 +555,16 @@ no destination: `s.spawn(entry, arg)` runs `entry(arg)`, and
 `s.spawn(() => work(a, b))` runs an arrow that reads the `const` locals and
 the parameters of the function it is written in. Either one answers `void`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Mutex, scope } from "nish/threads";
 
 class Tally {
-  total: i32 = 0;
+  total: f64 = 0.0;
 }
 
-const addAll = (tally: Mutex<Tally>, xs: i32[]): void => {
-  let t: i32 = 0;
+const addAll = (tally: Mutex<Tally>, xs: f64[]): void => {
+  let t: f64 = 0.0;
   for (const x of xs) {
     t = t + x;
   }
@@ -535,8 +574,8 @@ const addAll = (tally: Mutex<Tally>, xs: i32[]): void => {
 
 export const main = (): i32 => {
   const tally = new Mutex<Tally>(new Tally());
-  const low: i32[] = [1, 2, 3];
-  const high: i32[] = [40, 50];
+  const low: f64[] = [1.0, 2.0, 3.0];
+  const high: f64[] = [40.0, 50.0];
   {
     using s = scope();
     s.spawn(() => addAll(tally, low));
@@ -613,20 +652,24 @@ deeper than that faults. A type checker walking a deep tree is the usual
 case. `scopeWithStack(bytes)` is a scope whose tasks each run on a thread with
 at least `bytes` of stack:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { scopeWithStack } from "nish/threads";
 
-const depth = (n: i32): i32 => (n === 0 ? 0 : depth(n - 1) + 1);
+const depth = (n: i32): i32 => (n <= 0 ? 0 : depth(n - 1) + 1);
 
 export const main = (): i32 => {
   const out: i32[] = [0];
   {
     using s = scopeWithStack(64 * 1024 * 1024); // 64 MiB for each task
-    s.spawn(depth, 1000, out, 0);
+    if (out.length > 0) {
+      s.spawn(depth, 1000, out, 0);
+    }
   }
-  console.log(`${out[0]}`); // 1000
+  if (out.length > 0) {
+    console.log(`${out[0]}`); // 1000
+  }
   return 0;
 };
 ```
@@ -660,13 +703,12 @@ When tasks must update one value, put it in a `Mutex`. The value lives inside
 the lock, and the only way to it is the guard that `using g = m.lock()`
 binds, which holds the lock until its block ends:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Mutex, scope } from "nish/threads";
 
 class Counter {
-  n: i32 = 0;
+  n: u64 = 0;
 }
 
 const addMany = (total: Mutex<Counter>): i32 => {
@@ -682,7 +724,7 @@ export const main = (): i32 => {
   const done: i32[] = [0, 0, 0, 0];
   {
     using s = scope();
-    for (let t: i32 = 0; t < 4; t++) {
+    for (let t: i32 = 0; t < done.length; t++) {
       s.spawn(addMany, total, done, t);
     }
   }
@@ -723,19 +765,18 @@ export const main = (): i32 => {
 A helper that takes the guard does the block's work under the block's lock,
 so the work can be split into functions without taking the lock twice:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Mutex, MutexGuard, scope } from "nish/threads";
 
 class Stats {
-  count: i32 = 0;
-  total: i32 = 0;
+  count: u64 = 0;
+  total: f64 = 0.0;
 }
 
 const note = (g: MutexGuard<Stats>, x: i32): void => {
   g.value.count = g.value.count + 1; // the helper uses `g` as the block would
-  g.value.total = g.value.total + x;
+  g.value.total = g.value.total + toF64(x);
 };
 
 const addAll = (stats: Mutex<Stats>, xs: i32[]): void => {
@@ -823,8 +864,7 @@ lost when two threads make one at the same moment. The fast pattern is the one
 below: each task counts into its own local array, then adds each count to the
 shared atomic once, at its end:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `parallelMapInto` with no guard that proves `dst` is long enough -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { AtomicI32, parallelMapInto, scope } from "nish/threads";
 
@@ -837,33 +877,36 @@ class Shard {
   }
 }
 
-const binShard = (s: Shard): i32 => {
-  const local: i32[] = [0, 0, 0, 0]; // this task's own counts
+const binShard = (s: Shard): void => {
+  const local: u32[] = [0, 0, 0, 0]; // this task's own counts
   for (const x of s.xs) {
     const bin: i32 = x & 3;
     if (bin < local.length) {
       local[bin] += 1;
     }
   }
-  for (let b = 0; b < local.length; b++) {
-    s.bins[b].add(local[b]); // one indivisible add per bin, no lock
+  for (let b = 0; b < local.length && b < s.bins.length; b++) {
+    s.bins[b].add(toI32(local[b])); // one indivisible add per bin, no lock
   }
-  return 0;
 };
 
 export const main = (): i32 => {
   const bins: AtomicI32[] = [new AtomicI32(0), new AtomicI32(0), new AtomicI32(0), new AtomicI32(0)];
-  const done: i32[] = [0, 0];
   {
     using s = scope();
-    s.spawn(binShard, new Shard([1, 2, 3, 4, 5], bins), done, 0);
-    s.spawn(binShard, new Shard([6, 7, 8], bins), done, 1);
+    s.spawn(binShard, new Shard([1, 2, 3, 4, 5], bins));
+    s.spawn(binShard, new Shard([6, 7, 8], bins));
   }
   const big = new AtomicI32(0);
   const xs: i32[] = [3, 9, 4];
   const ys: i32[] = [0, 0, 0];
+  if (ys.length < xs.length) {
+    return 1;
+  }
   parallelMapInto(xs, ys, (x) => big.max(x)); // a parallel function may update an atomic
-  console.log(`${bins[0].load()} ${bins[1].load()} ${big.load()}`); // 2 2 9
+  if (bins.length > 1) {
+    console.log(`${bins[0].load()} ${bins[1].load()} ${big.load()}`); // 2 2 9
+  }
   return 0;
 };
 ```
@@ -929,8 +972,7 @@ export const main = (): i32 => {
 
 Read it once the block has closed, when every task has finished:
 
-<!-- allow-panics: calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { AtomicI32, scope } from "nish/threads";
 
@@ -941,7 +983,9 @@ export const main = (): i32 => {
   const done: i32[] = [0];
   {
     using s = scope();
-    s.spawn(bump, a, done, 0);
+    if (done.length > 0) {
+      s.spawn(bump, a, done, 0);
+    }
   }
   const seen = a.load(); // every task has finished
   console.log(`${seen}`); // 1
@@ -978,27 +1022,45 @@ element's index first, so `hits.add(r, 1)` adds 1 to counter `r` in one
 indivisible step. This counts requests and bytes per route from a parallel
 function:
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-import { AtomicI32Array, AtomicI64Array, parallelFrom } from "nish/threads";
+import { atomicI32ArrayChecked, atomicI64ArrayChecked, parallelMap } from "nish/threads";
 
 const ROUTES: i32 = 4; // 0 = /, 1 = /login, 2 = /api, 3 = anything else
 
+class Request {
+  route: i32;
+  size: i64;
+  constructor(route: i32, size: i64) {
+    this.route = route;
+    this.size = size;
+  }
+}
+
 export const main = (): i32 => {
-  const hits = new AtomicI32Array(ROUTES);  // one counter per route, one buffer
-  const bytes = new AtomicI64Array(ROUTES); // bytes served per route
-  const routes: i32[] = [0, 2, 2, 1, 2, 3, 0, 2];
-  const sizes: i64[] = [512, 90, 120, 300, 80, 64, 512, 100];
-  const seen = parallelFrom(routes.length, (i): i32 => {
-    hits.add(routes[i], 1);        // one indivisible add on element routes[i]
-    bytes.add(routes[i], sizes[i]);
-    return routes[i];
+  const madeHits = atomicI32ArrayChecked(ROUTES);  // one counter per route, one buffer
+  const madeBytes = atomicI64ArrayChecked(ROUTES); // bytes served per route
+  if (madeHits.isErr() || madeBytes.isErr()) {
+    return 1;
+  }
+  const hits = madeHits.value;
+  const bytes = madeBytes.value;
+  const requests: Request[] = [
+    new Request(0, 512), new Request(2, 90), new Request(2, 120), new Request(1, 300),
+    new Request(2, 80), new Request(3, 64), new Request(0, 512), new Request(2, 100),
+  ];
+  const seen = parallelMap(requests, (q): i32 => {
+    const r = q.route;
+    if (r >= 0 && r < hits.length && r < bytes.length) {
+      hits.add(r, 1);        // one indivisible add on element r
+      bytes.add(r, q.size);
+    }
+    return r;
   });
-  for (let r = 0; r < hits.length; r++) {
+  for (let r = 0; r < hits.length && r < bytes.length; r++) {
     console.log(`route ${r}: ${hits.load(r)} hits, ${bytes.load(r)} bytes`);
   }
-  return seen.length - routes.length; // 0
+  return seen.length - requests.length; // 0
 };
 ```
 
@@ -1016,27 +1078,28 @@ route 3: 1 hits, 64 bytes
   `compareExchange(i, expected, desired)`, each doing to element `i` what
   `AtomicI32`'s does to its counter. `length` says how many elements there
   are; it is fixed when the array is made.
-- **A length read from input**: `new AtomicI32Array(n)` stops the program on
-  a negative `n`, as `new Array` does. When `n` comes from input, call
-  `atomicI32ArrayChecked(n)` (or `atomicI64ArrayChecked(n)`) instead: it
+- **Make it with `atomicI32ArrayChecked(n)`**: `new AtomicI32Array(n)` stops
+  the program on a negative `n`, as `new Array` does, so by default it builds
+  only just after `atomicArrayLengthFault(n)` has found no fault in a `const` or a
+  parameter `n`. `atomicI32ArrayChecked(n)` (or `atomicI64ArrayChecked(n)`)
   returns the array as an `Ok`, or an `Err` saying the length is out of
-  range, so no panic is left to allow (`examples/histogram-atomic.ts` makes
-  its bins this way).
+  range, so no panic is left to allow, as the example and
+  `examples/histogram-atomic.ts` do.
 - **An index out of range is never used**, as for any array: by default the
   compiler refuses an index it cannot prove in range, and under
   `--allow-panics` the index is checked while the program runs and one out
   of range stops it: `index out of range: 16 >= 16`, exit status 1. The
   guards that prove an array index prove this one: a loop over
-  `r < hits.length`, as the example's last loop is, or a test of
-  `i >= 0 && i < hits.length` around the call. Test the same array's
-  `length`: another array's proves nothing about this one, so that loop
-  proves `hits.load(r)` but not `bytes.load(r)`. The method checks its
+  `r < hits.length`, or a test of `i >= 0 && i < hits.length` around the
+  call. Test the same array's `length`: another array's proves nothing about
+  this one, so `r < hits.length` alone proves `hits.load(r)` but not
+  `bytes.load(r)`, and the example's last loop tests both. The method checks its
   index after all its arguments have run, so that check proves nothing for
   them: in `hits.store(i, xs[i])`, guard `xs[i]` itself.
 - **The rules are the atomic's.** Only call its methods; don't touch it in the
   scope's block once the first task is spawned; scopes opened by one `using`
   don't share one; make the updates commute. An `AtomicI64Array` holds `i64`s
-  with the same ±2^53 limit under Node, so give it `i64` values, as `sizes`
+  with the same ±2^53 limit under Node, so give it `i64` values, as `size`
   is above.
 
 **When to choose it over `AtomicI32[]`.** An `AtomicI32[]` is one object per
@@ -1060,8 +1123,7 @@ the channel with `for...of`, which waits for values and ends once every task
 that may send has returned. Nobody closes a channel, so nobody can close one
 too early.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Channel, scope } from "nish/threads";
 
@@ -1074,32 +1136,34 @@ class Pipe {
   }
 }
 
-const produce = (p: Pipe): i32 => {
-  for (let i: i32 = 1; i <= p.n; i++) {
-    p.ch.send(i);
+const produce = (p: Pipe): void => {
+  for (let i: i32 = 0; i < p.n; i++) {
+    p.ch.send(i + 1);
   }
-  return p.n;
 };
 
-const consume = (p: Pipe): i32 => {
-  let sum: i32 = 0;
-  for (const x of p.ch) {
-    sum = sum + x;
+const consume = (ch: Channel<i32>): f64 => {
+  let sum: f64 = 0.0;
+  for (const x of ch) {
+    sum = sum + toF64(x);
   }
   return sum;
 };
 
 export const main = (): i32 => {
-  const sent: i32[] = [0, 0];
-  const sums: i32[] = [0];
-  const ch = new Channel<i32>();                 // a `const`, right before its scope
+  const sums: f64[] = [0.0];
+  const ch = new Channel<i32>();               // a `const`, right before its scope
   {
     using s = scope();
-    s.spawn(produce, new Pipe(ch, 10), sent, 0); // every sender first
-    s.spawn(produce, new Pipe(ch, 20), sent, 1);
-    s.spawn(consume, new Pipe(ch, 0), sums, 0);  // then the one receiver
+    s.spawn(produce, new Pipe(ch, 10));        // every sender first
+    s.spawn(produce, new Pipe(ch, 20));
+    if (sums.length > 0) {
+      s.spawn(consume, ch, sums, 0);           // then the one receiver
+    }
   }
-  console.log(`${sums[0]}`); // 265
+  if (sums.length > 0) {
+    console.log(`${sums[0]}`); // 265
+  }
   return 0;
 };
 ```
@@ -1168,8 +1232,7 @@ export const main = (): i32 => {
 Each task has memory of its own, freed when the scope joins, so a value that
 leaves a task is copied into the memory of whoever receives it:
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Mutex, scope } from "nish/threads";
 
@@ -1189,12 +1252,18 @@ export const main = (): i32 => {
   const last = new Mutex<Last>(new Last());
   {
     using s = scope();
-    s.spawn(label, 1, names, 0); // the answer is copied out at the join
-    s.spawn(label, 2, names, 1);
+    if (names.length > 1) {
+      s.spawn(label, 1, names, 0); // the answer is copied out at the join
+    }
+    if (names.length > 1) {
+      s.spawn(label, 2, names, 1);
+    }
     s.spawn(record, last);
   }
   using g = last.lock();
-  console.log(`${names[0]} ${names[1]} ${g.value.name}`); // job-1 job-2 job-3
+  if (names.length > 1) {
+    console.log(`${names[0]} ${names[1]} ${g.value.name}`); // job-1 job-2 job-3
+  }
   return 0;
 };
 ```
@@ -1299,7 +1368,7 @@ with an example on this page that compiles.
 | NL2536 | a guard handed to a method, a constructor or a generic function | a top-level helper, `const note = (g: MutexGuard<Stats>, x: i32): void => {`, called as `note(g, x)`: [the helper](#sharing-a-value-mutext) |
 | NL2513 | an atomic read inside the scope's block after a `spawn` | read it after the block, `const seen = a.load()`: [atomics](#counting-without-a-lock-atomici32-and-atomici64) |
 | NL2516 | two scopes of one `using` share an atomic | one `using` per scope, `using s = scope()` and `using t = scope()`: [below](#two-scopes-that-share-an-atomic) |
-| NL2481 | a channel's receiver spawned before a sender | spawn every sender first, `s.spawn(produce, new Pipe(ch, 10), sent, 0)` above `s.spawn(consume, new Pipe(ch, 0), sums, 0)`: [`Channel<T>`](#passing-values-channelt) |
+| NL2481 | a channel's receiver spawned before a sender | spawn every sender first, `s.spawn(produce, new Pipe(ch, 10))` above `s.spawn(consume, ch, sums, 0)`: [`Channel<T>`](#passing-values-channelt) |
 | NL2484 | an arrow that uses a channel | a module function the `spawn` names, `const mainTask = (c: Channel<i32>): void => {` and `s.spawn(mainTask, ch)`: [below](#a-channel-in-an-arrow) |
 
 ### A `let` read by a parallel arrow

@@ -41,25 +41,19 @@ export const main = async (): Promise<i32> => {
 };
 ```
 
-Several examples on this page do `i32` arithmetic nothing bounds, so the
-compiler cannot prove it fits and they build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
-as the compile error suggests, builds them under the default.
-
 An answer that cannot fail is a plain `Promise<T>`:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-const double = async (x: i32): Promise<i32> => {
-  return x * 2;
+const double = async (x: i32): Promise<i64> => {
+  return toI64(x) * 2;   // twice any i32 fits an i64
 };
 
 export const main = async (): Promise<void> => {
   const a = await double(3);
-  let b: i32 = 0;
-  b = await double(a);
-  console.log(b);
+  let b: i64 = 0;
+  b = await double(21);
+  console.log(`${a} ${b}`);   // 6 42
 };
 ```
 
@@ -124,22 +118,21 @@ available only through the import:
   Nothing reads its answer, so `f` answers `void`, or a `Result` it reports
   itself.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { awaitAll, spawn } from "nish:async";
 
-const price = async (id: i32): Promise<i32> => {
-  return id * 100;
+const price = async (id: i32): Promise<i64> => {
+  return toI64(id) * 100;
 };
 
-const report = async (total: i32): Promise<void> => {
-  console.log(total);
+const report = async (a: i64, b: i64): Promise<void> => {
+  console.log(`${a} ${b}`);
 };
 
 export const main = async (): Promise<void> => {
   const [a, b] = await awaitAll(price(1), price(2));
-  spawn(report(a + b));
+  spawn(report(a, b));   // 100 200
 };
 ```
 
@@ -229,32 +222,31 @@ copied for the task. An object, an array, a `Map` or a `Set` is shared: the
 task works on the spawner's own, and the spawner keeps it alive for as long
 as any task holds it.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { sleep, spawn } from "nish:async";
 
-class Tally {
-  hits: i32 = 0;
+class Latest {
+  value: i32 = 0;
 }
 
-const count = async (tally: Tally, n: i32): Promise<void> => {
+const record = async (latest: Latest, n: i32): Promise<void> => {
   await sleep(n);
-  tally.hits = tally.hits + n;
-  console.log(tally.hits);
+  latest.value = n;
+  console.log(latest.value);   // 5, then 10
 };
 
-const start = async (): Promise<Tally> => {
-  const tally = new Tally();
-  spawn(count(tally, 5));
-  spawn(count(tally, 10));
-  return tally;
+const start = async (): Promise<Latest> => {
+  const latest = new Latest();
+  spawn(record(latest, 5));
+  spawn(record(latest, 10));
+  return latest;
 };
 
 export const main = async (): Promise<void> => {
-  const tally = await start();
+  const latest = await start();
   await sleep(20);
-  console.log(tally.hits);
+  console.log(latest.value);   // 10: both tasks wrote main's object
 };
 ```
 
@@ -325,13 +317,12 @@ of anything else, such as a `string`, is refused (NL2690): pass it to the task
 as an argument of its own. Any other argument, such as an `Item | null`, is
 refused (NL2673); pass the value itself.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { sleep, spawn } from "nish:async";
 
 class Board {
-  hits: i32 = 0;
+  last: i32 = 0;
 }
 
 const later = async (handle: (n: i32) => Promise<void>, n: i32): Promise<void> => {
@@ -342,10 +333,10 @@ const later = async (handle: (n: i32) => Promise<void>, n: i32): Promise<void> =
 export const main = async (): Promise<i32> => {
   const board = new Board();
   spawn(later(async (n: i32): Promise<void> => {
-    board.hits = board.hits + n;
+    board.last = n;
   }, 5));
   await sleep(20);
-  console.log(`${board.hits}`); // 5
+  console.log(`${board.last}`); // 5
   return 0;
 };
 ```
@@ -506,18 +497,17 @@ arrow or an `async` function, and the function that receives it awaits each
 call. A plain function cannot go there, and an `async` arrow cannot go where
 the type answers a plain value.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-const twice = async (f: (n: i32) => Promise<i32>): Promise<i32> => {
+const twice = async (f: (n: i32) => Promise<string>): Promise<string> => {
   const a = await f(1);
   const b = await f(2);
-  return a + b;
+  return `${a}, ${b}`;
 };
 
 export const main = async (): Promise<void> => {
-  const total = await twice(async (n: i32): Promise<i32> => n * 10);
-  console.log(total);   // 30
+  const both = await twice(async (n: i32): Promise<string> => `call ${n}`);
+  console.log(both);   // call 1, call 2
 };
 ```
 
