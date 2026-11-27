@@ -82,12 +82,6 @@ const YAML_WRITE_BACKSLASH: i32 = 92
 const yamlWriteByte = (text: string, i: i32): i32 =>
   i >= 0 && i < toI32(text.length) ? toI32(text.charCodeAt(i)) : -1
 
-/** Byte `i + ahead` of `text`, or `-1` past either end; the sum is in `i64`, so it cannot overflow. */
-const yamlWriteByteAt = (text: string, i: i32, ahead: i32): i32 => {
-  const at: i64 = toI64(i) + toI64(ahead)
-  return at >= 0 && at < toI64(toI32(text.length)) ? yamlWriteByte(text, toI32(at)) : -1
-}
-
 /**
  * Where a scan of `text` that stands at `i` goes next: past the `step` bytes of
  * one character, `n` at most. Summed in `i64`, so `i + step` cannot overflow; the
@@ -182,7 +176,11 @@ const yamlWriteEscapedLength = (text: string, i: i32): i32 => {
   if (c === 194 && next >= 128 && next <= 159) {
     return 2
   }
-  const third: i32 = yamlWriteByteAt(text, i, 2)
+  if (c !== 226 && c !== 239) {
+    return 0
+  }
+  // Below `text.length - 2`, `i + 2` is at most 2^31 - 2.
+  const third: i32 = i < toI32(text.length) - 2 ? yamlWriteByte(text, i + 2) : -1
   if (c === 226 && next === 128 && (third === 168 || third === 169)) {
     return 3
   }
@@ -246,7 +244,11 @@ const yamlWriteKeyTooLong = (text: string, quoted: boolean): boolean => {
     } else {
       length += 1
     }
-    i = yamlWriteStep(i, escaped > 1 ? escaped : 1, n)
+    if (escaped > 1) {
+      i = yamlWriteStep(i, escaped, n)
+    } else {
+      i += 1
+    }
   }
   return length > YAML_WRITE_MAX_KEY_LENGTH
 }
@@ -301,7 +303,7 @@ class YamlWriter {
   private escape(text: string, i: i32, length: i32): void {
     const c: i32 = yamlWriteByte(text, i)
     const second: i32 = yamlWriteByte(text, i + 1)
-    const third: i32 = yamlWriteByteAt(text, i, 2)
+    const third: i32 = i < toI32(text.length) - 2 ? yamlWriteByte(text, i + 2) : -1
     if (length === 2) {
       this.hex(second)
     } else if (length === 3 && second === 128) {

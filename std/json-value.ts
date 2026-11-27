@@ -94,7 +94,7 @@
  * **Objects keep insertion order**, the order the members were written in or
  * added. `get` finds a member by its key with a scan, so it is for a handful of
  * lookups per object; a program that looks up many keys of a large object
- * walks it once with `keyAt` and `at`.
+ * walks it once with `keys` (or `keyAt`) and `at`.
  *
  * **Duplicate keys are refused by default.** `{"a":1,"a":2}` is
  * `JSON_VALUE_ERR_DUPLICATE`, with `errorAt` at the first key that repeats an
@@ -1246,8 +1246,11 @@ export class JsonDocument {
    * @returns the element or member value, or `-1`.
    */
   at(v: JsonValue, i: i32): JsonValue {
-    const s: i32 = this.slotAt(this.index(v), i)
-    return s < 0 ? -1 : this.handle(jsonValueGet(this.slotValue, s))
+    const x: i32 = this.index(v)
+    if (i < 0 || i >= this.lengthAt(x)) {
+      return -1
+    }
+    return this.handle(jsonValueGetAt(this.slotValue, jsonValueGet(this.first, x), i))
   }
 
   /**
@@ -1268,6 +1271,29 @@ export class JsonDocument {
       return ""
     }
     return this.textOf(jsonValueGet(this.slotKeyAt, s), jsonValueGet(this.slotKeyLength, s))
+  }
+
+  /**
+   * Every key of an object, decoded, in member order: `keyAt` for each position
+   * in one pass. Empty when `v` is not an object.
+   *
+   * @param v - an object handle.
+   * @returns the keys, a new array of new strings.
+   */
+  keys(v: JsonValue): string[] {
+    const out: string[] = []
+    const x: i32 = this.index(v)
+    if (this.kindAt(x) !== JSON_VALUE_OBJECT) {
+      return out
+    }
+    const start: i32 = jsonValueGet(this.first, x)
+    // The object's run of slots lies inside the slot arrays, as `slotAt` says;
+    // a `-1` end would read no key.
+    const end: i32 = jsonValueEnd(start, jsonValueGet(this.count, x))
+    for (let s: i32 = start; s < end; s += 1) {
+      out.push(this.textOf(jsonValueGet(this.slotKeyAt, s), jsonValueGet(this.slotKeyLength, s)))
+    }
+    return out
   }
 
   /**
@@ -1476,8 +1502,11 @@ export class JsonDocument {
   private textOf(at: i32, n: i32): string {
     const bytes: u8[] = this.bytes
     // An end past 2^31 - 1 is `-1` and, like any end past `bytes`, names no text.
+    if (at < 0 || n <= 0) {
+      return ""
+    }
     const end: i32 = jsonValueEnd(at, n)
-    if (at < 0 || n <= 0 || end < at || end > toI32(bytes.length)) {
+    if (end < at || end > toI32(bytes.length)) {
       return ""
     }
     return String.fromBytes(bytes, at, end)
@@ -2264,6 +2293,15 @@ export class JsonDocument {
 
 /** `a[i]`, or `-1` when `i` is outside `a`. */
 const jsonValueGet = (a: i32[], i: i32): i32 => (i >= 0 && i < toI32(a.length) ? a[i] : -1)
+
+/**
+ * `a[at + i]`, or `-1` when `at` or `i` is negative or the sum is outside `a`;
+ * the sum is in `i64`, so it cannot overflow.
+ */
+const jsonValueGetAt = (a: i32[], at: i32, i: i32): i32 => {
+  const s: i64 = toI64(at) + toI64(i)
+  return at >= 0 && i >= 0 && s < toI64(toI32(a.length)) ? jsonValueGet(a, toI32(s)) : -1
+}
 
 /** `a[i] = x`, growing `a` by one when `i` is its length; an `i` further out writes nothing. */
 const jsonValuePut = (a: i32[], i: i32, x: i32): void => {

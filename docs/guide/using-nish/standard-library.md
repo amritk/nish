@@ -1174,7 +1174,8 @@ export const main = (): i32 => {
 A value is a `JsonValue`, a handle into the document that made it, and every
 reader is a method of the document: `kind`, then `boolean`, `string`,
 `numberText`, `length`, `at` (an element, or an object's member by position),
-`keyAt` and `get` (a member by key). A handle that names nothing answers an
+`keyAt`, `keys` (every key of an object, in order) and `get` (a member by
+key). A handle that names nothing answers an
 empty value rather than panicking: `get` of a missing key is `-1`, and `kind(-1)`
 is `JSON_VALUE_NONE`.
 
@@ -1279,7 +1280,7 @@ that does not calls `parse`; it should not mix the two to save the ranges'
 cost on the documents that turn out valid.
 
 Objects keep their members in order, and `get` looks a key up by scanning
-them, so walk a large object once with `keyAt` and `at` rather than calling
+them, so walk a large object once with `keys` (or `keyAt`) and `at` rather than calling
 `get` for each of many keys. Under Node, where a string is UTF-16,
 `parseText` and the builders take one byte per character, so non-ASCII text
 differs from the native build there; `parse` over bytes reads the same both

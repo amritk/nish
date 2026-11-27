@@ -89,16 +89,15 @@ const jsonEqualSetAt = (a: i32[], i: i32, x: i32): void => {
 }
 
 /**
- * The member positions of object `v` in key order, with every key put
- * in `keys` by its position. A bottom-up merge sort: `n log n` comparisons and
- * no recursion. Keys in one object are distinct, so the order is total.
+ * The member positions of an object in key order, given its `keys` by
+ * position. A bottom-up merge sort: `n log n` comparisons and no recursion.
+ * Keys in one object are distinct, so the order is total.
  */
-const jsonEqualSortedMembers = (doc: JsonDocument, v: i32, keys: string[]): i32[] => {
-  const n: i32 = doc.length(v)
+const jsonEqualSortedMembers = (keys: string[]): i32[] => {
+  const n: i32 = toI32(keys.length)
   let order: i32[] = []
   let spare: i32[] = []
   for (let i: i32 = 0; i < n; i++) {
-    keys.push(doc.keyAt(v, i))
     order.push(i)
     spare.push(i)
   }
@@ -209,10 +208,10 @@ export const jsonEqual = (da: JsonDocument, a: i32, db: JsonDocument, b: i32): b
           right.push(db.at(y, i))
         }
       } else {
-        const keysX: string[] = []
-        const keysY: string[] = []
-        const orderX: i32[] = jsonEqualSortedMembers(da, x, keysX)
-        const orderY: i32[] = jsonEqualSortedMembers(db, y, keysY)
+        const keysX: string[] = da.keys(x)
+        const keysY: string[] = db.keys(y)
+        const orderX: i32[] = jsonEqualSortedMembers(keysX)
+        const orderY: i32[] = jsonEqualSortedMembers(keysY)
         for (let i: i32 = 0; i < n; i++) {
           const mx: i32 = jsonEqualAt(orderX, i)
           const my: i32 = jsonEqualAt(orderY, i)
@@ -296,8 +295,8 @@ const jsonEqualCanonicalText = (doc: JsonDocument, v: i32): string => {
     } else {
       const n: i32 = doc.length(x)
       jsonEqualPut(out, `o${n}:`)
-      const keys: string[] = []
-      const order: i32[] = jsonEqualSortedMembers(doc, x, keys)
+      const keys: string[] = doc.keys(x)
+      const order: i32[] = jsonEqualSortedMembers(keys)
       // Pushed last member first, each value before its key, so the key pops first.
       for (let i: i32 = n; i > 0; i--) {
         const m: i32 = jsonEqualAt(order, i - 1)
