@@ -37,26 +37,26 @@ const RING_SKIP: i32 = -1
 const RING_SLOT_HEAD: i32 = 16
 const RING_AWAKE: i32 = 0
 const RING_ASLEEP: i32 = 1
-struct SpscRing (class) size=120 align=8 exported
+struct SpscRing (class) size=112 align=8 exported
   field region: SharedRegion index=0 offset=0
   field base: i32 index=1 offset=8
   field capacity: i32 index=2 offset=12
-  field doorbell: boolean index=3 offset=16
-  field tail: i64 index=4 offset=24
-  field head: i64 index=5 offset=32
-  field seenHead: i64 index=6 offset=40
-  field seenTail: i64 index=7 offset=48
-  field wnd: u8[] | null index=8 offset=56 initialized
-  field view: u8[] | null index=9 offset=64 initialized
-  field reserved: i32 index=10 offset=72 initialized
-  field reservedPad: i32 index=11 offset=76 initialized
-  field peekedEnd: i64 index=12 offset=80 initialized
-  field found: i64 index=13 offset=88 initialized
-  field mask: integer<0, 1073741823> index=14 offset=96 initialized
-  field dataAt: integer<0, 2147483647> index=15 offset=100 initialized
-  field lastAt: integer<0, 2147483647> index=16 offset=104 initialized
-  field tailAt: i32 index=17 offset=108 initialized
-  field headAt: i32 index=18 offset=112 initialized
+  field tail: i64 index=3 offset=16
+  field head: i64 index=4 offset=24
+  field seenHead: i64 index=5 offset=32
+  field seenTail: i64 index=6 offset=40
+  field wnd: u8[] | null index=7 offset=48 initialized
+  field view: u8[] | null index=8 offset=56 initialized
+  field reserved: i32 index=9 offset=64 initialized
+  field reservedPad: i32 index=10 offset=68 initialized
+  field peekedEnd: i64 index=11 offset=72 initialized
+  field found: i64 index=12 offset=80 initialized
+  field mask: integer<0, 1073741823> index=13 offset=88 initialized
+  field dataAt: integer<0, 2147483647> index=14 offset=92 initialized
+  field lastAt: integer<0, 2147483647> index=15 offset=96 initialized
+  field tailAt: i32 index=16 offset=100 initialized
+  field headAt: i32 index=17 offset=104 initialized
+  field doorbell: boolean index=18 offset=108
   constructor -> @nish.SpscRing.constructor
   method tryPush -> @nish.SpscRing.tryPush
   method publish -> @nish.SpscRing.publish
@@ -221,7 +221,7 @@ function SpscRing.constructor(this: SpscRing, region: SharedRegion, base: i32): 
   sharedWrite: via nish.SharedRegion.loadI32
   escaping: base region
   calls: nish.SharedRegion.loadI32 nish.SharedRegion.loadI64 nish.ringAdd nish.ringFloor nish.ringSub
-  pointer this: size=120 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   pointer region: size=4 writesThrough=true captured=true passedTo=nish.SharedRegion.loadI32#0 nish.SharedRegion.loadI32#0 nish.SharedRegion.loadI64#0 nish.SharedRegion.loadI64#0
   stackSites=0 stackLocals=0
   callee +0:21 SharedRegion.loadI32 -> @nish.SharedRegion.loadI32
@@ -243,7 +243,7 @@ function SpscRing.tryPush(this: SpscRing, src: readonly u8[], off: i32, len: i32
   sharedWrite: +0:7
   escaping: len off
   calls: nish.SharedRegion.loadI64 nish.SharedRegion.storeI32 nish.SharedRegion.write nish.SpscRing.publish nish.ringAdd nish.ringGap nish.ringPos nish.ringRecordWide nish.ringSub nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=120 writesThrough=true captured=false passedTo=nish.SpscRing.publish#0
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.SpscRing.publish#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.SharedRegion.write#2 nish.SharedRegion.write#2
   stackSites=0 stackLocals=0
   local -7:11 mask: integer<0, 1073741823> (const)
@@ -269,7 +269,7 @@ function SpscRing.publish(this: SpscRing, end: i64): void -> @nish.SpscRing.publ
   sharedWrite: +0:5
   escaping: end
   calls: nish.SharedRegion.storeI64 nish.ringRing
-  pointer this: size=120 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +2:7 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
   callee +3:7 ringRing -> @nish.ringRing
@@ -279,7 +279,7 @@ function SpscRing.emptyWindow(this: SpscRing, window: u8[] | null): u8[] -> @nis
   sharedWrite: via nish.SharedRegion.lend
   escaping: window
   calls: nish.SharedRegion.giveBack nish.SharedRegion.lend
-  pointer this: size=120 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   pointer window: size=0 writesThrough=true captured=true passedTo=nish.SharedRegion.lend#3
   stackSites=0 stackLocals=0
   local +0:11 none: i32 (const)
@@ -291,7 +291,7 @@ function SpscRing.reserve(this: SpscRing, n: i32): u8[] -> @nish.SpscRing.reserv
   sharedWrite: +0:7
   escaping: n
   calls: nish.SharedRegion.lend nish.SharedRegion.loadI64 nish.SpscRing.emptyWindow nish.ringAdd nish.ringGap nish.ringPos nish.ringRecordWide nish.ringSub nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=120 writesThrough=true captured=false passedTo=nish.SpscRing.emptyWindow#0
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.SpscRing.emptyWindow#0
   stackSites=0 stackLocals=0
   local -17:11 most: i32 (const)
   callee -17:23 ringSub -> @nish.ringSub
@@ -318,7 +318,7 @@ function SpscRing.endReservation(this: SpscRing, what: string): void -> @nish.Sp
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.SharedRegion.giveBack nish_arena_mark nish_arena_release nish_panic nish_str_concat
-  pointer this: size=120 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:11 w: u8[] | null (const)
   callee -1:5 SharedRegion.giveBack -> @nish.SharedRegion.giveBack
@@ -327,7 +327,7 @@ function SpscRing.commit(this: SpscRing, len: i32): void -> @nish.SpscRing.commi
   sharedWrite: via nish.SpscRing.endReservation
   escaping: len
   calls: nish.SharedRegion.storeI32 nish.SpscRing.endReservation nish.SpscRing.publish nish.ringPos nish.ringRecordWide nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=120 writesThrough=true captured=false passedTo=nish.SpscRing.endReservation#0 nish.SpscRing.publish#0
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.SpscRing.endReservation#0 nish.SpscRing.publish#0
   stackSites=0 stackLocals=0
   local +0:11 n: i32 (const)
   callee +4:5 SpscRing.endReservation -> @nish.SpscRing.endReservation
@@ -344,7 +344,7 @@ function SpscRing.abandon(this: SpscRing): void -> @nish.SpscRing.abandon [expor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.SpscRing.endReservation
   calls: nish.SpscRing.endReservation
-  pointer this: size=120 writesThrough=true captured=false passedTo=nish.SpscRing.endReservation#0
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.SpscRing.endReservation#0
   stackSites=0 stackLocals=0
   callee +0:5 SpscRing.endReservation -> @nish.SpscRing.endReservation
 function SpscRing.ready(this: SpscRing, order: i32): boolean -> @nish.SpscRing.ready [exported method]
@@ -352,7 +352,7 @@ function SpscRing.ready(this: SpscRing, order: i32): boolean -> @nish.SpscRing.r
   sharedWrite: +0:5
   escaping: order
   calls: nish.SharedRegion.loadI64
-  pointer this: size=120 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:21 SharedRegion.loadI64 -> @nish.SharedRegion.loadI64
 function SpscRing.lengthAt(this: SpscRing, pos: i64, end: i64): i32 -> @nish.SpscRing.lengthAt [exported method]
@@ -360,7 +360,7 @@ function SpscRing.lengthAt(this: SpscRing, pos: i64, end: i64): i32 -> @nish.Sps
   sharedWrite: +0:5
   escaping: end pos
   calls: nish.SharedRegion.loadI32 nish.ringGap nish.ringPos nish.ringRecordWide nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32 nish_str_from_i64
-  pointer this: size=120 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -14:11 mask: integer<0, 1073741823> (const)
   local -13:11 last: integer<0, 2147483647> (const)
@@ -375,14 +375,14 @@ function SpscRing.lengthAt(this: SpscRing, pos: i64, end: i64): i32 -> @nish.Sps
 function SpscRing.notPeeked(this: SpscRing, what: string): void -> @nish.SpscRing.notPeeked [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat
-  pointer this: size=120 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function SpscRing.copyOut(this: SpscRing, pos: i64, len: i32, dst: u8[], off: i32): void -> @nish.SpscRing.copyOut [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.SharedRegion.read
   escaping: len off
   calls: nish.SharedRegion.read nish.ringAdd nish.ringSub
-  pointer this: size=120 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.SharedRegion.read#2 nish.SharedRegion.read#2
   stackSites=0 stackLocals=0
   local +0:11 mask: integer<0, 1073741823> (const)
@@ -399,7 +399,7 @@ function SpscRing.tryPop(this: SpscRing, dst: u8[], off: i32): i32 -> @nish.Spsc
   sharedWrite: +0:5
   escaping: off
   calls: nish.SharedRegion.storeI64 nish.SpscRing.copyOut nish.SpscRing.lengthAt nish.SpscRing.notPeeked nish.SpscRing.ready nish.ringPos nish.ringRecordWide
-  pointer this: size=120 writesThrough=true captured=false passedTo=nish.SpscRing.notPeeked#0 nish.SpscRing.ready#0 nish.SpscRing.lengthAt#0 nish.SpscRing.copyOut#0
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.SpscRing.notPeeked#0 nish.SpscRing.ready#0 nish.SpscRing.lengthAt#0 nish.SpscRing.copyOut#0
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.SpscRing.copyOut#3
   stackSites=0 stackLocals=0
   callee -9:5 SpscRing.notPeeked -> @nish.SpscRing.notPeeked
@@ -414,7 +414,7 @@ function SpscRing.popBatch(this: SpscRing, dst: u8[], lens: i32[]): i32 -> @nish
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.SharedRegion.loadI64 nish.SharedRegion.storeI64 nish.SpscRing.copyOut nish.SpscRing.lengthAt nish.SpscRing.notPeeked nish.ringAdd nish.ringPos nish.ringRecordWide
-  pointer this: size=120 writesThrough=true captured=false passedTo=nish.SpscRing.notPeeked#0 nish.SpscRing.lengthAt#0 nish.SpscRing.copyOut#0
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.SpscRing.notPeeked#0 nish.SpscRing.lengthAt#0 nish.SpscRing.copyOut#0
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.SpscRing.copyOut#3
   pointer lens: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -435,7 +435,7 @@ function SpscRing.popWait(this: SpscRing, dst: u8[], off: i32, timeoutMs: i32): 
   sharedWrite: via nish.ringDeadline
   escaping: off timeoutMs
   calls: nish.SharedRegion.storeI32 nish.SpscRing.ready nish.SpscRing.tryPop nish.ringAdd nish.ringDeadline nish.ringLeftMs nish.ringSleep
-  pointer this: size=120 writesThrough=true captured=false passedTo=nish.SpscRing.tryPop#0 nish.SpscRing.ready#0
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.SpscRing.tryPop#0 nish.SpscRing.ready#0
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.SpscRing.tryPop#1
   stackSites=0 stackLocals=0
   local +0:11 deadline: i64 (const)
@@ -453,7 +453,7 @@ function SpscRing.peek(this: SpscRing): readonly u8[] -> @nish.SpscRing.peek [ex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.SharedRegion.lend nish.SpscRing.emptyWindow nish.SpscRing.lengthAt nish.SpscRing.notPeeked nish.SpscRing.ready nish.ringPos nish.ringRecordWide
-  pointer this: size=120 writesThrough=true captured=false passedTo=nish.SpscRing.notPeeked#0 nish.SpscRing.ready#0 nish.SpscRing.emptyWindow#0 nish.SpscRing.lengthAt#0 nish.SpscRing.emptyWindow#0
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.SpscRing.notPeeked#0 nish.SpscRing.ready#0 nish.SpscRing.emptyWindow#0 nish.SpscRing.lengthAt#0 nish.SpscRing.emptyWindow#0
   stackSites=0 stackLocals=0
   callee -3:5 SpscRing.notPeeked -> @nish.SpscRing.notPeeked
   callee -2:10 SpscRing.ready -> @nish.SpscRing.ready
@@ -474,13 +474,13 @@ function SpscRing.release(this: SpscRing): void -> @nish.SpscRing.release [expor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.SharedRegion.giveBack nish.SharedRegion.storeI64 nish_panic
-  pointer this: size=120 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:11 r: u8[] | null (const)
   callee -1:5 SharedRegion.giveBack -> @nish.SharedRegion.giveBack
   callee +2:5 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
 function initSpscRing(region: SharedRegion, base: i32, capacity: i32, doorbell: boolean): SpscRing -> @nish.initSpscRing [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=120
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=112
   sharedWrite: via nish.ringCheckPlace
   escaping: base capacity
   calls: nish.SharedRegion.storeI32 nish.SharedRegion.storeI64 nish.SpscRing.constructor nish.ringAdd nish.ringCheckPlace nish.ringIsPowerOfTwo nish.spscRingBytes nish_alloc_struct nish_panic nish_str_concat nish_str_from_i32
@@ -1175,7 +1175,7 @@ function spscRound(ring: SpscRing, src: u8[], dst: u8[], round: i32): i64 -> @sp
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: lengthOf nish.SpscRing.commit nish.SpscRing.peek nish.SpscRing.release nish.SpscRing.reserve nish.SpscRing.tryPop nish.SpscRing.tryPush nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32 sumOf
-  pointer ring: size=120 writesThrough=true captured=false passedTo=nish.SpscRing.tryPush#0 nish.SpscRing.tryPop#0 nish.SpscRing.reserve#0 nish.SpscRing.commit#0 nish.SpscRing.peek#0 nish.SpscRing.release#0 nish.SpscRing.tryPop#0
+  pointer ring: size=112 writesThrough=true captured=false passedTo=nish.SpscRing.tryPush#0 nish.SpscRing.tryPop#0 nish.SpscRing.reserve#0 nish.SpscRing.commit#0 nish.SpscRing.peek#0 nish.SpscRing.release#0 nish.SpscRing.tryPop#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.SpscRing.tryPush#1
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.SpscRing.tryPop#1 sumOf#0 nish.SpscRing.tryPop#1
   stackSites=0 stackLocals=0
