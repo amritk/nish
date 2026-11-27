@@ -455,4 +455,37 @@ export const runGfxChecks = ({ only, has, check, skip, shown, nish, root, buildD
     ran.status === 0 && ran.stdout === "instance\n",
     shown(ran)
   )
+
+  // examples/gfx/clear.ts, through std/gpu/sys.ts: six offscreen frames, each
+  // cleared to its own colour and read back. Frame f clears to red f/5 and
+  // green (5 - f)/5, whose unorm bytes round exactly; the program prints each
+  // frame's first pixel and whether every pixel matches it. It answers 77 when
+  // no adapter answers, as the C triangle does.
+  const clearExe = path.join(dir, "clear")
+  const clearLinked = spawnSync(
+    nish,
+    [path.join(root, "examples", "gfx", "clear.ts"), "--link", clearExe, "--profile", "debug"],
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NISH_GFX_PREFIX: prefix },
+    }
+  )
+  const cleared =
+    clearLinked.status === 0
+      ? spawnSync(clearExe, ["--offscreen"], { encoding: "utf8", timeout: 120000 })
+      : clearLinked
+  if (clearLinked.status === 0 && cleared.status === 77) {
+    skip(`gfx: no GPU adapter answered (${cleared.stdout.trim()}), so examples/gfx/clear.ts is not drawn`)
+  } else {
+    const byte = (x) => Math.round(x * 255)
+    const expected = [0, 1, 2, 3, 4, 5]
+      .map((f) => `frame ${f}: ${byte(f / 5)},${byte((5 - f) / 5)},0,255 on every pixel\n`)
+      .join("")
+    check(
+      "gfx: examples/gfx/clear.ts clears six offscreen frames to their own colours and reads each back on every pixel",
+      cleared.status === 0 && cleared.stdout === expected,
+      `${shown(cleared)}\nexpected:\n${expected}`
+    )
+  }
 }
