@@ -374,7 +374,7 @@ export const rsaParsePrivateKey = (der: u8[], start: i32, end: i32): Secret<u8[]
     return null
   }
   const w: i32 = rsaSignHalfWidth(ne - ns)
-  for (let i: i32 = 3; i < 8; i++) {
+  for (let i: i32 = 3; i < toI32(spans.length); i++) {
     if (spans[i].end - spans[i].start > w) {
       return null
     }
@@ -1115,8 +1115,9 @@ const rsaSignMul = (out: u32[], a: u32[], b: u32[], count: i32): void => {
   if (count < 1 || count > 64 || toI32(out.length) < 128 || toI32(a.length) < 128 || toI32(b.length) < 128) {
     return
   }
-  for (let i: i32 = 0; i < 2 * count; i++) {
+  for (let i: i32 = 0; i < count; i++) {
     out[i] = 0
+    out[i + count] = 0
   }
   for (let i: i32 = 0; i < count; i++) {
     const ai: u64 = toU64(a[i])
@@ -1213,8 +1214,9 @@ const rsaSignCrtSound = (key: u8[], k: i32): u32 => {
   bad = bad | (rsaSignLess(dp, p, c) ^ 1) | (rsaSignLess(dq, q, c) ^ 1) | (rsaSignLess(qinv, p, c) ^ 1)
   const prod: u32[] = new Array<u32>(128)
   rsaSignMul(prod, p, q, c)
-  for (let l: i32 = 0; l < 2 * c; l++) {
-    bad = bad | (prod[l] ^ (l < count ? n[l] : 0))
+  for (let l: i32 = 0; l < c; l++) {
+    const h: i32 = c + l
+    bad = bad | (prod[l] ^ n[l]) | (prod[h] ^ (h < count ? n[h] : 0))
   }
   const t: u32[] = new Array<u32>(130)
   const p0inv: u32 = rsaSignMontInverse(p[0])
@@ -1468,15 +1470,21 @@ const rsaSignPrivateOp = (key: u8[], m: u8[]): u8[] | null => {
   const s: u32[] = new Array<u32>(128)
   rsaSignMul(s, entry, q, c)
   let carry: u64 = 0
-  for (let l: i32 = 0; l < 2 * c; l++) {
-    const v: u64 = toU64(s[l]) + toU64(l < c ? sq[l] : toU32(0)) + carry
+  for (let l: i32 = 0; l < c; l++) {
+    const v: u64 = toU64(s[l]) + toU64(sq[l]) + carry
     s[l] = toU32(v)
+    carry = v >> 32
+  }
+  for (let l: i32 = 0; l < c; l++) {
+    const v: u64 = toU64(s[c + l]) + carry
+    s[c + l] = toU32(v)
     carry = v >> 32
   }
   // The check: no limb past n's, s below n, and s^e mod n is m.
   let differ: u32 = toU32(carry) | (rsaSignLess(s, n, count) ^ 1)
-  for (let l: i32 = count; l < 2 * c; l++) {
-    differ = differ | s[l]
+  for (let l: i32 = 0; l < c; l++) {
+    const h: i32 = c + l
+    differ = differ | (h < count ? 0 : s[h])
   }
   const el: u32[] = new Array<u32>(128)
   rsaSignLimbs(el, key, 2 * k, k, count)

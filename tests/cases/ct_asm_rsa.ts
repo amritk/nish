@@ -194,8 +194,9 @@ export const rsaSignMul = (out: u32[], a: u32[], b: u32[], count: i32): void => 
   if (count < 1 || count > 64 || toI32(out.length) < 128 || toI32(a.length) < 128 || toI32(b.length) < 128) {
     return
   }
-  for (let i: i32 = 0; i < 2 * count; i++) {
+  for (let i: i32 = 0; i < count; i++) {
     out[i] = 0
+    out[i + count] = 0
   }
   for (let i: i32 = 0; i < count; i++) {
     const ai: u64 = toU64(a[i])

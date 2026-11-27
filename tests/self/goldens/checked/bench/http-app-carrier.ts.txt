@@ -17360,10 +17360,10 @@ function rsaSignPlace(out: u8[], at: i32, width: i32, der: u8[], span: RsaSignSp
   local -3:11 o: i32 (const)
   local -2:11 s: i32 (const)
 function rsaParsePrivateKey(der: u8[], start: i32, end: i32): Secret<u8[]> | null -> @nish.rsaParsePrivateKey [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rsaSignPrecompute
   escaping: end start
-  calls: nish.expose$arr.u8$bool$fn.20.nish.rsaSignKeySound nish.rsaSignBits nish.rsaSignDer nish.rsaSignHalfWidth nish.rsaSignInteger nish.rsaSignKeyBytes nish.rsaSignOdd nish.rsaSignPrecompute nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_array_grow nish_panic_index nish_panic_overflow
+  calls: nish.expose$arr.u8$bool$fn.20.nish.rsaSignKeySound nish.rsaSignBits nish.rsaSignDer nish.rsaSignHalfWidth nish.rsaSignInteger nish.rsaSignKeyBytes nish.rsaSignOdd nish.rsaSignPrecompute nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_array_grow nish_panic_overflow
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.rsaSignDer#0 nish.rsaSignDer#0 nish.rsaSignInteger#0 nish.rsaSignInteger#0 nish.rsaSignInteger#0 nish.rsaSignInteger#0 nish.rsaSignBits#0 nish.rsaSignBits#0 nish.rsaSignOdd#0 nish.rsaSignOdd#0 nish.rsaSignKeyBytes#0
   stackSites=1 stackLocals=1
   local +0:9 seq: RsaSignSpan | null (const)
@@ -17784,19 +17784,18 @@ function rsaSignLess(a: u32[], b: u32[], count: i32): u32 -> @nish.rsaSignLess
   local +1:12 i: i32 (let)
   local +2:11 d: u64 (const)
 function rsaSignMul(out: u32[], a: u32[], b: u32[], count: i32): void -> @nish.rsaSignMul
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_index
   pointer out: size=0 writesThrough=true captured=false
   pointer a: size=0 writesThrough=false captured=false
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -1:12 i: i32 (let)
-  local +2:12 i: i32 (let)
-  local +3:11 ai: u64 (const)
-  local +4:9 carry: u64 (let)
-  local +5:14 j: i32 (let)
-  local +6:13 s: u64 (const)
+  local +3:12 i: i32 (let)
+  local +4:11 ai: u64 (const)
+  local +5:9 carry: u64 (let)
+  local +6:14 j: i32 (let)
+  local +7:13 s: u64 (const)
 function rsaSignStore(out: u8[], at: i32, len: i32, a: u32[]): void -> @nish.rsaSignStore
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -17836,9 +17835,9 @@ function rsaSignPrecompute(key: u8[]): void -> @nish.rsaSignPrecompute
   callee +23:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +24:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function rsaSignCrtSound(key: u8[], k: i32): u32 -> @nish.rsaSignCrtSound
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
-  calls: nish.rsaSignHalfWidth nish.rsaSignLess nish.rsaSignLimbs nish.rsaSignMontInverse nish.rsaSignMontMul nish.rsaSignMul nish.wipe$arr.u32 nish_panic_index
+  calls: nish.rsaSignHalfWidth nish.rsaSignLess nish.rsaSignLimbs nish.rsaSignMontInverse nish.rsaSignMontMul nish.rsaSignMul nish.wipe$arr.u32
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1
   stackSites=9 stackLocals=9
   local +0:9 w: i32 (const)
@@ -17867,13 +17866,13 @@ function rsaSignCrtSound(key: u8[], k: i32): u32 -> @nish.rsaSignCrtSound
   local +23:9 prod: u32[] (const)
   callee +24:3 rsaSignMul -> @nish.rsaSignMul
   local +25:12 l: i32 (let)
-  local +28:9 t: u32[] (const)
-  local +29:9 p0inv: u32 (const)
-  callee +29:22 rsaSignMontInverse -> @nish.rsaSignMontInverse
-  callee +30:3 rsaSignMontMul -> @nish.rsaSignMontMul
+  local +26:11 h: i32 (const)
+  local +29:9 t: u32[] (const)
+  local +30:9 p0inv: u32 (const)
+  callee +30:22 rsaSignMontInverse -> @nish.rsaSignMontInverse
   callee +31:3 rsaSignMontMul -> @nish.rsaSignMontMul
-  local +33:12 l: i32 (let)
-  callee +36:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +32:3 rsaSignMontMul -> @nish.rsaSignMontMul
+  local +34:12 l: i32 (let)
   callee +37:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +38:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +39:3 wipe<u32[]> -> @nish.wipe$arr.u32
@@ -17881,6 +17880,7 @@ function rsaSignCrtSound(key: u8[], k: i32): u32 -> @nish.rsaSignCrtSound
   callee +41:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +42:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +43:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +44:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function rsaSignPow(acc: u32[], mm: u32[], x: u32[], n: u32[], n0inv: u32, r2: u32[], one: u32[], table: u32[], entry: u32[], sel: u32[], t: u32[], count: i32): void -> @nish.rsaSignPow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -17957,8 +17957,8 @@ function rsaSignOpens(s: u32[], m: u32[], el: u32[], n: u32[], n0inv: u32, r2: u
   local +15:7 differ: u32 (let)
   local +16:12 l: i32 (let)
 function rsaSignPrivateOp(key: u8[], m: u8[]): u8[] | null -> @nish.rsaSignPrivateOp
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.rsaSignBytes nish.rsaSignHalf nish.rsaSignHalfWidth nish.rsaSignKeySize nish.rsaSignLess nish.rsaSignLimbs nish.rsaSignModSub nish.rsaSignMontInverse nish.rsaSignMontMul nish.rsaSignMul nish.rsaSignOpens nish.wipe$arr.u32 nish_panic_index
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.rsaSignBytes nish.rsaSignHalf nish.rsaSignHalfWidth nish.rsaSignKeySize nish.rsaSignLess nish.rsaSignLimbs nish.rsaSignModSub nish.rsaSignMontInverse nish.rsaSignMontMul nish.rsaSignMul nish.rsaSignOpens nish.wipe$arr.u32
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.rsaSignKeySize#0 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1 nish.rsaSignLimbs#1
   pointer m: size=0 writesThrough=false captured=false passedTo=nish.rsaSignLimbs#1
   stackSites=22 stackLocals=22
@@ -18017,22 +18017,19 @@ function rsaSignPrivateOp(key: u8[], m: u8[]): u8[] | null -> @nish.rsaSignPriva
   local +72:7 carry: u64 (let)
   local +73:12 l: i32 (let)
   local +74:11 v: u64 (const)
-  local +79:7 differ: u32 (let)
-  callee +79:37 rsaSignLess -> @nish.rsaSignLess
-  local +80:12 l: i32 (let)
-  local +83:9 el: u32[] (const)
-  callee +84:3 rsaSignLimbs -> @nish.rsaSignLimbs
-  callee +85:21 rsaSignOpens -> @nish.rsaSignOpens
-  callee +85:48 rsaSignMontInverse -> @nish.rsaSignMontInverse
-  local +86:9 ok: boolean (const)
-  local +87:9 signature: u8[] (const)
-  callee +87:32 rsaSignBytes -> @nish.rsaSignBytes
-  callee +88:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +89:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +90:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +91:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +92:3 wipe<u32[]> -> @nish.wipe$arr.u32
-  callee +93:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  local +78:12 l: i32 (let)
+  local +79:11 v: u64 (const)
+  local +84:7 differ: u32 (let)
+  callee +84:37 rsaSignLess -> @nish.rsaSignLess
+  local +85:12 l: i32 (let)
+  local +86:11 h: i32 (const)
+  local +89:9 el: u32[] (const)
+  callee +90:3 rsaSignLimbs -> @nish.rsaSignLimbs
+  callee +91:21 rsaSignOpens -> @nish.rsaSignOpens
+  callee +91:48 rsaSignMontInverse -> @nish.rsaSignMontInverse
+  local +92:9 ok: boolean (const)
+  local +93:9 signature: u8[] (const)
+  callee +93:32 rsaSignBytes -> @nish.rsaSignBytes
   callee +94:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +95:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +96:3 wipe<u32[]> -> @nish.wipe$arr.u32
@@ -18044,6 +18041,12 @@ function rsaSignPrivateOp(key: u8[], m: u8[]): u8[] | null -> @nish.rsaSignPriva
   callee +102:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +103:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +104:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +105:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +106:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +107:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +108:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +109:3 wipe<u32[]> -> @nish.wipe$arr.u32
+  callee +110:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function rsaSignFullOpens(key: u8[], m: u8[]): boolean -> @nish.rsaSignFullOpens
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish.rsaSignHalfWidth nish.rsaSignKeySize nish.rsaSignLimbs nish.rsaSignMontInverse nish.rsaSignMontMul nish.rsaSignOpens nish.rsaSignPow nish.wipe$arr.u32 nish_arena_mark nish_arena_release

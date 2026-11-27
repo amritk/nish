@@ -1179,7 +1179,7 @@ for.end:
   ret i32 %40
 }
 
-define void @rsaSignMul(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %count) #1 {
+define void @rsaSignMul(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %count) #0 {
 entry:
   %i.addr = alloca i32, align 4
   %i.addr.1 = alloca i32, align 4
@@ -1236,132 +1236,127 @@ if.then:
 
 if.end:
   store i32 0, i32* %i.addr, align 4
-  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 0
-  %19 = load i64, i64* %18, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
-  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
+  %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   br label %for.cond
 
 for.cond:
-  %22 = load i32, i32* %i.addr, align 4
-  %23 = mul nsw i32 2, %count
-  %24 = icmp slt i32 %22, %23
-  br i1 %24, label %for.body, label %for.end
+  %20 = load i32, i32* %i.addr, align 4
+  %21 = icmp slt i32 %20, %count
+  br i1 %21, label %for.body, label %for.end
 
 for.body:
-  %25 = load i32, i32* %i.addr, align 4
-  %26 = sext i32 %25 to i64
-  %27 = icmp ult i64 %26, %19
-  br i1 %27, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %26, i64 %19)
-  unreachable
-
-bounds.ok:
-  %28 = bitcast i8* %21 to i32*
-  %29 = getelementptr inbounds i32, i32* %28, i64 %26
-  store i32 0, i32* %29, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = sext i32 %22 to i64
+  %24 = bitcast i8* %19 to i32*
+  %25 = getelementptr inbounds i32, i32* %24, i64 %23
+  store i32 0, i32* %25, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %26 = load i32, i32* %i.addr, align 4
+  %27 = add nsw i32 %26, %count
+  %28 = sext i32 %27 to i64
+  %29 = bitcast i8* %19 to i32*
+  %30 = getelementptr inbounds i32, i32* %29, i64 %28
+  store i32 0, i32* %30, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   br label %for.inc
 
 for.inc:
-  %30 = load i32, i32* %i.addr, align 4
-  %31 = add nsw i32 %30, 1
-  store i32 %31, i32* %i.addr, align 4
+  %31 = load i32, i32* %i.addr, align 4
+  %32 = add nsw i32 %31, 1
+  store i32 %32, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
   store i32 0, i32* %i.addr.1, align 4
-  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
-  %33 = load i8*, i8** %32, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
-  %35 = load i8*, i8** %34, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
-  %37 = load i8*, i8** %36, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
+  %34 = load i8*, i8** %33, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
+  %36 = load i8*, i8** %35, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %38 = load i8*, i8** %37, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   br label %for.cond.1
 
 for.cond.1:
-  %38 = load i32, i32* %i.addr.1, align 4
-  %39 = icmp slt i32 %38, %count
-  br i1 %39, label %for.body.1, label %for.end.1
+  %39 = load i32, i32* %i.addr.1, align 4
+  %40 = icmp slt i32 %39, %count
+  br i1 %40, label %for.body.1, label %for.end.1
 
 for.body.1:
-  %40 = load i32, i32* %i.addr.1, align 4
-  %41 = sext i32 %40 to i64
-  %42 = bitcast i8* %33 to i32*
-  %43 = getelementptr inbounds i32, i32* %42, i64 %41
-  %44 = load i32, i32* %43, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %45 = zext i32 %44 to i64
-  store i64 %45, i64* %ai.addr, align 8
+  %41 = load i32, i32* %i.addr.1, align 4
+  %42 = sext i32 %41 to i64
+  %43 = bitcast i8* %34 to i32*
+  %44 = getelementptr inbounds i32, i32* %43, i64 %42
+  %45 = load i32, i32* %44, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %46 = zext i32 %45 to i64
+  store i64 %46, i64* %ai.addr, align 8
   store i64 0, i64* %carry.addr, align 8
   store i32 0, i32* %j.addr, align 4
-  %46 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
-  %47 = load i8*, i8** %46, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
-  %49 = load i8*, i8** %48, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %47 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
+  %48 = load i8*, i8** %47, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %49 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %50 = load i8*, i8** %49, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   br label %for.cond.2
 
 for.cond.2:
-  %50 = load i32, i32* %j.addr, align 4
-  %51 = icmp slt i32 %50, %count
-  br i1 %51, label %for.body.2, label %for.end.2
+  %51 = load i32, i32* %j.addr, align 4
+  %52 = icmp slt i32 %51, %count
+  br i1 %52, label %for.body.2, label %for.end.2
 
 for.body.2:
-  %52 = load i32, i32* %i.addr.1, align 4
-  %53 = load i32, i32* %j.addr, align 4
-  %54 = add nsw i32 %52, %53
-  %55 = sext i32 %54 to i64
-  %56 = bitcast i8* %47 to i32*
-  %57 = getelementptr inbounds i32, i32* %56, i64 %55
-  %58 = load i32, i32* %57, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %59 = zext i32 %58 to i64
-  %60 = load i64, i64* %ai.addr, align 8
-  %61 = load i32, i32* %j.addr, align 4
-  %62 = sext i32 %61 to i64
-  %63 = bitcast i8* %49 to i32*
-  %64 = getelementptr inbounds i32, i32* %63, i64 %62
-  %65 = load i32, i32* %64, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %66 = zext i32 %65 to i64
-  %67 = mul i64 %60, %66
-  %68 = add i64 %59, %67
-  %69 = load i64, i64* %carry.addr, align 8
-  %70 = add i64 %68, %69
-  store i64 %70, i64* %s.addr, align 8
-  %71 = load i32, i32* %i.addr.1, align 4
-  %72 = load i32, i32* %j.addr, align 4
-  %73 = add nsw i32 %71, %72
-  %74 = sext i32 %73 to i64
-  %75 = load i64, i64* %s.addr, align 8
-  %76 = trunc i64 %75 to i32
-  %77 = bitcast i8* %47 to i32*
-  %78 = getelementptr inbounds i32, i32* %77, i64 %74
-  store i32 %76, i32* %78, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %79 = load i64, i64* %s.addr, align 8
-  %80 = lshr i64 %79, 32
-  store i64 %80, i64* %carry.addr, align 8
+  %53 = load i32, i32* %i.addr.1, align 4
+  %54 = load i32, i32* %j.addr, align 4
+  %55 = add nsw i32 %53, %54
+  %56 = sext i32 %55 to i64
+  %57 = bitcast i8* %48 to i32*
+  %58 = getelementptr inbounds i32, i32* %57, i64 %56
+  %59 = load i32, i32* %58, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %60 = zext i32 %59 to i64
+  %61 = load i64, i64* %ai.addr, align 8
+  %62 = load i32, i32* %j.addr, align 4
+  %63 = sext i32 %62 to i64
+  %64 = bitcast i8* %50 to i32*
+  %65 = getelementptr inbounds i32, i32* %64, i64 %63
+  %66 = load i32, i32* %65, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %67 = zext i32 %66 to i64
+  %68 = mul i64 %61, %67
+  %69 = add i64 %60, %68
+  %70 = load i64, i64* %carry.addr, align 8
+  %71 = add i64 %69, %70
+  store i64 %71, i64* %s.addr, align 8
+  %72 = load i32, i32* %i.addr.1, align 4
+  %73 = load i32, i32* %j.addr, align 4
+  %74 = add nsw i32 %72, %73
+  %75 = sext i32 %74 to i64
+  %76 = load i64, i64* %s.addr, align 8
+  %77 = trunc i64 %76 to i32
+  %78 = bitcast i8* %48 to i32*
+  %79 = getelementptr inbounds i32, i32* %78, i64 %75
+  store i32 %77, i32* %79, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %80 = load i64, i64* %s.addr, align 8
+  %81 = lshr i64 %80, 32
+  store i64 %81, i64* %carry.addr, align 8
   br label %for.inc.2
 
 for.inc.2:
-  %81 = load i32, i32* %j.addr, align 4
-  %82 = add nsw i32 %81, 1
-  store i32 %82, i32* %j.addr, align 4
+  %82 = load i32, i32* %j.addr, align 4
+  %83 = add nsw i32 %82, 1
+  store i32 %83, i32* %j.addr, align 4
   br label %for.cond.2
 
 for.end.2:
-  %83 = load i32, i32* %i.addr.1, align 4
-  %84 = add nsw i32 %83, %count
-  %85 = sext i32 %84 to i64
-  %86 = load i64, i64* %carry.addr, align 8
-  %87 = trunc i64 %86 to i32
-  %88 = bitcast i8* %35 to i32*
-  %89 = getelementptr inbounds i32, i32* %88, i64 %85
-  store i32 %87, i32* %89, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %84 = load i32, i32* %i.addr.1, align 4
+  %85 = add nsw i32 %84, %count
+  %86 = sext i32 %85 to i64
+  %87 = load i64, i64* %carry.addr, align 8
+  %88 = trunc i64 %87 to i32
+  %89 = bitcast i8* %36 to i32*
+  %90 = getelementptr inbounds i32, i32* %89, i64 %86
+  store i32 %88, i32* %90, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   br label %for.inc.1
 
 for.inc.1:
-  %90 = load i32, i32* %i.addr.1, align 4
-  %91 = add nsw i32 %90, 1
-  store i32 %91, i32* %i.addr.1, align 4
+  %91 = load i32, i32* %i.addr.1, align 4
+  %92 = add nsw i32 %91, 1
+  store i32 %92, i32* %i.addr.1, align 4
   br label %for.cond.1
 
 for.end.1:
