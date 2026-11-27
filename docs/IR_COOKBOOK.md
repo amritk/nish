@@ -11810,6 +11810,7 @@ declare noundef i32 @nish.JsonDocument.lengthAt(%struct.JsonDocument* noundef no
 declare noundef i32 @nish.JsonDocument.slotAt(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #3
 declare noundef i32 @nish.JsonDocument.at(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #3
 declare noundef nonnull align 8 i8* @nish.JsonDocument.keyAt(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
+declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDocument.keys(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.get(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8) #2
 declare noundef i32 @nish.JsonDocument.findKey(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8) #2
 declare noundef nonnull align 8 i8* @nish.JsonDocument.string(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef) #0
