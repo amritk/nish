@@ -207,7 +207,13 @@ const bcryptRangeMask = (c: i32, lo: integer<0, 255>, hi: integer<0, 255>): i32 
 const bcryptCharOf = (v: i32): u8 => {
   // Narrowed to the sextet it is, so the compiler proves the sum fits.
   const s: i32 = v & 63
-  return toU8(s + 46 + (bcryptRangeMask(s, 2, 63) & 17) + (bcryptRangeMask(s, 28, 63) & 6) - (bcryptRangeMask(s, 54, 63) & 75))
+  return toU8(
+    s +
+      46 +
+      (bcryptRangeMask(s, 2, 63) & 17) +
+      (bcryptRangeMask(s, 28, 63) & 6) -
+      (bcryptRangeMask(s, 54, 63) & 75)
+  )
 }
 
 /** The sextet of a bcrypt alphabet character, or -1 for any other byte, without a branch. */

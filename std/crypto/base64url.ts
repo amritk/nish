@@ -91,11 +91,7 @@ const base64urlSextetOf = (code: i32): i32 => {
   const dash: i32 = base64urlRangeMask(c, 45, 45)
   const underscore: i32 = base64urlRangeMask(c, 95, 95)
   const value: i32 =
-    (upper & (c - 65)) |
-    (lower & (c - 71)) |
-    (digit & (c + 4)) |
-    (dash & 62) |
-    (underscore & 63)
+    (upper & (c - 65)) | (lower & (c - 71)) | (digit & (c + 4)) | (dash & 62) | (underscore & 63)
   return value | ~(upper | lower | digit | dash | underscore)
 }
 
@@ -273,12 +269,7 @@ const base64StdPadSextetOf = (code: i32): i32 => {
   const digit: i32 = base64urlRangeMask(c, 48, 57)
   const plus: i32 = base64urlRangeMask(c, 43, 43)
   const slash: i32 = base64urlRangeMask(c, 47, 47)
-  const value: i32 =
-    (upper & (c - 65)) |
-    (lower & (c - 71)) |
-    (digit & (c + 4)) |
-    (plus & 62) |
-    (slash & 63)
+  const value: i32 = (upper & (c - 65)) | (lower & (c - 71)) | (digit & (c + 4)) | (plus & 62) | (slash & 63)
   return value | ~(upper | lower | digit | plus | slash)
 }
 
