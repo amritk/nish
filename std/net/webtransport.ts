@@ -145,7 +145,6 @@ import {
   h3Greased,
   h3PutFrameHeader,
   h3PutVarint,
-  h3ReadFrameHeader,
   h3ReadVarint,
   h3VarintLength,
   Http3FrameHeader,
