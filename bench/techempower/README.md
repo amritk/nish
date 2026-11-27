@@ -146,6 +146,25 @@ is under `/usr/lib/linux-tools-*/` when the running kernel has no matching
 and the explicit entry's, against `uws` and `go-fasthttp`, in
 [the HTTP/1 codec baseline](../../docs/BENCHMARKS.md#http1-codec-baseline).
 
+### `/json` against another tree's library, interleaved
+
+```bash
+bash bench/techempower/json-ab.sh --base b49794d8 --no-keep-head
+bash bench/techempower/json-ab.sh --help
+```
+
+`run.sh` interleaves its contestants within one run, but two trees can only
+run one after the other, so a change between them reads machine drift as a
+change in the code. `json-ab.sh` builds the entry twice from the working tree,
+and with `--base REV` once more from REV's `std/`, `runtime/`, `scripts/` and
+`bench/techempower` with the same compiler (`--link` runs the tree's own
+`scripts/build.sh`, which names that tree's runtime files). With
+`--no-keep-head` it also builds the working tree with the kept response head
+turned off. It then times all of them on `/json` in one run of rotated
+rounds. The interleaved `/json` table in
+[the codec re-measurement's follow-up](../../docs/BENCHMARKS.md#follow-up-json-interleaved-at-9533b5d5)
+comes from it.
+
 ## The database entry
 
 `db-server.ts` is the handler and `db-main.ts` the program, run as one

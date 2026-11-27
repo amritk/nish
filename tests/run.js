@@ -1758,6 +1758,7 @@ const DEALT_SECTIONS = {
   netTlsTcp: { name: "the net_tls_tcp section", selected: selects("net_tls_tcp") },
   http2: { name: "the net_http2_cleartext section", selected: selects("net_http2_cleartext") },
   tlsClient: { name: "the net_tls_client_tcp section", selected: selects("net_tls_client_tcp") },
+  tlsRsa: { name: "the net_tls_rsa_server section", selected: selects("net_tls_rsa_server") },
   diagnostics: { name: "the diagnostics section", selected: selects("diagnostics") },
   performance: { name: "the performance section", selected: selects("performance") },
   memAwfy: { name: "the mem_awfy section", selected: selects("mem_awfy") },
@@ -4661,6 +4662,167 @@ if (dealtHere("http2")) {
       ended.code === 0 && lines.length === connections && lines.every((line) => /^closed: streams \d+ error 0$/.test(line)),
       `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(served)}\nstderr: ${serverErr}`
     )
+  }
+}
+
+// ---- An RSA certificate on the TLS servers, against openssl and curl (TLS RSA S1) ----
+//
+// `tests/link/net_tls_rsa_server` checks its own handshakes under the RSA-2048
+// leaf, HTTP/3 over QUIC among them; this asks TLS 1.3 stacks somebody else
+// wrote. The program run as `serve h1 2` serves HTTP/1.1 over TLS for two
+// connections: openssl s_client -tls1_3, which must print the certificate,
+// TLSv1.3, an AEAD suite and an RSA-PSS peer signature, then curl --tlsv1.3,
+// which must GET the page. Run as `serve h2 1` it serves HTTP/2 over TLS: an
+// s_client that offers only ecdsa_secp256r1_sha256 must be refused with
+// handshake_failure (alert 40), since the server signs with rsa_pss_rsae_sha256
+// alone, and curl --http2 --tlsv1.3 must then GET the page over HTTP/2.
+// Run as `serve h3 1` it is the HTTP/3 listener, for `openssl s_client -quic
+// -alpn h3`, which must complete the QUIC handshake and print the same
+// certificate, suite and signature. `-quic` came with OpenSSL 3.2; an older
+// openssl skips that half and says so. The QUIC client only shakes hands: it
+// sends no HTTP/3 request, so the GET over HTTP/3 stays the program's own
+// client's. openssl and curl are on CI's runners, so a missing one is a
+// failure here.
+if (dealtHere("tlsRsa")) {
+  const rsaDir = path.join(buildDir, "net-tls-rsa")
+  fs.rmSync(rsaDir, { recursive: true, force: true })
+  fs.mkdirSync(rsaDir, { recursive: true })
+  const exe = path.join(rsaDir, "app")
+  const built = spawnNish(
+    [
+      path.join(root, "tests", "link", "net_tls_rsa_server", "main.ts"),
+      "-o",
+      rsaDir + path.sep,
+      "--link",
+      exe,
+      ...linkProfile("net_tls_rsa_server"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  const run = (tool, args, input) =>
+    new Promise((resolve) => {
+      const child = spawn(tool, args, { stdio: ["pipe", "pipe", "pipe"] })
+      let out = ""
+      const timer = setTimeout(() => child.kill("SIGKILL"), 30000)
+      child.stdout.on("data", (chunk) => {
+        out += chunk
+      })
+      child.stderr.on("data", (chunk) => {
+        out += chunk
+      })
+      child.on("error", (error) => {
+        out += String(error)
+      })
+      child.on("close", (code, signal) => {
+        clearTimeout(timer)
+        resolve({ code, signal, out })
+      })
+      child.stdin.end(input)
+    })
+  /** Starts `serve <carrier> <count>`, runs `clients(port)`, and answers what the server printed after its port, and how it ended. */
+  const serve = async (carrier, count, clients) => {
+    const server = spawn(exe, ["serve", carrier, String(count)], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let served = ""
+    let serverErr = ""
+    const serverTimer = setTimeout(() => server.kill("SIGKILL"), 60000)
+    const serverDone = new Promise((resolve) =>
+      server.on("close", (code, signal) => {
+        clearTimeout(serverTimer)
+        resolve({ code, signal })
+      })
+    )
+    server.stderr.on("data", (chunk) => {
+      serverErr += chunk
+    })
+    const port = await new Promise((resolve) => {
+      server.stdout.on("data", (chunk) => {
+        served += chunk
+        const m = /^port (\d+)\n/.exec(served)
+        if (m !== null) {
+          resolve(Number(m[1]))
+        }
+      })
+      server.on("close", () => resolve(0))
+    })
+    if (port > 0) {
+      await clients(port)
+    } else {
+      server.kill("SIGKILL")
+    }
+    const ended = await serverDone
+    const lines = served.replace(/^port \d+\n/, "").split("\n").filter((line) => line !== "")
+    return { ended, lines, detail: `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(served)}\nstderr: ${serverErr}` }
+  }
+  if (check("net_tls_rsa_server: the server links", built.status === 0, String(built.stderr))) {
+    const h1 = await serve("h1", 2, async (port) => {
+      const s = await run("openssl", ["s_client", "-connect", `127.0.0.1:${port}`, "-tls1_3", "-alpn", "http/1.1"], "Q\n")
+      check(
+        "net_tls_rsa_server: openssl s_client -tls1_3 completes under the RSA certificate: TLSv1.3, an AEAD suite, peer signature RSA-PSS",
+        /subject=CN ?= ?localhost/.test(s.out) &&
+          /New, TLSv1\.3, Cipher is TLS_(AES_128_GCM_SHA256|AES_256_GCM_SHA384|CHACHA20_POLY1305_SHA256)/.test(s.out) &&
+          // OpenSSL 3.0 names the scheme `RSA-PSS`; 3.5 prints its IANA name.
+          /Peer signature type: (RSA-PSS|rsa_pss_rsae_sha256)\n/.test(s.out) &&
+          /Server public key is 2048 bit/.test(s.out),
+        `exit ${s.code} signal ${s.signal}\n${s.out.slice(-2500)}`
+      )
+      const c = await run("curl", ["-sS", "-k", "--max-time", "10", "--tlsv1.3", "--http1.1", `https://127.0.0.1:${port}/hello`, "-w", "%{http_version} %{http_code}\n"], "")
+      check(
+        "net_tls_rsa_server: curl --tlsv1.3 GETs the page over HTTP/1.1 under the RSA certificate",
+        c.code === 0 && c.out === "hello\n1.1 200\n",
+        `exit ${c.code} signal ${c.signal}\n${c.out.slice(-1500)}`
+      )
+    })
+    check(
+      "net_tls_rsa_server: the HTTP/1.1 server closes both connections and exits 0",
+      h1.ended.code === 0 && h1.lines.length === 2 && h1.lines.every((line) => line === "closed: alpn http/1.1"),
+      h1.detail
+    )
+    const h2 = await serve("h2", 1, async (port) => {
+      const s = await run(
+        "openssl",
+        ["s_client", "-connect", `127.0.0.1:${port}`, "-tls1_3", "-alpn", "h2", "-sigalgs", "ecdsa_secp256r1_sha256"],
+        "Q\n"
+      )
+      check(
+        "net_tls_rsa_server: an s_client offering only ecdsa_secp256r1_sha256 is refused with handshake_failure",
+        s.code !== 0 && /alert handshake failure/.test(s.out) && /Cipher is \(NONE\)/.test(s.out),
+        `exit ${s.code} signal ${s.signal}\n${s.out.slice(-2500)}`
+      )
+      const c = await run("curl", ["-sS", "-k", "--max-time", "10", "--tlsv1.3", "--http2", `https://127.0.0.1:${port}/hello`, "-w", "%{http_version} %{http_code}\n"], "")
+      check(
+        "net_tls_rsa_server: curl --http2 --tlsv1.3 GETs the page over HTTP/2 under the RSA certificate",
+        c.code === 0 && c.out === "hello\n2 200\n",
+        `exit ${c.code} signal ${c.signal}\n${c.out.slice(-1500)}`
+      )
+    })
+    check(
+      "net_tls_rsa_server: the HTTP/2 server answers the one request and exits 0",
+      h2.ended.code === 0 && h2.lines.length === 1 && h2.lines[0] === "answered 1",
+      h2.detail
+    )
+    const quicHelp = spawnSync("openssl", ["s_client", "-help"], { encoding: "utf8" })
+    if (!/^ *-quic\b/m.test(`${quicHelp.stdout ?? ""}${quicHelp.stderr ?? ""}`)) {
+      const version = spawnSync("openssl", ["version"], { encoding: "utf8" })
+      skip(`net_tls_rsa_server: ${String(version.stdout).trim()}: s_client has no -quic, so the HTTP/3 listener met no third-party QUIC client`)
+    } else {
+      const h3 = await serve("h3", 1, async (port) => {
+        const s = await run("openssl", ["s_client", "-quic", "-alpn", "h3", "-connect", `127.0.0.1:${port}`, "-servername", "localhost"], "Q\n")
+        check(
+          "net_tls_rsa_server: openssl s_client -quic -alpn h3 completes the QUIC handshake under the RSA certificate: an AEAD suite, peer signature RSA-PSS",
+          /subject=CN ?= ?localhost/.test(s.out) &&
+            /New, (TLSv1\.3|QUICv1), Cipher is TLS_(AES_128_GCM_SHA256|AES_256_GCM_SHA384|CHACHA20_POLY1305_SHA256)/.test(s.out) &&
+            /Peer signature type: (RSA-PSS|rsa_pss_rsae_sha256)\n/.test(s.out) &&
+            /Server public key is 2048 bit/.test(s.out) &&
+            /ALPN protocol: h3/.test(s.out),
+          `exit ${s.code} signal ${s.signal}\n${s.out.slice(-2500)}`
+        )
+      })
+      check(
+        "net_tls_rsa_server: the HTTP/3 listener opens the s_client -quic connection, closes it and exits 0",
+        h3.ended.code === 0 && h3.lines.length === 1 && h3.lines[0] === "open 1",
+        h3.detail
+      )
+    }
   }
 }
 
@@ -14473,6 +14635,84 @@ if (dealtHere("cryptoChecks")) {
     }
   }
 
+  // The wipes of RSA signing (`std/crypto/rsa-sign.ts`) and of RSA key loading
+  // (`std/crypto/x509.ts`) survive `-O2`, counted in each function's own
+  // optimised body as a volatile `llvm.memset` (`i1 true`): `rsaSignPrivateOp`
+  // wipes the two primes, the two half exponents, `qInv`, the four Montgomery
+  // constants made from the primes, the product scratch, the window table, the
+  // selected entry, the power of `m`, the selection scratch, the two halves'
+  // results and the joined signature (seventeen); `rsaSignKeySound` the CRT
+  // check's primes, half exponents, `qInv`, R^2 mod `p`, product and scratch
+  // (eight, `rsaSignCrtSound` inlined) and the full-exponent check's
+  // signature (one, `rsaSignFullOpens` inlined); `rsaSignFullOp`, which that
+  // check and a first-form key's signature call, `d`, scratch, table, entry,
+  // power, selection and accumulator (seven); `rsaSignPrecompute` the prime, its two
+  // constants and the scratch (four);
+  // `RsaSignScratch.saltInto` its hasher's state, block and schedule (three);
+  // `rsaSignPssSha256` and `rsaSignPssSha256Into`, the one the TLS and QUIC
+  // servers' `TlsRsaSigner` calls, each the exponent copy the salt derivation
+  // took, which `opt` inlines from `rsaSignSaltInto` (one each);
+  // `rsaParsePrivateKey` a key that fails its soundness check (one); and
+  // `x509ParseRsaPrivateKey` the decoded PKCS#1 and PKCS#8 blocks, the two
+  // `x509WipeBlocks` loops `opt` inlines (two). `TlsKeySigner.sign` and
+  // `TlsRsaSigner.sign` borrow the key and copy none of it, so the exponent
+  // copy is the signing path's only one. The program is the RSA server's,
+  // which reaches every root. The count is exact, as in `tests/wipes/`:
+  // deleting a wipe, or one `opt` removes, lowers it. The `rsa`, `crypto`,
+  // `wipe`, `x509`, `crypto_rsa_sign` and `net_tls_rsa_server` filters all run it.
+  {
+    const name =
+      "crypto: the wipes survive opt -O2 (rsaSignPrivateOp seventeen, rsaSignKeySound nine, rsaSignFullOp seven, rsaSignPrecompute four, RsaSignScratch.saltInto three, rsaSignPssSha256 one, rsaSignPssSha256Into one, rsaParsePrivateKey one, x509ParseRsaPrivateKey two)"
+    if (!only || [name, "crypto_rsa_sign", "net_tls_rsa_server"].some((selector) => selector.includes(only))) {
+      if (!has("opt")) {
+        skip("crypto: no opt to show RSA signing's and RSA key loading's wipes survive -O2")
+      } else {
+        const dir = path.join(buildDir, "wipes-o2", "rsa-sign")
+        fs.rmSync(dir, { recursive: true, force: true })
+        fs.mkdirSync(dir, { recursive: true })
+        const c = spawnNish(
+          [path.join(root, "tests/link/net_tls_rsa_server/main.ts"), "--allow-panics", "-o", `${dir}/`],
+          { cwd: root, encoding: "utf8" }
+        )
+        const optimise = (module) =>
+          c.status === 0
+            ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, `${module}.ll`)], {
+                encoding: "utf8",
+                maxBuffer: 64 * 1024 * 1024,
+              })
+            : c
+        const modules = { "rsa-sign": optimise("rsa-sign"), x509: optimise("x509") }
+        const want = [
+          ["rsa-sign", "rsaSignPrivateOp", 17],
+          ["rsa-sign", "rsaSignKeySound", 9],
+          ["rsa-sign", "rsaSignFullOp", 7],
+          ["rsa-sign", "rsaSignPrecompute", 4],
+          ["rsa-sign", "RsaSignScratch.saltInto", 3],
+          ["rsa-sign", "rsaSignPssSha256", 1],
+          ["rsa-sign", "rsaSignPssSha256Into", 1],
+          ["rsa-sign", "rsaParsePrivateKey", 1],
+          ["x509", "x509ParseRsaPrivateKey", 2],
+        ]
+        const failed = Object.values(modules).find((o) => o.status !== 0)
+        const got = want.map(([module, symbol]) => {
+          const o = modules[module]
+          const body =
+            o.status === 0
+              ? o.stdout.match(new RegExp(`^define [^\\n]*@"?nish\\.${symbol.replace(".", "\\.")}"?\\([\\s\\S]*?\\n\\}`, "m"))
+              : null
+          return body === null ? null : (body[0].match(/call void @llvm\.memset[^\n]*i1 true\)/g) ?? []).length
+        })
+        check(
+          name,
+          failed === undefined && want.every(([, , count], i) => got[i] === count),
+          failed === undefined
+            ? want.map(([module, symbol, count], i) => `${symbol}: ${got[i] ?? `not in ${module}.ll`}, want ${count}`).join("\n")
+            : failed.stderr
+        )
+      }
+    }
+  }
+
   // The message-length guard of `ed25519Sign` and `ed25519Verify` (#788): a
   // message longer than 2^31 - 1 bytes does not survive `toI32` under
   // `--number-mode f64`, so both would hash a prefix and a signature would verify
@@ -15148,6 +15388,37 @@ if (dealtHere("cryptoChecks")) {
         "ct_asm: ct_asm_aes's loop copies match std/crypto/aes.ts",
         aesDrifted.length === 0,
         `differs from the module: ${aesDrifted.join(", ")}`
+      )
+
+      // ct_asm_rsa's copies keep the module's names and text, so only `export`
+      // differs. `rsaSignWindowStep` puts its parameters on lines of their own,
+      // so a copy runs to the first `}` at the start of a line, the function's
+      // own close, as `bodyOf` does for its block form; a blank line inside a
+      // body is compared, not a stop. The fixture's `rsaSignMontMulAt` and
+      // `rsaSignWindowStepAt` are its own stand-ins (a fixed odd `n0inv`, 64
+      // limbs) and are not compared with `rsaSignPrivateOp`'s call sites, which
+      // pass the key's `n0inv` and `count`: the check covers the copied bodies.
+      const rsaBody = (source, name) => source.match(new RegExp(`\\nconst ${name} = [\\s\\S]*?\\n\\}\\n`))?.[0]
+      const rsaSource = fs.readFileSync(path.join(root, "std", "crypto", "rsa-sign.ts"), "utf8")
+      const rsaFixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_rsa.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+      const rsaDrifted = [
+        "rsaSignReduce",
+        "rsaSignMontMul",
+        "rsaSignWindowStep",
+        "rsaSignModAdd",
+        "rsaSignModSub",
+        "rsaSignLess",
+        "rsaSignMul",
+      ].filter((name) => {
+        const copy = rsaBody(rsaFixture, name)
+        return copy === undefined || copy !== rsaBody(rsaSource, name)
+      })
+      check(
+        "ct_asm: ct_asm_rsa's copies match std/crypto/rsa-sign.ts",
+        rsaDrifted.length === 0,
+        `differs from the module: ${rsaDrifted.join(", ")}`
       )
 
       // ct_asm_x25519's copies are std/crypto/x25519.ts put through the rewrites

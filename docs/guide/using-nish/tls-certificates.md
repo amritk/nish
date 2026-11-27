@@ -200,6 +200,55 @@ sends no share of the chosen group is asked once, with a HelloRetryRequest,
 for one; and a P-256 share that is not an uncompressed point on the
 curve is refused with the `illegal_parameter` alert.
 
+The certificate's key may be P-256 or RSA. For RSA, set the configuration's
+`signatureScheme` to `TLS_SIGNATURE_RSA_PSS_RSAE_SHA256` and load the key
+with `x509ParseRsaPrivateKey`, which reads an `RSA PRIVATE KEY` (PKCS#1) or
+`PRIVATE KEY` (PKCS#8) PEM block. The key must be 2048 to 4096 bits: a
+smaller or larger key, an EC key, an encrypted one or anything malformed
+answers `null`. The server then signs each handshake with
+RSA-PSS and SHA-256. A client that does not offer `rsa_pss_rsae_sha256` is
+refused with the `handshake_failure` alert, though TLS 1.3 requires every
+client to support it (RFC 8446 §9.1). The same configuration serves HTTP/1.1, HTTP/2
+and, with `signatureScheme` set on the `QuicServerConfig`, HTTP/3.
+
+<!-- allow-panics: calls `std/crypto/x509.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
+import { Secret } from "nish:secret";
+import { pemToDer, x509ParseRsaPrivateKey } from "nish/crypto/x509";
+import { TlsServerConfig } from "nish/net/tls";
+import { TLS_SIGNATURE_RSA_PSS_RSAE_SHA256 } from "nish/net/tls/codec";
+
+/** A configuration serving the certificate in `certPem` and signing with its RSA key; `null` for a bad PEM. */
+export const rsaServerConfig = (certPem: string): TlsServerConfig | null => {
+  const chain: u8[][] | null = pemToDer(certPem, "CERTIFICATE");
+  if (chain === null) {
+    return null;
+  }
+  const none: u8[] = [];
+  return {
+    certificateChain: chain,
+    alpn: ["h2", "http/1.1"],
+    quicTransportParameters: none,
+    extraExtensions: none,
+    signatureScheme: TLS_SIGNATURE_RSA_PSS_RSAE_SHA256,
+    quic: false,
+  };
+};
+
+/** The RSA key in `keyPem`, as the `Secret` the server signs with; `null` when it is not one. */
+export const rsaServerKey = (keyPem: string): Secret<u8[]> | null => x509ParseRsaPrivateKey(keyPem);
+```
+
+Hand the key to the server's signing call (`waitSigned` on an `HttpServer`,
+`signKey` on a `TlsTcpServer`) as you would a P-256 key, and `wipe` it when
+the server stops. Every block `x509ParseRsaPrivateKey` decodes from the PEM
+is wiped before it returns. The PEM string itself cannot be wiped, so read
+it from the file just before you parse it and drop it afterwards. The
+record, [crypto-rsa.md](../../security/crypto-rsa.md#rsa-pss-signing),
+lists what the signer guards against and what is open: it uses no blinding,
+and its salt is derived from the key and the message, not random.
+
 A client may ask for smaller records with the `record_size_limit` extension
 (RFC 8449), as a client short of memory does. The server keeps every
 encrypted record it sends within that limit and tells the client its own,
