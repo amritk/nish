@@ -2929,6 +2929,8 @@ The explicit TechEmpower entry again, after the codec, head and codegen stages o
 | 8 | the real-world benches against the baseline | **MET** for `browser`, `api`, `short`, `pipelined`, `split` and `http1-parse`; **NOT MET** for `varied`, which is worse | `varied` +1.1% in time against `main`'s ±0.9% band (instructions −0.8%) |
 | 9 | `run.sh --browser-head` at 256 against the baseline | **MET** for `/plaintext`; **NOT MET** for `/json`, which is worse | `/plaintext` +13.0% in both runs; `/json` −5.9% and −11.7%, below the base band of 3.6% and both `main` bands |
 
+Criteria 1, 3, 8 and 9 were followed up at `main` `9533b5d5` in [#1525](https://github.com/amritk/nish/issues/1525): see [the follow-up](#follow-up-at-9533b5d5). The verdicts above are left as they were measured at `e66cf339`.
+
 ### Where a request's instructions go
 
 `bash bench/techempower/profile.sh --only plaintext` and `--only json` on each tree. Ir per request is deterministic; the other columns are timed.
@@ -3079,7 +3081,84 @@ Peak RSS: entry 3.4 MiB on `main` against 2.9 at `b49794d8`, `uws` about 57, `go
 | loadgen POST, 447 bytes | 406.3 | 426.9 (±5.1%) | 292.5 | −28.0% | −19.7% |
 | browser GET, 1,028 bytes | 897.5 | 883.2 (±1.6%) | 642.5 | −28.4% | −25.3% |
 
-`node bench/http1-parse/run.mjs` refuses to run on `main`: since #1460 the parser keeps each field line's CRLF, so `new`'s checksum (`5937a130`) no longer equals the `known` value frozen in `run.mjs` (`b29eddcc`). These figures come from a scratch copy of `run.mjs`, not in the tree, that skips that one check for `new` only and still checks that every round of a column agrees. `old` and `old-copy` passed the frozen check. The harness is left as it is here: `bench/http1-parse/run.mjs` needs its pinned `new` checksum updated, as a follow-up outside this stage.
+At `e66cf339`, `node bench/http1-parse/run.mjs` refused to run: since #1460 the parser keeps each field line's CRLF, so `new`'s checksum (`5937a130`) no longer equalled the `known` value frozen in `run.mjs` (`b29eddcc`). These figures come from a scratch copy of `run.mjs`, not in the tree, that skipped that one check for `new` only and still checked that every round of a column agreed. `old` and `old-copy` passed the frozen check. [#1525](https://github.com/amritk/nish/issues/1525) folds each field's offsets relative to its own start, so the checksum no longer depends on where a parser lays out the line, and `run.mjs` checks all three parsers again: [the follow-up](#follow-up-at-9533b5d5) reran it from the tree.
+
+### Follow-up at `9533b5d5`
+
+[#1525](https://github.com/amritk/nish/issues/1525) followed up criteria 1, 3, 8 and 9 on `main` at `9533b5d5`. The follow-up changes no library or runtime file, so every figure below measures `9533b5d5`'s `std/` and `runtime/`.
+
+| | |
+| --- | --- |
+| Date | 2026-11-27 |
+| Sources | library and runtime: `main` at `9533b5d5`. Bench code: `bench/techempower/json-ab.sh` and the fixed `bench/http1-parse`, both added by the squash commit of PR #PRNUM. Base: `b49794d8`'s `std/`, `runtime/` and `scripts/`, built by the same compiler as `main` (not by its own, as in the run above) |
+| nish | `build/nish` from `npm run build` at `9533b5d5` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, a shared cloud VM, no hardware performance counters |
+| OS | linux 6.18.44-fc-v880 (x64) |
+| Pinning | server on CPU 0 by `taskset -c 0`, wrk `-t 3` on CPUs 1–3, as above |
+
+| # | criterion | follow-up |
+| --- | --- | --- |
+| 1 | `/plaintext` Ir per request against 3,251 | **NOT MET, accepted**: 4,125, 874 over the target and 242 (+6.2%) over `e66cf339`'s 3,883. `urlIsHostPort` costs 412.3 of them: since #1532 the codec checks that the one `Host` is a host and an optional port, a check `e66cf339` did not make. The owner accepted the miss in #1525 and the follow-up does not cut Ir |
+| 3 | explicit `/json` no worse than the baseline | **not reproduced**: interleaved in one run, `main` is not below the base outside the band in any cell |
+| 8 | `varied` | **no change**: 61 rounds put the base +0.6% against `main`, inside the base's ±0.9% band; its instructions are 1.4% lower on `main` |
+| 9 | browser-head `/json` at 256 | **not reproduced**: the base is 3.5% below `main`, `main` is not below it |
+
+#### Follow-up: `/json` interleaved at `9533b5d5`
+
+`bash bench/techempower/json-ab.sh --base b49794d8 --no-keep-head`: 8 rounds of 10 s, four contestants a round in rotated order, so every contestant takes every slot and the drift between them lands on all four. `entry` is `main`; `entry-copy` is the same bytes, so its gap is the band; `base` is `b49794d8`'s library, runtime and link script under the same compiler; `nokeep` is `main` with the kept head off (`H1_HEAD_KEEP` 0). "beat entry" counts the rounds in which a contestant served more than `entry` in the same round. No round reported a socket error or a non-2xx response.
+
+| cell | band | `entry` req/s | `entry-copy` | `base` | `nokeep` | `base` beat entry |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| explicit, 128 connections | ±2.4% | 178,945 | −2.4% | −1.2% | +0.8% | 4 of 8 |
+| explicit, 256 connections | ±3.4% | 200,580 | −3.4% | +0.2% | +0.5% | 6 of 8 |
+| explicit, 512 connections | ±0.0% | 209,304 | −0.0% | −5.3% | −0.8% | 2 of 8 |
+| browser head, 256 connections | ±0.5% | 182,364 | +0.5% | −3.5% | −2.3% | 2 of 8 |
+
+- No cell puts `main` below the base outside its band: at 128 and 256 the base sits inside the band, and at 512 and with the browser head it is below `main`.
+- That is not a gain either. `entry`'s rounds spread 18.8% to 24.8% between their slowest and fastest in every cell, and at 512 the copy's median landed on `entry`'s by chance (its rounds spread 63.8%), so a ±0.0% band there says nothing about the noise.
+- The kept head costs nothing measurable: turning it off moves the explicit cells by +0.8%, +0.5% and −0.8%, inside the band at 128 and 256, and leaves the browser head 2.3% below `main`.
+- The "worse" cells at `e66cf339` came from runs that could not interleave the two builds, with the machine drifting between them; interleaved, they do not recur.
+
+#### Follow-up: `/plaintext` profile and the codec benches
+
+`bash bench/techempower/profile.sh --only plaintext`, explicit entry: 4,125 Ir per request, 0.129 system calls per request, 0.59 server CPU µs per request, 1,678,541.54 req/s under perf; the async entry 6,000 Ir per request. Top frames by self Ir per request:
+
+| frame | Ir/req |
+| --- | ---: |
+| `Http1Connection.next` | 2,194.0 |
+| `TfbServer.resume` | 449.6 |
+| `urlIsHostPort` | 412.3 |
+| the handler arrow | 276.6 |
+| `http1ServerKept` | 138.7 |
+| `http1ServerSame8` | 126.4 |
+| `http1TakeLine` | 110.7 |
+| `http1ServerSame4` | 105.3 |
+| `http1WriteResponseHead` | 102.9 |
+
+`node bench/http1-request/run.mjs --instructions --base b49794d8`, Ir a request:
+
+| case | `main` | base | `main` against base |
+| --- | ---: | ---: | ---: |
+| `browser` | 8,751 | 10,301 | −15.0% |
+| `api` | 7,246 | 8,513 | −14.9% |
+| `short` | 3,144 | 3,825 | −17.8% |
+| `pipelined` | 7,763 | 9,160 | −15.3% |
+| `split` | 9,059 | 10,648 | −14.9% |
+| `json1k` | 19,858 | 21,428 | −7.3% |
+| `json4k` | 67,185 | 73,503 | −8.6% |
+| `json16k` | 264,372 | 290,454 | −9.0% |
+| `json40k` | 658,739 | 724,707 | −9.1% |
+| `varied` | 4,028 | 4,087 | −1.4% |
+
+`node bench/http1-request/run.mjs --case varied --rounds 61 --base b49794d8` (the harness ran 64 rounds): `main` 786.2 ns, `main`'s copy 783.4 (band ±0.4%), base 791.2 (+0.6%), base's copy 784.4 (base band ±0.9%). The +0.6% is inside the base's band: no change. A 24-round run before it had `main`'s own band at ±10.6%, wider than any gap, and is not used.
+
+`node bench/http1-parse/run.mjs` from the tree, all three parsers under the checksum check again (24 rounds, baseline x86-64, `u8x16` on SSE2), ns a head, median:
+
+| head | `old` | `old-copy` (band) | `new` | `new` against `old` |
+| --- | ---: | ---: | ---: | ---: |
+| loadgen GET, 337 bytes | 323.8 | 361.8 (±11.8%) | 229.6 | −29.1% |
+| loadgen POST, 447 bytes | 425.0 | 440.6 (±3.7%) | 294.6 | −30.7% |
+| browser GET, 1,028 bytes | 886.9 | 937.1 (±5.7%) | 636.3 | −28.3% |
 
 ### Commands
 
@@ -3096,7 +3175,7 @@ bash bench/techempower/profile.sh --only plaintext
 bash bench/techempower/profile.sh --only json
 node bench/http1-request/run.mjs --instructions --base b49794d8
 node bench/http1-request/run.mjs --rounds 11 --base b49794d8
-# bench/http1-parse: a scratch copy of run.mjs with the known-checksum check skipped for `new` only; not in the tree
+# bench/http1-parse at e66cf339: a scratch copy of run.mjs with the known-checksum check skipped for `new` only; not in the tree
 # b49794d8, in a worktree with the seed in build/seed
 git worktree add ../nish-base b49794d8
 NISH_BOOTSTRAP=build/seed/bin/nish bash scripts/bootstrap.sh --quiet
@@ -3109,6 +3188,12 @@ bash bench/techempower/profile.sh --only json
 bash bench/techempower/run.sh --only plaintext
 bash bench/techempower/run.sh --only json
 bash bench/techempower/run.sh --browser-head
+# the follow-up, at 9533b5d5 with this PR's bench code
+bash bench/techempower/json-ab.sh --base b49794d8 --no-keep-head
+bash bench/techempower/profile.sh --only plaintext
+node bench/http1-request/run.mjs --instructions --base b49794d8
+node bench/http1-request/run.mjs --case varied --rounds 61 --base b49794d8
+node bench/http1-parse/run.mjs
 ```
 
 <!-- http-codec-regate:end -->
