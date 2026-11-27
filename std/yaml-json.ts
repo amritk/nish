@@ -414,6 +414,11 @@ export class YamlJsonLoader {
         top -= 1
       }
     }
+    // `top` is above 0 here only if the loop left early, which the test above
+    // never does; the count is unfinished then, and counts as too many.
+    if (top > 0) {
+      return this.over
+    }
     // `sizes` holds every node, so `root` is in it; a root outside counts as too many.
     return root >= 0 && root < toI32(sizes.length) ? sizes[root] : this.over
   }

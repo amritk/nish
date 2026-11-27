@@ -1,6 +1,6 @@
 // JSON equality (std/json-equal.ts) under an instruction count: two documents
 // that say the same thing in different spellings — members in another order,
-// `1.0` for `1`, `1e2` for `100`, `A` for `A` — parsed and compared `n`
+// `1.0` for `1`, `1e2` for `100`, `\u0041` for `A` — parsed and compared `n`
 // times, with the canonical text, the hash and the duplicate check of each.
 // It reaches the tokenizer, the number comparison and the value tree whose
 // panic sites the std/ ratchet counts, so a fix to one of them shows here as

@@ -230,6 +230,8 @@ const yamlWriteKeyTooLong = (text: string, quoted: boolean): boolean => {
   }
   let length: i32 = 2
   let i: i32 = 0
+  // `1024` is `YAML_WRITE_MAX_KEY_LENGTH`, spelled out: the bounds prover reads a
+  // literal in a loop test, not a module constant, and the additions below need it.
   while (i >= 0 && i < n && length <= 1024) {
     const c: i32 = yamlWriteByte(text, i)
     const escaped: i32 = yamlWriteEscapedLength(text, i)
