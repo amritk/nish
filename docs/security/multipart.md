@@ -41,7 +41,7 @@ no check fails when it is broken.
 
 | File | Functions |
 | --- | --- |
-| `std/net/multipart.ts` | `MultipartLimits`; `MultipartReader` (`constructor`, `next`, `fail`, `delimiterAt`, `find`, `readHeaders`, `readHeader`); the helpers `multipartBchar`, `multipartString`, `multipartCopy` |
+| `std/net/multipart.ts` | `MultipartLimits`; `MultipartReader` (`constructor`, `next`, `fail`, `delimiterAt`, `find`, `readHeaders`, `readHeader`); the helpers `multipartBchar`, `multipartString`, `multipartCopy`; the one-call readers `multipartPartCount`, `multipartFieldData`, `multipartFieldFilename`, each a `MultipartReader` with the default `MultipartLimits` over the whole array, which `contracts/multipart-form-data.json` tests (`node tests/run.js multipart-form-data`) |
 | `std/net/http-fields.ts` | The media types alone: `MediaType`, `mediaTypeParse`, `formDataDispositionParse`, `mediaTypeParam`, and the helpers `httpFieldsTchar`, `httpFieldsOws`, `httpFieldsQdtext`, `httpFieldsString`, `httpFieldsTokenEnd`, `httpFieldsOwsEnd`, `httpFieldsParams`. The header model is [`http2.md`](http2.md)'s and the date is [`http1-codec.md`](http1-codec.md)'s. |
 
 Out of scope:

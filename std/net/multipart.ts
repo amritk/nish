@@ -505,3 +505,73 @@ export class MultipartReader {
     return 0
   }
 }
+
+/**
+ * How many parts a whole `multipart/form-data` body holds, read with the
+ * default `MultipartLimits`: a check that it frames, without reading it
+ * part by part.
+ *
+ * @param body the octets of the message body, all of them the body's
+ * @param boundary the `boundary` parameter of the request's `Content-Type`
+ * @returns the number of parts once the close delimiter is read, or the
+ *   negative `MULTIPART_ERR_*` code `MultipartReader.next` refuses the body
+ *   with
+ */
+export const multipartPartCount = (body: u8[], boundary: string): i32 => {
+  const parts: MultipartReader = new MultipartReader(body, toI32(body.length), boundary, new MultipartLimits())
+  let count: i32 = 0
+  let code: i32 = parts.next()
+  while (code === MULTIPART_PART && count < 2147483647) {
+    count = count + 1
+    code = parts.next()
+  }
+  return code === MULTIPART_END ? count : code
+}
+
+/**
+ * The data of the first part named `name` in a whole `multipart/form-data`
+ * body, read with the default `MultipartLimits`: a form's one text field
+ * without a loop over its parts.
+ *
+ * @param body the octets of the message body, all of them the body's
+ * @param boundary the `boundary` parameter of the request's `Content-Type`
+ * @param name the field name, compared octet for octet with each part's
+ *   `name` parameter
+ * @returns a copy of that part's data, or null when no part before the
+ *   close delimiter has that name or `MultipartReader.next` refuses the body
+ *   before one does
+ */
+export const multipartFieldData = (body: u8[], boundary: string, name: string): u8[] | null => {
+  const parts: MultipartReader = new MultipartReader(body, toI32(body.length), boundary, new MultipartLimits())
+  while (parts.next() === MULTIPART_PART) {
+    const start: i32 = parts.dataStart
+    const length: i32 = parts.dataLength
+    const end: i64 = toI64(start) + toI64(length)
+    if (parts.name === name && start >= 0 && length >= 0 && end <= toI64(body.length)) {
+      return multipartCopy(body, start, toI32(end), false)
+    }
+  }
+  return null
+}
+
+/**
+ * The `filename` parameter of the first part named `name` in a whole
+ * `multipart/form-data` body, as `MultipartReader.filename` reads it.
+ *
+ * @param body the octets of the message body, all of them the body's
+ * @param boundary the `boundary` parameter of the request's `Content-Type`
+ * @param name the field name, compared octet for octet with each part's
+ *   `name` parameter
+ * @returns the file name as given, quotes removed, or null when that part
+ *   has none, no part before the close delimiter has that name, or
+ *   `MultipartReader.next` refuses the body before one does
+ */
+export const multipartFieldFilename = (body: u8[], boundary: string, name: string): string | null => {
+  const parts: MultipartReader = new MultipartReader(body, toI32(body.length), boundary, new MultipartLimits())
+  while (parts.next() === MULTIPART_PART) {
+    if (parts.name === name) {
+      return parts.filename
+    }
+  }
+  return null
+}

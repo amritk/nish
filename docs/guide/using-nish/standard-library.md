@@ -3262,8 +3262,9 @@ siblings, and every path that would leave the directory refused;
 `nish/net/multipart` reads a `multipart/form-data` body, the upload an HTML
 form with a file input sends, part by part from the bytes you hold, and
 `mediaTypeParse` in `nish/net/http-fields` reads the `Content-Type` its
-boundary comes in. A part's `filename` is what the sender wrote, not a safe
-path; [Reading a file upload](http-server.md#reading-a-file-upload) shows
+boundary comes in. `multipartPartCount`, `multipartFieldData` and
+`multipartFieldFilename` read a small form in one call each. A part's
+`filename` is what the sender wrote, not a safe path; [Reading a file upload](http-server.md#reading-a-file-upload) shows
 both.
 
 `nish/net/handler` is a request and response layer over `Http1Server`: an

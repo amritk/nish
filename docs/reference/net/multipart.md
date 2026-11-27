@@ -17,6 +17,9 @@ import {
   MULTIPART_PART,
   MultipartLimits,
   MultipartReader,
+  multipartFieldData,
+  multipartFieldFilename,
+  multipartPartCount,
 } from "nish/net/multipart";
 ```
 
@@ -40,6 +43,24 @@ if (boundary !== null) {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="multipart​Field​Data" icon="phosphor/regular/function" href="#multipartfielddata">
+
+The data of the first part named `name` in a whole `multipart/form-data` body, read with the default `MultipartLimits`: a form's one text field without a loop over its parts.
+
+</scalar-card>
+
+<scalar-card title="multipart​Field​Filename" icon="phosphor/regular/function" href="#multipartfieldfilename">
+
+The `filename` parameter of the first part named `name` in a whole `multipart/form-data` body, as `MultipartReader.filename` reads it.
+
+</scalar-card>
+
+<scalar-card title="multipart​Part​Count" icon="phosphor/regular/function" href="#multipartpartcount">
+
+How many parts a whole `multipart/form-data` body holds, read with the default `MultipartLimits`: a check that it frames, without reading it part by part.
+
+</scalar-card>
 
 <scalar-card title="Multipart​Limits" icon="phosphor/regular/cube" href="#multipartlimits">
 
@@ -115,6 +136,122 @@ Private helpers share the importing program's flat symbol namespace
 
 Written from RFC 7578, RFC 2046 §5.1 and the HTML form submission
 algorithm, not ported from another implementation.
+
+## Functions
+
+### multipartFieldData
+
+The data of the first part named `name` in a whole `multipart/form-data`
+body, read with the default `MultipartLimits`: a form's one text field
+without a loop over its parts.
+
+```ts
+const multipartFieldData: (
+  body: u8[],
+  boundary: string,
+  name: string,
+) => u8[] | null
+```
+
+<scalar-field name="body" type="u8[]" required>
+
+the octets of the message body, all of them the body's
+
+</scalar-field>
+
+<scalar-field name="boundary" type="string" required>
+
+the `boundary` parameter of the request's `Content-Type`
+
+</scalar-field>
+
+<scalar-field name="name" type="string" required>
+
+the field name, compared octet for octet with each part's
+  `name` parameter
+
+</scalar-field>
+
+<scalar-field name="returns" type="u8[] | null">
+
+a copy of that part's data, or null when no part before the
+  close delimiter has that name or `MultipartReader.next` refuses the body
+  before one does
+
+</scalar-field>
+
+### multipartFieldFilename
+
+The `filename` parameter of the first part named `name` in a whole
+`multipart/form-data` body, as `MultipartReader.filename` reads it.
+
+```ts
+const multipartFieldFilename: (
+  body: u8[],
+  boundary: string,
+  name: string,
+) => string | null
+```
+
+<scalar-field name="body" type="u8[]" required>
+
+the octets of the message body, all of them the body's
+
+</scalar-field>
+
+<scalar-field name="boundary" type="string" required>
+
+the `boundary` parameter of the request's `Content-Type`
+
+</scalar-field>
+
+<scalar-field name="name" type="string" required>
+
+the field name, compared octet for octet with each part's
+  `name` parameter
+
+</scalar-field>
+
+<scalar-field name="returns" type="string | null">
+
+the file name as given, quotes removed, or null when that part
+  has none, no part before the close delimiter has that name, or
+  `MultipartReader.next` refuses the body before one does
+
+</scalar-field>
+
+### multipartPartCount
+
+How many parts a whole `multipart/form-data` body holds, read with the
+default `MultipartLimits`: a check that it frames, without reading it
+part by part.
+
+```ts
+const multipartPartCount: (
+  body: u8[],
+  boundary: string,
+) => i32
+```
+
+<scalar-field name="body" type="u8[]" required>
+
+the octets of the message body, all of them the body's
+
+</scalar-field>
+
+<scalar-field name="boundary" type="string" required>
+
+the `boundary` parameter of the request's `Content-Type`
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+the number of parts once the close delimiter is read, or the
+  negative `MULTIPART_ERR_*` code `MultipartReader.next` refuses the body
+  with
+
+</scalar-field>
 
 ## Classes
 

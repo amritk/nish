@@ -245,6 +245,15 @@ The reader answers a negative code for a body it refuses, and every later
 `MultipartLimits` caps the parts (64), the header lines in one part (16) and
 their bytes (8,192). The body's own size is `maxBody`'s.
 
+For a small form held as an array of its own, three calls stand in for the
+loop, each with the default limits. `multipartPartCount(body, boundary)` is the
+number of parts, or the negative code the reader refuses the body with.
+`multipartFieldData(body, boundary, name)` is a copy of the first part named
+`name`, and `multipartFieldFilename(body, boundary, name)` is that part's
+`filename`. Both answer `null` when no part has that name. They stop at the
+part they find, so check `multipartPartCount` first when a body cut short after
+that part must be refused too.
+
 `parts.filename` is what the sender wrote, not a safe path: `../../etc/passwd`
 and `C:\x.txt` arrive as written. Name the file you store yourself, and keep
 the sender's name only as text.
