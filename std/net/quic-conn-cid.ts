@@ -250,7 +250,10 @@ export class QuicCidTable {
     // Sequence 0 travels in the long header's SCID, never in a frame.
     entry.announced = sequence === 0
     // Counted down from `QUIC_MAX_VARINT`: `sequence` is below it, so one
-    // more is a sum `src/bounds.ts` proves.
+    // more is a sum `src/bounds.ts` proves. The -1 at `QUIC_MAX_VARINT` is
+    // never reached: `addLocal` issues at most `QUIC_CONN_MAX_ISSUED_CIDS`
+    // IDs, far below it, so `retireLocal`'s `sequence >= nextLocal` keeps
+    // its meaning.
     const left: i64 = QUIC_MAX_VARINT - sequence
     this.nextLocal = left < 1 ? -1 : QUIC_MAX_VARINT - (left - 1)
     return sequence

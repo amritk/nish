@@ -458,8 +458,10 @@ const quicFrameReadAck = (r: QuicFrameReader, d: u8[], frame: QuicFrame, ecn: bo
     smallest = bottom
   }
   frame.ackRangeCount = stored
-  // `count` is a varint, at most `QUIC_MAX_VARINT`; one past that is more
-  // ranges than any frame could list, refused like a short read.
+  // `count` is a varint, at most `QUIC_MAX_VARINT`, and the total is one
+  // more. A count of `QUIC_MAX_VARINT` lists more ranges than a frame holds:
+  // it is refused here as FRAME_ENCODING, where the loop above would have
+  // refused it later as a short read or a range below zero.
   const total: i64 = quicFrameNext(count)
   if (total < 0) {
     return QUIC_ERROR_FRAME_ENCODING

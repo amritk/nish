@@ -576,6 +576,7 @@ const pgPutDecimal = (out: u8[], at: i32, value: i64, n: i32): i32 => {
     return -1
   }
   const first: i32 = value < 0 ? at + 1 : at
+  // Negated as a `u64`: the magnitude of the least `i64` has no `i64`.
   let m: u64 = value < 0 ? toU64(0) - toU64(value) : toU64(value)
   // Where the last two digits start.
   let j: i32 = at + n - 2

@@ -670,10 +670,6 @@ class TlsExchangeWords {
 }
 
 /**
- * `n` zero bytes; none for a negative `n`. A length a `u16` holds is one
- * allocation; a longer one is pushed a byte at a time.
- */
-/**
  * `a + b` for two offsets or sizes, or -1 when either is negative or the sum
  * passes 2^31 - 1. The sum is taken in i64, where it cannot overflow; -1 is
  * an offset outside every array and a size no buffer grows to.
@@ -686,6 +682,10 @@ const tlsSum = (a: i32, b: i32): i32 => {
   return sum > toI64(2147483647) ? -1 : toI32(sum)
 }
 
+/**
+ * `n` zero bytes; none for a negative `n`. A length a `u16` holds is one
+ * allocation; a longer one is pushed a byte at a time.
+ */
 const tlsZeros = (n: i32): u8[] => {
   if (n >= 0 && n <= 65535) {
     return new Array<u8>(toU16(n))
