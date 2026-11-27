@@ -843,9 +843,13 @@ leaves the IR unchanged.
   means the call broke a contract the function's doc states, such as an
   index outside an array the caller sized
   ([Panics the standard library keeps](../../reference/language/semantics-decisions.md#panics-the-standard-library-keeps)). A
-  function or method that checks a window `(buf, off, len)` with the one
-  guard shape the compiler reads moves that check to each call, so a caller
-  that has proved `off` and `len` inside `buf` calls it under the default
+  function, arrow `const` or method that checks a window `(buf, off, len)`
+  with the one guard shape the compiler reads moves that check to each call,
+  so a caller that has proved `off` and `len` inside `buf` calls it under the
+  default. A forwarder that passes a fixed count, `check(b, off, 4)`, leaves
+  only `off` to its caller, and `off >= 0 && off + 4 <= b.length` proves it;
+  the reads `b[off]` to `b[off + 3]` after the check need no proof of their
+  own
   ([Panic sites](../../reference/language/semantics-decisions.md#panic-sites),
   `window`).
 - **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`

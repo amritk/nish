@@ -16882,13 +16882,18 @@ not a slot of `dst`, which `spawn` checks before it takes the task
   site at the call is the only one the caller answers for
 
 **`window`**: a call to a *window guard* whose `[off, off + len)` is not inside
-its `buf`, or to a method that hands its own window to one first. A guard is
+its `buf`, or to a method, free function or arrow `const` that hands its own
+window to one first. A guard is
 a free function returning `void` whose body is exactly
 `const size: i32 = toI32(buf.length)` and then
 `if (off < 0 || len < 0 || off > size || len > size - off) { panic(m) }`, with
-`buf` an array parameter and `off` and `len` `i32` ones; a forwarding method's
-first statement is the guard's call on its own parameters, each window
-parameter named once and the others string literals or parameters. Any other
+`buf` an array parameter and `off` and `len` `i32` ones; a forwarder's first
+statement is the guard's call on its own parameters, each window parameter
+named once and the others string literals or parameters, except that `len`
+may be a non-negative integer literal
+(`tests/link/window_contract_free_function`,
+`window_contract_arrow_literal`). A forwarder is a method, or a free
+non-generic function or arrow `const` that is no guard itself. Any other
 shape, the tests reordered (`tests/link/window_contract_not_a_guard`) or a
 statement before the call, is no contract, and its check is followed as any
 call's is
@@ -16896,14 +16901,20 @@ call's is
 - *What proves it away:* what proves `buf.slice(off, off + len)` at the call:
   `off` and `len` literals or the whole `buf.length` behind a length test, or
   `end - off` behind `off >= 0 && off <= end && end <= buf.length`
-  (`tests/link/window_contract_proven`, `window_contract_unproven`); an
+  (`tests/link/window_contract_proven`, `window_contract_unproven`). A
+  forwarder that passes a literal `len` leaves only `off` to its caller:
+  `off >= 0 && off + 4 <= buf.length` proves a count of 4
+  (`window_contract_arrow_literal`, `window_contract_literal_unproven`); an
   assignment between the test and the call undoes it
-  (`window_contract_guard_then_mutate`). A forwarding method's own call is
-  proven, because each of its callers holds the window
+  (`window_contract_guard_then_mutate`). A forwarder's own call is proven,
+  because each of its callers holds the window
   (`window_contract_late_forward` is a method that writes first and forwards
-  nothing). A guard passed as a value is judged in each instance it is
-  passed into, whose call is to the guard itself
-  (`window_contract_unnamed`). A call is judged in any function, one with
+  nothing). After a guard's call returns, an index inside the window it
+  checked is proven: `buf[off]` to `buf[off + 3]` after a literal count of 4.
+  After any other count, `off` and `len` are known to be at least 0 and at
+  most `buf.length`. A guard or forwarder passed as a value is judged
+  in each instance it is passed into, whose call is to it
+  (`window_contract_unnamed`, `window_contract_value_forward`). A call is judged in any function, one with
   nothing else to prove included. A window read from an object's fields is
   never proven (`window_kept_field`), and neither is one a statement or a
   later argument between the test and the call shortens or rebinds
