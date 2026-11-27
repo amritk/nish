@@ -77,6 +77,7 @@ first case, is its own.
 | REGEX-5 | Low | `build`, `compileIteration` | Groups under `{0}` emit nothing, yet every enclosing iteration's CLEAR clears their slots. `build` sizes the VM stack at one frame per cleared slot times 2^levels: 424 MiB for a 10 KB pattern, held for the `Regex`'s life. It is bounded (about 8 × 4194304 frames) but far above the documented 1 MiB. | Fixed: `build` refuses a pattern whose stack frames would pass `REGEX_MAX_SLOT_TABLE`, "too many groups for the pattern's size", before it allocates them. Never-set groups still go into CLEAR; the cap is what bounds the memory. Test: the row "a backtrack stack past the slot table" |
 | REGEX-6 | Low | `src/kernels.ts` (the `regexScanFrom` comment) | The comment states a mask array of 32 bytes per position. The contract in `runtime/nish.h`, and the kernel, need 288 bytes per position. No caller is affected. | Fixed: the comment states 288 bytes a position |
 | REGEX-7 | Low | `addProperty`, `foldRanges`, `finishClass` | Found while adding them: a property escape adds up to about 700 ranges from 9 pattern bytes (`\p{L}`), and a class under `i` adds its folded orbits, so the class cap of 10,000 bounds neither a pattern of many escapes outside classes nor the ranges folding adds after it. | Fixed: `countPropertyRanges` refuses a pattern whose escapes and folding add more than `REGEX_MAX_PROPERTY_RANGES` (100,000) ranges, "property escapes and case folding add more than 100000 ranges"; a class's own ranges stay under `REGEX_MAX_CLASS_RANGES` before folding; `storeRanges` merge-sorts more than `REGEX_INSERTION_SORT` (64) ranges, so the sort is O(r log r). Nothing is decoded ahead of time: a compile reads the folding table in place, `REGEX_FOLD_INDEX` (every sixteenth folding code point) bounding each lookup to one block of at most sixteen entries, with the table's size fixed by the generator, and only for a pattern that folds a code point in `REGEX_FOLD_SPANS`. Tests: the rows "property escapes past 100000 ranges", "case folding past 100000 ranges" and "property escapes just under 100000 ranges compile" (147 `\p{L}`, one escape short of the cap) |
+| REGEX-8 | Low | `std/regex.ts` throughout: the parser, the compiler, the DFA (`dfaForward`, `dfaReverse`, `dStep`, `dStartAt`, `dWideClass`), the VM, `count`, `pastEmpty` and `expand` | 131 sums, differences and products of positions, lengths, offsets and table values were computed as `toI32(toU32(a) + toU32(b))`, so a value past `i32` wrapped silently instead of being refused or proven in range. | **Fixed** in WP91 S2. `scripts/wrap-casts.mjs`, in `npm run lint`, counts 0 such casts in the file, down from 131, and fails on a new one. Of the 131 sites, 12 are plain operations the prover discharges (two of them now a bitwise or, `off \| c`, of a row start and a class below the row width), 114 are plain sums behind a guard the prover reads (a range test, a mask or a length cap), 4 run in `u32` all the way through (`dStartAt`'s slot and `dWideClass`'s search), and 1 is gone (a flagged DFA entry is now stored as `~(next << 4 \| flags)`). None wraps, and the module still has no panic site: `std-panics: no std/ module gains its first panic site` fails if a guard is dropped and the sum it covered is left unproven. Input reaches a guard only through a subject longer than 2,146,435,071 bytes (2^31 − 2^20 − 1), so that a position one character (at most 4 bytes) or one literal prefix (`run` refuses one over 1,048,576 bytes) further on fits an `i32`: for such a subject `run` and `vm` return false, `dfaForward` gives up, `count` returns 0, and `pastEmpty` returns 2147483647, past every subject. No check builds a 2 GiB subject, so these answers are **untested** and read from the code. |
 
 ## Properties verified
 
@@ -119,16 +120,6 @@ first case, is its own.
 - An empty subject loads nothing.
 - `findScan` and `scanTo` keep the contract: depth 1..8, width at most 3, offset + width ≤ depth, `from` ≤ length.
 - Pinned by: the `simd` regex-scan checks, which compare each vector path with the scalar one. None places a match against an unmapped page.
-
-**Open: untested defensive bound.** A subject longer than 2,146,435,071
-bytes (2^31 − 2^20 − 1) never matches. `run` and `vm` return false for it,
-`dfaForward` gives up, and `count` returns 0. The bound lets a position one
-character or one literal prefix further on fit an i32: a character is at most
-4 bytes, and `run` also refuses a prefix over 1,048,576 bytes. Before WP91 S2,
-these sums were wrapping casts. `pastEmpty` returns 2147483647, past every
-subject, for an end outside 0..2146435071. `ctxAt` reads no byte past that
-position. This was read from the code: no check builds a 2 GiB subject, and
-no check fails when the guards are removed.
 
 ## Tests
 
