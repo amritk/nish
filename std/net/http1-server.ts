@@ -1094,6 +1094,13 @@ export class Http1Connection {
   headTimed: boolean = false
   /** Whether a reader holds the parser's head and spans past the exchange: `restart` hands it them rather than reuse them. */
   private lentParsed: boolean = false
+  /**
+   * `park` gave the parser's input buffer to `inputs`, leaving it nothing fed
+   * and unread, and `unpark` has not taken one back: `inputRoom` and `unpark`
+   * learn it here, on the connection's front line, without loading the
+   * parser's. Only those two assign it.
+   */
+  private inputParked: boolean = false
   /** Where the bytes `H1_BODY` or `H1_WS_MESSAGE` handed over start in `data`. */
   dataStart: i32 = 0
   /** How many bytes `H1_BODY` or `H1_WS_MESSAGE` handed over, from `data[dataStart]`. */
@@ -1352,6 +1359,7 @@ export class Http1Connection {
       p.scan = 0
       p.lineStart = 0
       p.lineEnd = 0
+      this.inputParked = true
     }
     // A lent head is the reader's too: it goes to the pool only once
     // `unlendParsed` ends the loan, or never, if a restart hands it over.
@@ -1372,10 +1380,11 @@ export class Http1Connection {
     const heads: Http1OutputPool | null = this.heads
     const p: Http1Parser = this.parser
     const none: u8[] = this.noOutput
-    if (inputs !== null && (p.buf === none || toI32(p.buf.length) === 0)) {
+    if (inputs !== null && (this.inputParked || p.buf === none || toI32(p.buf.length) === 0)) {
       p.buf = inputs.take()
       p.body = p.buf
     }
+    this.inputParked = false
     if (heads !== null && (p.head === none || toI32(p.head.length) === 0)) {
       p.head = heads.take()
     }
@@ -1410,6 +1419,9 @@ export class Http1Connection {
         this.inputLimit(),
         ws !== null ? http1ServerSub(ws.end, ws.start) : this.parser.buffered()
       )
+    } else if (this.inputParked) {
+      // `park` left the parser nothing unread: the whole limit is room.
+      room = this.bufferLimit
     } else {
       room = http1ServerSub(this.bufferLimit, this.parser.buffered())
     }
