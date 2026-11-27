@@ -76,36 +76,36 @@ function structDefinitions(compilation: Compilation): string[] -> @structDefinit
   local +2:9 files: string[] (const)
   local +3:14 unit: ModuleUnit (const)
   local +4:16 info: StructInfo (const)
-  local +14:9 lines: string[] (const)
-  local +18:9 vectored: StringSet (const)
-  callee +18:20 structsHoldingVectors -> @structsHoldingVectors
-  local +19:9 layouts: StringSet (const)
-  callee +19:19 structsHoldingLayouts -> @structsHoldingLayouts
-  local +24:14 info: StructInfo (const)
-  callee +25:26 cStructName -> @cStructName
-  local +27:7 i: i32 (let)
-  local +29:11 info: StructInfo (const)
-  local +30:11 file: string (const)
-  local +31:11 ifaces: string (const)
-  local +32:11 kind: string (const)
-  local +33:11 cName: string (const)
-  callee +33:19 cStructName -> @cStructName
-  callee +38:9 isCollectionStruct -> @isCollectionStruct
-  callee +48:9 isSecretStruct -> @isSecretStruct
-  callee +58:9 secretFieldOf -> @secretFieldOf
-  callee +69:9 StringSet.has -> @StringSet.has
-  callee +79:9 StringSet.has -> @StringSet.has
-  callee +90:9 holdsLink -> @holdsLink
-  local +105:16 f: FieldInfo (const)
-  local +106:13 t: string (const)
-  callee +106:17 cFieldType -> @cFieldType
-  local +108:13 name: string (const)
-  callee +108:20 cParamName -> @cParamName
-  local +110:13 note: string (const)
-  callee +111:9 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +111:45 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +112:31 tsKeyword -> @tsKeyword
-  callee +114:27 spaceAfter -> @spaceAfter
+  local +15:9 lines: string[] (const)
+  local +19:9 vectored: StringSet (const)
+  callee +19:20 structsHoldingVectors -> @structsHoldingVectors
+  local +20:9 layouts: StringSet (const)
+  callee +20:19 structsHoldingLayouts -> @structsHoldingLayouts
+  local +25:14 info: StructInfo (const)
+  callee +26:26 cStructName -> @cStructName
+  local +28:7 i: i32 (let)
+  local +30:11 info: StructInfo (const)
+  local +31:11 file: string (const)
+  local +32:11 ifaces: string (const)
+  local +33:11 kind: string (const)
+  local +34:11 cName: string (const)
+  callee +34:19 cStructName -> @cStructName
+  callee +39:9 isCollectionStruct -> @isCollectionStruct
+  callee +49:9 isSecretStruct -> @isSecretStruct
+  callee +59:9 secretFieldOf -> @secretFieldOf
+  callee +70:9 StringSet.has -> @StringSet.has
+  callee +80:9 StringSet.has -> @StringSet.has
+  callee +91:9 holdsLink -> @holdsLink
+  local +106:16 f: FieldInfo (const)
+  local +107:13 t: string (const)
+  callee +107:17 cFieldType -> @cFieldType
+  local +109:13 name: string (const)
+  callee +109:20 cParamName -> @cParamName
+  local +111:13 note: string (const)
+  callee +112:9 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +112:45 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +113:31 tsKeyword -> @tsKeyword
+  callee +115:27 spaceAfter -> @spaceAfter
 function holdsLink(info: StructInfo): boolean -> @holdsLink
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer info: size=176 writesThrough=false captured=false

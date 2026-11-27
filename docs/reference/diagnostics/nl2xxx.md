@@ -11173,7 +11173,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-`: each field a handle class owns is a `CPtr`, an opaque `declare class`, a `HostHandle` or another handle class that does not hold this one, each perhaps `| null`, `readonly` and with no initialiser, so it is written once by the constructor and closed once by the dispose
+`: each field a handle class owns is a `CPtr`, an opaque `declare class`, a `HostHandle` or another handle class that does not hold this one, each but a `HostHandle` perhaps `| null` (a `HostHandle` is a scalar, whose none is `0`), `readonly` and with no initialiser, so it is written once by the constructor and closed once by the dispose
 ```
 
 ## NL2565

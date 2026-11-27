@@ -8,6 +8,7 @@ import CLI from "./branding" -> const CLI
 import Compilation from "./compilation" -> struct Compilation
 import ModuleUnit from "./compilation" -> struct ModuleUnit
 import privateAbi from "./emit-result" -> function @privateAbi
+import signatureNamesHandle from "./handles" -> function @signatureNamesHandle
 import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
@@ -92,7 +93,7 @@ function ExternalFunction.constructor(this: ExternalFunction, sig: FunctionSig, 
 function externalFunctions(compilation: Compilation): ExternalFunction[] -> @externalFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via analyzeFunctions
-  calls: AnalysisUnit.constructor ExternalFunction.constructor FactsTable.get FunctionSig.compileTimeOnly FunctionSig.definedIn FunctionSig.foreign analyzeFunctions nish_alloc_struct nish_array_grow nish_str_eq privateAbi signatureHidesRange signatureHidesVector structsHoldingRanges structsHoldingVectors writtenArrayParams
+  calls: AnalysisUnit.constructor ExternalFunction.constructor FactsTable.get FunctionSig.compileTimeOnly FunctionSig.definedIn FunctionSig.foreign analyzeFunctions nish_alloc_struct nish_array_grow nish_str_eq privateAbi signatureHidesRange signatureHidesVector signatureNamesHandle structsHoldingRanges structsHoldingVectors writtenArrayParams
   pointer compilation: size=264 writesThrough=false captured=false passedTo=structsHoldingRanges#0 structsHoldingVectors#0
   stackSites=1 stackLocals=1
   local +0:9 units: AnalysisUnit[] (const)
@@ -111,16 +112,17 @@ function externalFunctions(compilation: Compilation): ExternalFunction[] -> @ext
   local +30:16 sig: FunctionSig (const)
   callee +31:12 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee +41:11 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +45:11 privateAbi -> @privateAbi
-  callee +51:11 FunctionSig.compileTimeOnly -> @FunctionSig.compileTimeOnly
-  local +54:13 written: StringSet (const)
-  callee +54:23 writtenArrayParams -> @writtenArrayParams
-  callee +54:66 FactsTable.get -> @FactsTable.get
-  local +55:13 table: TypeTable (const)
-  local +56:13 hidesRange: boolean (const)
-  callee +56:26 signatureHidesRange -> @signatureHidesRange
-  callee +58:9 new ExternalFunction -> @ExternalFunction.constructor
-  callee +58:62 signatureHidesVector -> @signatureHidesVector
+  callee +48:11 signatureNamesHandle -> @signatureNamesHandle
+  callee +52:11 privateAbi -> @privateAbi
+  callee +58:11 FunctionSig.compileTimeOnly -> @FunctionSig.compileTimeOnly
+  local +61:13 written: StringSet (const)
+  callee +61:23 writtenArrayParams -> @writtenArrayParams
+  callee +61:66 FactsTable.get -> @FactsTable.get
+  local +62:13 table: TypeTable (const)
+  local +63:13 hidesRange: boolean (const)
+  callee +63:26 signatureHidesRange -> @signatureHidesRange
+  callee +65:9 new ExternalFunction -> @ExternalFunction.constructor
+  callee +65:62 signatureHidesVector -> @signatureHidesVector
 function structsHoldingRanges(compilation: Compilation): StringSet -> @structsHoldingRanges
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: StringSet.add StringSet.constructor StringSet.has holdsRange nish_alloc_struct
