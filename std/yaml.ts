@@ -596,9 +596,19 @@ export class YamlStream {
     if (i < 0 || i >= this.count(n)) {
       return -1
     }
-    const at: i64 = toI64(yamlAt(this.firsts, n)) + toI64(i)
+    const first: i32 = yamlAt(this.firsts, n)
     const kids: i32[] = this.kids
-    return at >= 0 && at < toI64(kids.length) ? yamlAt(kids, toI32(at)) : -1
+    const len: i32 = toI32(kids.length)
+    // `first` and `i` are each below the slots in use. Past 2^30 slots the
+    // node arrays would hold tens of gigabytes, an allocation that fails first
+    // (see `grow`), so the test never fails; it is what proves the sum.
+    if (first >= 0 && first < 1073741824 && i < 1073741824) {
+      const at: i32 = first + i
+      if (at < len) {
+        return kids[at]
+      }
+    }
+    return -1
   }
 
   /**
@@ -1229,22 +1239,42 @@ const yamlLineEnd = (text: string, from: i32, to: i32): i32 => {
 
 /** The bytes a scalar decodes to, collected before they become one string. */
 class YamlBuffer {
-  private bytes: u8[] = []
+  /** Room for the bytes; the first `count` are in use. */
+  private bytes: u8[]
+  private count: i32 = 0
+
+  /** A buffer with room for `room` bytes, or 16 if that is more. */
+  constructor(room: i32) {
+    let size: i32 = room
+    if (size < 16) {
+      size = 16
+    }
+    this.bytes = new Array<u8>(size)
+  }
 
   /**
    * How many bytes the buffer holds.
    * @internal Called by `yamlDecodeFlow`.
    */
   size(): i32 {
-    return toI32(this.bytes.length)
+    return this.count
   }
 
   /**
-   * Appends one byte.
+   * Appends one byte: in place while there is room, then by the array's own
+   * `push`, which grows it. Either way `count` never passes the length.
    * @internal Called by `yamlDecodeFlow`, `yamlDecodeEscape` and `yamlDecodeBlock`.
    */
   push(code: i32): void {
-    this.bytes.push(toU8(code))
+    const bytes: u8[] = this.bytes
+    const count: i32 = this.count
+    if (count >= 0 && count < toI32(bytes.length)) {
+      bytes[count] = toU8(code)
+      this.count = count + 1
+    } else {
+      bytes.push(toU8(code))
+      this.count = toI32(bytes.length)
+    }
   }
 
   /**
@@ -1307,18 +1337,15 @@ class YamlBuffer {
    */
   trimBlanks(floor: i32): void {
     const bytes: u8[] = this.bytes
-    while (bytes.length > 0) {
-      const at: i32 = toI32(bytes.length) - 1
-      if (at < 0 || at < floor) {
-        return
-      }
-      // Spelled out, not `yamlIsBlank`: a call would cost the prover the length the pop needs.
-      const code: i32 = toI32(bytes[at])
+    let count: i32 = this.count
+    while (count > 0 && count > floor && count <= toI32(bytes.length)) {
+      const code: i32 = toI32(bytes[count - 1])
       if (code !== YAML_SPACE && code !== YAML_TAB) {
-        return
+        break
       }
-      bytes.pop()
+      count -= 1
     }
+    this.count = count
   }
 
   /**
@@ -1327,6 +1354,12 @@ class YamlBuffer {
    */
   text(): string {
     const bytes: u8[] = this.bytes
+    const count: i32 = this.count
+    // `push` never lets `count` pass the length, so the test never fails; it
+    // is what proves the slice.
+    if (count >= 0 && count <= toI32(bytes.length)) {
+      return String.fromBytes(bytes, 0, count)
+    }
     return String.fromBytes(bytes, 0, toI32(bytes.length))
   }
 }
@@ -1367,7 +1400,7 @@ const yamlDecodeFlow = (text: string, from: i32, to: i32, style: i32): string =>
   if (i >= to) {
     return text.substring(from, to)
   }
-  const out: YamlBuffer = new YamlBuffer()
+  const out: YamlBuffer = new YamlBuffer(from >= 0 && to > from ? to - from : 0)
   out.copy(text, from, i)
   // Blanks the source spelled as escapes are content, and a fold never trims them.
   let floor: i32 = 0
@@ -1579,7 +1612,7 @@ const yamlDecodeBlock = (text: string, from: i32, to: i32, extras: i32, folded: 
   const indent: i32 = (extras >> 3) - 1
   const explicit: boolean = (extras & 4) !== 0
   const chomp: i32 = extras & 3
-  const out: YamlBuffer = new YamlBuffer()
+  const out: YamlBuffer = new YamlBuffer(from >= 0 && to > from ? to - from : 0)
   let i: i32 = from
   let seenContent: boolean = false
   let previousMore: boolean = false
