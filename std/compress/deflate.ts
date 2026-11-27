@@ -1480,10 +1480,7 @@ export class Deflater {
     }
     const at: integer<0, 2147483639> = p
     const word: u32 = deflateLoad32(src, at)
-    const h: i32 =
-      minMatch === 3
-        ? deflateHash(word << 8, 17)
-        : deflateHash(word, 17)
+    const h: i32 = minMatch === 3 ? deflateHash(word << 8, 17) : deflateHash(word, 17)
     let cand: i32 = uncheckedGet(head, h)
     uncheckedSet(head, h, v)
     uncheckedSet(prev, v & (DEFLATE_WINDOW - 1), cand)
@@ -1857,9 +1854,7 @@ export class Deflater {
         while (q < insertEnd && q >= 0 && q <= 2147483639 && vq >= 0 && vq < 2147483647) {
           const qa: integer<0, 2147483639> = q
           const word: u32 = deflateLoad32(src, qa)
-          const hq: i32 = three
-            ? deflateHash(word << 8, 17)
-            : deflateHash(word, 17)
+          const hq: i32 = three ? deflateHash(word << 8, 17) : deflateHash(word, 17)
           uncheckedSet(prev, vq & (DEFLATE_WINDOW - 1), uncheckedGet(head, hq))
           uncheckedSet(head, hq, vq)
           q += 1

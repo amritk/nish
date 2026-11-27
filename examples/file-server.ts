@@ -102,12 +102,12 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
     return IDLE
   }
   while (pos < size) {
-    const at: i32 = toI32(pos)
-    if (pos < 0 || at < 0) {
+    const low: i32 = toI32(pos)
+    if (pos < 0 || low < 0) {
       conn.abort()
       return IDLE
     }
-    const here: integer<0, 2147483647> = at
+    const here: integer<0, 2147483647> = low
     const left: i64 = size - toI64(here)
     const want: i32 = left < toI64(WINDOW) ? toI32(left) : WINDOW
     const window: u8[] = served.window
