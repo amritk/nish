@@ -143,7 +143,7 @@ For a page, link with the `wasm-host` profile instead. It takes the same
 inputs but exports only what the loader calls: your exported functions,
 `memory`, and the arena entry points when `runtime-wasm.c` is linked. That
 makes the module smaller than the `wasm` profile's (`examples/arrays.ts`:
-2,827 bytes down to 2,091). `--inline` also writes the bytes as an ES module, so
+3,116 bytes down to 2,249). `--inline` also writes the bytes as an ES module, so
 the page needs no `fetch` and no `await`:
 
 ```console
@@ -174,7 +174,7 @@ memory grows on demand. `--inline <file.mjs>` writes the bytes
 module. Any other profile refuses either flag with exit 2. The stack is a
 fixed 64 KiB. If `wasm-opt` (binaryen) is on `PATH`, `build.sh` runs
 `wasm-opt -Oz --strip-target-features` on the module (`examples/arrays.ts`:
-2,091 bytes down to 1,713), and the build line says whether it ran.
+2,249 bytes down to 1,851), and the build line says whether it ran.
 `NISH_WASM_OPT=0` skips it even when binaryen is installed, and so does
 clang's own `wasm-opt` call after the link:
 

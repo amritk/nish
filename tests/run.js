@@ -6501,7 +6501,6 @@ if (dealtHere("performance")) {
     ["examples/argv.ts f64", "NL2140"], // `main` answers `number`, which is f64 there
     ["examples/arrays.ts f64", "NL2100"], // `squares`' `i` is f64 there, and its bound `len` an i32
     ["examples/hello.ts f64", "NL2140"],
-    ["examples/multi/main.ts f64", "NL2140"],
     ["examples/nbody.ts i32", "NL2008"], // written for f64 (its `// smoke: args` line): `Math.sqrt` of an i32
   ])
   // The walker the gate reads `std/` through reaches a module in a subdirectory,
@@ -23473,6 +23472,48 @@ if (dealtHere("cliChecks")) {
       entryHeader || entry.stderr
     )
 
+    // multi's `square` at its edge: 46340² is the last square that fits i32, so
+    // 46340 is Ok and 46341 the overflow `Err(1)`; a negative n squares to Ok.
+    const math = emit("examples/multi/math.ts", ["--emit-header", sidecar("multi_math", "h")], "multi_math")
+    if (math.status === 0) {
+      const mathDriver = path.join(interopDir, "multi_math_driver.c")
+      fs.writeFileSync(
+        mathDriver,
+        [
+          "#include <stdio.h>",
+          '#include "multi_math.h"',
+          "static void show(int32_t n) {",
+          "  nish_result_i32_i32_word r = square(n);",
+          '  printf("%d: %s %d\\n", n, r.ok ? "ok" : "err", r.ok ? r.as.value : r.as.error);',
+          "}",
+          "int main(void) {",
+          "  show(46340);",
+          "  show(46341);",
+          "  show(-46340);",
+          "  show(-7);",
+          "  return 0;",
+          "}",
+          "",
+        ].join("\n")
+      )
+      const mathExe = path.join(interopDir, "multi_math_driver")
+      const mathCc = spawnSync(
+        "clang",
+        [...strictC, "-O2", sidecar("multi_math", "ll"), path.join(runtimeDir, "runtime.c"), mathDriver, "-o", mathExe],
+        { cwd: root }
+      )
+      const mathRun = mathCc.status === 0 ? spawnSync(mathExe, { encoding: "utf8" }) : null
+      check(
+        "multi's square answers Ok(46340²) at 46340, Err(1) at 46341 and Ok for a negative n",
+        mathRun !== null &&
+          mathRun.status === 0 &&
+          mathRun.stdout === "46340: ok 2147395600\n46341: err 1\n-46340: ok 2147395600\n-7: ok 49\n",
+        String(mathCc.stderr) + (mathRun ? mathRun.stdout + mathRun.stderr : "")
+      )
+    } else {
+      check("examples/multi/math.ts compiles on its own with its header", false, math.stderr)
+    }
+
     const cxx = spawnSync("clang", [
       "-std=c++17",
       "-x",
@@ -25097,11 +25138,21 @@ if (dealtHere("cliChecks")) {
           "    return 0;",
           "  }",
           '  if (argc > 1 && strcmp(argv[1], "squares") == 0) { squares(-1); return 0; }',
-          '  if (argc > 1 && strcmp(argv[1], "sumI64") == 0) {',
-          "    int64_t big[2] = {9223372036854775807LL, 1};",
-          "    nish_array over = {2, 2, (char *)big};",
-          "    sumI64(&over);",
+          '  if (argc > 1 && strcmp(argv[1], "squares46342") == 0) { squares(46342); return 0; }',
+          '  if (argc > 1 && strcmp(argv[1], "squares46341") == 0) {',
+          "    nish_array *edge = squares(46341);",
+          '    printf("len %llu last %d\\n", (unsigned long long)edge->len, ((int32_t *)edge->data)[edge->len - 1]);',
           "    return 0;",
+          "  }",
+          "  /* sumI64 at both limits: {MAX, 1} and {MIN, -1} overflow, {MAX - 1, 1} and {MIN + 1, -1} land on the limit. */",
+          "  int64_t edges[4][2] = {{9223372036854775807LL, 1}, {-9223372036854775807LL - 1, -1}, {9223372036854775806LL, 1}, {-9223372036854775807LL, -1}};",
+          '  const char *edgeArms[4] = {"sumI64", "sumI64Below", "sumI64AtMax", "sumI64AtMin"};',
+          "  for (int e = 0; e < 4; e++) {",
+          "    if (argc > 1 && strcmp(argv[1], edgeArms[e]) == 0) {",
+          "      nish_array edge = {2, 2, (char *)edges[e]};",
+          '      printf("%lld\\n", (long long)sumI64(&edge));',
+          "      return 0;",
+          "    }",
           "  }",
           "  int32_t buf[4] = {1, 2, 3, 4};",
           "  nish_array xs = {4, 4, (char *)buf}; /* a host buffer, borrowed for the calls */",
@@ -25141,6 +25192,23 @@ if (dealtHere("cliChecks")) {
       )
       // Each refusal arrays.ts gives in place of a panic, reached from C: sumI32's Err arm,
       // and squares(-1) and an i64 overflow in sumI64 reported on stderr with exit 1.
+      const edgeRun = (arm) => (arraysCc.status === 0 ? spawnSync(arraysExe, [arm], { encoding: "utf8" }) : null)
+      const [sq46341, sq46342, below, atMax, atMin] = ["squares46341", "squares46342", "sumI64Below", "sumI64AtMax", "sumI64AtMin"].map(edgeRun)
+      check(
+        "arrays.ts at its edges: squares(46341) ends on 46340², squares(46342) exits 1, sumI64 exits 1 below i64 min and lands exactly on max and min",
+        sq46341 !== null &&
+          sq46341.status === 0 &&
+          sq46341.stdout === "len 46341 last 2147395600\n" &&
+          sq46342.status === 1 &&
+          sq46342.stderr === "squares: n must be in 0..46341\n" &&
+          below.status === 1 &&
+          below.stderr === "sumI64: the sum overflows i64\n" &&
+          atMax.status === 0 &&
+          atMax.stdout === "9223372036854775807\n" &&
+          atMin.status === 0 &&
+          atMin.stdout === "-9223372036854775808\n",
+        [sq46341, sq46342, below, atMax, atMin].map((r) => (r ? `${r.status}: ${r.stdout}${r.stderr}` : "not built")).join("\n")
+      )
       const refusals = arraysCc.status === 0 ? ["sumI32", "squares", "sumI64"].map((arm) => spawnSync(arraysExe, [arm], { encoding: "utf8" })) : []
       const [sumI32Err, squaresErr, sumI64Err] = refusals
       check(
