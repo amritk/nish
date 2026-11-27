@@ -136,7 +136,12 @@ big-endian bytes as the modulus has (`k`); then `p`, `q`, `dP`, `dQ` and
 `qInv`, then R^2 and R^3 modulo `p` and modulo `q`, each in `w` bytes, for
 `w` four times half the modulus's 32-bit limbs, rounded up; then R^2 modulo
 the modulus in `k` bytes: `4 k + 9 w` bytes, the constants computed once at
-load.
+load. A `Secret` of the first `3 k` bytes alone, `n`, `d` and `e` (RFC 8017
+§3.2's first form), is a key here too: it signs by `m^d mod n`, the same
+fixed window over every nibble of `d` and the same check against `e`, about
+four times the CRT's work, and nothing checks it before its first
+signature, since no parse made it. Known-answer tests build one directly
+(`test/spec/rfc8017-rsa-pss-sha256.ts`).
 
 </scalar-detail>
 
@@ -321,7 +326,7 @@ A fresh copy of the modulus, which is public.
 RSASSA-PSS-SIGN (RFC 8017 §8.1.1) with SHA-256, MGF1-SHA-256 and the
 `RSA_PSS_SHA256_SALT_SIZE`-byte salt derived from the key and the message
 (see the module's comment): TLS 1.3's `rsa_pss_rsae_sha256`. `null` for a
-`Secret` that is not a key from `rsaParsePrivateKey` and a signature that
+`Secret` that is not a key (the module's comment) and a signature that
 fails the check against `e`.
 
 ```ts
@@ -427,7 +432,7 @@ given: for known-answer tests. A salt of any length up to `emLen - 34`
 bytes is taken; TLS's `rsa_pss_rsae_sha256` wants
 `RSA_PSS_SHA256_SALT_SIZE` bytes, which `rsaSignPssSha256` derives. `null`
 for a salt too long for the key, a
-`Secret` that is not a key from `rsaParsePrivateKey`, and a signature that
+`Secret` that is not a key (the module's comment), and a signature that
 fails the check against `e`.
 
 ```ts
@@ -545,8 +550,9 @@ RSASP1 (RFC 8017 §5.2.1) alone: `m^d mod n` for the `k`-byte big-endian
 `m`, as `k` bytes, with no padding scheme around it. It is a primitive for
 known-answer tests and for a caller that encodes its own message; signing a
 value an attacker chose with it is a decryption oracle. `null` for an `m`
-that is not exactly `k` bytes or not below `n`, a `Secret` that is not a key
-from `rsaParsePrivateKey`, and a result that fails the check against `e`.
+that is not exactly `k` bytes or not below `n`, a `Secret` that is neither a
+key from `rsaParsePrivateKey` nor the first form `n`, `d` and `e` (the
+module's comment), and a result that fails the check against `e`.
 
 ```ts
 const rsaSignRaw: (
