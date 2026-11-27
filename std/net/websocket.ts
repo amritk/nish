@@ -252,6 +252,18 @@ const websocketUtf8Run = (state: WsUtf8, buf: u8[], off: i32, len: i32): boolean
 }
 
 /**
+ * Panics unless `buf[off .. off + len)` is inside `buf`: a window past its
+ * buffer is the caller's mistake. A window guard, so a caller that proves
+ * the window in range removes the panic site.
+ */
+const websocketCheckWindow = (what: string, buf: readonly u8[], off: i32, len: i32): void => {
+  const size: i32 = toI32(buf.length)
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    panic(`${what}: the window is outside the buffer`)
+  }
+}
+
+/**
  * Whether `buf[off .. off + len)` is well-formed UTF-8, no character cut short
  * at the end. The window is the caller's, already checked against `buf`, as
  * for `websocketUtf8Run`: what `websocketIsUtf8` checks before it calls this.
@@ -272,10 +284,7 @@ const websocketUtf8Whole = (buf: u8[], off: i32, len: i32): boolean => {
  * @returns True when the bytes are UTF-8 with no overlong form, surrogate or code point past U+10FFFF, and no character cut short at the end.
  */
 export const websocketIsUtf8 = (buf: u8[], off: i32, len: i32): boolean => {
-  const size: i32 = toI32(buf.length)
-  if (off < 0 || len < 0 || off > size || len > size - off) {
-    panic("websocketIsUtf8: the window is outside the buffer")
-  }
+  websocketCheckWindow("websocketIsUtf8", buf, off, len)
   return websocketUtf8Whole(buf, off, len)
 }
 
@@ -360,10 +369,7 @@ export class WsDecoder {
    * @param len How many bytes to append.
    */
   feed(data: u8[], off: i32, len: i32): void {
-    const size: i32 = toI32(data.length)
-    if (off < 0 || len < 0 || off > size || len > size - off) {
-      panic("WsDecoder: the window is outside the buffer")
-    }
+    websocketCheckWindow("WsDecoder", data, off, len)
     if (this.state !== WS_S_FRAMES) {
       return
     }

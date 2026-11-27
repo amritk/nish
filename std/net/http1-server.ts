@@ -458,18 +458,40 @@ const http1ServerConfigFault = (config: Http1Config): string => {
   const one: i32 = 1
   const smallest: i32 = 64
   const output: i32 = 1024
-  const caps: string[] = [
-    http1ServerCapFault("maxTarget", config.maxTarget, one, big),
-    http1ServerCapFault("maxHeaderBytes", config.maxHeaderBytes, smallest, big),
-    http1ServerCapFault("maxHeaders", config.maxHeaders, one, big),
-    http1ServerCapFault("maxBody", config.maxBody, H1_ZERO, big),
-    http1ServerCapFault("chunkSize", config.chunkSize, one, big),
-    http1ServerCapFault("outputSize", config.outputSize, output, big),
-    http1ServerCapFault("maxMessage", config.maxMessage, H1_ZERO, big - H1_FRAME_HEADER),
-    http1ServerCapFault("idleTimeout", config.idleTimeout, one, big),
-    http1ServerCapFault("headTimeout", config.headTimeout, one, big),
-    http1ServerCapFault("lingerTimeout", config.lingerTimeout, one, big),
-    http1ServerCapFault("lingerBytes", config.lingerBytes, H1_ZERO, big),
+  // One cap at a time, the first fault answered: no list of the twelve
+  // answers is built, so a check that passes costs comparisons alone.
+  let fault: string = http1ServerCapFault("maxTarget", config.maxTarget, one, big)
+  if (fault.length === 0) {
+    fault = http1ServerCapFault("maxHeaderBytes", config.maxHeaderBytes, smallest, big)
+  }
+  if (fault.length === 0) {
+    fault = http1ServerCapFault("maxHeaders", config.maxHeaders, one, big)
+  }
+  if (fault.length === 0) {
+    fault = http1ServerCapFault("maxBody", config.maxBody, H1_ZERO, big)
+  }
+  if (fault.length === 0) {
+    fault = http1ServerCapFault("chunkSize", config.chunkSize, one, big)
+  }
+  if (fault.length === 0) {
+    fault = http1ServerCapFault("outputSize", config.outputSize, output, big)
+  }
+  if (fault.length === 0) {
+    fault = http1ServerCapFault("maxMessage", config.maxMessage, H1_ZERO, big - H1_FRAME_HEADER)
+  }
+  if (fault.length === 0) {
+    fault = http1ServerCapFault("idleTimeout", config.idleTimeout, one, big)
+  }
+  if (fault.length === 0) {
+    fault = http1ServerCapFault("headTimeout", config.headTimeout, one, big)
+  }
+  if (fault.length === 0) {
+    fault = http1ServerCapFault("lingerTimeout", config.lingerTimeout, one, big)
+  }
+  if (fault.length === 0) {
+    fault = http1ServerCapFault("lingerBytes", config.lingerBytes, H1_ZERO, big)
+  }
+  if (fault.length === 0) {
     // The buffers the peer's bytes fill grow by doubling and stop at 2^30
     // (`Http1Parser`'s input and head, `WsDecoder`'s input), so a cap whose
     // buffer could need more is refused here rather than reached by a peer:
@@ -477,19 +499,14 @@ const http1ServerConfigFault = (config: Http1Config): string => {
     // the input never holds more than the larger of the two lines or a chunk.
     // Each is at most 2^30 here, so the sum wraps only at 2^31, to a
     // negative the check refuses as it would the sum itself.
-    http1ServerCapFault(
+    fault = http1ServerCapFault(
       "maxTarget + maxHeaderBytes",
       toI32(toI64(config.maxTarget) + toI64(config.maxHeaderBytes)),
       one,
       big - H1_LINE_OVERHEAD
-    ),
-  ]
-  for (const fault of caps) {
-    if (fault.length > 0) {
-      return fault
-    }
+    )
   }
-  return ""
+  return fault
 }
 
 /** Panics unless every cap of `config` is one a connection can work with: a cap outside is the program's mistake. */
@@ -774,6 +791,67 @@ export class Http1Config {
 export const http1ConfigChecked = (config: Http1Config): Result<Http1Config, string> => {
   const fault: string = http1ServerConfigFault(config)
   return fault.length > 0 ? Err(fault) : Ok(config)
+}
+
+/** A copy of `config`, field for field: a snapshot whoever holds `config` cannot change. */
+const http1ConfigCopy = (config: Http1Config): Http1Config => {
+  const kept: Http1Config = new Http1Config()
+  kept.maxTarget = config.maxTarget
+  kept.maxHeaderBytes = config.maxHeaderBytes
+  kept.maxHeaders = config.maxHeaders
+  kept.maxBody = config.maxBody
+  kept.chunkSize = config.chunkSize
+  kept.outputSize = config.outputSize
+  kept.maxMessage = config.maxMessage
+  kept.idleTimeout = config.idleTimeout
+  kept.headTimeout = config.headTimeout
+  kept.lingerTimeout = config.lingerTimeout
+  kept.lingerBytes = config.lingerBytes
+  kept.idleInput = config.idleInput
+  return kept
+}
+
+/**
+ * A connection under a copy of `config`, checked once, the twin of
+ * `Http1Connection`'s constructor that refuses a cap outside what the
+ * connection can work with as an `Err` rather than panicking. The connection
+ * keeps the copy, so a later change to `config` does not reach it.
+ *
+ * @param config the caps the connection is held to, copied and checked now
+ * @param date the `Date` its responses carry, shared with other connections; null makes it one of its own
+ * @returns the connection, or the first cap outside its range, named with the range it must lie in
+ */
+export const http1ConnectionChecked = (
+  config: Http1Config,
+  date: HttpDate | null = null
+): Result<Http1Connection, string> => {
+  const kept: Http1Config = http1ConfigCopy(config)
+  const fault: string = http1ServerConfigFault(kept)
+  if (fault.length > 0) {
+    return Err(fault)
+  }
+  return Ok(new Http1Connection(kept, date))
+}
+
+/**
+ * A server pool under a copy of `config`, checked once, the twin of
+ * `Http1Server`'s constructor: a cap outside what a connection can work
+ * with is an `Err` here, where the constructor's pool would panic building
+ * its first connection. The pool keeps the copy, so a later change to
+ * `config` reaches none of its connections.
+ *
+ * @param config the caps every slot's connection is held to, copied and checked now
+ * @param listener the listening socket from `tcpListen`, which stays the program's to close
+ * @param size how many connections the pool serves at once; less than 1 counts as 1
+ * @returns the pool, or the first cap outside its range, named with the range it must lie in
+ */
+export const http1ServerChecked = (config: Http1Config, listener: i32, size: i32): Result<Http1Server, string> => {
+  const kept: Http1Config = http1ConfigCopy(config)
+  const fault: string = http1ServerConfigFault(kept)
+  if (fault.length > 0) {
+    return Err(fault)
+  }
+  return Ok(new Http1Server(kept, listener, size))
 }
 
 /** The reason phrase a status is sent with; RFC 9112 §4 lets a client ignore it. */
@@ -1352,10 +1430,23 @@ export class Http1Connection {
       return 0
     }
     if (this.state === H1_S_WEBSOCKET) {
-      this.decoder().feed(buf, off, n)
+      // `[off, off + n)` lies inside the window checked above, as `n <= len`;
+      // spelled as `end - off` behind its test so the decoder's check is proven.
+      const ws: WsDecoder = this.decoder()
+      const end: i32 = toI32(toI64(off) + toI64(n))
+      if (off < 0 || off > end || end > toI32(buf.length)) {
+        this.abort()
+        return 0
+      }
+      ws.feed(buf, off, end - off)
     } else {
       this.unpark()
-      this.parser.feed(buf, off, n)
+      // In the window checked above, so `tryFeed` takes it; false would be a
+      // window it refused, and the connection could not go on.
+      if (!this.parser.tryFeed(buf, off, n)) {
+        this.abort()
+        return 0
+      }
     }
     return n
   }
@@ -1601,7 +1692,17 @@ export class Http1Connection {
           const p: Http1Parser = this.parser
           const ws: WsDecoder = this.decoder()
           ws.reset()
-          ws.feed(p.buf, p.start, p.buffered())
+          // What the parser holds past the head: its own buffer's window,
+          // tested so the decoder's window check is proven. A parser that
+          // broke it is a connection that cannot go on.
+          const held: u8[] = p.buf
+          const from: i32 = p.start
+          const end: i32 = toI32(toI64(from) + toI64(p.buffered()))
+          if (from < 0 || from > end || end > toI32(held.length)) {
+            this.abort()
+            return H1_ERROR
+          }
+          ws.feed(held, from, end - from)
           this.state = H1_S_WEBSOCKET
           return this.nextFrame()
         }
@@ -2790,7 +2891,9 @@ export class Http1Server {
    * @param size how many connections the pool serves at once; less than 1 counts as 1
    */
   constructor(config: Http1Config, listener: i32, size: i32) {
-    this.config = config
+    // A copy: the caps each connection is built under are the ones given
+    // here, whatever the caller sets on `config` later.
+    this.config = http1ConfigCopy(config)
     this.listener = listener
     this.connections = []
     this.at = []
@@ -2810,11 +2913,21 @@ export class Http1Server {
     this.peer = new Array<u8>(H1_ADDRESS_SIZE)
   }
 
-  /** A new connection on this pool's outputs and `Date`, appended to `connections`. */
-  private build(): Http1Connection {
-    const conn: Http1Connection = new Http1Connection(this.config, this.date)
+  /**
+   * A new connection on this pool's outputs and `Date`, appended to
+   * `connections`; null, building none, when the pool's caps are ones a
+   * connection cannot work with.
+   */
+  private build(): Http1Connection | null {
+    const config: Http1Config = this.config
+    const date: HttpDate = this.date
+    const fault: string = http1ServerConfigFault(config)
+    if (fault.length > 0) {
+      return null
+    }
+    const conn: Http1Connection = new Http1Connection(config, date)
     conn.pool = this.outputs
-    if (this.config.idleInput) {
+    if (config.idleInput) {
       conn.inputs = this.inputs
       conn.heads = this.heads
     }
@@ -2885,6 +2998,23 @@ export class Http1Server {
    * @returns the slot's connection, which the pool keeps; read its events and write its response through it
    */
   connection(slot: i32): Http1Connection {
+    const conn: Http1Connection | null = this.tryConnection(slot)
+    // Null only for a free slot when no connection could be built: the
+    // pool's caps are bad, which this constructor panics on.
+    return conn !== null ? conn : new Http1Connection(this.config, this.date)
+  }
+
+  /**
+   * The connection `slot` holds, as `connection` answers it, or null where
+   * `connection` would panic: the twin for a pool made by `new Http1Server`
+   * whose caps no connection can work with (`http1ServerChecked` makes a
+   * pool that never answers null). A free slot, or one out of range, names
+   * the first connection built, as `connection`'s does.
+   *
+   * @param slot the slot `accept` answered
+   * @returns the slot's connection, which the pool keeps; null when none could be built
+   */
+  tryConnection(slot: i32): Http1Connection | null {
     const conn: Http1Connection | null = this.attach(slot)
     if (conn !== null) {
       return conn
@@ -2972,7 +3102,11 @@ export class Http1Server {
     }
     const taken: Http1Connection | null = k >= 0 && k < toI32(connections.length) ? connections[k] : null
     // No spare: a new one, at the end of `connections`.
-    const conn: Http1Connection = taken !== null ? taken : this.build()
+    const conn: Http1Connection | null = taken !== null ? taken : this.build()
+    if (conn === null) {
+      // Bad caps: no connection, so the slot reads as closed.
+      return null
+    }
     if (taken === null) {
       k = toI32(this.connections.length) - 1
     }
@@ -3136,8 +3270,14 @@ export class Http1Server {
         }
         break
       }
+      // `netRead` answers at most `want`; a count past the scratch is a
+      // broken read, and the connection is aborted rather than fed it.
+      if (n > toI32(scratch.length)) {
+        conn.abort()
+        break
+      }
       moved = true
-      conn.feed(scratch, H1_ZERO, n)
+      conn.feed(scratch, 0, n)
       // A short read emptied the socket. The loop's readiness is
       // level-triggered, so more input, or the peer's close, wakes it again;
       // reading once more here would only answer -11, at the price of a
