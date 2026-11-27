@@ -2361,10 +2361,15 @@ class YamlParser {
   /** The tag written at `[start, end)`, resolved against this document's handles. */
   private resolveTag(start: i32, end: i32): string {
     const written: string = this.text.substring(start, end)
-    if (end - start === 1) {
+    // A tag is a span of the text holding at least its `!`, so this never returns.
+    if (start < 0 || end > this.len || end < 1 || end <= start) {
+      return written
+    }
+    const open: i32 = start + 1
+    if (open >= end) {
       return "!"
     }
-    if (this.at(start + 1) === YAML_LT) {
+    if (this.at(open) === YAML_LT) {
       if (this.at(end - 1) !== YAML_GT) {
         this.error(YAML_ERR_BAD_TAG, 'Verbatim tag is missing its closing ">"', start, end)
         return written
@@ -2373,17 +2378,18 @@ class YamlParser {
         this.error(YAML_ERR_BAD_TAG, "Verbatim tag is empty", start, end)
         return written
       }
-      return yamlShortenTag(this.text.substring(start + 2, end - 1))
+      return yamlShortenTag(this.text.substring(open + 1, end - 1))
     }
-    let handleEnd: i32 = start + 1
-    if (this.at(start + 1) === YAML_BANG) {
-      handleEnd = start + 2
+    let handleEnd: i32 = open
+    if (this.at(open) === YAML_BANG) {
+      handleEnd = open + 1
     } else {
-      let i: i32 = start + 1
+      let i: i32 = open
       while (i < end && yamlIsHandleChar(this.at(i))) {
         i += 1
       }
-      if (i > start + 1 && this.at(i) === YAML_BANG) {
+      // `!` is not a handle character, so the loop stops on it inside the tag.
+      if (i > open && i < end && this.at(i) === YAML_BANG) {
         handleEnd = i + 1
       }
     }
@@ -2397,10 +2403,12 @@ class YamlParser {
     }
     const handle: string = this.text.substring(start, handleEnd)
     const suffix: string = this.text.substring(handleEnd, end)
+    const prefixes: string[] = this.handlePrefixes
     let i: i32 = toI32(this.handleNames.length) - 1
     while (i >= 0) {
-      if (this.handleNames[i] === handle) {
-        return yamlShortenTag(this.handlePrefixes[i] + suffix)
+      // The two lists grow together, so the prefix is always there.
+      if (this.handleNames[i] === handle && i < toI32(prefixes.length)) {
+        return yamlShortenTag(prefixes[i] + suffix)
       }
       i -= 1
     }
@@ -2421,26 +2429,37 @@ class YamlParser {
 
   /** Reports an anchor or alias name that is empty or runs into a flow indicator. */
   private reportBadAnchorName(what: string, start: i32, end: i32): void {
-    if (end === start + 1) {
+    // A name follows its `&` or `*` inside the text, so this never returns.
+    if (start < 0 || end > this.len || end <= start) {
+      return
+    }
+    const open: i32 = start + 1
+    if (end === open) {
       this.error(YAML_ERR_BAD_ANCHOR, `${what} name cannot be empty`, start, end)
       return
     }
-    const name: string = this.text.substring(start + 1, end)
-    const next: string = this.text.substring(end, end + 1)
+    const name: string = this.text.substring(open, end)
+    // The flow indicator at `end` is inside the text, so `stop` is always `end + 1`.
+    const stop: i32 = end < this.len ? end + 1 : end
+    const next: string = this.text.substring(end, stop)
     this.error(
       YAML_ERR_BAD_ANCHOR,
       `${what} name "${name}" cannot run on into "${next}": a flow indicator is not part of a name, so it needs a space before it`,
       start,
-      end + 1
+      stop
     )
   }
 
   /** Warns about an anchor or alias name `[start + 1, end)` that ends in `:`. */
   private checkAmbiguousName(what: string, start: i32, end: i32): void {
-    if (end <= start + 1 || this.at(end - 1) !== YAML_COLON) {
+    if (start >= end) {
       return
     }
-    const name: string = this.text.substring(start + 1, end)
+    const open: i32 = start + 1
+    if (end <= open || this.before(end) !== YAML_COLON) {
+      return
+    }
+    const name: string = this.text.substring(open, end)
     this.warn(
       YAML_ERR_AMBIGUOUS_ANCHOR_NAME,
       `${what} name "${name}" ends in ":", which YAML reads as part of the name rather than as a mapping separator`,
@@ -2458,20 +2477,22 @@ class YamlParser {
     let slot: i32 = -1
     while (true) {
       this.skipInlineSpaces()
-      const c: i32 = this.at(this.pos)
-      if (c !== YAML_AMP && c !== YAML_BANG) {
+      const start: i32 = this.pos
+      const c: i32 = this.at(start)
+      // A byte matched is inside the text.
+      if ((c !== YAML_AMP && c !== YAML_BANG) || start >= this.len) {
         break
       }
-      const start: i32 = this.pos
-      const end: i32 = this.propTokenEnd(start + 1, c === YAML_AMP || flow)
+      const open: i32 = start + 1
+      const end: i32 = this.propTokenEnd(open, c === YAML_AMP || flow)
       if (slot < 0) {
         slot = this.stream.newProps()
         yamlPut(this.stream.propStarts, slot, start)
       }
       if (c === YAML_AMP) {
-        if (end === start + 1 || (!flow && yamlIsFlowIndicator(this.at(end)))) {
+        if (end === open || (!flow && yamlIsFlowIndicator(this.at(end)))) {
           this.reportBadAnchorName("Anchor", start, end)
-          if (end === start + 1) {
+          if (end === open) {
             this.pos = end
             continue
           }
@@ -2479,7 +2500,7 @@ class YamlParser {
         if (yamlAt(this.stream.propAnchorStarts, slot) >= 0) {
           this.error(YAML_ERR_BAD_PROPERTY, "A node cannot carry more than one anchor", start, end)
         }
-        yamlPut(this.stream.propAnchorStarts, slot, start + 1)
+        yamlPut(this.stream.propAnchorStarts, slot, open)
         yamlPut(this.stream.propAnchorEnds, slot, end)
         this.checkAmbiguousName("Anchor", start, end)
       } else {
@@ -2513,11 +2534,12 @@ class YamlParser {
     let i: i32 = from
     while (true) {
       const c: i32 = this.at(i)
-      if (c !== YAML_AMP && c !== YAML_BANG) {
+      // A byte matched is inside the text.
+      if ((c !== YAML_AMP && c !== YAML_BANG) || i >= this.len) {
         return i
       }
       i = this.propTokenEnd(i + 1, c === YAML_AMP)
-      while (yamlIsBlank(this.at(i))) {
+      while (i < this.len && yamlIsBlank(this.at(i))) {
         i += 1
       }
     }
@@ -2525,12 +2547,12 @@ class YamlParser {
 
   /** The entry of the anchor named `[from, to)` among those defined so far, or `-1`. */
   private findAnchor(from: i32, to: i32): i32 {
-    let i: i32 = this.anchorTop - 1
-    while (i >= 0) {
+    let i: i32 = this.anchorTop
+    while (i > 0) {
+      i -= 1
       if (yamlSameBytes(this.text, yamlAt(this.anchorStarts, i), yamlAt(this.anchorEnds, i), from, to)) {
         return i
       }
-      i -= 1
     }
     return -1
   }
@@ -2541,20 +2563,25 @@ class YamlParser {
     yamlStackPush(this.anchorEnds, this.anchorTop, to)
     yamlPut(this.stream.propEntries, slot, this.anchorTop)
     this.anchorTop = yamlStackPush(this.anchorNodes, this.anchorTop, node)
-    let i: i32 = this.pendingTop - 1
-    while (i >= 0) {
+    const top: i32 = this.pendingTop
+    let i: i32 = top
+    while (i > 0) {
+      i -= 1
       if (yamlSameBytes(this.text, yamlAt(this.pendingStarts, i), yamlAt(this.pendingEnds, i), from, to)) {
         // Close the gap: what was pending after it moves down one.
-        let j: i32 = i + 1
-        while (j < this.pendingTop) {
-          yamlPut(this.pendingStarts, j - 1, yamlAt(this.pendingStarts, j))
-          yamlPut(this.pendingEnds, j - 1, yamlAt(this.pendingEnds, j))
-          j += 1
+        let gap: i32 = i
+        while (gap < top) {
+          const j: i32 = gap + 1
+          if (j >= top) {
+            break
+          }
+          yamlPut(this.pendingStarts, gap, yamlAt(this.pendingStarts, j))
+          yamlPut(this.pendingEnds, gap, yamlAt(this.pendingEnds, j))
+          gap = j
         }
-        this.pendingTop -= 1
+        this.pendingTop = gap
         return
       }
-      i -= 1
     }
   }
 
@@ -2622,7 +2649,12 @@ class YamlParser {
 
   /** Reports the bad escape whose `\` is at `at`. */
   private reportBadEscape(at: i32): void {
-    const e: i32 = this.at(at + 1)
+    // The caller found its `\` inside the text, so this never returns.
+    if (at < 0 || at >= this.len) {
+      return
+    }
+    const open: i32 = at + 1
+    const e: i32 = this.at(open)
     let digits: i32 = 0
     if (e === 120) {
       digits = 2
@@ -2631,25 +2663,30 @@ class YamlParser {
     } else if (e === 85) {
       digits = 8
     }
-    if (digits > 0) {
-      let limit: i32 = at + 2 + digits
-      if (limit > this.len) {
-        limit = this.len
-      }
-      let end: i32 = at + 2
+    // A letter matched at `open` is inside the text.
+    if (digits > 0 && open < this.len) {
+      let end: i32 = open + 1
+      let count: i32 = 0
       let value: i32 = 0
       let tooBig: boolean = false
-      while (end < limit && yamlHexValue(this.at(end)) >= 0) {
-        // 0x10FFFF fits in 21 bits: past it, stop growing and remember.
-        if (value > 1114111) {
+      while (count < digits && end < this.len) {
+        // A hex digit is worth 0 to 15, so the upper test never fires.
+        const h: i32 = yamlHexValue(this.at(end))
+        if (h < 0 || h > 15) {
+          break
+        }
+        // 0x10FFFF fits in 21 bits: past it, stop growing and remember. The
+        // value starts at 0 and only grows, so it is never negative.
+        if (value > 1114111 || value < 0) {
           tooBig = true
         } else {
-          value = value * 16 + yamlHexValue(this.at(end))
+          value = value * 16 + h
         }
         end += 1
+        count += 1
       }
       const written: string = this.text.substring(at, end)
-      if (end - at - 2 < digits) {
+      if (count < digits) {
         this.error(YAML_ERR_BAD_ESCAPE, `"${written}" needs exactly ${digits} hex digits`, at, end)
       } else if (digits === 8 && (tooBig || value > 1114111)) {
         this.error(YAML_ERR_BAD_ESCAPE, `"${written}" is past the last Unicode code point`, at, end)
@@ -2657,14 +2694,18 @@ class YamlParser {
       return
     }
     const width: i32 = yamlCharWidth(e)
-    const escaped: string = this.text.substring(at + 1, at + 1 + width)
-    this.error(YAML_ERR_BAD_ESCAPE, `"\\${escaped}" is not a valid escape sequence`, at, at + 1 + width)
+    const escaped: string = this.text.substring(open, open + width)
+    this.error(YAML_ERR_BAD_ESCAPE, `"\\${escaped}" is not a valid escape sequence`, at, open + width)
   }
 
   /** Reports a quoted scalar's continuation line at `lineStart` that is not indented past its parent. */
   private checkQuotedIndent(lineStart: i32, parentIndent: i32): boolean {
+    // Outside the text the byte reads -1, which answers `false` below as well.
+    if (lineStart < 0) {
+      return false
+    }
     let i: i32 = lineStart
-    while (this.at(i) === YAML_SPACE) {
+    while (i < this.len && this.at(i) === YAML_SPACE) {
       i += 1
     }
     const c: i32 = this.at(i)
@@ -2685,7 +2726,9 @@ class YamlParser {
   private scanQuoted(quote: i32, parentIndent: i32): i32 {
     const start: i32 = this.pos
     const single: boolean = quote === YAML_SQUOTE
-    let i: i32 = start + 1
+    // The quote at the cursor is inside the text, so this is always `start + 1`.
+    const open: i32 = start < this.len ? start + 1 : start
+    let i: i32 = open
     let indentReported: boolean = parentIndent < 0
     let closed: boolean = false
     let contentEnd: i32 = this.len
@@ -2693,16 +2736,18 @@ class YamlParser {
     let verbatim: boolean = true
     while (i < this.len) {
       const at: i32 = toI32(indexOfAny(this.text, single ? YAML_SINGLE_STOPS : YAML_DOUBLE_STOPS, i))
-      if (at < 0) {
+      // A byte found is inside the text, so the second test never fires.
+      if (at < 0 || at >= this.len) {
         i = this.len
         break
       }
       i = at
       const c: i32 = this.at(i)
       if (c === YAML_SQUOTE) {
-        if (this.at(i + 1) === YAML_SQUOTE) {
+        const next: i32 = i + 1
+        if (next < this.len && this.at(next) === YAML_SQUOTE) {
           verbatim = false
-          i += 2
+          i = next + 1
           continue
         }
         contentEnd = i
@@ -2718,8 +2763,9 @@ class YamlParser {
       }
       if (c === YAML_BACKSLASH) {
         verbatim = false
-        const e: i32 = this.at(i + 1)
-        if (e < 0) {
+        const next: i32 = i + 1
+        const e: i32 = this.at(next)
+        if (e < 0 || next >= this.len) {
           i = this.len
           break
         }
@@ -2730,7 +2776,7 @@ class YamlParser {
         if (yamlEscapeKind(e) !== 1) {
           this.reportBadEscape(i)
         }
-        i += 2
+        i = next + 1
         continue
       }
       // A line break.
@@ -2755,7 +2801,7 @@ class YamlParser {
       start,
       i
     )
-    yamlPut(this.stream.firsts, node, start + 1)
+    yamlPut(this.stream.firsts, node, open)
     yamlPut(this.stream.counts, node, contentEnd)
     if (verbatim && closed) {
       yamlPut(this.stream.extras, node, YAML_VERBATIM)
