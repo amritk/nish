@@ -13,10 +13,10 @@
 #
 #   entry, entry-copy   the working tree, built twice; `cmp` must find them
 #                       identical, and the spread between them is the band
-#   base                with --base REV: the std/, runtime/ and
+#   base                with --base REV: the std/, runtime/, scripts/ and
 #                       bench/techempower of REV (`git archive`), so it differs
-#                       from entry only in the library and the entry, not in
-#                       the compiler
+#                       from entry only in the library, the runtime, its link
+#                       script and the entry, not in the compiler
 #   nokeep              with --no-keep-head: the working tree with
 #                       std/net/http1-server.ts's H1_HEAD_KEEP set to 0, which
 #                       turns the kept response head off
@@ -92,18 +92,20 @@ build() {
     exit 1
   }
 }
-# A copy of the std/, runtime/ and bench/techempower named by $2 in build/tfb/$1:
-# a revision, or `.` for the working tree.
+# A copy of the std/, runtime/, scripts/ and bench/techempower named by $2 in
+# build/tfb/$1: a revision, or `.` for the working tree. scripts/ comes along
+# because --link runs the build.sh beside the compiler, and only that tree's
+# build.sh knows that tree's runtime/ files.
 tree() {
   local dir=$root/build/tfb/$1
   rm -rf "$dir"
   mkdir -p "$dir"
   if [ "$2" = . ]; then
     mkdir -p "$dir/bench"
-    cp -r std runtime "$dir/"
+    cp -r std runtime scripts "$dir/"
     cp -r bench/techempower "$dir/bench/"
   else
-    git archive "$2" std runtime bench/techempower | tar -x -C "$dir"
+    git archive "$2" std runtime scripts bench/techempower | tar -x -C "$dir"
   fi
 }
 
