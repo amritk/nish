@@ -15776,7 +15776,50 @@ Parameter `mask` of `declare function blend` is readonly u8[] in a run that `dst
 The message of an error contains:
 
 ```text
-` = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there: any other write would drop a handle the object owns or own one twice
+… = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there: any other write would drop a handle the object owns or own one twice
+```
+
+[`nl2825_handle_child_write.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2825_handle_child_write.ts):
+
+```ts
+// WP89 S5a: a field that owns another handle class is written once, by
+// `this.field = p` as a statement at the top of the constructor. A write under
+// an `if` is refused even when every branch writes it: the walk that proves
+// each owned handle is closed exactly once follows the top of the constructor
+// only, and the branch that does not keep `slot` would leave it closed by no one.
+declare function slot_open(): CPtr
+declare function slot_close(p: CPtr): i32
+
+class Slot {
+  readonly p: CPtr
+  constructor() {
+    this.p = slot_open()
+  }
+  [Symbol.dispose](): void {
+    slot_close(this.p)
+  }
+}
+
+class Holder {
+  readonly slot: Slot
+  constructor(slot: Slot, keep: boolean) {
+    if (keep) {
+      this.slot = slot
+    } else {
+      this.slot = new Slot()
+    }
+  }
+  [Symbol.dispose](): void {}
+}
+
+export const main = (): i32 => {
+  using h = new Holder(new Slot(), true)
+  return 0
+}
+```
+
+```text
+The field `slot` of handle class `Holder` owns a handle and is written only once, by `this.slot = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there: any other write would drop a handle the object owns or own one twice
 ```
 
 ## NL2826
@@ -15784,7 +15827,54 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` opened as an argument of a `new` that takes ownership of it cannot be followed by an argument that may leave the function, as `.orReturn()` does: the handle is open by then and the object that would close it is never built; compute that argument first, into a `const`
+…` opened as an argument of a `new` that takes ownership of it cannot be followed by an argument that may leave the function, as `.orReturn()` does: the handle is open by then and the object that would close it is never built; compute that argument first, into a `const`
+```
+
+[`nl2826_handle_sink_leave.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2826_handle_sink_leave.ts):
+
+```ts
+// WP89 S5a: a handle opened as an argument of a `new` that takes ownership
+// of it is owned by nothing until that `new` runs. An argument after it that
+// may leave the function, here by `orReturn` on a `Result`, would leave the opened
+// `Slot` closed by no one, so the order is refused: open the handle last, or
+// bind the leaving value first.
+declare function slot_open(): CPtr
+declare function slot_close(p: CPtr): i32
+
+class Slot {
+  readonly p: CPtr
+  constructor() {
+    this.p = slot_open()
+  }
+  [Symbol.dispose](): void {
+    slot_close(this.p)
+  }
+}
+
+class Holder {
+  readonly slot: Slot
+  readonly n: i32
+  constructor(slot: Slot, n: i32) {
+    this.slot = slot
+    this.n = n
+  }
+  [Symbol.dispose](): void {}
+}
+
+const count = (ok: boolean): Result<i32, string> => (ok ? Ok(1) : Err("no"))
+
+const build = (ok: boolean): Result<i32, string> => {
+  using h = new Holder(new Slot(), count(ok).orReturn())
+  return Ok(h.n)
+}
+
+export const main = (): i32 => {
+  return build(true).isOk() ? 0 : 1
+}
+```
+
+```text
+A `Slot` opened as an argument of a `new` that takes ownership of it cannot be followed by an argument that may leave the function, as `.orReturn()` does: the handle is open by then and the object that would close it is never built; compute that argument first, into a `const`
 ```
 
 ## NL2827
@@ -15792,5 +15882,34 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` cannot cross an export of the entry module: the entry's exports are C symbols, and a foreign caller that is given or lent a handle runs no close; export the class and the functions that take it from a module the entry imports
+…` cannot cross an export of the entry module: the entry's exports are C symbols, and a foreign caller that is given or lent a handle runs no close; export the class and the functions that take it from a module the entry imports
+```
+
+[`nl2827_handle_entry_export.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2827_handle_entry_export.ts):
+
+```ts
+// WP89 S5a: a handle class is exported between Nish modules, never across
+// the entry module's exports: those are C symbols, and a C caller that took
+// a `File` would never close it.
+declare function file_open(): CPtr
+declare function file_close(p: CPtr): i32
+
+export class File {
+  readonly p: CPtr
+  constructor() {
+    this.p = file_open()
+  }
+  [Symbol.dispose](): void {
+    file_close(this.p)
+  }
+}
+
+export const main = (): i32 => {
+  using f = new File()
+  return 0
+}
+```
+
+```text
+Handle class `File` cannot cross an export of the entry module: the entry's exports are C symbols, and a foreign caller that is given or lent a handle runs no close; export the class and the functions that take it from a module the entry imports
 ```

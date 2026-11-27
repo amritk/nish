@@ -339,9 +339,9 @@ function checkDispose(program: CheckedProgram, table: TypeTable, info: StructInf
   callee +17:52 disposeShapeMessage -> @disposeShapeMessage
   local +22:7 bad: i32 (let)
   local +23:12 i: i32 (let)
-  callee +24:9 closeStepFinding -> @closeStepFinding
-  local +29:11 finding: HandleFinding | null (const)
-  callee +29:21 closeStepFinding -> @closeStepFinding
+  callee +25:7 closeStepFinding -> @closeStepFinding
+  local +32:11 finding: HandleFinding | null (const)
+  callee +32:21 closeStepFinding -> @closeStepFinding
 function ownerReaches(info: StructInfo, at: StructInfo, depth: i32): boolean -> @ownerReaches
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ownerReaches
