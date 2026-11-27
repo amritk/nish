@@ -613,6 +613,30 @@ const declareHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void =>
 }
 
 /**
+ * WP89 S5a: a class whose `[Symbol.dispose]` marked it a handle class but
+ * which owns no field has nothing for its dispose to close, and its `using`
+ * would close nothing: the dispose is refused as any class's outside
+ * `nish/threads` is, and the class is an ordinary one from here on.
+ */
+const rejectEmptyHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void => {
+  if (!info.handle || info.owned.length > 0) {
+    return
+  }
+  info.handle = false
+  // A pointer field refused by `collectField` has said why already.
+  for (const member of decl.children[3].children) {
+    if (member.kind === NodeKind.Field && isHandleFieldAnnotation(member.children[1])) {
+      return
+    }
+  }
+  for (const member of decl.children[3].children) {
+    if (member.kind === NodeKind.Method && member.children[0].text === DISPOSE_METHOD) {
+      ctx.error(member.children[0], disposeElsewhereMessage(spelled(ctx, info)))
+    }
+  }
+}
+
+/**
  * WP89 S5a: whether a field of a handle class typed `type` is one it owns: a
  * `CPtr`, an opaque `declare class`, a `HostHandle<K>` or another handle
  * class, each perhaps `| null`.
@@ -622,7 +646,7 @@ const ownedFieldType = (ctx: CheckContext, type: i32): boolean => {
   if (bare === T_CPTR || ctx.table.isOpaque(bare) || ctx.table.isHostHandle(bare)) {
     return true
   }
-  const held = ctx.table.isStruct(bare) ? ctx.program.structByType(bare) : null
+  const held: StructInfo | null = ctx.table.isStruct(bare) ? ctx.program.structByType(bare) : null
   return held !== null && held.handle
 }
 
@@ -1703,6 +1727,7 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
         collectConstructor(ctx, info, member)
       }
     }
+    rejectEmptyHandle(ctx, info, decl)
     checkHolderReleaser(ctx, info)
   } else {
     for (const member of decl.children[1].children) {

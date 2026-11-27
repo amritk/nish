@@ -39,7 +39,7 @@ import { isScalarArgument } from "./escape"
 import { checkedFieldElement } from "./emit-arrays"
 import { loadField, structFieldPointer, structInfoOf } from "./emit-classes"
 import { internalErrorFor } from "./ice"
-import { IRFunction, IRParam, paramValue } from "./ir"
+import { IRBlock, IRFunction, IRParam, paramValue } from "./ir"
 import { loadLocal } from "./emit-ops"
 import { isArenaCall, unwrapParens } from "./emit-util"
 import { Node } from "./nodes"
@@ -835,6 +835,7 @@ export const openScope = (emitter: Emitter, decl: Node): void => {
   emitter.openScopeArenas.push(arena)
   emitter.openScopeLocks.push(lock)
   emitter.openScopeHandles.push(handle)
+  emitter.openScopeNullable.push(handle !== null && emitter.table.stripNull(local.type) !== local.type)
   const none: string[] = []
   emitter.openScopeSeals.push(arena || lock || handle !== null ? none : scopeSeals(emitter, decl))
 }
@@ -870,31 +871,61 @@ const emitDropped = (emitter: Emitter, call: string, result: string): void => {
 }
 
 /**
- * WP53 H1.2: close the pointer the handle `object` owns, exactly as its
- * `[Symbol.dispose]` does: one call of the close it names on the field, behind
- * a `null` test only when the dispose writes one (§4b shape 2) and the field
- * may be `null`. Shape 1 passes the field as it is, `null` included. The
- * field is read here rather than when the `using` opened, because a dispose
- * reads it when it runs.
+ * WP53 H1.2, WP89 S5a: close what the handle `object` owns, exactly as the
+ * disposes of its class and of the handle classes its fields hold do: its
+ * owned fields in the reverse of their declaration, a native one by one call
+ * of the close its dispose names, behind a test for "none" only when the
+ * dispose writes one (§4b shape 2), and a handle-class one by its own closes,
+ * behind a `null` test when the field may hold none. `nullable` is whether
+ * `object` itself may be `null`. Each field is read here rather than when the
+ * `using` opened, because a dispose reads it when it runs.
  */
-const closeHandle = (emitter: Emitter, info: StructInfo, object: string): void => {
-  const close = info.handleClose
-  if (close === null) {
-    process.exit(internalErrorFor(`emitter: handle class \`${info.name}\` has no close`, emitter.opts.json))
+const closeHandle = (emitter: Emitter, info: StructInfo, object: string, nullable: boolean): void => {
+  let done: IRBlock | null = null
+  if (nullable) {
+    const open = emitter.fn.newBlock("handle.open")
+    const after = emitter.fn.newBlock("handle.none")
+    const isNull = emitter.fn.emitValue(`icmp eq ${emitter.llvm(info.type)} ${object}, null`)
+    emitter.fn.emit(`br i1 ${isNull}, label %${after.label}, label %${open.label}`)
+    emitter.fn.placeBlock(open)
+    done = after
   }
-  const field = lockWord(emitter, info, info.handleField)
-  const pointer = loadField(emitter, info, object, field)
+  for (let i = info.owned.length - 1; i >= 0; i--) {
+    const owned = info.owned[i]
+    const field = lockWord(emitter, info, owned.name)
+    const value = loadField(emitter, info, object, field)
+    const child = owned.child
+    const close = owned.close
+    if (child !== null) {
+      closeHandle(emitter, child, value, owned.tested)
+    } else if (close === null) {
+      process.exit(internalErrorFor(`emitter: handle class \`${info.name}\` has no close for \`${owned.name}\``, emitter.opts.json))
+    } else {
+      closeNative(emitter, close, field.type, value, owned.tested)
+    }
+  }
+  if (done !== null) {
+    emitter.fn.emit(`br label %${done.label}`)
+    emitter.fn.placeBlock(done)
+  }
+}
+
+/** One call of a native field's close on `value`, behind a test for its "none" (`null`, or a `HostHandle`'s `0`) when `tested`. */
+const closeNative = (emitter: Emitter, close: FunctionSig, type: i32, value: string, tested: boolean): void => {
   const param = emitter.llvmAbi(close.paramTypes[0], false)
   const result = emitter.llvmAbi(close.returnType, false)
-  const call = `call ${result} @${close.name}(${param} ${pointer})`
-  if (!info.handleTested) {
+  const call = `call ${result} @${close.name}(${param} ${value})`
+  if (!tested) {
     emitDropped(emitter, call, result)
     return
   }
   const open = emitter.fn.newBlock("handle.close")
   const done = emitter.fn.newBlock("handle.closed")
-  const isNull = emitter.fn.emitValue(`icmp eq ${emitter.llvm(field.type)} ${pointer}, null`)
-  emitter.fn.emit(`br i1 ${isNull}, label %${done.label}, label %${open.label}`)
+  // A pointer's none is `null`, a `HostHandle`'s, an `i32`, is `0`.
+  const llvm = emitter.llvm(type)
+  const none = llvm.endsWith("*") || llvm === "ptr" ? "null" : "0"
+  const isNone = emitter.fn.emitValue(`icmp eq ${llvm} ${value}, ${none}`)
+  emitter.fn.emit(`br i1 ${isNone}, label %${done.label}, label %${open.label}`)
   emitter.fn.placeBlock(open)
   emitDropped(emitter, call, result)
   emitter.fn.emit(`br label %${done.label}`)
@@ -905,7 +936,7 @@ const closeHandle = (emitter: Emitter, info: StructInfo, object: string): void =
 const closeScope = (emitter: Emitter, i: i32): void => {
   const handle = emitter.openScopeHandles[i]
   if (handle !== null) {
-    closeHandle(emitter, handle, emitter.openScopes[i])
+    closeHandle(emitter, handle, emitter.openScopes[i], emitter.openScopeNullable[i])
   } else if (emitter.openScopeLocks[i]) {
     emitter.fn.emit(`store atomic i32 0, i32* ${emitter.openScopes[i]} release, align 4`)
   } else if (emitter.openScopeArenas[i]) {
@@ -962,6 +993,7 @@ export const closeBlockScopes = (emitter: Emitter, count: i32): void => {
     emitter.openScopeArenas.pop()
     emitter.openScopeLocks.pop()
     emitter.openScopeHandles.pop()
+    emitter.openScopeNullable.pop()
     emitter.openScopeSeals.pop()
   }
 }

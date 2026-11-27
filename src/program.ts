@@ -1212,12 +1212,22 @@ export class OwnedField {
    * field holds a handle class `| null`.
    */
   tested: boolean
+  /**
+   * For a handle-class field: the index of the constructor parameter that
+   * `this.<name> = <param>` at the top of the constructor moves into it, or
+   * -1. A fresh handle passed there is owned from then on.
+   */
+  sink: i32
+  /** The statement that moves the parameter in, or `null`. */
+  sinkAt: Node | null
 
   constructor(name: string) {
     this.name = name
     this.close = null
     this.child = null
     this.tested = false
+    this.sink = -1
+    this.sinkAt = null
   }
 }
 
