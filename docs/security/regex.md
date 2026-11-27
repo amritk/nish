@@ -120,6 +120,16 @@ first case, is its own.
 - `findScan` and `scanTo` keep the contract: depth 1..8, width at most 3, offset + width ≤ depth, `from` ≤ length.
 - Pinned by: the `simd` regex-scan checks, which compare each vector path with the scalar one. None places a match against an unmapped page.
 
+**Open: untested defensive bound.** A subject longer than 2,146,435,071
+bytes (2^31 − 2^20 − 1) never matches. `run` and `vm` return false for it,
+`dfaForward` gives up, and `count` returns 0. The bound lets a position one
+character or one literal prefix further on fit an i32: a character is at most
+4 bytes, and `run` also refuses a prefix over 1,048,576 bytes. Before WP91 S2,
+these sums were wrapping casts. `pastEmpty` returns 2147483647, past every
+subject, for an end outside 0..2146435071. `ctxAt` reads no byte past that
+position. This was read from the code: no check builds a 2 GiB subject, and
+no check fails when the guards are removed.
+
 ## Tests
 
 - `link/${name}: exits with ${wantCode} and stdout matches expected.out` — `tests/link/std_regex` (JavaScript-generated rows, error rows, the compile-bound rows, prefilter rows, the linear-time rows, the property-escape and folding rows) and `tests/link/std_regex_f64` (the same suite under `--number-mode f64`); `tests/link/std_regex_unicode` (every property escape, every folded code point and a set of classes under `i`, against Node's `RegExp` with `u` and `iu` over a sample of every code point)
