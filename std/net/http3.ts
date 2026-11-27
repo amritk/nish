@@ -2709,23 +2709,13 @@ export class Http3Connection {
       digits[2] = toU8(H3_DIGIT_ZERO + (status % 10))
       const nameLength: i32 = toI32(this.statusName.length)
       const valueLength: i32 = toI32(digits.length)
-      this.encoder.encodeField(
-        out,
-        this.statusName,
-        H3_ZERO,
-        nameLength,
-        this.statusValue,
-        H3_ZERO,
-        valueLength,
-        false,
-        true
-      )
+      this.encoder.encodeWholeField(out, this.statusName, digits, false, true)
       size = toI64(nameLength) + toI64(valueLength) + toI64(QPACK_FIELD_OVERHEAD)
     }
     if (dated && status >= 200 && toI32(this.date.length) > 0 && !http3NamesHoldDate(names)) {
       const nl: i32 = toI32(this.dateName.length)
       const vl: i32 = toI32(this.date.length)
-      this.encoder.encodeField(out, this.dateName, H3_ZERO, nl, this.date, H3_ZERO, vl, false, true)
+      this.encoder.encodeWholeField(out, this.dateName, this.date, false, true)
       if (size >= 0 && size < 1073741824) {
         size = size + toI64(nl) + toI64(vl) + toI64(QPACK_FIELD_OVERHEAD)
       }
@@ -2736,7 +2726,7 @@ export class Http3Connection {
       const value: u8[] = values[j]
       const nl: i32 = toI32(name.length)
       const vl: i32 = toI32(value.length)
-      this.encoder.encodeField(out, name, H3_ZERO, nl, value, H3_ZERO, vl, httpFieldSensitive(name), true)
+      this.encoder.encodeWholeField(out, name, value, httpFieldSensitive(name), true)
       // The sum stops growing past 2^30 bytes: a section that size is past any stream buffer.
       if (size >= 0 && size < 1073741824) {
         size = size + toI64(nl) + toI64(vl) + toI64(QPACK_FIELD_OVERHEAD)

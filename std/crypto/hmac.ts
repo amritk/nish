@@ -135,6 +135,18 @@ const hmacWipeSha512 = (h: Sha512): void => {
   h.engine.finished = true
 }
 
+/**
+ * Panics, naming `what`, unless `[off, off + len)` lies inside `buf`: the
+ * window contract's shape, so a method that calls it first leaves the
+ * check to a caller that proves the window.
+ */
+const hmacCheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
+  const size: i32 = toI32(buf.length)
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    panic(what)
+  }
+}
+
 /** Whether `[off, off + len)` is a window inside an array of `length` elements. */
 const hmacWindowFits = (length: i32, off: i32, len: i32): boolean =>
   off >= 0 && len >= 0 && length >= 0 && off <= length - len
@@ -632,9 +644,7 @@ export class HmacSha256Scratch {
    * @param len The key's length in bytes.
    */
   begin(key: u8[], off: i32, len: i32): void {
-    if (!hmacWindowFits(toI32(key.length), off, len)) {
-      panic("HmacSha256Scratch: the key window is outside its array")
-    }
+    hmacCheckWindow("HmacSha256Scratch: the key window is outside its array", key, off, len)
     if (len <= SHA256_BLOCK) {
       this.keyBlocks(key, off, len)
       return
@@ -753,9 +763,7 @@ export class HmacSha384Scratch {
    * @param len The key's length in bytes.
    */
   begin(key: u8[], off: i32, len: i32): void {
-    if (!hmacWindowFits(toI32(key.length), off, len)) {
-      panic("HmacSha384Scratch: the key window is outside its array")
-    }
+    hmacCheckWindow("HmacSha384Scratch: the key window is outside its array", key, off, len)
     if (len <= SHA512_BLOCK) {
       this.keyBlocks(key, off, len)
       return
