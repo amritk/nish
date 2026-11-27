@@ -77,6 +77,32 @@ else
   fi
 fi
 
+# A runner can boot with no Ubuntu archive source at all. On PR #2353 (run
+# 45954309838, job 140357134706) an ubuntu-26.04 runner on AWS, image
+# 20261122.9.1, listed only packages.microsoft.com: `apt-get update` fetched
+# nothing from Ubuntu, every package was "Unable to locate", and the shard died
+# before a test ran. The other eight shards installed as usual (shard 6 on an
+# Azure host, image 20261116.202.1) and the re-run installed in 13 s, so it is
+# a property of the runner a job lands on, not of the change under test. The
+# sed above has nothing to rewrite on such a runner, so the archive is named
+# here instead, at the mirror list, in the suites and components the image's
+# own ubuntu.sources uses. apt names its index files after the URI, suite and
+# component, so a cached index restored on this runner matches as it would on
+# any other.
+if ! grep -hEs '^[[:space:]]*(deb|URIs:).*(mirror\+file:/etc/apt/apt-mirrors\.txt|ubuntu\.com/ubuntu)' \
+  "${sources[@]}" /dev/null > /dev/null; then
+  codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+  echo "::warning::no apt source names the Ubuntu archive; adding one for $codename at $list"
+  printf '%s\n' \
+    'Types: deb' \
+    "URIs: mirror+file:$list" \
+    "Suites: $codename $codename-updates $codename-backports $codename-security" \
+    'Components: main universe restricted multiverse' \
+    'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' |
+    sudo tee /etc/apt/sources.list.d/nish-ubuntu.sources > /dev/null
+  sources+=(/etc/apt/sources.list.d/nish-ubuntu.sources)
+fi
+
 # What apt will fetch from, so a slow install's log names the mirror.
 echo "apt sources ($arch):"
 if [ "${#sources[@]}" -gt 0 ]; then
