@@ -205,11 +205,11 @@ function serveTurn(app: App, timeoutMs: i32): void -> @serveTurn [exported]
   callee +3:5 App.answer -> @App.answer
   callee +4:11 HttpHandler.next -> @nish.HttpHandler.next
 function addRoutes(router: Router): Router -> @addRoutes
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=296
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
   sharedWrite: via nish.Router.add
   escaping: router
   calls: nish.Router.add
-  pointer router: size=296 writesThrough=true captured=true passedTo=nish.Router.add#0 nish.Router.add#0 nish.Router.add#0 nish.Router.add#0 nish.Router.add#0 nish.Router.add#0
+  pointer router: size=288 writesThrough=true captured=true passedTo=nish.Router.add#0 nish.Router.add#0 nish.Router.add#0 nish.Router.add#0 nish.Router.add#0 nish.Router.add#0
   stackSites=0 stackLocals=0
   callee +0:3 Router.add -> @nish.Router.add
   callee +1:3 Router.add -> @nish.Router.add
@@ -218,7 +218,7 @@ function addRoutes(router: Router): Router -> @addRoutes
   callee +4:3 Router.add -> @nish.Router.add
   callee +5:3 Router.add -> @nish.Router.add
 function appRoutes(): Router -> @appRoutes [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=296
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
   sharedWrite: via addRoutes
   calls: addRoutes nish.Router.constructor nish_alloc_struct
   stackSites=1 stackLocals=0

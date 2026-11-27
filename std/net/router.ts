@@ -234,6 +234,9 @@ export class Router {
    */
   pathEnd: i32 = 0
   private wanted: i32 = 0
+  private foundCount: i32 = 0
+  /** During a match: whether a route of another method ended at the path's end. */
+  private otherMethod: boolean = false
   /**
    * Set by `enter` on a range outside its array, and cleared by the `match`
    * that reads it: only then does `match` test the ranges again, to panic.
@@ -241,9 +244,6 @@ export class Router {
    * `ROUTER_NOT_FOUND` a test that passes.
    */
   private outside: boolean = false
-  private foundCount: i32 = 0
-  /** During a match: whether a route of another method ended at the path's end. */
-  private otherMethod: boolean = false
   /** The nodes the last `match` visited: never more than `nodeCount()`, which the tests pin, and none when the exact-path table answered. */
   private visited: i32 = 0
 
