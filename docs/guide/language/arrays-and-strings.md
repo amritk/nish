@@ -295,7 +295,7 @@ keeps its values from one call to the next. It is the one piece of state a
 module keeps, and no code runs to set it up.
 ([Module storage](../../reference/language/declarations.md#module-storage)).
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
 ```ts
 const SCORES = new Int32Array(4);
@@ -339,6 +339,11 @@ export const main = (): i32 => {
 };
 ```
 
+- **Its indexes are checked like a local array's.** Its length never
+  changes, so `SCORES[3]` above needs no guard, and neither does `SCORES[i]`
+  in a loop that stops below `SCORES.length` or below the constant the
+  storage was made with. An index the compiler cannot bound that way needs
+  the same guard as any array's.
 - **It is a place, not a value.** You index it and read its `length`; you do
   not store, return or alias the array itself. The one way to hand it to
   another function is a parameter spelled with a typed-array name, such as

@@ -600,7 +600,8 @@ export const tick = (): void => {
   Lending `0, toU32(xs.length)` of a local array `xs` is proven in bounds
   and costs no check. A window of module storage, such as `DATA` here,
   always keeps the check, even `0, toU32(DATA.length)`, so lending one needs
-  `--allow-panics`: the compiler proves facts about locals, not about storage.
+  `--allow-panics`: a window is proven from facts about locals, not about
+  storage, though an index into storage is proven like a local's.
 - **The page is handed a view of all of memory and an index**, so its
   `xs[at]` is the program's `DATA[at]`. Read and write only `[at, at + n)`:
   past it is the rest of the module's memory
