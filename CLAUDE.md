@@ -58,6 +58,18 @@ lanes `bounds.ts` proves in range is recorded as a proven index site and an
 unguarded one as unproven (`src/attributes.ts`), so `std/` code a
 `--deny-panics` caller can reach uses only guarded ones.
 
+**A wrap is spelled, never cast.** Nish code here (`std/`, `src/`,
+`examples/`) never makes `i32` or `i64` arithmetic wrap by casting it through
+`u32` or `u64` (`toI32(toU32(a) + toU32(b))`). Where the wrap would hide an
+overflow, the site gets a bound `src/bounds.ts` proves or a `Result`: a wrap
+never stands in for a panic. Where wrapping is the algorithm's answer (a hash
+multiply, a counter mod 2^32), it is `wrappingAdd`, `wrappingSub` or
+`wrappingMul` from `nish:unsafe`, so every deliberate wrap is greppable and
+reads as one. A value that is `u32` or `u64` all the way through wraps by its
+type and needs neither. `scripts/wrap-casts.mjs` (in `npm run lint`) fails on
+a new cast wrap; `scripts/wrap-casts.txt`, the casts from before the rule,
+only falls.
+
 A new diagnostic code lands with a `tests/link` negative that provokes it
 (an `expected.err`): inline `tests/run.js` checks do not count toward "every
 registry code is provoked". A changed diagnostic message is grepped across

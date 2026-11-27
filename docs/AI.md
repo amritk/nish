@@ -349,7 +349,10 @@ where it can prove the result fits — a loop counter under `i < n`, a byte
 widened with `toI32`, an `integer<Lo, Hi>`, a value masked with `& c`. Arithmetic
 that is *meant* to wrap — a hash, a PRNG, a checksum — goes in `u32` or `u64`,
 which always wrap and are never checked; convert back with `toI32` (free), or
-call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site.
+call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site. Never cast an
+`i32` through `u32` and back just to make it wrap (`toI32(toU32(a) + toU32(b))`):
+that hides an overflow the compiler would have caught, where a `wrapping*` call
+says the wrap is meant.
 
 <!-- nish:ok -->
 ```ts
