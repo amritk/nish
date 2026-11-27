@@ -7,13 +7,14 @@
  * Sans-IO, like the rest of `nish/net`.
  *
  *     import { QuicConnection, QuicServerConfig } from "nish/net/quic";
- *     import { tlsSignEcdsaP256 } from "nish/net/tls";
+ *     import { TlsKeySigner } from "nish/net/tls";
  *
+ *     const signer = new TlsKeySigner(config.signatureScheme);  // config: QuicServerConfig; P-256 or RSA-PSS
  *     const conn = new QuicConnection(config, entropy);   // entropy: QUIC_CONN_ENTROPY_SIZE random bytes
  *     conn.receiveWindow(buf, off, len, now);              // every datagram the client sends; now in ms
  *     const input: u8[] | null = conn.signatureInput();
  *     if (input !== null) {
- *       const signature: u8[] | null = tlsSignEcdsaP256(key, input);   // key: Secret<u8[]>
+ *       const signature: u8[] | null = signer.sign(key, input);   // key: Secret<u8[]>, the leaf's own key
  *       if (signature !== null) { conn.sign(signature); }
  *     }
  *     let n: i32 = conn.takeDatagramInto(out, 0, now);     // out: at least QUIC_CONN_DATAGRAM_SIZE bytes

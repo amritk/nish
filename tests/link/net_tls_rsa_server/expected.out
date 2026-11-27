@@ -1,0 +1,27 @@
+PASS  PKCS#1: a 2048-bit key
+PASS  PKCS#8: the same key loads
+PASS  PKCS#8: the same modulus as PKCS#1
+PASS  the modulus is the certificate's
+PASS  a 1024-bit key is refused, without a panic
+PASS  a certificate is not a key
+PASS  start
+PASS  the server reads the ClientHello
+PASS  the RSA signer signs
+PASS  the server takes the signature
+PASS  the client reads the ServerHello
+PASS  the client reads the flight
+PASS  the chain is the RSA certificate
+PASS  CertificateVerify: rsa_pss_rsae_sha256
+PASS  the signature verifies under the certificate's key, salt 32
+PASS  a signature with one bit flipped does not
+PASS  authenticate
+PASS  the client is connected
+PASS  the server reads Finished
+PASS  the server is connected
+PASS  a hello offering only ECDSA P-256 is refused with handshake_failure
+PASS  a hello offering only RSA-PSS is taken
+PASS  the P-256 signer refuses the RSA key
+PASS  HTTP/3: the handshake, its RSA-PSS signature verified
+PASS  HTTP/3: the GET is answered and ended
+PASS  HTTP/3: 200 hello
+net_tls_rsa_server: 26 passed, 0 failed, 0 skipped

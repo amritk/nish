@@ -107,12 +107,22 @@ const toBytes = (text: string): u8[] => {
   return out
 }
 
+/** `head[at]`, or -1 past either end (an empty value at the head's end). */
+const byteAt = (head: u8[], at: i32): i32 => (at >= 0 && at < toI32(head.length) ? toI32(head[at]) : -1)
+
 /** One step of FNV-1a over a whole `i32`. */
 const mix = (sum: u32, x: i32): u32 => (sum ^ toU32(x)) * 16777619
 
-/** What a parser's head is, as `mix` folds it: the same for every parser. */
+/**
+ * What a parser's head is, as `mix` folds it: the same for every parser. A
+ * field is folded by where its spans fall within its own line and by the first
+ * byte of its name and value, never by its offset into `head`: the live
+ * parser keeps each field line's CRLF in `head` and the frozen ones do not,
+ * so the same field sits at a different offset in each.
+ */
 const headSum = (
   sum0: u32,
+  head: u8[],
   methodStart: i32,
   methodEnd: i32,
   targetStart: i32,
@@ -126,8 +136,13 @@ const headSum = (
   sum = mix(sum, targetStart)
   sum = mix(sum, targetEnd)
   sum = mix(sum, count)
-  for (let k: i32 = 0; k < 4 * count && k < toI32(spans.length); k++) {
-    sum = mix(sum, spans[k])
+  for (let k: i32 = 0; k + 3 < 4 * count && k + 3 < toI32(spans.length); k += 4) {
+    const at: i32 = spans[k]
+    sum = mix(sum, spans[k + 1] - at)
+    sum = mix(sum, spans[k + 2] - at)
+    sum = mix(sum, spans[k + 3] - at)
+    sum = mix(sum, byteAt(head, at))
+    sum = mix(sum, byteAt(head, spans[k + 2]))
   }
   return mix(sum, contentLength)
 }
@@ -145,6 +160,7 @@ const runNew = (request: u8[], iterations: i32): i32 => {
       if (event === HTTP1_HEAD) {
         sum = headSum(
           sum,
+          p.head,
           p.methodStart,
           p.methodEnd,
           p.targetStart,
@@ -179,6 +195,7 @@ const runOld = (request: u8[], iterations: i32): i32 => {
       if (event === H1A_HEAD) {
         sum = headSum(
           sum,
+          p.head,
           p.methodStart,
           p.methodEnd,
           p.targetStart,
@@ -213,6 +230,7 @@ const runOldCopy = (request: u8[], iterations: i32): i32 => {
       if (event === H1B_HEAD) {
         sum = headSum(
           sum,
+          p.head,
           p.methodStart,
           p.methodEnd,
           p.targetStart,
