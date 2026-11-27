@@ -324,7 +324,7 @@ class WebTransport
 | `resetStream(id: i64, code: i64): i32` | Resets this side of session stream `id` with the application's `code` (mapped, `wtCodeToHttp3`). |
 | `sendDatagram(id: i64, buf: u8[], off: i32, len: i32): i32` | Sends `buf[off .. off + len)` as an HTTP datagram of session `id` (RFC 9297 §2.1): its quarter stream ID, then the payload, one QUIC DATAGRAM frame, never sent again if lost. Answers 0; H3_TOO_LARGE past `maxDatagramPayload`; H3_AGAIN while QUIC's queue is full; or H3_CLOSED for a session not accepted. |
 | `stopSending(id: i64, code: i64): i32` | Asks the client to stop its side of session stream `id` with the application's `code`, and drops what it sends. |
-| `write(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32` | Writes up to `len` bytes of `buf` from `off` to session stream `id`, with its FIN when `fin` and all were taken. Answers how many it took, or H3_AGAIN, or H3_CLOSED (see `Http3Connection.writeStream`). |
+| `write(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32` | Writes up to `len` bytes of `buf` from `off` to session stream `id`, with its FIN when `fin` and all were taken. Answers how many it took, or H3_AGAIN, or H3_CLOSED (see `Http3Connection.writeStream`). A window outside `buf` panics, whatever stream `id` names. |
 
 ### WebTransportConfig
 
