@@ -5,7 +5,7 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1049,
+  "total": 1056,
   "explicit": {
     "kept": 360,
     "toFix": 7
@@ -44,7 +44,6 @@
       "index": 7
     },
     "std/crypto/base64url.ts": {
-      "array-length": 2,
       "panic": 7
     },
     "std/crypto/chacha20poly1305.ts": {
@@ -129,7 +128,7 @@
       "io-exit": 4,
       "panic": 45,
       "slice": 1,
-      "window": 2
+      "window": 4
     },
     "std/net/http1-client-codec.ts": {
       "panic": 1
@@ -153,15 +152,17 @@
       "panic": 3
     },
     "std/net/http3-frame.ts": {
-      "panic": 1
+      "panic": 1,
+      "window": 2
     },
     "std/net/http3-server.ts": {
       "io-exit": 2,
       "panic": 3,
-      "slice": 4
+      "slice": 3
     },
     "std/net/http3.ts": {
-      "panic": 4
+      "panic": 4,
+      "window": 3
     },
     "std/net/oidc.ts": {
       "overflow": 3,
@@ -239,7 +240,8 @@
     "std/net/webtransport.ts": {
       "io-exit": 1,
       "overflow": 2,
-      "panic": 2
+      "panic": 2,
+      "window": 3
     },
     "std/random.ts": {
       "panic": 1

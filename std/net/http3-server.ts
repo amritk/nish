@@ -1102,18 +1102,15 @@ export class Http3Server {
    */
   receive(now: i64, key: Secret<u8[]>): i32 {
     let count: i32 = 0
+    // The whole of `rx`, which is `H3_SERVER_RECEIVE_SIZE` bytes: read through
+    // a local so the bounds prover sees the window is its own length.
+    const rx: u8[] = this.rx
     for (let burst: i32 = 0; burst < H3_SERVER_RECEIVE_BURST; burst++) {
-      const n: i32 = udpRecvFrom(
-        this.fd,
-        this.rx,
-        H3_SERVER_ZERO,
-        H3_SERVER_RECEIVE_SIZE,
-        this.from,
-        this.meta
-      )
+      const n: i32 = udpRecvFrom(this.fd, rx, 0, toI32(rx.length), this.from, this.meta)
       const meta: i32[] = this.meta
       // Past the first term, never taken: `udpRecvFrom` reads at most the
-      // `H3_SERVER_RECEIVE_SIZE` it is given, and `meta` is the constructor's two words.
+      // length of `rx` it is given, `H3_SERVER_RECEIVE_SIZE`, and `meta` is the
+      // constructor's two words.
       if (n < 0 || n > 65536 || toI32(meta.length) < 2) {
         return count
       }
@@ -1124,7 +1121,7 @@ export class Http3Server {
       while (at >= 0 && at < n && segment > 0) {
         const left: i32 = n - at
         const length: i32 = left < segment ? left : segment
-        this.datagram(this.rx, at, length, this.from, now, key)
+        this.datagram(rx, at, length, this.from, now, key)
         count = h3Count(count)
         if (length < left) {
           at = at + length

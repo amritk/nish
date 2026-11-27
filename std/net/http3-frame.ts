@@ -206,20 +206,7 @@ export class Http3FrameHeader {
    */
   read(buf: u8[], off: i32, len: i32): i32 {
     h3CheckWindow("Http3FrameHeader.read", buf, off, len)
-    const end: i32 = toI32(toI64(off) + toI64(len))
-    const type: i64 = quicVarintRead(buf, off, end)
-    const at: i32 = h3VarintEnd(buf, off, end)
-    if (type < 0 || at < 0) {
-      return 0
-    }
-    const length: i64 = quicVarintRead(buf, at, end)
-    const past: i32 = h3VarintEnd(buf, at, end)
-    if (length < 0 || past < 0) {
-      return 0
-    }
-    this.type = type
-    this.length = length
-    return toI32(toI64(past) - toI64(off))
+    return h3FrameHeaderIn(this, buf, off, toI32(toI64(off) + toI64(len)))
   }
 }
 
@@ -482,7 +469,31 @@ export const h3FrameHeaderSize = (type: i64, length: i64): i32 => {
  * @returns The header's size, 2 to 16 bytes, or 0 when the window ends before both varints are whole.
  */
 export const h3ReadFrameHeader = (h: Http3FrameHeader, buf: u8[], off: i32, len: i32): i32 =>
-  h.read(buf, off, len)
+  h3FrameHeaderIn(h, buf, off, h3WindowEnd("h3ReadFrameHeader", buf, off, len))
+
+/**
+ * The frame header at `buf[off, end)`, a window inside `buf` its caller has checked, read into `h`.
+ * @param h The header to fill; set only when the answer is above 0.
+ * @param buf The bytes the stream delivered.
+ * @param off Where the header starts.
+ * @param end Where the window ends, at most `buf.length`.
+ * @returns The header's size, 2 to 16 bytes, or 0 when the window ends before both varints are whole.
+ */
+const h3FrameHeaderIn = (h: Http3FrameHeader, buf: u8[], off: i32, end: i32): i32 => {
+  const type: i64 = quicVarintRead(buf, off, end)
+  const at: i32 = h3VarintEnd(buf, off, end)
+  if (type < 0 || at < 0) {
+    return 0
+  }
+  const length: i64 = quicVarintRead(buf, at, end)
+  const past: i32 = h3VarintEnd(buf, at, end)
+  if (length < 0 || past < 0) {
+    return 0
+  }
+  h.type = type
+  h.length = length
+  return toI32(toI64(past) - toI64(off))
+}
 
 /**
  * Writes a frame header of `type` and `length` at `buf[at]`, before `end`.

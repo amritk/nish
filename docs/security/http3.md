@@ -389,10 +389,10 @@ without the sites the prover discharges:
 
 | File | Before | After | What is left |
 | --- | --- | --- | --- |
-| `std/net/http3-frame.ts` | 21 | 1 | `h3CheckWindow`: a window outside the caller's buffer |
+| `std/net/http3-frame.ts` | 21 | 3 | `h3CheckWindow`: a window outside the caller's buffer, and the two exported forwarders' calls of it (`Http3FrameHeader.read`, `h3WindowEnd`) |
 | `std/net/qpack.ts` | 38 | 3 | `qpackCheckWindow`, `qpackPushInteger`'s prefix, `QpackDecoder`'s construction limit |
-| `std/net/http3.ts` | 248 | 4 | `http3CheckCap` and three checks of `Http3Connection`'s configuration |
-| `std/net/http3-server.ts` | 153 | 9 | three checks of `Http3Server`'s configuration; four `udpSendTo`/`udpRecvFrom` buffer range checks; two runtime exits when `crypto.getRandomValues` fails |
+| `std/net/http3.ts` | 248 | 7 | `http3CheckCap` and three checks of `Http3Connection`'s configuration; three exported forwarders' calls of `h3CheckWindow` |
+| `std/net/http3-server.ts` | 153 | 8 | three checks of `Http3Server`'s configuration; three `udpSendTo`/`udpRecvFrom` buffer range checks; two runtime exits when `crypto.getRandomValues` fails |
 
 Every `panic` left checks an argument the program passes: a window, a cap or a
 configuration. None is reached by a byte a peer sends. The compiler counts
@@ -415,6 +415,24 @@ reference refused for `QPACK_REASON_DYNAMIC`. The other three are the
 readers' own answers: -1 for a GOAWAY payload with a byte after its
 identifier, 0 for a frame header not yet whole, and 9, the header's size,
 for one claiming the largest length a varint holds.
+
+**Since examples-strict S8** `h3CheckWindow` has the window guard's shape
+(`src/window-contract.ts`), so a caller's window over its own buffer is a
+`window` site the prover discharges where it can, not the one `panic` inside
+the guard every caller reached. A program that builds `nish/net` as a
+dependency (relay) sees its calls proven or forwarded. The sweep above builds
+each module as the root package, where an exported forwarder keeps its own
+guard call as an unproven `window` site (`link/window_contract_proven`): two
+in `http3-frame.ts`, three in `http3.ts` and three in `webtransport.ts` (its
+`close`, `write` and `sendDatagram`), each checking the window its caller
+passes, as the guard's `panic` did before. `http3-server.ts`'s receive now
+hands `udpRecvFrom` the whole of `rx`, and its guard refuses a length past
+`rx`'s 65,536 bytes, so its range is proven and the server counts three
+`slice` sites, not four. `std/net/http-server.ts` counts two more `window`
+sites, at its calls of `Http3Connection.writeData`, now a forwarder:
+`HttpServer.carry` hands it the window its own caller passed, and
+`HttpServer.carryEnd` an empty one at `HTTP_SERVER_ZERO`, a module constant
+the prover does not read. That file is not this record's.
 
 Where a guard cannot fail, a comment says why: the index is below a length
 read on the line before, or the slot is one the connection numbered. Where
