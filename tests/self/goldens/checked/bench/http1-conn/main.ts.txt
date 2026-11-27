@@ -36222,6 +36222,7 @@ struct IdlePool (class) size=136 align=8
   method settle -> @IdlePool.settle
   method send -> @IdlePool.send
   method serve -> @IdlePool.serve
+  method answer -> @IdlePool.answer
   method sweep -> @IdlePool.sweep
 function ascii(text: string): u8[] -> @ascii
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -36395,11 +36396,21 @@ function IdlePool.send(this: IdlePool, slot: i32): void -> @IdlePool.send [metho
   callee +1:7 Http1Connection.consume -> @nish.Http1Connection.consume
   callee +4:5 Http1Connection.release -> @nish.Http1Connection.release
 function IdlePool.serve(this: IdlePool, slot: i32, req: u8[]): void -> @IdlePool.serve [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IdlePool.answer
+  escaping: slot
+  calls: IdlePool.answer IdlePool.flush nish_panic
+  pointer this: size=136 writesThrough=true captured=false passedTo=IdlePool.answer#0 IdlePool.flush#0
+  pointer req: size=0 writesThrough=false captured=false passedTo=IdlePool.answer#2
+  stackSites=0 stackLocals=0
+  callee +0:5 IdlePool.answer -> @IdlePool.answer
+  callee +1:9 IdlePool.flush -> @IdlePool.flush
+function IdlePool.answer(this: IdlePool, slot: i32, req: u8[]): void -> @IdlePool.answer [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: slot
-  calls: IdlePool.flush IdlePool.next IdlePool.readable nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.Http1Parser.headerIs nish.Http1Parser.methodIs nish.Http1Parser.targetIs nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer this: size=136 writesThrough=true captured=false passedTo=IdlePool.readable#0 IdlePool.next#0 IdlePool.next#0 IdlePool.flush#0
+  calls: IdlePool.next IdlePool.readable nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.Http1Parser.headerIs nish.Http1Parser.methodIs nish.Http1Parser.targetIs nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=136 writesThrough=true captured=false passedTo=IdlePool.readable#0 IdlePool.next#0 IdlePool.next#0
   pointer req: size=0 writesThrough=false captured=false passedTo=IdlePool.readable#2
   stackSites=0 stackLocals=0
   callee -10:9 IdlePool.readable -> @IdlePool.readable
@@ -36417,7 +36428,6 @@ function IdlePool.serve(this: IdlePool, slot: i32, req: u8[]): void -> @IdlePool
   callee +13:68 Http1Connection.write -> @nish.Http1Connection.write
   callee +16:9 Http1Connection.end -> @nish.Http1Connection.end
   callee +20:15 IdlePool.next -> @IdlePool.next
-  callee +22:9 IdlePool.flush -> @IdlePool.flush
 function IdlePool.sweep(this: IdlePool): void -> @IdlePool.sweep [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -36462,33 +36472,38 @@ function idle(shape: string, requests: i32, count: i32, batches: i32, evictMib: 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via IdlePool.constructor
   escaping: count evictMib requests
-  calls: IdlePool.constructor IdlePool.serve IdlePool.sweep nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 peakKib
+  calls: IdlePool.answer IdlePool.constructor IdlePool.serve IdlePool.sweep nish.HttpDate.unhold nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 peakKib
   stackSites=1 stackLocals=1
-  local +0:9 measuring: boolean (const)
-  local +1:9 b: IdlePool (const)
-  callee +1:23 new IdlePool -> @IdlePool.constructor
-  local +2:9 evicting: boolean (const)
-  local +7:9 passes: i32 (const)
-  local +8:12 pass: i32 (let)
-  local +9:14 i: i32 (let)
-  callee +11:9 IdlePool.sweep -> @IdlePool.sweep
-  local +13:13 pick: i32 (const)
-  callee +14:7 IdlePool.serve -> @IdlePool.serve
-  callee +18:29 peakKib -> @peakKib
-  local +22:7 best: i64 (let)
-  local +23:7 at: i32 (let)
-  local +24:7 round: i32 (let)
-  local +25:12 batch: i32 (let)
-  local +26:9 timed: i64 (let)
-  local +27:11 started: i64 (const)
-  local +28:14 k: i32 (let)
-  local +29:13 pick: i32 (const)
-  local +30:13 req: u8[] (const)
-  callee +32:9 IdlePool.sweep -> @IdlePool.sweep
-  local +33:15 before: i64 (const)
-  callee +34:9 IdlePool.serve -> @IdlePool.serve
-  callee +37:9 IdlePool.serve -> @IdlePool.serve
-  local +45:11 ns: i64 (const)
+  local +0:9 serving: boolean (const)
+  local +1:9 measuring: boolean (const)
+  local +2:9 b: IdlePool (const)
+  callee +2:23 new IdlePool -> @IdlePool.constructor
+  local +3:9 evicting: boolean (const)
+  local +8:9 passes: i32 (const)
+  local +9:12 pass: i32 (let)
+  local +10:14 i: i32 (let)
+  callee +12:9 IdlePool.sweep -> @IdlePool.sweep
+  local +14:13 pick: i32 (const)
+  callee +15:7 IdlePool.serve -> @IdlePool.serve
+  local +21:14 i: i32 (let)
+  local +22:13 pick: i32 (const)
+  callee +23:7 IdlePool.answer -> @IdlePool.answer
+  callee +24:7 HttpDate.unhold -> @nish.HttpDate.unhold
+  callee +28:29 peakKib -> @peakKib
+  local +32:7 best: i64 (let)
+  local +33:7 at: i32 (let)
+  local +34:7 round: i32 (let)
+  local +35:12 batch: i32 (let)
+  local +36:9 timed: i64 (let)
+  local +37:11 started: i64 (const)
+  local +38:14 k: i32 (let)
+  local +39:13 pick: i32 (const)
+  local +40:13 req: u8[] (const)
+  callee +42:9 IdlePool.sweep -> @IdlePool.sweep
+  local +43:15 before: i64 (const)
+  callee +44:9 IdlePool.serve -> @IdlePool.serve
+  callee +47:9 IdlePool.serve -> @IdlePool.serve
+  local +55:11 ns: i64 (const)
 function articles(): u8[] -> @articles
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: ascii nish_alloc_struct nish_array_grow nish_str_concat nish_str_new
