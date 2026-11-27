@@ -83,7 +83,8 @@ the record that found it. The notes below the table name each such finding.
 | Protobuf wire format | [protobuf.md](https://github.com/amritk/nish/blob/main/docs/security/protobuf.md) | `std/net/protobuf.ts`; `src/proto-lex.ts`, `src/proto-parse.ts`, `src/proto-emit.ts`, `src/proto-cli.ts` and the `decode` methods they write | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | gRPC calls, unary and streaming | [grpc.md](https://github.com/amritk/nish/blob/main/docs/security/grpc.md) | `std/net/grpc.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ³³ |
 | Graphics shim over wgpu-native and SDL3 | [gfx.md](https://github.com/amritk/nish/blob/main/docs/security/gfx.md) | `runtime/gfx/nish-gfx.c`, `runtime/gfx/nish-gfx.h` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 4 ³⁴ |
-| **Total** ⁸ | | | **3 / 19 / 110 / 231** | **0 / 0 / 2 / 51** |
+| multipart/form-data and media types | [multipart.md](https://github.com/amritk/nish/blob/main/docs/security/multipart.md) | `std/net/multipart.ts`; the media-type section of `std/net/http-fields.ts` (`MediaType`, `mediaTypeParse`, `formDataDispositionParse`, `mediaTypeParam` and their helpers) | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 1 ³⁵ |
+| **Total** ⁸ | | | **3 / 19 / 111 / 232** | **0 / 0 / 2 / 52** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -492,6 +493,12 @@ the record that found it. The notes below the table name each such finding.
 34. GFX-1 (Low) was fixed in the stage that wrote the record: a bind group
     entry of size 0 that aborted the process in wgpu-native. GFX-2 to GFX-5
     (Low) are open. The Total moves by this row: fixed +1 Low, open +4 Low.
+35. MP-11 (Medium), a repeated-parameter check that was quadratic in a header
+    line, and MP-12 (Low), a body cut after a CR refused as malformed, were
+    fixed in the stage that wrote the record. MP-13 (Low) is open. MP-1 to
+    MP-8 are properties and MP-9 and MP-10 are accepted decisions, and none
+    of them is counted. The Total moves by this row: fixed +1 Medium +1 Low,
+    open +1 Low.
 
 ## Fuzzed
 
