@@ -7922,12 +7922,17 @@ declare void @counter_free(i8*)
   `` `declare class Point` cannot be exported: it has fields, and a C struct
   layout is built and read only in the module that declares it `` (NL2746,
   `tests/link/export_declare_layout`), and an exported `declare function` that
-  takes one is refused as an exported function of this program is
-  (NL2756, `tests/link/export_declare_layout_param`). Only an opaque class,
-  which every module holds as the same C pointer, crosses.
+  takes one, `| null` or not, is refused as an exported function of this
+  program is (NL2756, `tests/link/export_declare_layout_param`,
+  `export_declare_layout_nullable`). Behind an array or in a `Result` arm it
+  is refused before that, because no `declare function` takes either
+  (`export_declare_layout_array`, `export_declare_layout_result`). Only an
+  opaque class, which every module holds as the same C pointer, crosses.
 - **A binding is not re-exported.** `export { counter_new } from "./sys"` is
-  refused as every re-export is (`tests/link/export_declare_reexport`): a
-  module that wants the binding imports it from the module that declares it.
+  refused as every re-export is (`tests/link/export_declare_reexport`), and
+  so is `import * as sys from "./sys"` (`tests/link/export_declare_namespace`):
+  a module that wants the binding imports it by name from the module that
+  declares it.
 - **It is a binding between modules of one program, and the program links the
   C library** as it would for a declaration of its own. The symbol stays C's:
   no module defines it, so `--emit-header`, `--emit-dts` and `--emit-napi`,
