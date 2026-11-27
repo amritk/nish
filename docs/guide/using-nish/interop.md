@@ -1224,7 +1224,7 @@ it, copy it with `readCString` from `nish:unsafe`, and free C's buffer
 yourself. A parameter declared `CPtr | null` takes the literal `null`, which is
 how `realpath` is asked to allocate:
 
-<!-- allow-panics: copies C's string with `readCString`, whose `NULL` test nothing proves away -->
+<!-- allow-panics: copies C's string with `readCString`, whose `NULL` test the checker keeps after `p === null` narrows the pointer yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { readCString } from "nish:unsafe";
@@ -1449,7 +1449,7 @@ program owns, so a later call that overwrites C's buffer leaves the copy
 alone. The type to copy into comes from the context, an annotation or a
 return type, and the copy is the class's size in bytes:
 
-<!-- allow-panics: reads C's pointers with `readStruct` and `readCString`, whose `NULL` tests nothing proves away -->
+<!-- allow-panics: copies the struct with `readStruct`, whose `NULL` test the checker keeps after `p === null` narrows the pointer yet; follows a `CPtr` field C may leave `NULL` with `readCString`, a test which nothing proves away -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { readCString, readStruct } from "nish:unsafe";
