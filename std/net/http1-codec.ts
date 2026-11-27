@@ -603,8 +603,15 @@ export class Http1Parser {
    * @returns the count of unread input bytes, at `buf[start ..]`
    */
   buffered(): i32 {
-    // `start` never passes `end`, and both are offsets into `buf`.
-    return toI32(toU32(this.end) - toU32(this.start))
+    // `start` never passes `end`, and both are offsets into `buf`; a parser
+    // whose public fields were moved out of that order holds nothing unread.
+    const from: i32 = this.start
+    const to: i32 = this.end
+    let held: i32 = 0
+    if (from >= 0 && to > from) {
+      held = to - from
+    }
+    return held
   }
 
   /**
@@ -683,8 +690,35 @@ const http1Append = (p: Http1Parser, data: u8[], off: i32, len: i32): void => {
     http1Fail(p, 413, "the buffer could not take the input")
     return
   }
-  // In range, because the move fit: `at + len` is at most `buf.length`.
-  p.end = toI32(toU32(at) + toU32(len))
+  // The move fit, so the window is inside `buf` and its end is `at + len`,
+  // at most `buf.length`; the -1 is never taken, and refuses were it to be.
+  const end: i32 = http1WindowEnd(buf, at, len)
+  if (end < 0) {
+    http1Fail(p, 400, "the input window is out of order")
+    return
+  }
+  p.end = end
+}
+
+/**
+ * `off + len` when `bytes[off, off + len)` lies inside `bytes`, else -1. Each
+ * step subtracts a non-negative value from one that is no larger than
+ * `bytes.length`, so the bounds prover sees no sum that can overflow.
+ */
+const http1WindowEnd = (bytes: u8[], off: i32, len: i32): i32 => {
+  if (off < 0 || len < 0) {
+    return -1
+  }
+  const size: i32 = toI32(bytes.length)
+  const room: i32 = size - off
+  if (room < 0) {
+    return -1
+  }
+  const gap: i32 = room - len
+  if (gap < 0) {
+    return -1
+  }
+  return size - gap
 }
 
 /**
@@ -732,9 +766,12 @@ const http1Reserve = (p: Http1Parser, len: i32): boolean => {
     return false
   }
   p.buf = buf
-  p.lineStart = toI32(toU32(p.lineStart) - toU32(from))
-  p.lineEnd = toI32(toU32(p.lineEnd) - toU32(from))
-  p.scan = toI32(toU32(p.scan) - toU32(from))
+  // A line already consumed sits before `from` and moves below 0, as it
+  // always has; `http1Less` holds a mark moved by hand at the i32 range's end
+  // rather than let it overflow.
+  p.lineStart = http1Less(p.lineStart, from)
+  p.lineEnd = http1Less(p.lineEnd, from)
+  p.scan = http1Less(p.scan, from)
   p.start = 0
   p.end = toI32(live)
   return true
@@ -753,7 +790,9 @@ const http1Grown = (old: u8[], from: i32, live: u32, size: u32): u8[] => {
   if (old.length === 0 && size === toU32(HTTP1_FIRST_HEAD)) {
     return new Array<u8>(HTTP1_FIRST_HEAD)
   }
-  const to: i32 = toI32(toU32(from) + live)
+  // `live` is the count from `from` to the end of the bytes in `old`, so the
+  // window always fits and `to` is its end; -1 would copy nothing.
+  const to: i32 = http1WindowEnd(old, from, toI32(live))
   if (size <= toU32(65535)) {
     // A size that fits a `u16` is one allocation whose length needs no check.
     const sized: u8[] = new Array<u8>(toU16(toI32(size)))
@@ -877,7 +916,7 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
       const bad: u32 = toU32(bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127)))))
       if (bad !== 0) {
         // The lowest set lane, 0 to 15: sixteen lanes set at most bit 15.
-        const lane: i32 = toI32(31) - toI32(Math.clz32(bad & (toU32(0) - bad)))
+        const lane: i32 = toI32(31) - toI32(Math.clz32(bad & (0 - bad)))
         if (lane >= 0 && lane < 16) {
           i += lane
         }
@@ -993,10 +1032,10 @@ const http1LowerName = (head: u8[], k0: i32, stop: i32): i32 => {
     let run: i32 = 16
     if (bad !== 0) {
       // The lowest set lane, 0 to 15.
-      run = toI32(31) - toI32(Math.clz32(bad & (toU32(0) - bad)))
+      run = toI32(31) - toI32(Math.clz32(bad & (0 - bad)))
     }
-    // `0 <= k < stop`, so the u32 difference is the bytes left.
-    const left: i32 = toI32(toU32(stop) - toU32(k))
+    // `0 <= k < stop`, so the difference is the bytes left.
+    const left: i32 = stop - k
     if (run > left) {
       run = left
     }
@@ -1005,8 +1044,13 @@ const http1LowerName = (head: u8[], k0: i32, stop: i32): i32 => {
       lt(lanes, splatU8x16(toU8(run)))
     )
     store(select(upper, or(v, splatU8x16(32)), v), head, k)
-    // `run` is at most the bytes left before `stop`, so the sum fits.
-    k = toI32(toU32(k) + toU32(run))
+    // `run` is 0 to 16 and `k` at most `head.length - 16`, so the sum is
+    // inside `head`; the test spells that out for the bounds proof and is
+    // never taken.
+    if (run < 0 || run > 16 || k > toI32(head.length) - 16) {
+      return k
+    }
+    k = k + run
     if (run < 16) {
       return k
     }
@@ -1066,8 +1110,8 @@ export const http1IsOws = (c: i32): boolean => c === 32 || c === 9
  */
 export const http1SameWord = (text: string, a: i32, b: i32, word: string): boolean => {
   const n: i32 = toI32(word.length)
-  // `0 <= a <= b`, so the u32 difference is the slice's length.
-  if (a < 0 || b < a || b > toI32(text.length) || toI32(toU32(b) - toU32(a)) !== n) {
+  // `0 <= a <= b` by the tests before it, so the difference is the slice's length.
+  if (a < 0 || b < a || b > toI32(text.length) || b - a !== n) {
     return false
   }
   let j: i32 = a
@@ -1091,8 +1135,8 @@ export const http1SameWord = (text: string, a: i32, b: i32, word: string): boole
  */
 const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): boolean => {
   const n: i32 = toI32(word.length)
-  // `0 <= a <= b`, so the u32 difference is the slice's length.
-  if (a < 0 || b < a || b > toI32(bytes.length) || toI32(toU32(b) - toU32(a)) !== n) {
+  // `0 <= a <= b` by the tests before it, so the difference is the slice's length.
+  if (a < 0 || b < a || b > toI32(bytes.length) || b - a !== n) {
     return false
   }
   // `j` walks `bytes[a .. b)` beside `k`: the lengths are equal.
@@ -1173,8 +1217,8 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
     http1Fail(p, 400, "the request line is outside the buffer")
     return -1
   }
-  // `0 <= from <= to`, so the u32 difference is the line's length.
-  const n: i32 = toI32(toU32(to) - toU32(from))
+  // `0 <= from <= to`, checked above, so the difference is the line's length.
+  const n: i32 = to - from
   const head: u8[] = p.head
   const buf: u8[] = p.buf
   // A line of up to 32 bytes is one or two vector stores; a longer one, or
@@ -1191,8 +1235,14 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
     http1Fail(p, 400, "the request line does not fit the head")
     return -1
   }
-  // Both are at most 2^30, so the u32 sum fits.
-  p.headLength = toI32(toU32(at) + toU32(n))
+  // The line was stored at `head[at ..]`, so the window fits and its end is
+  // the new length; were it not to, the parser is refused.
+  const headEnd: i32 = http1WindowEnd(head, at, n)
+  if (headEnd < 0) {
+    http1Fail(p, 400, "the request line does not fit the head")
+    return -1
+  }
+  p.headLength = headEnd
   return at
 }
 
@@ -1308,14 +1358,19 @@ const http1HeadIsVector = (
     return false
   }
   if (at > toI32(head.length) - 16) {
-    // An offset into the head and a length of at most 16: the u32 sum fits.
-    return http1HeadIs(head, at, toI32(toU32(at) + toU32(n)), text, fold)
+    // A window past the head's end matches nothing, as `http1HeadIs` says.
+    const end: i32 = http1WindowEnd(head, at, n)
+    return end >= 0 && http1HeadIs(head, at, end, text, fold)
   }
   let v: u8x16 = loadU8x16(head, at)
   if (fold) {
     v = select(lt(subWrapping(v, splatU8x16(65)), splatU8x16(26)), or(v, splatU8x16(32)), v)
   }
-  const want: i32 = n >= 16 ? 65535 : toI32((toU32(1) << toU32(n)) - toU32(1))
+  // The low `n` lanes: `n` is 0 to 16, so the shift is 0 to 16 places.
+  let want: i32 = 65535
+  if (n < 16) {
+    want = toI32(65535) >> (16 - n)
+  }
   return (bitmask(eq(v, word)) & want) === want
 }
 
@@ -1382,7 +1437,7 @@ const http1ConnectionList = (head: u8[], from: i32, to: i32): i32 => {
         const commas: u32 = toU32(bitmask(eq(loadU8x16(head, end), splatU8x16(44))))
         if (commas !== 0) {
           // The lowest set lane, 0 to 15.
-          const lane: i32 = toI32(31) - toI32(Math.clz32(commas & (toU32(0) - commas)))
+          const lane: i32 = toI32(31) - toI32(Math.clz32(commas & (0 - commas)))
           if (lane >= 0 && lane < 16) {
             end += lane
           }
@@ -1407,8 +1462,11 @@ const http1ConnectionList = (head: u8[], from: i32, to: i32): i32 => {
     while (b > a && b > 0 && b <= toI32(head.length) && http1IsOws(toI32(head[b - 1]))) {
       b -= 1
     }
-    // `0 <= a <= b`, so the u32 difference is the element's length.
-    const n: i32 = a >= 0 && b >= a ? toI32(toU32(b) - toU32(a)) : 0
+    // `0 <= a <= b`, so the difference is the element's length.
+    let n: i32 = 0
+    if (a >= 0 && b >= a) {
+      n = b - a
+    }
     if (n === 5 && http1HeadIsVector(head, a, n, close, "close", true)) {
       found = found | HTTP1_CONNECTION_CLOSE
     } else if (n === 10 && http1HeadIsVector(head, a, n, keepAlive, "keep-alive", true)) {
@@ -1452,8 +1510,10 @@ const http1MethodOverrun = (p: Http1Parser): boolean => {
       return false
     }
   }
-  // `start` is within a buffer under 2^30 bytes, so the sum is an i32.
-  const stop: i32 = toI32(toU32(from) + toU32(HTTP1_MAX_METHOD))
+  // `start` is within a buffer under 2^30 bytes, so the sum is an i32;
+  // `http1Past` holds a start moved by hand at the i32 range's end rather
+  // than let it overflow.
+  const stop: i32 = http1Past(from, HTTP1_MAX_METHOD)
   for (let k: i32 = from; k >= 0 && k < p.end && k < toI32(buf.length); k += 1) {
     if (buf[k] === 32 || buf[k] === 13 || buf[k] === 10) {
       return false
@@ -1488,7 +1548,7 @@ const http1RequestLine = (p: Http1Parser): i32 => {
     const bad: u32 = toU32(http1NonTokenLanes(loadU8x16(buf, i)))
     if (bad !== 0) {
       // The lowest set lane, 0 to 15.
-      const lane: i32 = toI32(31) - toI32(Math.clz32(bad & (toU32(0) - bad)))
+      const lane: i32 = toI32(31) - toI32(Math.clz32(bad & (0 - bad)))
       if (lane >= 0 && lane < 16) {
         i += lane
       }
@@ -1525,7 +1585,7 @@ const http1RequestLine = (p: Http1Parser): i32 => {
     const bad: u32 = toU32(bitmask(gt(subWrapping(loadU8x16(buf, i), splatU8x16(33)), splatU8x16(93))))
     if (bad !== 0) {
       // The lowest set lane, 0 to 15.
-      const lane: i32 = toI32(31) - toI32(Math.clz32(bad & (toU32(0) - bad)))
+      const lane: i32 = toI32(31) - toI32(Math.clz32(bad & (0 - bad)))
       if (lane >= 0 && lane < 16) {
         i += lane
       }
@@ -1580,8 +1640,8 @@ const http1RequestLine = (p: Http1Parser): i32 => {
     return http1Fail(p, 505, "an HTTP major version other than 1")
   }
   p.minor = buf[i + 7] === 48 ? 0 : 1
-  // `a <= b`, checked above.
-  const lineLength: i32 = toI32(toU32(b) - toU32(a))
+  // `0 <= a <= b`, checked above.
+  const lineLength: i32 = b - a
   if (p.headLength < 0 || toU64(p.headLength) + toU64(lineLength) + toU64(16) > toU64(p.head.length)) {
     if (!http1HeadGrow(p, lineLength)) {
       return http1Fail(p, 431, "a head of more than 2^30 bytes")
@@ -1593,9 +1653,9 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   }
   p.methodStart = at
   // Each mark is within the line, `a` to `b`, and the line is in the head.
-  p.methodEnd = http1Past(at, toI32(toU32(methodEnd) - toU32(a)))
-  p.targetStart = http1Past(at, toI32(toU32(targetStart) - toU32(a)))
-  p.targetEnd = http1Past(at, toI32(toU32(targetEnd) - toU32(a)))
+  p.methodEnd = http1Past(at, http1Less(methodEnd, a))
+  p.targetStart = http1Past(at, http1Less(targetStart, a))
+  p.targetEnd = http1Past(at, http1Less(targetEnd, a))
   if (p.keepText) {
     p.method = http1Text(buf, a, methodEnd, false)
     p.target = http1Text(buf, targetStart, targetEnd, false)
@@ -1623,7 +1683,7 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
   }
   // Every offset below is in the line, `a` to `b`, or its copy in the head,
   // both under 2^31 bytes, so they are added with `http1Past` and
-  // subtracted with `http1Less`, which do not check what cannot wrap.
+  // subtracted with `http1Less`, whose proofs need no bound from here.
   // A kept line's name is read in the head's copy, each upper-case letter
   // lowered as the scan passes it: one walk over the name, not a check of
   // `buf` and then a second walk of the copy. The copy of a line refused
@@ -1702,8 +1762,14 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
       p.upgradeFields = http1Past(p.upgradeFields, 1)
       p.upgradeValueBytes = http1Past(p.upgradeValueBytes, http1Less(valueEnd, valueStart))
     }
-    // Four spans a field, and fields are at most `maxHeaders`.
-    const base: i32 = toI32(toU32(4) * toU32(p.headerCount))
+    // Four spans a field. Each field line is at least four bytes of a head
+    // under 2^30, so the count is below 2^28 and the product fits; the test
+    // spells that out for the bounds proof, and refuses a count moved by hand.
+    const count: i32 = p.headerCount
+    if (count < 0 || count > 536870911) {
+      return http1Fail(p, 431, "more fields than the limit")
+    }
+    const base: i32 = count * 4
     http1SpanSet(p, http1Past(base, 3), http1Past(at, http1Less(valueEnd, a)))
     // The last of the four is set first, so the array has room for them all.
     const spans: i32[] = p.spans
@@ -2043,7 +2109,7 @@ const http1BodyWindow = (p: Http1Parser, after: i32): i32 => {
   if (from < 0 || to <= from) {
     return HTTP1_NEED_MORE
   }
-  const ready: i32 = toI32(toU32(to) - toU32(from))
+  const ready: i32 = to - from
   let take: i32 = ready < p.left ? ready : p.left
   if (take > p.maxChunk && p.maxChunk > 0) {
     take = p.maxChunk
@@ -2059,10 +2125,10 @@ const http1BodyWindow = (p: Http1Parser, after: i32): i32 => {
   p.bodyOff = from
   p.bodyLen = take
   // `take` is at most `end - start`, and at most `left`, which was counted
-  // within `maxBody`: none of the three wraps.
+  // within `maxBody`: none of the three leaves the i32 range.
   p.start = http1Past(from, take)
   p.scan = p.start
-  p.left = toI32(toU32(p.left) - toU32(take))
+  p.left = http1Less(p.left, take)
   p.bodyTotal = http1Past(total, take)
   if (p.left === 0) {
     p.state = after
@@ -2104,8 +2170,9 @@ const http1Section = (p: Http1Parser): i32 => {
   // line), so the copy, and the head, stay within the limit.
   //
   // Every offset here is a position in `buf` or the head, both under 2^31
-  // bytes, and `delta` moves one to the other, so the sums below are taken
-  // with `http1Past` and `http1Less`, which do not check what cannot pass.
+  // bytes, and `delta` moves one to the other, so the sums below never leave
+  // the i32 range; they are taken with `http1Past` and `http1Less`, whose
+  // proofs need no bound from the caller.
   const copy: boolean = !trailer
   const delta: i32 = http1Less(p.headLength, p.start)
   const wideStop: i64 = toI64(p.start) + toI64(p.maxHeaderBytes) - toI64(p.sectionBytes) + toI64(2)
@@ -2129,7 +2196,7 @@ const http1Section = (p: Http1Parser): i32 => {
     while (seeking) {
       if (bits !== 0) {
         // The lowest set bit, 0 to 15.
-        j = http1Past(base, toI32(31) - toI32(Math.clz32(bits & (toU32(0) - bits))))
+        j = http1Past(base, toI32(31) - toI32(Math.clz32(bits & (0 - bits))))
         seeking = false
       } else {
         const next: i32 = http1Past(base, 16)
@@ -2721,17 +2788,61 @@ export const http1PutText = (out: u8[], at: i32, text: string): i32 => {
 }
 
 /**
- * `at + n` for an `n` that is not negative, wrapping as an i32 where the sum
- * would pass 2^31: the writers' callers measure the head first, so it never
- * does for them.
+ * `at + n`, held at the i32 range's end where the sum would leave it: the
+ * writers' callers measure the head first and the parser adds only offsets
+ * in buffers under 2^30 bytes, so it never does for them. A sum of two
+ * values of opposite signs cannot leave the range; for two of one sign,
+ * the room left before the range's end on that side is measured first, the
+ * window-end shape, so the bounds prover sees no sum that can overflow.
  */
-const http1Past = (at: i32, n: i32): i32 => toI32(toU32(at) + toU32(n))
+const http1Past = (at: i32, n: i32): i32 => {
+  if (at >= 0) {
+    if (n < 0) {
+      return at + n
+    }
+    const gap: i32 = 2147483647 - at - n
+    if (gap < 0) {
+      return 2147483647
+    }
+    return 2147483647 - gap
+  }
+  if (n >= 0) {
+    return at + n
+  }
+  // `at + 2^31` is 0 to 2^31 - 1, so adding `n`, which is negative, fits.
+  const gap: i32 = at + 2147483647 + 1 + n
+  if (gap < 0) {
+    return -2147483648
+  }
+  return gap - 2147483647 - 1
+}
 
 /**
- * `at - n`, wrapping as an i32 where the difference would leave its range:
+ * `at - n`, held at the i32 range's end where the difference would leave it:
  * the parser takes it only between offsets in one buffer, so it never does.
+ * Measured as `http1Past` measures a sum.
  */
-const http1Less = (at: i32, n: i32): i32 => toI32(toU32(at) - toU32(n))
+const http1Less = (at: i32, n: i32): i32 => {
+  if (at >= 0) {
+    if (n >= 0) {
+      return at - n
+    }
+    const gap: i32 = 2147483647 - at + n
+    if (gap < 0) {
+      return 2147483647
+    }
+    return 2147483647 - gap
+  }
+  if (n <= 0) {
+    return at - n
+  }
+  // `at + 2^31` is 0 to 2^31 - 1, so taking `n`, which is positive, fits.
+  const gap: i32 = at + 2147483647 + 1 - n
+  if (gap < 0) {
+    return -2147483648
+  }
+  return gap - 2147483647 - 1
+}
 
 /** Writes CR LF at `out[at ..)`, likewise: two stores, where `http1PutText` walks a string. */
 const http1PutCrlf = (out: u8[], at: i32): i32 => {
