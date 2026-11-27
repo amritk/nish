@@ -1364,9 +1364,9 @@ import Screen from "nish/term" -> struct Screen
 const COLUMNS: i32 = 80
 const ROWS: i32 = 24
 function draw(screen: Screen, k: i32): void -> @draw
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Screen.text
-  calls: nish.Screen.text nish_panic_overflow nish_str_concat nish_str_from_i32
+  calls: nish.Screen.text nish_str_concat nish_str_from_i32
   pointer screen: size=88 writesThrough=false captured=false passedTo=nish.Screen.text#0 nish.Screen.text#0 nish.Screen.text#0 nish.Screen.text#0
   stackSites=0 stackLocals=0
   callee +0:3 Screen.text -> @nish.Screen.text

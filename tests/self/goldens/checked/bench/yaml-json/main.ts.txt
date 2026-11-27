@@ -5542,8 +5542,7 @@ function yamlIsDigit(code: i32): boolean -> @nish.yamlIsDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function yamlHexValue(code: i32): i32 -> @nish.yamlHexValue
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function yamlAfterBreak(text: string, i: i32): i32 -> @nish.yamlAfterBreak
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -7868,7 +7867,7 @@ function YamlFlowWriter.write(this: YamlFlowWriter, n: i32, depth: i32): void ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: n
-  calls: nish.YamlFlowWriter.append nish.YamlFlowWriter.write nish.YamlStream.child nish.YamlStream.count nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.text nish.YamlStream.type nish.YamlStream.value nish.yamlKeyText nish_panic_overflow
+  calls: nish.YamlFlowWriter.append nish.YamlFlowWriter.write nish.YamlStream.child nish.YamlStream.count nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.text nish.YamlStream.type nish.YamlStream.value nish.yamlKeyText
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.write#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.write#0 nish.YamlFlowWriter.write#0 nish.YamlFlowWriter.append#0
   stackSites=0 stackLocals=0
   local -3:11 stream: YamlStream (const)

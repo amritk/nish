@@ -1821,31 +1821,31 @@ function two(n: i32): string -> @two
   calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
 function dateText(i: i32): string -> @dateText
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow nish_str_concat nish_str_from_i32 two
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32 two
   stackSites=0 stackLocals=0
   callee +0:32 two -> @two
   callee +0:53 two -> @two
 function dateTimeText(i: i32): string -> @dateTimeText
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: i
-  calls: dateText nish_panic_overflow nish_str_concat nish_str_from_i32 two
+  calls: dateText nish_str_concat nish_str_from_i32 two
   stackSites=0 stackLocals=0
   callee +0:6 dateText -> @dateText
   callee +0:21 two -> @two
   callee +0:36 two -> @two
   callee +0:57 two -> @two
 function instantText(i: i32): string -> @instantText
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: i
-  calls: dateText nish_panic_overflow nish_str_concat nish_str_from_i32 two
+  calls: dateText nish_str_concat nish_str_from_i32 two
   stackSites=0 stackLocals=0
   callee +0:6 dateText -> @dateText
   callee +0:21 two -> @two
   callee +0:36 two -> @two
 function durationText(i: i32): string -> @durationText
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow nish_str_concat nish_str_from_i32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true

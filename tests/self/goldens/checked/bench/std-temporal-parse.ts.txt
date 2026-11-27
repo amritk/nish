@@ -1811,14 +1811,14 @@ function two(n: i32): string -> @two
   calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
 function dateText(i: i32): string -> @dateText
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow nish_str_concat nish_str_from_i32 two
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32 two
   stackSites=0 stackLocals=0
   callee +0:32 two -> @two
   callee +0:74 two -> @two
 function timeText(i: i32): string -> @timeText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32 nish_str_new two
+  calls: nish_panic_slice nish_str_concat nish_str_from_i32 nish_str_new two
   stackSites=0 stackLocals=0
   callee +0:27 two -> @two
   callee +0:42 two -> @two
