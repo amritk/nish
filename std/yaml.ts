@@ -406,12 +406,15 @@ export class YamlStream {
   /** @internal Used by `YamlParser`. */
   types: u8[]
 
-  /** How many nodes the arrays have room for, and how many are in use. */
+  /** How many nodes the arrays have room for: the length of each. */
   private cap: i32 = 0
-  /** @internal Used by `YamlPathWalker`. */
+  /**
+   * How many nodes are in use.
+   * @internal Used by `YamlPathWalker`.
+   */
   top: i32 = 0
   /**
-   * How many slots of `kids` are in use.
+   * How many slots of `kids` are in use: its length.
    * @internal Used by `YamlParser`.
    */
   kidTop: i32 = 0
@@ -458,7 +461,7 @@ export class YamlStream {
     this.counts = new Array<i32>(room)
     this.extras = new Array<i32>(room)
     this.props = new Array<i32>(room)
-    this.kids = new Array<i32>(room)
+    this.kids = []
     this.kinds = new Array<u8>(room)
     this.styles = new Array<u8>(room)
     this.types = new Array<u8>(room)
@@ -593,7 +596,9 @@ export class YamlStream {
     if (i < 0 || i >= this.count(n)) {
       return -1
     }
-    return yamlAt(this.kids, yamlAt(this.firsts, n) + i)
+    const at: i64 = toI64(yamlAt(this.firsts, n)) + toI64(i)
+    const kids: i32[] = this.kids
+    return at >= 0 && at < toI64(kids.length) ? yamlAt(kids, toI32(at)) : -1
   }
 
   /**
@@ -901,7 +906,7 @@ export class YamlStream {
    */
   comment(i: i32): string {
     const from: i32 = this.commentStart(i)
-    return from < 0 ? "" : this.source.substring(from + 1, this.commentEnd(i))
+    return from < 0 || from >= toI32(this.source.length) ? "" : this.source.substring(from + 1, this.commentEnd(i))
   }
 
   // ---- Building ----------------------------------------------------------------
@@ -911,11 +916,15 @@ export class YamlStream {
    * @internal Called by `YamlParser`.
    */
   newNode(kind: i32, style: i32, start: i32, end: i32): i32 {
-    if (this.top >= this.cap) {
+    const n: i32 = this.top
+    if (n >= this.cap) {
       this.grow()
     }
-    const n: i32 = this.top
-    this.top = n + 1
+    // `grow` left room past `n`, so the test never fails; it is what proves the count.
+    const cap: i32 = this.cap
+    if (n >= 0 && n < cap) {
+      this.top = n + 1
+    }
     yamlPut(this.starts, n, start)
     yamlPut(this.ends, n, end)
     yamlPut(this.firsts, n, -1)
@@ -928,9 +937,17 @@ export class YamlStream {
     return n
   }
 
-  /** Doubles every node array together. */
+  /**
+   * Doubles every node array together. Past 2^30 nodes the arrays already
+   * hold tens of gigabytes, so the allocation fails before the doubling
+   * could pass the longest array there is, which is where it stops.
+   */
   private grow(): void {
-    const room: i32 = this.cap * 2
+    const cap: i32 = this.cap
+    let room: i32 = 2147483647
+    if (cap >= 0 && cap < 1073741824) {
+      room = cap + cap
+    }
     this.starts = yamlRoomI32(this.starts, room)
     this.ends = yamlRoomI32(this.ends, room)
     this.firsts = yamlRoomI32(this.firsts, room)
@@ -944,14 +961,14 @@ export class YamlStream {
   }
 
   /**
-   * Appends `n` to `kids`, growing it by doubling; answers its slot.
+   * Appends `n` to `kids`; answers its slot.
    * @internal Called by `YamlParser`.
    */
   pushKid(n: i32): i32 {
-    const slot: i32 = this.kidTop
-    this.kids = yamlRoomI32(this.kids, slot + 1)
-    yamlPut(this.kids, slot, n)
-    this.kidTop = slot + 1
+    const kids: i32[] = this.kids
+    const slot: i32 = toI32(kids.length)
+    kids.push(n)
+    this.kidTop = toI32(kids.length)
     return slot
   }
 
@@ -966,10 +983,19 @@ export class YamlStream {
     this.diagStarts.push(start)
     this.diagEnds.push(end < start ? start : end)
     this.diagDocuments.push(document)
+    // Each count stays below the diagnostics recorded, the one just pushed
+    // included: the tests never fail, and they are what prove the counts.
+    const recorded: i32 = toI32(this.diagCodes.length)
     if (warning) {
-      this.warnings += 1
+      const warnings: i32 = this.warnings
+      if (warnings < recorded) {
+        this.warnings = warnings + 1
+      }
     } else {
-      this.errors += 1
+      const errors: i32 = this.errors
+      if (errors < recorded) {
+        this.errors = errors + 1
+      }
     }
   }
 
