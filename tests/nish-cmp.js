@@ -11859,6 +11859,12 @@ const storageIndex = () => [
     changelog: STORAGE_INDEX,
     why: "the program adds 1 past a guard against a folded module constant under --deny-panics, which the candidate reads as an order and the reference refuses as an overflow that may panic",
   },
+  {
+    program: "tests/cases/deny_panics_storage_local_const.ts",
+    file: "exit",
+    changelog: STORAGE_INDEX,
+    why: "the program indexes module storage past a guard against a function const under --deny-panics, which the candidate proves and the reference refuses as a site that may panic",
+  },
 ]
 
 /** The release-note words of TLS RSA S1, RSA-PSS CertificateVerify on the TLS and QUIC servers. */
