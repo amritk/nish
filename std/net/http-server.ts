@@ -72,15 +72,19 @@ import {
   H1_AGAIN,
   H1_ALPN,
   H1_BODY,
+  H1_CLOSED,
   H1_DONE,
   H1_END,
   H1_ERROR,
+  H1_INVALID,
   H1_NEED_MORE,
   H1_POOL_FULL,
   H1_REQUEST,
   H1_WANT_READ,
   H1_WANT_WRITE,
   H1_WRITE,
+  H1_WS_CLOSE,
+  H1_WS_MESSAGE,
   Http1Config,
   Http1Connection,
   Http1Server,
@@ -147,7 +151,8 @@ const HTTP_SERVER_TOO_LARGE: i32 = 413
 const HTTP_SERVER_UNAVAILABLE: i32 = 503
 
 // A request's life: free, reading its body, whole but parked behind a full output, queued for `take`,
-// held by the program, streaming its response, and flushing the response's last bytes.
+// held by the program, streaming its response, and flushing the response's last bytes; or, once
+// `acceptWebSocket` took its upgrade, a WebSocket the program holds until `closeWebSocket`.
 const HTTP_SERVER_FREE: i32 = 0
 const HTTP_SERVER_READING: i32 = 1
 const HTTP_SERVER_PARKED: i32 = 2
@@ -155,6 +160,9 @@ const HTTP_SERVER_QUEUED: i32 = 3
 const HTTP_SERVER_HELD: i32 = 4
 const HTTP_SERVER_STREAMING: i32 = 5
 const HTTP_SERVER_FLUSHING: i32 = 6
+const HTTP_SERVER_SOCKET: i32 = 7
+/** The close code a WebSocket gets when its connection ends with no close frame (RFC 6455 §7.1.5). */
+const HTTP_SERVER_WS_ABNORMAL: i32 = 1006
 /** `checkParam`'s `end` for a parameter's start offset (an i32 under `--number-mode f64`). */
 const HTTP_SERVER_PARAM_START: i32 = 0
 /** `checkParam`'s `end` for a parameter's end offset. */
@@ -411,6 +419,46 @@ export class HttpServerRequest {
    * @internal Set by `HttpServer.before` and cleared when a request is read into it, in this module.
    */
   stepped: boolean = false
+  /**
+   * Whether `acceptWebSocket` took this request's upgrade: it is a WebSocket
+   * now, the program's until `closeWebSocket`, and comes out of `take` again
+   * each time a message, a close or room to send arrives.
+   */
+  socket: boolean = false
+  /**
+   * Whether a WebSocket message is held for the program: `messageData` from
+   * `messageStart`, `messageLength` bytes, valid until `received` or
+   * `closeWebSocket`. The connection reads no further frame until then.
+   */
+  message: boolean = false
+  /** The held message's opcode: 1 (`WS_OP_TEXT`) for text, which the decoder has checked is UTF-8, or 2 (`WS_OP_BINARY`). */
+  opcode: i32 = 0
+  /**
+   * The bytes of the held message, the connection's own decoder buffer, not a copy:
+   * `messageData[messageStart .. messageStart + messageLength)`.
+   */
+  messageData: u8[]
+  /** Where the held message starts in `messageData`. */
+  messageStart: i32 = 0
+  /** How many bytes the held message has. */
+  messageLength: i32 = 0
+  /**
+   * Whether the connection has room again after `sendFrame` answered
+   * `H1_AGAIN`; cleared by the next `sendFrame`.
+   */
+  writable: boolean = false
+  /**
+   * Whether the WebSocket is over: the peer sent a close, broke the
+   * protocol, or the connection ended. `closeCode` says why; the program
+   * hands the request back with `closeWebSocket`.
+   */
+  closed: boolean = false
+  /**
+   * Why the WebSocket closed: the peer's close code (1005 when its close
+   * carried none), the code a protocol error was answered with (1002, 1007,
+   * 1009), or 1006 when the connection ended with no close.
+   */
+  closeCode: i32 = 0
 
   /**
    * An empty request for the server's pool; its buffers are made on its first use.
@@ -427,6 +475,7 @@ export class HttpServerRequest {
     this.trailerValues = []
     this.addedNames = []
     this.addedValues = []
+    this.messageData = []
   }
 
   /**
@@ -2113,7 +2162,7 @@ export class HttpServer {
       return
     }
     let event: i32 = H1_NEED_MORE
-    if (!this.starve(s) && !this.unended(s)) {
+    if (!this.starve(s) && !this.unended(s) && !this.holding(s, conn)) {
       event = this.h1Next(s)
       while (event !== H1_NEED_MORE && event !== H1_ERROR) {
         // A TLS slot's connection is built by the read that brought its first plaintext.
@@ -2121,7 +2170,10 @@ export class HttpServer {
         if (live === null) {
           break
         }
-        if (event === H1_REQUEST) {
+        const socket: HttpServerRequest | null = this.socketOf(s)
+        if (socket !== null) {
+          this.frame(socket, live, event)
+        } else if (event === H1_REQUEST) {
           this.begin(s, live)
         } else if (event === H1_BODY) {
           this.gather(s, live)
@@ -2130,7 +2182,7 @@ export class HttpServer {
         } else if (event === H1_WRITE) {
           this.resume(s, live)
         }
-        if (this.starve(s) || this.unended(s)) {
+        if (this.starve(s) || this.unended(s) || this.holding(s, live)) {
           break
         }
         event = this.h1Next(s)
@@ -2138,11 +2190,68 @@ export class HttpServer {
     }
     if (event === H1_ERROR) {
       // The carrier has written its refusal and ends the connection; a
-      // request it was reading is nobody's.
+      // request it was reading is nobody's, and a WebSocket learns why.
       this.releaseReading(s)
+      const socket: HttpServerRequest | null = this.socketOf(s)
+      const live: Http1Connection | null = this.h1Conn(s)
+      if (socket !== null && live !== null) {
+        this.shut(socket, live.status)
+      }
     }
     const after: Http1Connection | null = this.h1Conn(s)
     this.settle(s, after !== null ? after : conn)
+  }
+
+  /** The WebSocket slot `s` carries, the program's or closing, or null when it carries HTTP. */
+  private socketOf(s: HttpServerH1Slot): HttpServerRequest | null {
+    const r: HttpServerRequest | null = s.current
+    return r !== null && r.socket ? r : null
+  }
+
+  /**
+   * Whether slot `s` must not be asked for its next event: its WebSocket
+   * holds a message, whose bytes are the decoder's buffer that the next
+   * frame would overwrite. A full output still lets `H1_WRITE` through,
+   * which the carrier gives without decoding.
+   */
+  private holding(s: HttpServerH1Slot, conn: Http1Connection): boolean {
+    const r: HttpServerRequest | null = this.socketOf(s)
+    return r !== null && r.message && !conn.writeHeld
+  }
+
+  /**
+   * One carrier event of WebSocket `r`: a message is held for the program, a
+   * close is marked, room to send is said, and the program is told by `r`
+   * coming out of `take` again.
+   */
+  private frame(r: HttpServerRequest, conn: Http1Connection, event: i32): void {
+    if (r.state !== HTTP_SERVER_SOCKET) {
+      // Closing: the carrier only sends what is left, and the slot closes once it is.
+      return
+    }
+    if (event === H1_WS_MESSAGE) {
+      r.message = true
+      r.opcode = conn.opcode
+      r.messageData = conn.data
+      r.messageStart = conn.dataStart
+      r.messageLength = conn.dataLength
+      this.requeue(r)
+    } else if (event === H1_WS_CLOSE) {
+      this.shut(r, conn.status)
+    } else if (event === H1_WRITE) {
+      r.writable = true
+      this.requeue(r)
+    }
+  }
+
+  /** Marks WebSocket `r` closed with `code`, once, and queues it for the program. */
+  private shut(r: HttpServerRequest, code: i32): void {
+    if (r.closed) {
+      return
+    }
+    r.closed = true
+    r.closeCode = code
+    this.requeue(r)
   }
 
   /**
@@ -2419,6 +2528,9 @@ export class HttpServer {
     const r: HttpServerRequest | null = s.current
     s.current = null
     if (r !== null) {
+      if (r.state === HTTP_SERVER_SOCKET) {
+        this.shut(r, HTTP_SERVER_WS_ABNORMAL)
+      }
       this.drop(r)
     }
   }
@@ -2487,6 +2599,14 @@ export class HttpServer {
     r.bodyEnded = true
     r.stepped = false
     r.added = 0
+    r.socket = false
+    r.message = false
+    r.opcode = 0
+    r.messageStart = 0
+    r.messageLength = 0
+    r.writable = false
+    r.closed = false
+    r.closeCode = 0
     this.route(r)
     const declared: i32 = this.declared(r)
     if (declared > toI32(r.body.length) && !(mayStream && this.streamsBody(r.route))) {
@@ -2676,7 +2796,12 @@ export class HttpServer {
    * flushing is past caring.
    */
   private requeue(r: HttpServerRequest): void {
-    if (r.again || (r.state !== HTTP_SERVER_HELD && r.state !== HTTP_SERVER_STREAMING)) {
+    if (
+      r.again ||
+      (r.state !== HTTP_SERVER_HELD &&
+        r.state !== HTTP_SERVER_STREAMING &&
+        r.state !== HTTP_SERVER_SOCKET)
+    ) {
       return
     }
     r.again = true
@@ -2784,7 +2909,10 @@ export class HttpServer {
       }
       // A streaming request queued again is the program's, live or not: it learns of a reset by taking it.
       // One whose answer ended since (`end`, `trailers`) is flushing on its own, and stays out of `take`.
-      const held: boolean = r.state === HTTP_SERVER_HELD || r.state === HTTP_SERVER_STREAMING
+      const held: boolean =
+        r.state === HTTP_SERVER_HELD ||
+        r.state === HTTP_SERVER_STREAMING ||
+        r.state === HTTP_SERVER_SOCKET
       if ((r.again && held) || (!r.again && this.live(r))) {
         return r
       }
@@ -3787,6 +3915,134 @@ export class HttpServer {
     }
     w.endObject()
     return w.complete() ? w.end : -1
+  }
+
+  // ---- WebSockets ------------------------------------------------------------------
+
+  /**
+   * Accepts `r`'s WebSocket opening handshake (RFC 6455 §4.2.2) with
+   * `protocol`, empty for none: the 101 is queued and `r` becomes a WebSocket,
+   * `socket` set, the program's until `closeWebSocket`. It then comes out of
+   * `take` again whenever a message is held (`message`), the connection has
+   * room after `sendFrame` answered `H1_AGAIN` (`writable`), or the WebSocket
+   * is over (`closed`). Only an HTTP/1.1 request upgrades: one on HTTP/2 or
+   * HTTP/3 answers `H1_INVALID` (RFC 8441's extended CONNECT is not served).
+   * On anything but 0, `r` is still held and unanswered, and the program
+   * answers it as any other: 400, or 426 for a wrong `Sec-WebSocket-Version`.
+   * The slot's `idleTimeout` (`Http1Config`) closes a WebSocket nothing moves
+   * on; `bodyTimeout` does not apply. A draining server leaves a WebSocket
+   * open until the program closes it. Panics on another server's request, or
+   * when `r` is not held unanswered.
+   * @param r a request `take` handed over and the program has not answered
+   * @param protocol the subprotocol to name in `Sec-WebSocket-Protocol`, one the client offered, or "" for none
+   * @returns 0 once the 101 is queued; `H1_INVALID` for a request that is not
+   *   a valid HTTP/1.1 opening handshake or a `protocol` that is not a token;
+   *   `H1_AGAIN` when the output has no room yet; `H1_CLOSED` when the connection closed
+   */
+  acceptWebSocket(r: HttpServerRequest, protocol: string): i32 {
+    this.own(r, "acceptWebSocket")
+    if (r.state !== HTTP_SERVER_HELD) {
+      panic(`HttpServer.acceptWebSocket: the request is not held unanswered (state ${r.state})`)
+    }
+    if (r.kind !== HTTP_SERVER_H1) {
+      return H1_INVALID
+    }
+    const conn: Http1Connection | null = this.h1ConnOf(r)
+    if (!this.live(r) || conn === null) {
+      return H1_CLOSED
+    }
+    const done: i32 = conn.acceptWebSocket(protocol)
+    if (done !== 0) {
+      return done
+    }
+    r.state = HTTP_SERVER_SOCKET
+    r.socket = true
+    this.driveOf(r)
+    return 0
+  }
+
+  /**
+   * Sends one frame on WebSocket `r`, unmasked as a server's are: a whole
+   * text or binary message, a fragment of one (`fin` false, then
+   * continuations), a ping or a pong. The payload is copied once, into the
+   * connection's output. On `H1_AGAIN`, `r` comes out of `take` again with
+   * `writable` set once there is room. Panics on another server's request,
+   * when `r` is not a WebSocket the program holds, or on a window outside `buf`.
+   * @param r a request `acceptWebSocket` upgraded and `closeWebSocket` has not handed back
+   * @param fin true when this frame ends its message; false for a fragment that continuations follow
+   * @param opcode the frame's `WS_OP_` opcode: text, binary, continuation, ping or pong, never close
+   * @param buf the payload bytes
+   * @param off where in `buf` the window starts
+   * @param len how many bytes the window holds
+   * @returns 0 once the frame is queued; `H1_AGAIN` when it does not fit yet;
+   *   `H1_INVALID` for a close, a frame the encoder refuses or one larger
+   *   than the output; `H1_CLOSED` when the WebSocket is closing or its connection closed
+   */
+  sendFrame(r: HttpServerRequest, fin: boolean, opcode: i32, buf: u8[], off: i32, len: i32): i32 {
+    this.own(r, "sendFrame")
+    if (r.state !== HTTP_SERVER_SOCKET) {
+      panic(`HttpServer.sendFrame: the request is not an open WebSocket (state ${r.state})`)
+    }
+    r.writable = false
+    const conn: Http1Connection | null = this.h1ConnOf(r)
+    if (!this.live(r) || conn === null) {
+      return H1_CLOSED
+    }
+    const sent: i32 = conn.sendFrame(fin, opcode, buf, off, len)
+    if (sent === 0) {
+      this.driveOf(r)
+    }
+    return sent
+  }
+
+  /**
+   * Hands WebSocket `r`'s held message back: `message` is cleared and
+   * `messageData` may be overwritten, as the connection reads its next
+   * frame. Nothing is read past a held message, so a program that keeps one
+   * stops its peer. Panics on another server's request, or when `r` is not
+   * a WebSocket the program holds.
+   * @param r a request `acceptWebSocket` upgraded, with or without a message held
+   */
+  received(r: HttpServerRequest): void {
+    this.own(r, "received")
+    if (r.state !== HTTP_SERVER_SOCKET) {
+      panic(`HttpServer.received: the request is not an open WebSocket (state ${r.state})`)
+    }
+    r.message = false
+    this.driveOf(r)
+  }
+
+  /**
+   * Ends WebSocket `r` and hands it back to the server: a close frame with
+   * `code` when the WebSocket is still open (a peer's close is answered by
+   * the connection already), then the connection closes once that is sent.
+   * Panics on another server's request, or when `r` is not a WebSocket the
+   * program holds.
+   * @param r a request `acceptWebSocket` upgraded; the server's again unless this answers `H1_INVALID`
+   * @param code the close status code to send (RFC 6455 §7.4), such as 1000 for a normal close
+   * @returns 0 once `r` is handed back; `H1_INVALID`, with `r` still the
+   *   program's, for a code that may not be sent
+   */
+  closeWebSocket(r: HttpServerRequest, code: i32): i32 {
+    this.own(r, "closeWebSocket")
+    if (r.state !== HTTP_SERVER_SOCKET) {
+      panic(`HttpServer.closeWebSocket: the request is not an open WebSocket (state ${r.state})`)
+    }
+    const conn: Http1Connection | null = this.h1ConnOf(r)
+    if (!this.live(r) || conn === null) {
+      this.release(r)
+      return 0
+    }
+    if (conn.closeWebSocket(code) === H1_INVALID) {
+      return H1_INVALID
+    }
+    r.message = false
+    r.state = HTTP_SERVER_FLUSHING
+    if (r.again) {
+      this.unqueue(r)
+    }
+    this.driveOf(r)
+    return 0
   }
 
   /**
