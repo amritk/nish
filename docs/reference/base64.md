@@ -7,6 +7,7 @@ Standard base64 (RFC 4648 §4) with `=` padding, the encoding kitty graphics fra
 ```ts
 import {
   base64Encode,
+  base64EncodeIfFits,
   base64EncodeInto,
   base64EncodedLength,
 } from "nish/base64";
@@ -33,6 +34,12 @@ export const main = (): i32 => {
 <scalar-card title="base64​Encode" icon="phosphor/regular/function" href="#base64encode">
 
 `bytes` as padded base64.
+
+</scalar-card>
+
+<scalar-card title="base64​Encode​If​Fits" icon="phosphor/regular/function" href="#base64encodeiffits">
+
+`base64EncodeInto` for a caller that has an answer for a range that does not fit: the same bytes written to the same place, or -1, with nothing written, when `src[off..off+len)` is not inside `src`, the encoding does not fit in `dst` from `at`, or either array is longer than 2^31 - 1 bytes.
 
 </scalar-card>
 
@@ -106,13 +113,71 @@ A fresh string holding the padded encoding.
 
 </scalar-field>
 
+### base64EncodeIfFits
+
+`base64EncodeInto` for a caller that has an answer for a range that does not
+fit: the same bytes written to the same place, or -1, with nothing written,
+when `src[off..off+len)` is not inside `src`, the encoding does not fit in
+`dst` from `at`, or either array is longer than 2^31 - 1 bytes. It never
+panics.
+
+```ts
+const base64EncodeIfFits: (
+  src: u8[],
+  off: i32,
+  len: i32,
+  dst: u8[],
+  at: i32,
+) => i32
+```
+
+<scalar-field name="src" type="u8[]" required>
+
+The bytes to encode from; only `src[off..off+len)` is read.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where in `src` the bytes to encode start.
+
+</scalar-field>
+
+<scalar-field name="len" type="i32" required>
+
+How many bytes of `src` to encode; zero writes nothing and
+  answers `at` when `at` is inside `dst` or just past it.
+
+</scalar-field>
+
+<scalar-field name="dst" type="u8[]" required>
+
+The buffer the characters are written into, one ASCII byte per
+  character; bytes outside the written range are left as they were.
+
+</scalar-field>
+
+<scalar-field name="at" type="i32" required>
+
+Where in `dst` the first character goes.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The index in `dst` just past the last character written, or -1
+  when the range does not fit.
+
+</scalar-field>
+
 ### base64EncodeInto
 
 Write the base64 of `src[off..off+len)` into `dst` from index `at`, and
 answer the index just past the last character written, which is
 `at + base64EncodedLength(len)`. Nothing is allocated. Panics when the source
 range is not inside `src` or the encoding does not fit in `dst` from `at`;
-both are checked before anything is written.
+both are checked before anything is written. `base64EncodeIfFits` answers -1
+for those instead.
 
 ```ts
 const base64EncodeInto: (
