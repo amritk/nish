@@ -4714,7 +4714,6 @@ class YamlKeySet {
   private texts: string[]
   private used: boolean[]
   private filled: i32[]
-  private mask: i32 = 0
 
   constructor() {
     this.texts = []
@@ -4728,21 +4727,30 @@ class YamlKeySet {
    * @internal Called by `YamlParser`.
    */
   add(text: string): boolean {
-    if ((toI32(this.filled.length) + 1) * 2 > this.mask + 1) {
+    const slots: i32 = toI32(this.used.length)
+    if (slots < 1073741824 && toI32(this.filled.length) >= slots / 2) {
       this.grow()
     }
-    let slot: i32 = yamlKeyHash(text) & this.mask
-    while (slot < toI32(this.used.length) && this.used[slot]) {
-      if (this.texts[slot] === text) {
+    const used: boolean[] = this.used
+    const texts: string[] = this.texts
+    const size: i32 = toI32(used.length)
+    // `size` is a power of two, so the mask keeps every probe inside the table.
+    const mask: i32 = size - 1
+    let slot: i32 = yamlKeyHash(text) & mask
+    // A probe visits each slot at most once: past that, `text` is in none of them.
+    let probes: i32 = 0
+    while (probes < size && slot >= 0 && slot < size && slot < toI32(texts.length) && used[slot]) {
+      if (texts[slot] === text) {
         return false
       }
-      slot = (slot + 1) & this.mask
+      slot = (slot + 1) & mask
+      probes += 1
     }
-    if (slot < toI32(this.used.length)) {
-      this.used[slot] = true
-      this.texts[slot] = text
+    if (probes < size && slot >= 0 && slot < size && slot < toI32(texts.length)) {
+      used[slot] = true
+      texts[slot] = text
+      this.filled.push(slot)
     }
-    this.filled.push(slot)
     return true
   }
 
@@ -4751,28 +4759,38 @@ class YamlKeySet {
    * @internal Called by `YamlParser`.
    */
   clear(): void {
+    const filled: i32[] = this.filled
+    const used: boolean[] = this.used
+    const texts: string[] = this.texts
     let i: i32 = 0
-    while (i < toI32(this.filled.length)) {
-      const slot: i32 = this.filled[i]
-      if (slot >= 0 && slot < toI32(this.used.length)) {
-        this.used[slot] = false
-        this.texts[slot] = ""
+    while (i < toI32(filled.length)) {
+      const slot: i32 = filled[i]
+      if (slot >= 0 && slot < toI32(used.length) && slot < toI32(texts.length)) {
+        used[slot] = false
+        texts[slot] = ""
       }
       i += 1
     }
     this.filled = []
   }
 
-  /** Doubles the table and puts every key back. */
+  /**
+   * Doubles the table and puts every key back. `add` stops growing it at
+   * 2^30 slots, which is more keys than a text can spell: each takes a byte
+   * and a separator, and a text is shorter than 2^31 bytes.
+   */
   private grow(): void {
     const texts: string[] = []
+    const filled: i32[] = this.filled
+    const old: string[] = this.texts
     let i: i32 = 0
-    while (i < toI32(this.filled.length)) {
-      const slot: i32 = this.filled[i]
-      texts.push(slot >= 0 && slot < toI32(this.texts.length) ? this.texts[slot] : "")
+    while (i < toI32(filled.length)) {
+      const slot: i32 = filled[i]
+      texts.push(slot >= 0 && slot < toI32(old.length) ? old[slot] : "")
       i += 1
     }
-    this.resize((this.mask + 1) * 2)
+    const slots: i32 = toI32(this.used.length)
+    this.resize(slots >= 0 && slots < 1073741824 ? slots + slots : slots)
     let j: i32 = 0
     while (j < toI32(texts.length)) {
       this.add(texts[j])
@@ -4782,16 +4800,17 @@ class YamlKeySet {
 
   /** An empty table of `slots` slots. */
   private resize(slots: i32): void {
-    this.texts = []
-    this.used = []
-    this.filled = []
+    const texts: string[] = []
+    const used: boolean[] = []
     let i: i32 = 0
     while (i < slots) {
-      this.texts.push("")
-      this.used.push(false)
+      texts.push("")
+      used.push(false)
       i += 1
     }
-    this.mask = slots - 1
+    this.texts = texts
+    this.used = used
+    this.filled = []
   }
 }
 
@@ -4841,9 +4860,10 @@ class YamlFlowWriter {
       return
     }
     const length: i32 = toI32(s.length)
-    if (length > this.left) {
+    const left: i32 = this.left
+    if (length > left) {
       // Back up to the start of a character, so the cut never splits one's bytes.
-      let keep: i32 = this.left
+      let keep: i32 = left
       while (keep > 0 && (yamlByte(s, keep) & 0xc0) === 0x80) {
         keep -= 1
       }
@@ -4852,7 +4872,7 @@ class YamlFlowWriter {
       return
     }
     this.out = this.out + s
-    this.left -= length
+    this.left = left - length
   }
 
   /**
@@ -4866,6 +4886,8 @@ class YamlFlowWriter {
       this.cut = true
       return
     }
+    // `depth` is at most the limit, so the step never passes the limit and one.
+    const deeper: i32 = depth < YAML_KEY_TEXT_DEPTH ? depth + 1 : YAML_KEY_TEXT_DEPTH + 1
     const at: i32 = n >= 0 ? stream.resolved(n) : -1
     if (at < 0) {
       this.append(n >= 0 ? yamlKeyText(stream, n) : "null")
@@ -4890,11 +4912,11 @@ class YamlFlowWriter {
       }
       const item: i32 = stream.child(at, i)
       if (map) {
-        this.write(stream.key(item), depth + 1)
+        this.write(stream.key(item), deeper)
         this.append(": ")
-        this.write(stream.value(item), depth + 1)
+        this.write(stream.value(item), deeper)
       } else {
-        this.write(item, depth + 1)
+        this.write(item, deeper)
       }
       i += 1
     }
@@ -4966,7 +4988,7 @@ class YamlPathWalker {
     let at: i32 = n
     let hops: i32 = 0
     while (at >= 0 && stream.kind(at) === YAML_ALIAS) {
-      if (hops === YAML_ALIAS_HOPS) {
+      if (hops >= YAML_ALIAS_HOPS) {
         return -1
       }
       at = stream.target(at)
@@ -4999,7 +5021,7 @@ class YamlPathWalker {
   /** The index `step` writes, or `-1` when it is not 1 to 9 decimal digits without a leading zero. */
   private indexOf(step: string): i32 {
     const length: i32 = toI32(step.length)
-    if (length === 0 || length > 9 || (length > 1 && toI32(step.charCodeAt(0)) === 48)) {
+    if (length === 0 || length > 9 || (length > 1 && step.startsWith("0"))) {
       return -1
     }
     let index: i32 = 0
@@ -5009,7 +5031,10 @@ class YamlPathWalker {
       if (c < 48 || c > 57) {
         return -1
       }
-      index = index * 10 + (c - 48)
+      // Nine digits at most stay below 10^9, so the test never fails; it is what proves the step.
+      if (index >= 0 && index < 100000000) {
+        index = index * 10 + (c - 48)
+      }
       i += 1
     }
     return index
@@ -5018,13 +5043,13 @@ class YamlPathWalker {
   /** The last pair of map `map` whose key `step` matches, as when a duplicate is let through; `-1` for none. */
   private ownPair(map: i32, step: string): i32 {
     const stream: YamlStream = this.stream
-    let i: i32 = stream.count(map) - 1
-    while (i >= 0) {
+    let i: i32 = stream.count(map)
+    while (i > 0) {
+      i -= 1
       const pair: i32 = stream.child(map, i)
       if (this.keyIs(stream.key(pair), step)) {
         return pair
       }
-      i -= 1
     }
     return -1
   }
@@ -5094,15 +5119,17 @@ class YamlPathWalker {
     while (toI32(stamps.length) < stream.top) {
       stamps.push(0)
     }
-    if (stream.mergeStep === 2147483647) {
+    const step: i32 = stream.mergeStep
+    if (step < 2147483647) {
+      stream.mergeStep = step + 1
+    } else {
       let k: i32 = 0
       while (k < toI32(stamps.length)) {
         stamps[k] = 0
         k += 1
       }
-      stream.mergeStep = 0
+      stream.mergeStep = 1
     }
-    stream.mergeStep += 1
   }
 
   /** Marks map `map` searched by this step; `false` when it already was. */
@@ -5126,12 +5153,13 @@ class YamlPathWalker {
     this.pair = -1
     this.matched = 0
     const steps: i32 = toI32(path.length)
-    while (this.matched < steps) {
+    let matched: i32 = 0
+    while (matched < steps && matched < toI32(path.length)) {
       const at: i32 = this.follow(this.node)
       if (at < 0) {
         return
       }
-      const step: string = path[this.matched]
+      const step: string = path[matched]
       const kind: i32 = stream.kind(at)
       if (kind === YAML_MAP) {
         let pair: i32 = this.ownPair(at, step)
@@ -5146,7 +5174,8 @@ class YamlPathWalker {
         // An empty value (`a:`) matches the step and reaches no node, which ends the walk.
         this.pair = pair
         this.node = stream.value(pair)
-        this.matched += 1
+        matched += 1
+        this.matched = matched
         if (this.node < 0) {
           return
         }
@@ -5156,7 +5185,8 @@ class YamlPathWalker {
           return
         }
         this.node = stream.child(at, index)
-        this.matched += 1
+        matched += 1
+        this.matched = matched
       } else {
         return
       }
