@@ -183,6 +183,7 @@ function jsonTokDigitsExceed(src: u8[], i: i32, end: i32, bound: i32): boolean -
 function jsonTokSigned(m: u64, negative: boolean): i64 -> @nish.jsonTokSigned
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+  local +0:9 less: u64 (const)
 function jsonTokDepthStack(depth: i32): u8[] -> @nish.jsonTokDepthStack
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
@@ -735,7 +736,6 @@ function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokeniz
   local +0:11 src: u8[] (const)
   local +1:11 start: i32 (const)
   local +2:11 end: i32 (const)
-  local +3:11 n: i32 (const)
 function JsonTokenizer.rewindObject(this: JsonTokenizer, start: i32): void -> @nish.JsonTokenizer.rewindObject [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
