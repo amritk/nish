@@ -270,6 +270,9 @@ attributions in commits, code or PR text.
   on the current head, nothing conflicts, and no human requests changes or
   holds an open thread. Until then, watch it and fix what is red. A PR that
   conflicts with `main` gets no CI at all — check mergeability first.
+- **Picking up a work package, a stage or an issue (`/feature`, "pick up
+  WP50") is the explicit request to open its PR.** Open it as soon as the
+  stage is finished and its local checks pass; do not stop to ask first.
 - **Never merge the Release PR** (`chore(release): <version>` on
   `release/next`): merging it publishes to npm.
 - The five conditions in full:
