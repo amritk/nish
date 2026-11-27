@@ -3670,12 +3670,12 @@ The serving connection's bytes, by object, from `bench/http1-conn/bytes.ts` (thi
 | object | bytes |
 | --- | ---: |
 | the connection between requests, after four (`pooled-after-4`) | 1,200 |
-| input buffer from the pool, 1,024 + 24 | 1,048 |
-| head buffer from the pool, 256 + 24 | 280 |
-| output buffer from the pool, 65,536 + 24 | 65,560 |
+| input buffer, 1,024 + 24 | 1,048 |
+| head buffer, 256 + 24 | 280 |
+| output buffer, 65,536 + 24 | 65,560 |
 | a serving connection | 68,088 |
 
-`bytes.ts` prints the input and head buffers together as `pooled-holding-read`, 1,328. The output buffer is larger than an arena chunk, so it gets a chunk of its own and the count after the answer prints `chunk`: its row is the length `bytes.ts` prints under `holding.output` plus the 24-byte array header, not an arena count.
+The pools hold one spare buffer of each kind, and `bytes.ts` gives them to another connection, which holds a response too, before it counts, so the counted connection's three buffers are made fresh in the arena, as on a server whose every connection holds a response at once. `bytes.ts` prints the input and head buffers together as `pooled-holding-read`, 1,328. The output buffer is larger than an arena chunk, so it gets a chunk of its own and the count after the answer prints `chunk`: its row is the length `bytes.ts` prints under `holding.output` plus the 24-byte array header, not an arena count.
 
 The peak RSS per connection, from `node bench/http1-conn/run.mjs --shape rss --connections 10000 --base origin/main` (this PR's bench code, `bench/http1-conn/main.ts` and `run.mjs`), median (min–max) of 5 runs at 10,000 connections less 0, in bytes. The last row is `main.ts`'s `rss-serving` mode: the four passes of the row above it, then every connection fed one more request and answered without a flush, so all 10,000 hold their input, head and output buffers at once.
 

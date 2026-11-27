@@ -103,7 +103,8 @@ GET with and without its four field lines after Host, less the same four lines
 sent as a chunked POST's trailer section with and without them, which the
 same scan reads with a token check and a count and no span. `Date` is
 `hold`, `current` and `unhold` on the wall clock against a pinned date, and a
-whole served GET between `hold` and `unhold` on each. The clock-read loop,
+whole served GET between `hold` and `unhold` on each, with no clock read
+around its `next` calls. The clock-read loop,
 the three-call `Date` loop and the held-serve loop are the bench's own; every
 other call is the shipped one. The table gives ns per request, median and
 min–max over the rounds, with `old′` as the band; `parts.ts`'s header comment

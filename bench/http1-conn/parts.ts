@@ -41,6 +41,9 @@
 //                 the kept head compared against a Date that moves
 //   serve-pinned  the same requests on a pinned date
 //
+// The two serve shapes time the whole batch, and their `next` calls run with
+// no clock read around them.
+//
 // Every shape runs `<batches>` times, the shapes taking turns, and keeps its
 // fastest. Prints `parts <ns> <requests> <checksum>`, `<ns>` the fastest
 // `get`, then a second line of `<shape> <ns>` pairs, each the fastest
@@ -131,6 +134,8 @@ class One {
   /**
    * One request read, answered and sent, as main.ts's `Bench.serve`; answers
    * the ns of the one `next` that returns `timed`, between two clock reads.
+   * With `timed` negative it reads no clock and answers 0, so a loop that
+   * times whole requests pays for none of these reads.
    */
   serve(req: u8[], timed: i32): i64 {
     const conn: Http1Connection = this.conn
@@ -145,11 +150,15 @@ class One {
     let event: i32 = H1_NEED_MORE
     let more: boolean = true
     while (more) {
-      const before: i64 = monotonicNanos()
-      event = conn.next()
-      const after: i64 = monotonicNanos()
-      if (event === timed) {
-        span = after - before
+      if (timed < 0) {
+        event = conn.next()
+      } else {
+        const before: i64 = monotonicNanos()
+        event = conn.next()
+        const after: i64 = monotonicNanos()
+        if (event === timed) {
+          span = after - before
+        }
       }
       if (event === H1_NEED_MORE) {
         more = false
@@ -192,7 +201,7 @@ class One {
     const started: i64 = monotonicNanos()
     for (let k: i32 = 0; k < requests; k += 1) {
       this.date.hold()
-      this.serve(req, H1_NEED_MORE - 1)
+      this.serve(req, -1)
       this.date.unhold()
     }
     return monotonicNanos() - started

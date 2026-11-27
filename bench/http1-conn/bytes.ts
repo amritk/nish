@@ -10,8 +10,9 @@
 // its count starts, so it leaves main and is not put on the stack; every
 // count is printed after the last, so no printed string lands in one. Then
 // slot 0 reads a fifth GET and holds its unsent response, which takes every
-// buffer the pools kept, and the second connection does the same: what it
-// makes once the request is read and parsed is `pooled-holding-read`, and
+// buffer the pools kept, and the second connection does the same with the
+// pools empty, so its buffers are made fresh in the arena, as on a server
+// whose every connection holds a response at once: what it makes once the request is read and parsed is `pooled-holding-read`, and
 // once the response is written `pooled-holding-answered` (a 64 KiB output
 // buffer is bigger than an arena chunk, so that one reads `chunk`), beside
 // the lengths it holds then. Prints
@@ -59,7 +60,9 @@ const keep = (conn: Http1Connection, lengths: i64[], at: i32): void => {
 /**
  * One request fed, answered and sent at once, as startup.ts serves it; keeps
  * the held buffers' lengths at `at` when `at` is not negative. With `holding`
- * the response is written and not sent, and the connection keeps its buffers.
+ * the response is written and not sent, and the connection keeps its buffers;
+ * with `at` not negative too, the counts since `mark` go to `counts[9]` and
+ * `counts[10]`.
  */
 const serve = (
   conn: Http1Connection,
@@ -82,8 +85,8 @@ const serve = (
   let answered: boolean = false
   let event: i32 = conn.next()
   while (event !== H1_NEED_MORE) {
-    if (event === H1_END && holding) {
-      // What the read and the parse took, before the output is borrowed.
+    if (event === H1_END && holding && at >= 0) {
+      // What the read and the parse took, before the output is made.
       counts[9] = since(mark, before)
     }
     if (event === H1_END) {
@@ -99,8 +102,10 @@ const serve = (
   if (at >= 0) {
     keep(conn, lengths, at)
   }
-  if (holding) {
+  if (holding && at >= 0) {
     counts[10] = since(mark, before)
+  }
+  if (holding) {
     return answered && conn.wantsWrite()
   }
   conn.consume(conn.outputEnd - conn.outputStart)
