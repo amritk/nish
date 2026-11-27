@@ -1067,22 +1067,44 @@ const yamlPutU8 = (a: u8[], i: i32, v: i32): void => {
 /** `a`, or a copy of it at least `n` long and at least twice as long. */
 const yamlRoomI32 = (a: i32[], n: i32): i32[] => {
   const have: i32 = toI32(a.length)
-  if (n <= have) {
+  // `n < 0` is inside `n <= have`; spelled out, it is what proves `n` a length.
+  if (n < 0 || n <= have) {
     return a
   }
-  const grown: i32[] = new Array<i32>(n > have * 2 ? n : have * 2)
-  grown.set(a, 0)
+  let size: i32 = n
+  if (have < 1073741824) {
+    const twice: i32 = have + have
+    if (twice > n) {
+      size = twice
+    }
+  }
+  const grown: i32[] = new Array<i32>(size)
+  // `size` is above `have`, so the test never fails; it is what proves the copy.
+  if (toI32(a.length) <= toI32(grown.length)) {
+    grown.set(a, 0)
+  }
   return grown
 }
 
 /** `a`, or a copy of it at least `n` long and at least twice as long. */
 const yamlRoomU8 = (a: u8[], n: i32): u8[] => {
   const have: i32 = toI32(a.length)
-  if (n <= have) {
+  // `n < 0` is inside `n <= have`; spelled out, it is what proves `n` a length.
+  if (n < 0 || n <= have) {
     return a
   }
-  const grown: u8[] = new Array<u8>(n > have * 2 ? n : have * 2)
-  grown.set(a, 0)
+  let size: i32 = n
+  if (have < 1073741824) {
+    const twice: i32 = have + have
+    if (twice > n) {
+      size = twice
+    }
+  }
+  const grown: u8[] = new Array<u8>(size)
+  // `size` is above `have`, so the test never fails; it is what proves the copy.
+  if (toI32(a.length) <= toI32(grown.length)) {
+    grown.set(a, 0)
+  }
   return grown
 }
 
