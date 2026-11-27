@@ -425,7 +425,9 @@ the longest record, in bytes, as `initMpscRing` will be
 
 <scalar-field name="returns" type="i32">
 
-how many bytes from the ring's base the region must hold
+how many bytes from the ring's base the region must hold; a shape
+  whose size passes the i32 range answers 2147483647, and `initMpscRing`
+  and `tryInitMpscRing` refuse that shape through `ringFits`
 
 </scalar-field>
 
@@ -447,7 +449,10 @@ the ring's data bytes, as `initSpscRing` will be given them
 
 <scalar-field name="returns" type="i32">
 
-how many bytes from the ring's base the region must hold
+how many bytes from the ring's base the region must hold; a
+  capacity whose size passes the i32 range answers 2147483647, which no
+  power-of-two capacity `initSpscRing` takes reaches, and which `ringFits`
+  refuses as a place in any region
 
 </scalar-field>
 

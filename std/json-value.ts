@@ -1918,6 +1918,8 @@ export class JsonDocument {
       }
       const top: i32 = jsonValueSum(start, grown)
       if (top < 0) {
+        // Not reached under the slot bound above. `moveSlots` has already run,
+        // and `push`, `set` and std/yaml-json.ts ignore this answer.
         return -1
       }
       this.slotTop = top
@@ -2249,7 +2251,9 @@ export class JsonDocument {
 /**
  * `a + b` for `a` and `b` from 0 to 2^31 - 1, or `-1` when either is
  * negative or the sum passes 2^31 - 1. Written as differences from the
- * largest `i32`, which the prover follows where it cannot bound a sum.
+ * largest `i32`, which the prover follows where it cannot bound a sum. Slot
+ * sums never reach `-1` under the bound `append` states, so there the check
+ * proves the sum; a byte sum that does is a full store, answered as `-1`.
  */
 const jsonValueSum = (a: i32, b: i32): i32 => {
   if (a < 0 || b < 0) {

@@ -3,3 +3,5 @@ spsc max: 2147483647
 mpsc 4x8: 352
 mpsc 65536x65536: 2147483647
 mpsc 2x max: 2147483647
+tryInitMpscRing 65536x65536 refused: true
+and wrote no magic: true

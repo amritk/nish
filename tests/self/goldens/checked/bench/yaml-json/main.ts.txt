@@ -2540,8 +2540,8 @@ import JSON_TOK_TRUE from "nish/json-tokenizer" -> const JSON_TOK_TRUE
 import JsonLimits from "nish/json-tokenizer" -> struct JsonLimits
 import JsonTokenizer from "nish/json-tokenizer" -> struct JsonTokenizer
 unsafe import 152:10 uncheckedSet from "nish:unsafe"
-unsafe call 2007:7 uncheckedSet (node 8133)
-unsafe call 2048:7 uncheckedSet (node 8298)
+unsafe call 2009:7 uncheckedSet (node 8133)
+unsafe call 2050:7 uncheckedSet (node 8298)
 const JSON_VALUE_NONE: i32 = 0 [exported]
 const JSON_VALUE_NULL: i32 = 1 [exported]
 const JSON_VALUE_BOOLEAN: i32 = 2 [exported]
@@ -3672,19 +3672,19 @@ function JsonDocument.append(this: JsonDocument, c: i32, v: i32, keyAt: i32, key
   calls: nish.JsonDocument.moveSlots nish.jsonValueGet nish.jsonValuePut nish.jsonValueRoomI32 nish.jsonValueSum
   pointer this: size=248 writesThrough=true captured=false passedTo=nish.JsonDocument.moveSlots#0
   stackSites=0 stackLocals=0
-  local -17:9 start: i32 (let)
-  callee -17:22 jsonValueGet -> @nish.jsonValueGet
-  local -16:11 n: i32 (const)
-  callee -16:20 jsonValueGet -> @nish.jsonValueGet
-  local -15:11 capacity: i32 (const)
-  callee -15:27 jsonValueGet -> @nish.jsonValueGet
-  local -13:13 grown: i32 (const)
-  callee -12:70 jsonValueSum -> @nish.jsonValueSum
-  callee -8:11 jsonValueSum -> @nish.jsonValueSum
-  callee -7:17 JsonDocument.moveSlots -> @nish.JsonDocument.moveSlots
-  callee -6:9 jsonValuePut -> @nish.jsonValuePut
-  local -4:13 top: i32 (const)
-  callee -4:24 jsonValueSum -> @nish.jsonValueSum
+  local -19:9 start: i32 (let)
+  callee -19:22 jsonValueGet -> @nish.jsonValueGet
+  local -18:11 n: i32 (const)
+  callee -18:20 jsonValueGet -> @nish.jsonValueGet
+  local -17:11 capacity: i32 (const)
+  callee -17:27 jsonValueGet -> @nish.jsonValueGet
+  local -15:13 grown: i32 (const)
+  callee -14:70 jsonValueSum -> @nish.jsonValueSum
+  callee -10:11 jsonValueSum -> @nish.jsonValueSum
+  callee -9:17 JsonDocument.moveSlots -> @nish.JsonDocument.moveSlots
+  callee -8:9 jsonValuePut -> @nish.jsonValuePut
+  local -6:13 top: i32 (const)
+  callee -6:24 jsonValueSum -> @nish.jsonValueSum
   callee +1:24 jsonValueRoomI32 -> @nish.jsonValueRoomI32
   callee +2:24 jsonValueRoomI32 -> @nish.jsonValueRoomI32
   callee +3:28 jsonValueRoomI32 -> @nish.jsonValueRoomI32

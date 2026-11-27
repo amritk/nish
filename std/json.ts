@@ -229,7 +229,8 @@ const jsonClosingQuote = (text: string, start: i32): i32 => {
  * Where the `count` bytes from `at` end, `at + count`, when they end by
  * `length`; `-1` when any of the three is negative or they run past it. Written
  * as differences, each of which `src/bounds.ts` proves, so the end needs no
- * overflow check and no cast through `u32`.
+ * overflow check and no cast through `u32`. A `-1` means only a span that
+ * runs past `length` (a full writer); no sum of in-range values wraps to it.
  */
 const jsonSpanEnd = (length: i32, at: i32, count: i32): i32 => {
   if (length < 0 || at < 0 || count < 0) {

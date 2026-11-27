@@ -1355,7 +1355,7 @@ export class RowRecord {
       // A varint is at most 5 bytes, so the mask keeps its length. `idx` is
       // below `hdr`, so only a header within 7 bytes of 2^31 could pass the
       // literal, which no record buffer reaches; the test is what proves the
-      // sum, and a header that did would end the walk as a short one.
+      // sum, and a header that did would be refused: the walk answers false.
       if (idx > 2147483640) {
         return false
       }

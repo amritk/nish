@@ -944,8 +944,8 @@ unsafe import 102:10 wrappingAdd from "nish:unsafe"
 unsafe import 102:23 wrappingSub from "nish:unsafe"
 unsafe call 203:45 wrappingAdd (node 434)
 unsafe call 209:42 wrappingSub (node 483)
-unsafe call 283:30 wrappingAdd (node 797)
-unsafe call 290:21 wrappingSub (node 846)
+unsafe call 288:30 wrappingAdd (node 797)
+unsafe call 295:21 wrappingSub (node 846)
 const RING_EMPTY: i32 = -1 [exported]
 const RING_TOO_SMALL: i32 = -2 [exported]
 const RING_CORRUPT: i32 = -3 [exported]

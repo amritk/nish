@@ -241,7 +241,10 @@ const ringCheckPlace = (region: SharedRegion, base: i32, bytes: i64, what: strin
  * 256-byte header and the data. Nothing is checked here; `initSpscRing`
  * refuses a capacity that is not a power of two from 8.
  * @param capacity the ring's data bytes, as `initSpscRing` will be given them
- * @returns how many bytes from the ring's base the region must hold
+ * @returns how many bytes from the ring's base the region must hold; a
+ *   capacity whose size passes the i32 range answers 2147483647, which no
+ *   power-of-two capacity `initSpscRing` takes reaches, and which `ringFits`
+ *   refuses as a place in any region
  */
 export const spscRingBytes = (capacity: i32): i32 => ringAdd(RING_DATA_AT, capacity)
 
@@ -253,7 +256,9 @@ export const spscRingBytes = (capacity: i32): i32 => ringAdd(RING_DATA_AT, capac
  *   will be given it
  * @param slotBytes the longest record, in bytes, as `initMpscRing` will be
  *   given it
- * @returns how many bytes from the ring's base the region must hold
+ * @returns how many bytes from the ring's base the region must hold; a shape
+ *   whose size passes the i32 range answers 2147483647, and `initMpscRing`
+ *   and `tryInitMpscRing` refuse that shape through `ringFits`
  */
 export const mpscRingBytes = (slots: i32, slotBytes: i32): i32 =>
   ringAdd(RING_DATA_AT, ringMul(slots, ringAdd(RING_SLOT_HEAD, slotBytes)))
