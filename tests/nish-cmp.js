@@ -1635,7 +1635,7 @@ const s1PanicFree = byFinding(S1_PANIC_FREE)
 const S2_REST_PANIC_FREE = "the remaining std modules panic-free"
 const s2RestPanicFree = byFinding(S2_REST_PANIC_FREE)
 /** The changelog words of WP86 S1, which makes std's JSON helpers, yaml-lines, yaml-write and yaml-json panic-free. */
-const WP86_S1_PANIC_FREE = "make the JSON helpers, yaml-lines, yaml-write and yaml-json panic-free"
+const WP86_S1_PANIC_FREE = "the JSON helpers and the YAML loader and writer panic-free"
 const wp86S1PanicFree = byFinding(WP86_S1_PANIC_FREE)
 /** WP87 S2's programs whose only move is testing.ll: `Suite` stops its tallies at the largest `i32` through `testingCount`. */
 const S2_REST_TESTING = [
