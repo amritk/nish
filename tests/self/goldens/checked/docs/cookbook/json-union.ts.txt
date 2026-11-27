@@ -2259,6 +2259,7 @@ function jsonTokDigitsExceed(src: u8[], i: i32, end: i32, bound: i32): boolean -
   local +3:11 next: i64 (const)
 function jsonTokSigned(m: u64, negative: boolean): i64 -> @nish.jsonTokSigned
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: m
   stackSites=0 stackLocals=0
   local +0:9 less: u64 (const)
 function jsonTokDepthStack(depth: i32): u8[] -> @nish.jsonTokDepthStack
