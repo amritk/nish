@@ -11830,6 +11830,12 @@ const storageIndex = () => [
     changelog: STORAGE_INDEX,
     why: "the program indexes module storage under --deny-panics with every index bounded, which the candidate proves and the reference refuses as a site that may panic",
   },
+  {
+    program: "tests/cases/deny_panics_storage_const_guard.ts",
+    file: "exit",
+    changelog: STORAGE_INDEX,
+    why: "the program adds 1 past a guard against a folded module constant under --deny-panics, which the candidate reads as an order and the reference refuses as an overflow that may panic",
+  },
 ]
 
 /** WP80 S8's release-note words, a checked HTTP/1 server config and the twins the server examples call. */

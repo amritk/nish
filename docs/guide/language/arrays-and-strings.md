@@ -299,8 +299,7 @@ keeps its values from one call to the next. It is the one piece of state a
 module keeps, and no code runs to set it up.
 ([Module storage](../../reference/language/declarations.md#module-storage)).
 
-<!-- allow-panics: indexes module storage, which no guard the checker reads proves in range yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const SCORES = new Int32Array(4);
 

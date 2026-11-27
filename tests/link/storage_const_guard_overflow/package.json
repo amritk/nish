@@ -1,0 +1,7 @@
+{
+  "name": "storage-const-guard-overflow",
+  "private": true,
+  "nish": {
+    "noPanic": ["main.ts"]
+  }
+}
