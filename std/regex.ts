@@ -2548,7 +2548,9 @@ export class RegexMatch {
 
 /**
  * A compiled pattern: its program, its classes, what the prefilters read and
- * the VM's scratch memory. Made by `regexCompile`.
+ * the VM's scratch memory. Made by `regexCompile`. A subject longer than
+ * 2,146,435,071 bytes never matches: `test` and `exec` give false,
+ * and `count` gives 0.
  */
 export class Regex {
   // Widest first, so the alignment rules insert no padding.
@@ -4303,6 +4305,8 @@ export class Regex {
         const key: i32 = c * 2 + toI32(hit[u])
         if (key < toI32(remap.length)) {
           if (remap[key] < 0) {
+            // Never taken: `next` counts the classes in use, at most
+            // `units`. The test is what proves `next + 1`.
             if (next < 0 || next > 2097152) {
               return next
             }
@@ -4617,7 +4621,7 @@ export class Regex {
     } else {
       // A state below `DFA_MAX_STATES` shifted left by 4 with its flags is
       // never negative, so this never gives the search up. `~` keeps the
-      // decoding free of a sign test: `~entry` is below -1, never 0.
+      // decoding free of a sign test: `~entry` is at most -1, never 0.
       entry = entry >= 0 ? ~entry : 0
     }
     // The table is a cache: a slot outside it would only go unremembered.
