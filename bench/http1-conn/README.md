@@ -559,14 +559,15 @@ Figures: 63 numbers in the tables (27 timing and 36 memory medians and
 ranges) and 6 timing ratios, each checked against the recorded runs' printed
 tables; the percentages above are recomputed from the medians.
 
-## Measured: a parked flag in the hot block, and a slot-indexed block (2026-11-27)
+## Measured: a parked flag in the hot block; a slot-indexed block not built (2026-11-27)
 
 Issue #1225 left two ideas from #1211 unmeasured: the lent read buffer's
 start and capacity inline in `Http1Connection`'s hot block, where on `main`
 2.56 of an idle request's D1 read misses fall in `IdlePool.readable`, into
 which `inputRoom` inlines; and a struct-of-arrays hot block on `Http1Server`
-indexed by slot. Neither is adopted: the first moves a miss and saves none,
-and the second is already how `Http1Server` keeps a resting slot.
+indexed by slot. Neither is adopted. The first was measured: it moves a
+miss and saves none. The second was not built and not measured, because
+`Http1Server` already keeps a resting slot that way (below).
 
 **The parked flag.** `parked-flag.patch` (apply it to `3a5bbbaf` with
 `git apply bench/http1-conn/parked-flag.patch`) is the first idea as far as
@@ -595,14 +596,18 @@ medians to `old`:
 | direct-dram | 645.4 (588.4–702.3) | 640.8 (586.1–792.2) 0.993 | 596.6 (551.1–727.3) 0.924 |
 | peak RSS per idle connection (idleInput, 1 request), bytes | 1105 (1105–1107) | 1106 (1105–1107) | 1105 (1105–1109) |
 
-`old′`, the same binary as `old`, lands from 0.888 to 1.191 of it, so this
-run's noise band is −11% to +19%. Every `new` ratio but `direct`'s sits inside
-it. `direct` reads 0.851, under the band, but against `old′` it is 0.958, and
-cachegrind finds its misses unchanged in total (below): `old`'s `direct`
-median is that row's high one. `idle`, the shape that does what
-`Http1Server`'s readable path does, is 1.000.
-`cold` reads 7.9% slower, though it never parks, so the patch adds it one
-load from a line `inputRoom` already reads: that is the band, not the change.
+Each shape's band is its own `old′` ratio, the same binary as `old` timed
+again: hot ±19.1%, cold ±3.4%, idle ±3.2%, direct ±11.2%, idle-dram ±1.7%
+and direct-dram ±0.7%. `new` sits inside its band in `hot` (−2.7%) and
+`idle` (0.0%, the shape that does what `Http1Server`'s readable path does),
+and outside it in `cold` (+7.9%), `direct` (−14.9%; −4.2% against `old′`),
+`idle-dram` (−5.9%) and `direct-dram` (−7.6%). One `old′` a shape on a
+shared VM is a single sample of the noise, and those moves go both ways, so
+the wall times do not settle the question: the cachegrind totals below carry
+the verdict, and they show no miss saved in `idle`, `direct` or
+`idle-dram`. `cold` was not run under cachegrind; the patch adds it one load
+from a line `inputRoom` already reads, and this run does not separate its
++7.9% from noise.
 
 `bash bench/http1-conn/misses.sh` on the same two builds (100,000 requests
 less 0 over 10,000 connections; 20,000 in `idle-dram`) shows why. An idle
@@ -613,11 +618,11 @@ and come back in `Http1Connection.feed` (read misses 0.75 to 1.19, write
 misses 0 to 1.38): `unpark` still writes `parser.buf` and `parser.body`, so
 the parser's line is loaded one call later, as a write miss instead of a read
 miss. `direct` gives the same totals. In `idle-dram` LL read misses fall by
-1.38 a request and LL write misses rise by 1.38, and the run's LL misses are
+27,517 and LL write misses rise by 27,517, so the run's LL misses are
 33,856,519 on both builds. The stages profile agrees: `recv` goes from 4.50
 read misses and 0 write misses to 3.13 and 1.38, every other stage the same.
 
-**A slot-indexed hot block.** `Http1Server` on `main` already keeps a
+**A slot-indexed hot block: not built, not measured.** `Http1Server` on `main` already keeps a
 resting slot as five slot-indexed arrays, `fds`, `at`, `rested`,
 `restedMss` and `owner`, and hands its `Http1Connection` back to a LIFO stack
 of spare connections at `flush`; `attach` lends the next readable slot the
