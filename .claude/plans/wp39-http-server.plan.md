@@ -170,12 +170,10 @@ stages:
         status: pending
   - id: bench-lean-record
     title: WP39 H1 — finish the http-lean-get record and the http1-cpu-per-request gaps
-    goal: BENCHMARKS.md http-lean-get gives ns per component with a band, a serving-connection byte sum checked against RSS, h1 over NET_LISTEN_RING and idle memory at 18,000 connections, and the x86 parse gain is proven or withdrawn.
+    goal: BENCHMARKS.md http-lean-get gives ns per component with a base-against-base band and a serving-connection byte sum checked against RSS, measured in a cloud container. The x86 PMU proof and the 18,000-connection ring runs are bench-lean-machine.
     verification: node bench/http1-conn/run.mjs --connections 10000 --rounds 15 && node docs/check-links.mjs && npm run lint
     status: pending
     issue: 1780
-    labels: [needs-decision]
-    related: [1295]
     todos:
       - id: lean-component-ns
         content: Time head parse apart from header spans and Date including its clock read in bench/http1-conn, with a noise band — see WP39 H1 bench lean record
@@ -183,19 +181,26 @@ stages:
       - id: lean-serving-bytes
         content: Sum the serving connection's bytes by object and check them against RSS while serving — see WP39 H1 bench lean record
         status: pending
+  - id: bench-lean-machine
+    title: WP39 H1 — the x86 head-scan proof and the 18,000-connection ring runs, on a machine with counters
+    goal: The x86 gain of the 16-byte head scans is proven or withdrawn with hardware counters, and h1 over NET_LISTEN_RING and idle memory at 18,000 connections are measured on a quiet machine.
+    verification: node bench/http1-conn/run.mjs --connections 18000 --rounds 15 && npm run lint
+    status: pending
+    labels: [deferred]
+    related: [1295]
+    todos:
       - id: lean-ring-idle
-        content: Run bench/http1-server.ts over NET_LISTEN_RING at 18,000 connections interleaved with epoll and a byte-identical copy, and measure idle memory with the load stopped — see WP39 H1 bench lean record
+        content: Run bench/http1-server.ts over NET_LISTEN_RING at 18,000 connections interleaved with epoll and a byte-identical copy, and measure idle memory with the load stopped — see WP39 H1 bench lean machine
         status: pending
       - id: x86-parse-pmu
-        content: Prove or withdraw the x86 gain of the 16-byte head scans on a machine with x86 hardware counters, and add ns per stage for the submission stages — see WP39 H1 bench lean record
+        content: Prove or withdraw the x86 gain of the 16-byte head scans on a machine with x86 hardware counters, and add ns per stage for the submission stages — see WP39 H1 bench lean machine
         status: pending
   - id: bench-syscall-box
-    title: WP39 H1 — measure the syscall and quickack benches on the reported box
-    goal: bench/syscall-cost and bench/quickack are run on the reported Linux 6.8 Xeon box, the alternatives to per-response QUICKACK are measured, and the reset-per-response syscall is removed if it buys nothing.
+    title: WP39 H1 — split the syscall bench in one run and measure the QUICKACK alternatives
+    goal: bench/syscall-cost prints a request's kernel time split into entry and exit and TCP work in one run, and bench/quickack measures the route, BPF sockops and sysctl alternatives to per-response QUICKACK, in a cloud container. The reported-box run is bench-syscall-reported-box.
     verification: bash bench/syscall-cost/run.sh && bash bench/quickack/run.sh && npm run lint
     status: pending
     issue: 1092
-    labels: [needs-decision]
     todos:
       - id: syscall-split
         content: Make bench/syscall-cost/run.sh print a request's kernel time split into entry and exit and TCP work without a separate run — see WP39 H1 bench syscall box
@@ -203,8 +208,15 @@ stages:
       - id: quickack-alternatives
         content: Measure the ip route quickack, BPF sockops and sysctl alternatives in bench/quickack, not only reason about them — see WP39 H1 bench syscall box
         status: pending
+  - id: bench-syscall-reported-box
+    title: WP39 H1 — the syscall and quickack benches on the reported Xeon 8260 box
+    goal: bench/syscall-cost and bench/quickack run on the reported Linux 6.8 Xeon Platinum 8260 box, and the per-response QUICKACK reset is removed if it measures within noise there.
+    verification: bash bench/syscall-cost/run.sh && bash bench/quickack/run.sh && npm run lint
+    status: pending
+    labels: [deferred]
+    todos:
       - id: quickack-reported-box
-        content: Run both benches on the reported box and drop the per-response netSetOption NET_TCP_QUICKACK call if it measures within noise — see WP39 H1 bench syscall box
+        content: Run both benches on the reported box and drop the per-response netSetOption NET_TCP_QUICKACK call if it measures within noise — see WP39 H1 bench syscall reported box
         status: pending
   - id: plaintext-codec-followup
     title: WP39 H1 — the http1 plaintext codec follow-up, the /plaintext Ir target and the /json regression
@@ -255,8 +267,8 @@ Depends on: none. First of the three G7 stages; they share `std/net/http-server.
 
 Likely files: `std/net/http-server.ts`, `std/net/websocket.ts`, `tests/link/net_http_server*`, the interop job, `docs/http-one-handler.md`, `docs/security/http-server.md`, `docs/guide/`.
 
-Owns: `std/net/http-server.ts`, `std/net/websocket.ts`, `tests/link/net_http_server_ws*/**`, `tests/interop/**`, `.github/workflows/interop.yml`, `docs/security/http1-codec.md`, `docs/http-one-handler.md`, `docs/security/http-server.md`, `docs/security/README.md`, `docs/guide/using-nish/http-server.md`.
-Depends on: g7-h2c-preface (development and merge). Last of the G7 stages, because its Autobahn todo edits `.github/workflows/interop.yml`, a sensitive path: its PR is built and reviewed, then left for a human merge, and nothing waits behind it.
+Owns: `std/net/http-server.ts`, `std/net/websocket.ts`, `tests/link/net_http_server_ws*/**`, `tests/interop/**`, `.github/workflows/interop.yml`, `docs/security/http1-codec.md`, `docs/http-one-handler.md`, `docs/security/http-server.md`, `docs/security/README.md`, `docs/guide/using-nish/http-server.md`, `tests/nish-cmp.js` (its `DECLARED` entries only).
+Depends on: none (g7-h2c-preface merged as 471394b). Last of the G7 stages, because its Autobahn todo edits `.github/workflows/interop.yml`, a sensitive path: its PR is built and reviewed, then left for a human merge, and nothing waits behind it.
 
 ## WP39 G7 — an h2c peer taken by its preface on the façade's HTTP/1.1 listener
 [`docs/http-one-handler.md`](../../docs/http-one-handler.md#4-h2c-prior-knowledge-only) §4 rules sniffing out: an h2c port never falls back to HTTP/1.1, and a deployment that wants both runs two ports. HttpArena serves HTTP/1.1, WebSocket and cleartext gRPC on one port (8080), so WP71's `unary-grpc` profile (with [WP72](https://github.com/amritk/nish/pull/1809)'s gRPC) cannot be entered without it.
@@ -294,8 +306,8 @@ Depends on: none.
 Issue #1225, a follow-up to #1211, which cut D1 misses per idle request from 10.95 to 9.01 with no wall-time gain. Not evaluated: the lent buffer's start and capacity inline in the hot block (3.50 D1 read misses per idle request sit in `Http1Connection.inputRoom`), and a struct-of-arrays hot block on `Http1Server` indexed by slot. Public API stays the same and an idle connection stays about 1.1 KiB (1,026 B today). Bench: `node bench/http1-conn/run.mjs --connections 10000 --rounds 15 --base <base>` and `bash bench/http1-conn/misses.sh`. Settled, do not redo: LIFO lending and reading straight into the lent buffer.
 Likely files: `std/net/http1-server.ts`, `bench/http1-conn/`.
 
-Owns: `std/net/http1-server.ts`, `bench/http1-conn/**`, `docs/BENCHMARKS.md`, `tests/runtime-budgets.js`, `docs/wp7-runtime.md`.
-Depends on: plaintext-codec-followup (`std/net/http1-server.ts`, `docs/BENCHMARKS.md`) and bench-base-build (`bench/http1-conn/`).
+Owns: `std/net/http1-server.ts`, `bench/http1-conn/**`, `docs/BENCHMARKS.md` (its `http1-conn` hot-block record only), `tests/runtime-budgets.js`, `docs/wp7-runtime.md`, `tests/nish-cmp.js` (its `DECLARED` entries only).
+Depends on: plaintext-codec-followup (`std/net/http1-server.ts`, development and merge) and bench-lean-record (`bench/http1-conn/**`, development and merge). bench-base-build merged as 86ce9bc.
 
 ## WP39 H1 — lazy Http1Server slots, the RSS gap and the throughput run left open after the first change
 Issue #744 (after #734). Open: (1) RSS at 16,384 slots is 0.7 MB above 1,024 (2.6 against 1.9 MB), likely the bench server's own per-slot state at `bench/http1-server.ts:269-272`; accept it or make that lazy; (2) ping, query and body throughput were never compared with `wrk`. Item 3, a stale preallocation claim in `bench/README.md`, is already met per the owner's comment of 2026-11-12. Also unblocked: the same lazy-slot change for `Http1TlsServer`, `std/net/tls-tcp.ts`, `http2*` and `http3*`.
@@ -340,13 +352,27 @@ Depends on: none.
 Issue #1780 (BENCHMARKS.md section `http-lean-get`; verdict STOP stands): ns per component with a band (head parse apart from header spans, and Date including its clock read, estimated up to about 28 ns); the serving connection's bytes summed by object and checked against RSS; `bench/http1-server.ts` over `NET_LISTEN_RING` (`BENCH_RING=1`) at 18,000 connections, plus idle memory with the load stopped. Related #1295, the same kind of gap: the x86 gain of the 16-byte head scans is unproven (aarch64 parse 474.3 to 314.5 ns; x86 ranges overlap) and the submission stages lack ns; its small defects were fixed per the owner's comment of 2026-11-12.
 Likely files: `bench/http1-conn/`, `bench/http1-server.ts`, `bench/http1-e2e/`, `docs/BENCHMARKS.md`.
 
-**Waiting on a decision (2026-11-25).** Left out of the `/feature` run: its x86 parse proof needs hardware counters (the container has no `perf` and `perf_event_paranoid` is 2), and the 18,000-connection ring and idle runs need a quiet machine. The stage's issue carries `needs-decision` with the question.
+**Decided (owner, via /decide, 2026-11-25, on #1780): split.** This stage keeps the component ns and the serving-connection bytes against RSS, measured in a cloud container with a base-against-base band. The x86 PMU parse proof and the 18,000-connection `NET_LISTEN_RING` and idle runs are `bench-lean-machine`, which waits for a machine with counters and low noise. #1295 belongs to that half, so this stage's PR does not close it.
+
+Owns: `bench/http1-conn/**`, `docs/BENCHMARKS.md` (its `http-lean-get` section only).
+Depends on: none.
+
+## WP39 H1 — the x86 head-scan proof and the 18,000-connection ring runs, on a machine with counters
+The half of #1780 that `bench-lean-record` leaves: `lean-ring-idle` and `x86-parse-pmu`, with #1295. Deferred until a machine with x86 hardware counters (`perf` usable) and low noise is available; agents do not build it before then.
+Likely files: `bench/http1-server.ts`, `bench/http1-e2e/`, `bench/http1-conn/`, `docs/BENCHMARKS.md`.
 
 ## WP39 H1 — measure the syscall and quickack benches on the reported box
 Issue #1092 (after #1085 and #1088). `bench/syscall-cost/run.sh` splits a request's kernel time only with `--split` from a separate run; `bench/quickack` measured `none`, `once0`, `reset0` and `reset1` but only reasoned about the route, BPF sockops and sysctl alternatives; every figure is from cloud VMs on Linux 6.18, never the reported Xeon Platinum 8260 on Linux 6.8. Actionable if it holds there: the per-response `netSetOption(conn, NET_TCP_QUICKACK, 0)` buys nothing and costs one syscall (3.6 to about 2.6 syscalls a request). Needs access to that box.
 Likely files: `bench/syscall-cost/`, `bench/quickack/`, the Conduit submission's QUICKACK call.
 
-**Waiting on a decision (2026-11-25).** Left out of the `/feature` run: it needs the reported Xeon Platinum 8260 box on Linux 6.8, which the run cannot reach. The stage's issue carries `needs-decision` with the question.
+**Decided (owner, via /decide, 2026-11-25, on #1092): split.** This stage builds the `run.sh` split and measures the route, BPF sockops and sysctl QUICKACK alternatives in a cloud container, and records that the figures are from a cloud VM. If an alternative needs a capability the container lacks (`CAP_NET_ADMIN`, BPF), the record says so with the refusal rather than an estimate. The per-response QUICKACK call stays: removing it waits for the reported box.
+
+Owns: `bench/syscall-cost/**`, `bench/quickack/**`, `bench/README.md`, `docs/BENCHMARKS.md` (its `Syscall cost` section only).
+Depends on: none.
+
+## WP39 H1 — the syscall and quickack benches on the reported Xeon 8260 box
+The half of #1092 that `bench-syscall-box` leaves: `quickack-reported-box`. Deferred until someone with access to the reported Xeon Platinum 8260 on Linux 6.8 runs it.
+Likely files: `bench/syscall-cost/`, `bench/quickack/`, the Conduit submission's QUICKACK call.
 
 ## WP39 H1 — the http1 plaintext codec follow-up, the /plaintext Ir target and the /json regression
 Issue #1525 (after #1416). Open: explicit `/plaintext` at 3,873 to 3,883 Ir against the 3,251 target (the owner accepted the miss); explicit `/json` worse in four cells from 128 to 512 connections, as low as −18.7%, cause not isolated (candidates #1460's section scan and #1457's head state); `varied` +1.1% wall against a ±0.9% band; `node bench/http1-parse/run.mjs` refuses to run on main because `new`'s checksum 5937a130 no longer matches the pinned `b29eddcc`; browser-shaped `/json` at c=256 is −5.9% and −11.7%. Fuzz sanitizer replays did not run in the acceptance container.
@@ -354,8 +380,10 @@ Likely files: `std/net/http1-server.ts`, `bench/http1-parse/`, `bench/techempowe
 
 The owner accepted the `/plaintext` Ir miss on the issue, so `codec-plaintext-ir` records it rather than cutting Ir. Fuzz sanitizer replays are out of this stage.
 
-Owns: `std/net/http1-server.ts`, `bench/http1-parse/**`, `bench/techempower/**`, `docs/BENCHMARKS.md`. A codec change that moves a `docs/security/http1-codec.md` row is recorded in the PR body for a follow-up, since g7-websocket owns that record while both run.
-Depends on: date-header (`docs/BENCHMARKS.md`) and g7-h2c-preface (`std/net/http1-server.ts`).
+Owns: `std/net/http1-server.ts`, `bench/http1-parse/**`, `bench/techempower/**`, `tests/link/net_http1_server*/**`, `docs/BENCHMARKS.md` (its http1 codec and TechEmpower sections only), `tests/nish-cmp.js` (its `DECLARED` entries only). A codec change that moves a `docs/security/http1-codec.md` row is recorded in the PR body for a follow-up, since g7-websocket owns that record while both run.
+Depends on: none (date-header and g7-h2c-preface merged).
+
+**Shared by section (second feature run, 2026-11-27).** `docs/BENCHMARKS.md` and `tests/nish-cmp.js` are named by more than one stage that runs at once. Each stage edits only the section or `DECLARED` entries its `Owns` line names, the stages merge one at a time, and a textual conflict a merge of `main` brings into either file is resolved by the stage's worker.
 
 ## Acceptance criteria
 Checked on `main` after the last merge of the run (stages left out of it are not checked).
@@ -370,6 +398,10 @@ Checked on `main` after the last merge of the run (stages left out of it are not
 8. The inline read-buffer header and the slot-indexed hot block are each measured with `bench/http1-conn` and adopted with a gain beyond the band or recorded as no gain.
 9. `ci-gate` is green on `main` after the last merge.
 10. Each built stage's issue is closed by its merged PR.
+11. `bash bench/syscall-cost/run.sh` prints a request's kernel time split into entry and exit and TCP work in one run, and `bench/quickack` records a measured figure, or the refusal that stopped it, for each of the route, BPF sockops and sysctl alternatives, stating that the figures are from a cloud VM.
+12. `docs/BENCHMARKS.md` `http-lean-get` gives ns for head parse, header spans and Date including its clock read, each with a base-against-base band, and the serving connection's bytes summed by object and checked against RSS.
+
+Criteria 1, 2, 4, 5 and 6 were checked by the first run (2026-11-26); the second run checks 3 and 7 to 12.
 
 ## Out of scope
 - **E9, submitting the entry to TechEmpower.** TechEmpower archived TechEmpower/FrameworkBenchmarks on 2026-03-24 ([its issue 10932](https://github.com/TechEmpower/FrameworkBenchmarks/issues/10932)) and takes no entries; #1859 is closed as not planned. The entry stays in `bench/techempower/` as this repository's benchmark, and a public number goes through [WP71](https://github.com/amritk/nish/pull/1809)'s HttpArena entry.
