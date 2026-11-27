@@ -1555,11 +1555,15 @@ export class HttpHandler {
 
   /** Hands the carrier as much of `r`'s pending bytes as it takes. */
   private pushPending(r: HttpRequest, conn: Http1Connection): void {
-    const left: i32 = handlerSub(r.pendingEnd, r.pendingStart)
-    if (left === 0) {
+    const pending: u8[] = r.pending
+    const start: i32 = r.pendingStart
+    const end: i32 = r.pendingEnd
+    // `keep` holds `start <= end <= pending.length`; the test says so where
+    // the checker reads it, and an empty window has nothing to hand over.
+    if (start < 0 || start >= end || end > toI32(pending.length)) {
       return
     }
-    const taken: i32 = conn.write(r.pending, r.pendingStart, left)
+    const taken: i32 = conn.write(pending, start, end - start)
     if (taken > 0) {
       r.pendingStart = handlerAdd(r.pendingStart, taken)
     }
@@ -2064,7 +2068,14 @@ export class HttpHandler {
     }
     let taken: i32 = 0
     if (r.pendingEnd === r.pendingStart) {
-      taken = conn.write(buf, off, len)
+      // `handlerOutside` refused this window above; the test is here again,
+      // next to the call, where the checker reads it.
+      const end: i32 = handlerAdd(off, len)
+      if (off < 0 || off > end || end > toI32(buf.length)) {
+        this.abandon(r)
+        return this.refused(`HttpHandler.write: the window ${off} + ${len} is outside its ${buf.length} bytes`)
+      }
+      taken = conn.write(buf, off, end - off)
       if (taken === H1_AGAIN) {
         taken = 0
       } else if (taken < 0) {
