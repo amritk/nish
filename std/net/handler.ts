@@ -133,8 +133,10 @@ import {
   HTTP_CODING_IDENTITY,
   HTTP_CODING_NONE,
   HTTP_DECODE_TOO_LARGE,
+  HTTP_CODING_BAD_WINDOW,
   HttpBodyDecoder,
-  httpContentEncoding,
+  httpBodyDecoderFault,
+  httpTryContentEncoding,
 } from "nish/net/http-compress"
 
 /** `HandlerLimits.maxWaitMs`' most: a second, the interval `bodyTimeout` is checked at. */
@@ -865,8 +867,8 @@ export class HttpHandler {
   private allowBytes: u8[][]
   private jsonType: u8[]
   private problemType: u8[]
-  /** Decodes `gzip` and `deflate` bodies under `HandlerLimits.maxDecoded`. */
-  private decoder: HttpBodyDecoder
+  /** Decodes `gzip` and `deflate` bodies under `HandlerLimits.maxDecoded`; null while that is 0. */
+  private decoder: HttpBodyDecoder | null
   private noFields: u8[][]
   /** Per length: the array `start` gathers an answer's fields and the fields `field` added into, kept for the answers after. */
   private namesBy: u8[][][]
@@ -931,7 +933,7 @@ export class HttpHandler {
   constructor(limits: HandlerLimits, listener: i32, router: Router, loop: i32 = -1) {
     handlerCheckLimits(limits)
     this.maxDecoded = limits.maxDecoded
-    this.decoder = new HttpBodyDecoder(limits.maxDecoded > 0 ? limits.maxDecoded : 1)
+    this.decoder = handlerDecoder(limits.maxDecoded)
     this.bodyTimeout = toI64(limits.bodyTimeout) * HANDLER_NANOS_PER_MS
     this.minEvents = limits.minEvents
     this.maxWaitMs = limits.maxWaitMs
@@ -1505,7 +1507,12 @@ export class HttpHandler {
       const valueStart: i32 = spans[at + 2]
       const valueEnd: i32 = spans[at + 3]
       if (handlerSpanIs(r.head, spans[at], spans[at + 1], "content-encoding")) {
-        const named: i32 = httpContentEncoding(r.head, valueStart, valueEnd)
+        const named: i32 = httpTryContentEncoding(r.head, valueStart, valueEnd)
+        if (named === HTTP_CODING_BAD_WINDOW) {
+          // The spans are the parser's own, so this is a head the handler cannot read.
+          r.refusal = toI32(400)
+          return
+        }
         // A second field stacks its codings on the first's (RFC 9110 §5.3).
         coding = coding === HTTP_CODING_IDENTITY ? named : HTTP_CODING_NONE
       }
@@ -1513,14 +1520,19 @@ export class HttpHandler {
     if (coding !== HTTP_CODING_GZIP && coding !== HTTP_CODING_DEFLATE) {
       return
     }
-    const got: i32 = this.decoder.decode(coding, r.body, HANDLER_ZERO, r.bodyLength)
+    const decoder = this.decoder
+    if (decoder === null) {
+      return
+    }
+    // The window is the body's own, so `tryDecode`'s bad-call answer, a 400 below, cannot come.
+    const got: i32 = decoder.tryDecode(coding, r.body, HANDLER_ZERO, r.bodyLength)
     if (got < 0) {
       r.refusal = got === HTTP_DECODE_TOO_LARGE ? toI32(413) : toI32(400)
       return
     }
     // The buffers change hands, so neither is copied or grown twice.
-    const decoded: u8[] = this.decoder.output
-    this.decoder.output = r.body
+    const decoded: u8[] = decoder.output
+    decoder.output = r.body
     r.body = decoded
     r.bodyLength = got
     r.decodedFrom = coding
@@ -2724,6 +2736,18 @@ export const openHttpHandler = (
     return Err(`HttpHandler: pollCreate failed: ${loop}`)
   }
   return Ok(new HttpHandler(limits, listener, router, loop))
+}
+
+/**
+ * The body decoder for a `maxDecoded` of `limit`, or null for 0, which
+ * decodes nothing (`handlerCheckLimits` has refused a negative one).
+ */
+const handlerDecoder = (limit: i32): HttpBodyDecoder | null => {
+  const fault: string = httpBodyDecoderFault(limit)
+  if (fault.length > 0) {
+    return null
+  }
+  return new HttpBodyDecoder(limit)
 }
 
 /** Panics unless `limits` can make a handler: a limit below its least is the program's mistake. */
