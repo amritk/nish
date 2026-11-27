@@ -12334,6 +12334,14 @@ const DECLARED = [
     changelog: CHECKED_CONFIG,
     why: "the program calls routerChecked, which the seed's nish/net/router does not export, so only the candidate compiles it",
   },
+  // #2385 S3: arrays.ts's `squares` refuses an out-of-range count before
+  // `new Array`, which the candidate's strict default accepts.
+  {
+    program: "examples/arrays.ts",
+    file: "exit",
+    changelog: "add, multi and arrays build without --allow-panics",
+    why: "squares checks its count before `new Array`, which the candidate's strict default proves and the seed refuses as an array-length panic site",
+  },
   // #2297: the bounds walk proves `end - start` of two index locals with
   // `0 <= start <= end` cannot overflow, so `hasTwinWord`'s `i - from` and
   // the type table's `to - from` drop their overflow checks.

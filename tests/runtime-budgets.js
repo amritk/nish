@@ -1361,8 +1361,18 @@ export const RUNTIME_BUDGETS = [
  * does not always shrink the module (#1257): clang 18 runs one itself after the link
  * and keeps the `target_features` section for it, which took add.wasm to 150 bytes.
  * build.sh's own pass drops that section again; with binaryen 132 it gives add.wasm
- * 74 / 93 / 68, arrays.wasm 1,713 / 970 / 876, results.wasm 72 / 90 / 69 and label.wasm
- * 12,464 / 11,710 / 11,207, which these ceilings do not pin.
+ * 106 / 115 / 99, arrays.wasm 1,851 / 1,074 / 987, results.wasm 72 / 90 / 69 and
+ * label.wasm 12,464 / 11,710 / 11,207, which these ceilings do not pin.
+ *
+ * add.ts and arrays.ts answer their overflows (examples-strict S3, #2385, measured
+ * 2026-11-27): `add` and `sumI32` return `Result<i32, i32>`, `squares` and `sumI64`
+ * check their inputs and exit. Of add's loader growth (828 bytes raw), 350 are the
+ * Result word's decoder `resultOut`, 361 its encoder `resultIn`, which only a `Result`
+ * parameter calls and the loader emits whenever a signature has a `Result`, and the
+ * rest the call's wrapper; arrays' loader grows by the same three. add.wasm's 20 bytes
+ * are the two range checks. arrays.wasm grows 210 bytes over main's build (2,039; its
+ * ceiling of 2,091 predates #2207): code 164 (the checks, the stderr writes and the
+ * exits), the two messages 40, a signature 6.
  *
  * label.ts is the string row (WP50 stage 4, measured 2026-11-08): a template with an
  * `i32` and an `f64` links runtime-text.c beside runtime-wasm.c. Of its 13,046 bytes,
@@ -1386,16 +1396,21 @@ export const WASM_HOST_SIZE_BUDGETS = [
   {
     src: "examples/add.ts",
     runtime: false,
-    wasm: [102, 111, 87],
-    loader: [1625, 732, 625],
-    inline: [396, 253, 223],
+    // Raised for the Result answer (examples-strict S3): wasm 102/111/87 to 122/127/126,
+    // loader 1625/732/625 to 2453/1073/940, inline 396/253/223 to 475/274/235.
+    wasm: [122, 127, 126],
+    loader: [2453, 1073, 940],
+    inline: [475, 274, 235],
   },
   {
     src: "examples/arrays.ts",
     runtime: true,
-    wasm: [2091, 1092, 970],
-    loader: [4560, 1602, 1399],
-    inline: [6163, 1468, 1267],
+    // Raised for the Result answer (examples-strict S3): wasm 2091/1092/970 to
+    // 2249/1182/1077, loader 4560/1602/1399 to 5372/1909/1679, inline 6163/1468/1267
+    // to 6666/1578/1391.
+    wasm: [2249, 1182, 1077],
+    loader: [5372, 1909, 1679],
+    inline: [6666, 1578, 1391],
   },
   {
     src: "examples/results.ts",
@@ -1454,21 +1469,26 @@ export const WASM_HOST_SIZE_BUDGETS = [
  * and `new BigInt64Array(xs.length)` are proven non-negative, so their length
  * checks and panic blocks leave the IR (`squares`' `new Int32Array(n)` keeps
  * its own). The `.d.ts` and the loader are unchanged.
+ *
+ * examples-strict S3 (#2385) moved all four digests of add.ts and arrays.ts: `add`
+ * and `sumI32` answer a `Result<i32, i32>` whose `Err` arm is the overflow, so their
+ * `.d.ts` and loader read the Result word, and `squares` and `sumI64` check their
+ * inputs instead of panicking, so both builds of the `.wasm` change.
  */
 export const WASM_PLAIN_DIGESTS = [
   {
     src: "examples/add.ts",
-    dts: "a778903f14bc84f10b073b3596be86f4afee5b2f6ef357f0259fd4398b506d2c",
-    loader: "8ff7c215c5a084df79f7bc3d88b82d0137422cddeb1bbea8bb958890c8cc792a",
-    wasm: "6440497d7438b6f38e8adbc6f31fa1b265825fde3f85e02fc253e4ddc5eeccdc",
-    host: "a57f2f52343518d5d351f91d2a7d40fa6281a20fb8b3be7d116d14e8db6daae6",
+    dts: "f4c27c6af8ec4eed9366b44eb5eb5dc136540c861fc6175e5399ae2ac8415135",
+    loader: "401a7f184a2301eae0f06d6ed7ced6981efed3ed8d8399b2942b37a71938c16f",
+    wasm: "c1da26806667b318710fc77b6e1f08f3342bddf13ba89cdc1ff27a4d862fb9a5",
+    host: "bbef5a283aae7553c4c607f1dff84afa008f90793fe3b98d6006ae4b02f212e5",
   },
   {
     src: "examples/arrays.ts",
-    dts: "e01467ab59357645168a86b4defe2aa137a0c2395e1b211993379957899154b7",
-    loader: "894b7789a0be7f7fb39bdcd252d58dd321e6912cb425db7e459f0cbc11c2500a",
-    wasm: "0072d08fedfcfc3c994874791197b1dbe78b12549cefb12d8338ce545036d9f3",
-    host: "887b960efd3aafb2ae62bfcf0a49e8d3a146a8afaef7ab1fe96111295e5eba67",
+    dts: "e395d58a260c322bd8aa0a0aed484d5d23a1d1d52edda43a234c8783b629a48d",
+    loader: "aade9a0e4c6e1788f274c90bd1b0bf4c5c2ff5cac0e6a14f17dffa3193cfee91",
+    wasm: "b679e8a9fbf0a32220b4e5bcfb4c722dc3effaa69bf884d78c3a04e9f3999746",
+    host: "0912699b41391eb55e60e13b5fbc560b01019fa95b79ad273163d0121b5cf29d",
   },
   {
     src: "examples/results.ts",
