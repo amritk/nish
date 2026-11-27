@@ -235,10 +235,12 @@ const rsaSignHalfWidth = (k: i32): i32 => {
  */
 const rsaSignKeyBytes = (der: u8[], k: i32, spans: RsaSignSpan[]): u8[] => {
   const w: i32 = rsaSignHalfWidth(k)
-  if (w === 0 || toI32(spans.length) !== 8) {
+  // The bounds restate rsaSignHalfWidth's, so the prover sees the sizes fit.
+  if (k < 256 || k > 512 || w < 1 || w > 256 || toI32(spans.length) !== 8) {
     return []
   }
-  const out: u8[] = new Array<u8>(4 * k + 9 * w)
+  const size: i32 = 4 * k + 9 * w
+  const out: u8[] = new Array<u8>(size)
   for (let i: i32 = 0; i < 8; i++) {
     const at: i32 = i < 3 ? i * k : 3 * k + (i - 3) * w
     rsaSignPlace(out, at, i < 3 ? k : w, der, spans[i])
@@ -375,7 +377,9 @@ export const rsaParsePrivateKey = (der: u8[], start: i32, end: i32): Secret<u8[]
   }
   const w: i32 = rsaSignHalfWidth(ne - ns)
   for (let i: i32 = 3; i < toI32(spans.length); i++) {
-    if (spans[i].end - spans[i].start > w) {
+    const from: i32 = spans[i].start
+    const to: i32 = spans[i].end
+    if (from < 0 || to < 0 || to - from > w) {
       return null
     }
   }
@@ -1014,7 +1018,11 @@ const rsaSignWindowStep = (
   for (let j: i32 = 0; j < 16; j++) {
     const mask: u32 = ctEq(toU32(j), nibble)
     for (let l: i32 = 0; l < count; l++) {
-      sel[l] = sel[l] | (table[j * count + l] & mask)
+      // Always true after the length test above; it is here for the prover.
+      const at: i32 = j * count + l
+      if (at < toI32(table.length)) {
+        sel[l] = sel[l] | (table[at] & mask)
+      }
     }
   }
   rsaSignMontMul(acc, acc, sel, n, n0inv, t, count)
@@ -1270,7 +1278,11 @@ const rsaSignPow = (
   rsaSignMontMul(entry, one, r2, n, n0inv, t, count)
   for (let j: i32 = 0; j < 16; j++) {
     for (let l: i32 = 0; l < count; l++) {
-      table[j * count + l] = entry[l]
+      // Always true after the length test above; it is here for the prover.
+      const at: i32 = j * count + l
+      if (at < toI32(table.length)) {
+        table[at] = entry[l]
+      }
     }
     rsaSignMontMul(entry, entry, mm, n, n0inv, t, count)
   }

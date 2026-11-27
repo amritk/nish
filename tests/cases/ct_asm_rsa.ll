@@ -490,13 +490,14 @@ for.end:
   ret void
 }
 
-define internal void @rsaSignWindowStep(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %acc, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %sel, i32 noundef %nibble, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %n, i32 noundef %n0inv, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %t, i32 noundef %count) #1 {
+define internal void @rsaSignWindowStep(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %acc, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %sel, i32 noundef %nibble, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %n, i32 noundef %n0inv, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %t, i32 noundef %count) #0 {
 entry:
   %s.addr = alloca i32, align 4
   %l.addr = alloca i32, align 4
   %j.addr = alloca i32, align 4
   %mask.addr = alloca i32, align 4
   %l.addr.1 = alloca i32, align 4
+  %at.addr = alloca i32, align 4
   %0 = icmp slt i32 %count, 1
   br i1 %0, label %lor.end.2, label %lor.rhs.2
 
@@ -580,11 +581,11 @@ for.inc.1:
 
 for.end.1:
   store i32 0, i32* %j.addr, align 4
-  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %sel, i64 0, i32 2
-  %29 = load i8*, i8** %28, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 0
-  %31 = load i64, i64* %30, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 0
+  %29 = load i64, i64* %28, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %31 = load i8*, i8** %30, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %sel, i64 0, i32 2
   %33 = load i8*, i8** %32, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   br label %for.cond.2
 
@@ -603,11 +604,11 @@ for.body.2:
   %42 = call i32 asm "", "=r,0"(i32 %41) readnone nounwind
   store i32 %42, i32* %mask.addr, align 4
   store i32 0, i32* %l.addr.1, align 4
-  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %sel, i64 0, i32 2
-  %44 = load i8*, i8** %43, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %45 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 0
-  %46 = load i64, i64* %45, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %47 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 0
+  %44 = load i64, i64* %43, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %45 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %46 = load i8*, i8** %45, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %47 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %sel, i64 0, i32 2
   %48 = load i8*, i8** %47, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   br label %for.cond.3
 
@@ -617,50 +618,53 @@ for.cond.3:
   br i1 %50, label %for.body.3, label %for.end.3
 
 for.body.3:
-  %51 = load i32, i32* %l.addr.1, align 4
-  %52 = sext i32 %51 to i64
+  %51 = load i32, i32* %j.addr, align 4
+  %52 = mul nsw i32 %51, %count
   %53 = load i32, i32* %l.addr.1, align 4
-  %54 = sext i32 %53 to i64
-  %55 = bitcast i8* %44 to i32*
-  %56 = getelementptr inbounds i32, i32* %55, i64 %54
-  %57 = load i32, i32* %56, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %58 = load i32, i32* %j.addr, align 4
-  %59 = mul nsw i32 %58, %count
+  %54 = add nsw i32 %52, %53
+  store i32 %54, i32* %at.addr, align 4
+  %55 = load i32, i32* %at.addr, align 4
+  %56 = trunc i64 %44 to i32
+  %57 = icmp slt i32 %55, %56
+  br i1 %57, label %if.then.1, label %if.end.1
+
+if.then.1:
+  %58 = load i32, i32* %l.addr.1, align 4
+  %59 = sext i32 %58 to i64
   %60 = load i32, i32* %l.addr.1, align 4
-  %61 = add nsw i32 %59, %60
-  %62 = sext i32 %61 to i64
-  %63 = icmp ult i64 %62, %46
-  br i1 %63, label %bounds.ok, label %bounds.fail
+  %61 = sext i32 %60 to i64
+  %62 = bitcast i8* %48 to i32*
+  %63 = getelementptr inbounds i32, i32* %62, i64 %61
+  %64 = load i32, i32* %63, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %65 = load i32, i32* %at.addr, align 4
+  %66 = sext i32 %65 to i64
+  %67 = bitcast i8* %46 to i32*
+  %68 = getelementptr inbounds i32, i32* %67, i64 %66
+  %69 = load i32, i32* %68, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %70 = load i32, i32* %mask.addr, align 4
+  %71 = and i32 %69, %70
+  %72 = or i32 %64, %71
+  %73 = bitcast i8* %48 to i32*
+  %74 = getelementptr inbounds i32, i32* %73, i64 %59
+  store i32 %72, i32* %74, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  br label %if.end.1
 
-bounds.fail:
-  call void @nish_panic_index(i64 %62, i64 %46)
-  unreachable
-
-bounds.ok:
-  %64 = bitcast i8* %48 to i32*
-  %65 = getelementptr inbounds i32, i32* %64, i64 %62
-  %66 = load i32, i32* %65, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %67 = load i32, i32* %mask.addr, align 4
-  %68 = and i32 %66, %67
-  %69 = or i32 %57, %68
-  %70 = bitcast i8* %44 to i32*
-  %71 = getelementptr inbounds i32, i32* %70, i64 %52
-  store i32 %69, i32* %71, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+if.end.1:
   br label %for.inc.3
 
 for.inc.3:
-  %72 = load i32, i32* %l.addr.1, align 4
-  %73 = add nsw i32 %72, 1
-  store i32 %73, i32* %l.addr.1, align 4
+  %75 = load i32, i32* %l.addr.1, align 4
+  %76 = add nsw i32 %75, 1
+  store i32 %76, i32* %l.addr.1, align 4
   br label %for.cond.3
 
 for.end.3:
   br label %for.inc.2
 
 for.inc.2:
-  %74 = load i32, i32* %j.addr, align 4
-  %75 = add nsw i32 %74, 1
-  store i32 %75, i32* %j.addr, align 4
+  %77 = load i32, i32* %j.addr, align 4
+  %78 = add nsw i32 %77, 1
+  store i32 %78, i32* %j.addr, align 4
   br label %for.cond.2
 
 for.end.2:
@@ -674,7 +678,7 @@ entry:
   ret void
 }
 
-define void @rsaSignWindowStepAt(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %acc, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %sel, i32 noundef %nibble, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %n, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %t) #1 {
+define void @rsaSignWindowStepAt(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %acc, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %sel, i32 noundef %nibble, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %n, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %t) #0 {
 entry:
   call void @rsaSignWindowStep(%struct.nish_array* %acc, %struct.nish_array* %table, %struct.nish_array* %sel, i32 %nibble, %struct.nish_array* %n, i32 1866257063, %struct.nish_array* %t, i32 64)
   ret void

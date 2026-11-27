@@ -40,10 +40,10 @@ function rsaSignMontMul(out: u32[], a: u32[], b: u32[], n: u32[], n0inv: u32, t:
   local +13:11 last: u64 (const)
   callee +17:3 rsaSignReduce -> @rsaSignReduce
 function rsaSignWindowStep(acc: u32[], table: u32[], sel: u32[], nibble: u32, n: u32[], n0inv: u32, t: u32[], count: i32): void -> @rsaSignWindowStep
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: count n0inv
-  calls: nish_panic_index rsaSignMontMul
+  calls: rsaSignMontMul
   pointer acc: size=0 writesThrough=true captured=false passedTo=rsaSignMontMul#0 rsaSignMontMul#1 rsaSignMontMul#2 rsaSignMontMul#0 rsaSignMontMul#1
   pointer table: size=0 writesThrough=false captured=false
   pointer sel: size=0 writesThrough=true captured=false passedTo=rsaSignMontMul#2
@@ -56,7 +56,8 @@ function rsaSignWindowStep(acc: u32[], table: u32[], sel: u32[], nibble: u32, n:
   local +2:12 j: i32 (let)
   local +3:11 mask: u32 (const)
   local +4:14 l: i32 (let)
-  callee +8:3 rsaSignMontMul -> @rsaSignMontMul
+  local +6:13 at: i32 (const)
+  callee +12:3 rsaSignMontMul -> @rsaSignMontMul
 function rsaSignMontMulAt(out: u32[], a: u32[], b: u32[], n: u32[], t: u32[], count: i32): void -> @rsaSignMontMulAt [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rsaSignMontMul
@@ -70,7 +71,7 @@ function rsaSignMontMulAt(out: u32[], a: u32[], b: u32[], n: u32[], t: u32[], co
   stackSites=0 stackLocals=0
   callee +0:3 rsaSignMontMul -> @rsaSignMontMul
 function rsaSignWindowStepAt(acc: u32[], table: u32[], sel: u32[], nibble: u32, n: u32[], t: u32[]): void -> @rsaSignWindowStepAt [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rsaSignWindowStep
   escaping: nibble
   calls: rsaSignWindowStep

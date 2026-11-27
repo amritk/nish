@@ -110,7 +110,11 @@ const rsaSignWindowStep = (
   for (let j: i32 = 0; j < 16; j++) {
     const mask: u32 = ctEq(toU32(j), nibble)
     for (let l: i32 = 0; l < count; l++) {
-      sel[l] = sel[l] | (table[j * count + l] & mask)
+      // Always true after the length test above; it is here for the prover.
+      const at: i32 = j * count + l
+      if (at < toI32(table.length)) {
+        sel[l] = sel[l] | (table[at] & mask)
+      }
     }
   }
   rsaSignMontMul(acc, acc, sel, n, n0inv, t, count)
