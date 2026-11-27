@@ -10698,6 +10698,8 @@ const wirePanicFreeDeclared = () => [
 // DECLARED: each names the program and the file this change moves, listed
 // from a nish-cmp run against the 0.44.0 seed with those files undeclared.
 const HASH_MAC_KDF = "hashes, MACs and key derivation"
+/** WP91 S3's release-note words: the squash subject carries them verbatim. */
+const WP91_S3 = "json, text, temporal, sqlite and sync"
 /** Why each module of WP83 S1 writes different IR. */
 const HASH_MAC_KDF_WHY = Object.fromEntries([
   ...["base64url", "hkdf", "hmac", "scram", "sha1", "sha256", "sha512"].map((name) => [
@@ -23769,6 +23771,20 @@ const DECLARED = [
     file: "exit",
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
+  },
+  // WP91 S3: the cast wraps of std/json*, text, temporal, sqlite and sync
+  // become proven sums, refusals or spelled wraps.
+  ...["bench/httparena/main.ts", "tests/link/httparena_entry/main.ts"].map((program) => ({
+    program,
+    file: "json-tokenizer.ll",
+    changelog: WP91_S3,
+    why: "std/json-tokenizer.ts's jsonTokSigned takes a negative number's `u64` difference only from a magnitude of at least 1 instead of casting a wrapping one, so json-tokenizer.ll moves",
+  })),
+  {
+    program: "tests/link/std_temporal_result/main.ts",
+    file: "temporal.ll",
+    changelog: WP91_S3,
+    why: "std/temporal.ts's sums, differences and products go through temporalAdd, temporalSub and temporalMul, which raise a RangeError where the result leaves the i64 range instead of wrapping, so temporal.ll moves",
   },
 ]
 
