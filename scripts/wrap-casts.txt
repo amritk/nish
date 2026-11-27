@@ -58,4 +58,3 @@
 3 std/net/tls/ticket.ts
 8 std/net/upstream.ts
 17 std/net/url.ts
-131 std/regex.ts

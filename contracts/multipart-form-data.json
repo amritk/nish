@@ -1,0 +1,2620 @@
+{
+  "$schema": "../build/vector/schemas/rfc-contract.json",
+  "contract": "multipart-form-data",
+  "source": {
+    "title": "Spec 0002: nish/net/multipart — reading multipart/form-data bodies",
+    "main": "multipart-form-data",
+    "sha256": "00f9d3ead39fa267b4442fcad82a879e53fd5e3669f32ea970396263eb03fdb3"
+  },
+  "sources": [
+    {
+      "id": "multipart-form-data",
+      "path": "../specs/multipart-form-data.xml"
+    },
+    {
+      "id": "rfc2046",
+      "rfc": 2046,
+      "path": "../rfcs/rfc2046.txt",
+      "file": "rfcs/rfc2046.txt",
+      "sha256": "7ac4096b9263e11a704f06892638258ac1ddc0394dd75ffdc171e7b5ba0123e0"
+    },
+    {
+      "id": "rfc7578",
+      "rfc": 7578,
+      "path": "../rfcs/rfc7578.txt",
+      "file": "rfcs/rfc7578.txt",
+      "sha256": "813277f91c6c65c9047da9e9a8f1f0c19c1fb4bb1aaeea944bcf3bbdcc2eef49"
+    }
+  ],
+  "target": {
+    "module": "nish/net/multipart"
+  },
+  "requirements": [
+    {
+      "id": "R-LINE-START",
+      "source": "rfc2046",
+      "section": "5.1.1",
+      "level": "MUST",
+      "quote": "The boundary delimiter MUST occur at the beginning of a line, i.e., following a CRLF, and the initial CRLF is considered to be attached to the boundary delimiter line rather than part of the preceding part."
+    },
+    {
+      "id": "R-COUNT",
+      "section": "3.1",
+      "level": "MUST",
+      "quote": "For a body that ends in its close delimiter, multipartPartCount MUST return how many parts the body holds."
+    },
+    {
+      "id": "R-PREAMBLE",
+      "section": "3.1",
+      "level": "MUST",
+      "quote": "The octets before the first delimiter and after the close delimiter MUST be skipped."
+    },
+    {
+      "id": "R-PADDING",
+      "section": "3.1",
+      "level": "MUST",
+      "quote": "Spaces and tabs between a delimiter and its CRLF, RFC 2046's transport padding, MUST be skipped."
+    },
+    {
+      "id": "R-NEAR",
+      "section": "3.1",
+      "level": "MUST",
+      "quote": "A CRLF, two hyphens and the boundary followed by anything but transport padding and a CRLF, or two more hyphens, MUST be read as data."
+    },
+    {
+      "id": "R-FIELD-CASE",
+      "section": "3.2",
+      "level": "MUST",
+      "quote": "A part's header field names MUST be matched without regard to case."
+    },
+    {
+      "id": "R-OTHER-FIELDS",
+      "section": "3.2",
+      "level": "MUST",
+      "quote": "A header field other than Content-Disposition and Content-Type MUST be ignored."
+    },
+    {
+      "id": "R-DISPOSITION",
+      "source": "rfc7578",
+      "section": "4.2",
+      "level": "MUST",
+      "quote": "Each part MUST contain a Content-Disposition header field [RFC2183] where the disposition type is \"form-data\"."
+    },
+    {
+      "id": "R-NAME",
+      "source": "rfc7578",
+      "section": "4.2",
+      "level": "MUST",
+      "quote": "The Content-Disposition header field MUST also contain an additional parameter of \"name\"; the value of the \"name\" parameter is the original field name from the form (possibly encoded; see Section 5.1)."
+    },
+    {
+      "id": "R-TYPE-CASE",
+      "section": "4.1",
+      "level": "MUST",
+      "quote": "The disposition type MUST be matched without regard to case."
+    },
+    {
+      "id": "R-DATA",
+      "section": "4.2",
+      "level": "MUST",
+      "quote": "multipartFieldData MUST return the data of the first part whose name is name, octet for octet: every octet from the empty line that ends its header fields to the CRLF of the delimiter after it."
+    },
+    {
+      "id": "R-ABSENT",
+      "section": "4.2",
+      "level": "MUST",
+      "quote": "multipartFieldData and multipartFieldFilename MUST return null when no part before the close delimiter has that name, and when the body is refused before one does."
+    },
+    {
+      "id": "R-FILENAME",
+      "section": "4.3",
+      "level": "MUST",
+      "quote": "multipartFieldFilename MUST return the filename parameter of the first part whose name is name as the sender wrote it, quotes removed: a backslash inside the quotes is an octet like any other, so a Windows path such as C:\\x.txt keeps its backslash, and a browser's escaped quote %22a%22.txt stays as given."
+    },
+    {
+      "id": "R-FILENAME-NULL",
+      "section": "4.3",
+      "level": "MUST",
+      "quote": "multipartFieldFilename MUST return null for a part with no filename parameter."
+    },
+    {
+      "id": "R-FILENAME-STAR",
+      "section": "4.3",
+      "level": "MUST NOT",
+      "quote": "A filename* parameter MUST NOT be read in place of filename."
+    },
+    {
+      "id": "R-BOUNDARY",
+      "section": "5",
+      "level": "MUST",
+      "quote": "multipartPartCount MUST return -1 for a boundary that is empty, longer than 70 octets, holds an octet outside RFC 2046's bchars or ends in a space."
+    },
+    {
+      "id": "R-UNTERMINATED",
+      "section": "5",
+      "level": "MUST",
+      "quote": "multipartPartCount MUST return -2 for a body with no opening delimiter, or whose part's header lines or data run to its end."
+    },
+    {
+      "id": "R-HEADER",
+      "section": "5",
+      "level": "MUST",
+      "quote": "multipartPartCount MUST return -3 for a header line that ends in a CR or LF alone, starts with a space or tab, or has no colon, and for a part with two Content-Type fields."
+    },
+    {
+      "id": "R-HEADERS",
+      "section": "5",
+      "level": "MUST",
+      "quote": "multipartPartCount MUST return -4 for a part with more than 16 header lines, or more than 8192 octets of them."
+    },
+    {
+      "id": "R-DISPOSITION-REFUSED",
+      "section": "5",
+      "level": "MUST",
+      "quote": "multipartPartCount MUST return -5 for a part with no Content-Disposition, two of them, one whose type is not form-data, or one with no name parameter."
+    },
+    {
+      "id": "R-PARTS",
+      "section": "5",
+      "level": "MUST",
+      "quote": "multipartPartCount MUST return -6 for a body of more than 64 parts."
+    }
+  ],
+  "exclusions": [],
+  "functions": [
+    {
+      "name": "multipartPartCount",
+      "params": [
+        {
+          "name": "body",
+          "type": "bytes"
+        },
+        {
+          "name": "boundary",
+          "type": "string"
+        }
+      ],
+      "returns": "i32"
+    },
+    {
+      "name": "multipartFieldData",
+      "params": [
+        {
+          "name": "body",
+          "type": "bytes"
+        },
+        {
+          "name": "boundary",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "multipartFieldFilename",
+      "params": [
+        {
+          "name": "body",
+          "type": "bytes"
+        },
+        {
+          "name": "boundary",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": "string?"
+    }
+  ],
+  "clauses": [
+    {
+      "kind": "vector",
+      "id": "C1",
+      "title": "a field and a file, as a browser sends them",
+      "covers": ["R-COUNT"],
+      "source": {
+        "command": "python3 -c 'import email;m=email.message_from_bytes(b\"Content-Type: multipart/form-data; boundary=b\\r\\n\\r\\n\"+bytes.fromhex(\"2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2261220d0a0d0a68690d0a2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2266223b2066696c656e616d653d22782e747874220d0a436f6e74656e742d547970653a20746578742f706c61696e0d0a0d0a78780d0a2d2d622d2d\"));print(len(m.get_payload()))'"
+      },
+      "section": "7",
+      "call": "multipartPartCount",
+      "args": [
+        {
+          "hex": "2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2261220d0a0d0a68690d0a2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2266223b2066696c656e616d653d22782e747874220d0a436f6e74656e742d547970653a20746578742f706c61696e0d0a0d0a78780d0a2d2d622d2d"
+        },
+        {
+          "str": "b"
+        }
+      ],
+      "expect": {
+        "int": 2
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "C2",
+      "title": "a preamble, padding, a boundary mid-line and an epilogue",
+      "covers": ["R-PREAMBLE", "R-PADDING", "R-LINE-START"],
+      "source": {
+        "command": "python3 -c 'import email;m=email.message_from_bytes(b\"Content-Type: multipart/form-data; boundary=b\\r\\n\\r\\n\"+bytes.fromhex(\"7072650d0a2d2d6220090d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2261220d0a0d0a782d2d6220790d0a2d2d622d2d0d0a657069\"));print(len(m.get_payload()))'"
+      },
+      "section": "7",
+      "call": "multipartPartCount",
+      "args": [
+        {
+          "hex": "7072650d0a2d2d6220090d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2261220d0a0d0a782d2d6220790d0a2d2d622d2d0d0a657069"
+        },
+        {
+          "str": "b"
+        }
+      ],
+      "expect": {
+        "int": 1
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "D1",
+      "title": "the second part's data",
+      "covers": ["R-DATA"],
+      "source": {
+        "command": "python3 -c 'import email;m=email.message_from_bytes(b\"Content-Type: multipart/form-data; boundary=b\\r\\n\\r\\n\"+bytes.fromhex(\"2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2261220d0a0d0a68690d0a2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2266223b2066696c656e616d653d22782e747874220d0a436f6e74656e742d547970653a20746578742f706c61696e0d0a0d0a78780d0a2d2d622d2d\"));print(m.get_payload()[1].get_payload(decode=True).hex())'"
+      },
+      "section": "7",
+      "call": "multipartFieldData",
+      "args": [
+        {
+          "hex": "2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2261220d0a0d0a68690d0a2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2266223b2066696c656e616d653d22782e747874220d0a436f6e74656e742d547970653a20746578742f706c61696e0d0a0d0a78780d0a2d2d622d2d"
+        },
+        {
+          "str": "b"
+        },
+        {
+          "str": "f"
+        }
+      ],
+      "expect": {
+        "hex": "7878"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "D2",
+      "title": "the CRLF before a delimiter is the delimiter's, the one before it the data's",
+      "covers": ["R-DATA", "R-LINE-START"],
+      "source": {
+        "command": "python3 -c 'import email;m=email.message_from_bytes(b\"Content-Type: multipart/form-data; boundary=b\\r\\n\\r\\n\"+bytes.fromhex(\"2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2261220d0a0d0a68690d0a0d0a2d2d622d2d\"));print(m.get_payload()[0].get_payload(decode=True).hex())'"
+      },
+      "section": "7",
+      "call": "multipartFieldData",
+      "args": [
+        {
+          "hex": "2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2261220d0a0d0a68690d0a0d0a2d2d622d2d"
+        },
+        {
+          "str": "b"
+        },
+        {
+          "str": "a"
+        }
+      ],
+      "expect": {
+        "hex": "68690d0a"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "D3",
+      "title": "a longer boundary after a CRLF and two hyphens is data",
+      "covers": ["R-NEAR"],
+      "source": {
+        "command": "python3 -c 'import email;m=email.message_from_bytes(b\"Content-Type: multipart/form-data; boundary=b\\r\\n\\r\\n\"+bytes.fromhex(\"2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2261220d0a0d0a780d0a2d2d62630d0a2d2d622d2d\"));print(m.get_payload()[0].get_payload(decode=True).hex())'"
+      },
+      "section": "7",
+      "call": "multipartFieldData",
+      "args": [
+        {
+          "hex": "2d2d620d0a436f6e74656e742d446973706f736974696f6e3a20666f726d2d646174613b206e616d653d2261220d0a0d0a780d0a2d2d62630d0a2d2d622d2d"
+        },
+        {
+          "str": "b"
+        },
+        {
+          "str": "a"
+        }
+      ],
+      "expect": {
+        "hex": "780d0a2d2d6263"
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-DATA",
+      "title": "the data of a one-part body is what was sent, whatever its octets",
+      "covers": ["R-DATA", "R-LINE-START"],
+      "forall": [
+        {
+          "name": "v",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 64
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "d",
+            "value": {
+              "call": "multipartFieldData",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n"
+                    },
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "var": "v"
+                        },
+                        {
+                          "ascii": "\r\n--Xq7Bound9z--"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "str": "Xq7Bound9z"
+                },
+                {
+                  "str": "f"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "notNull",
+              "args": [
+                {
+                  "var": "d"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "var": "d"
+                    }
+                  ]
+                },
+                {
+                  "var": "v"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-TWO",
+      "title": "two parts are counted, and the second is found by its name",
+      "covers": ["R-COUNT", "R-DATA"],
+      "forall": [
+        {
+          "name": "v",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 32
+        },
+        {
+          "name": "w",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "body",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n"
+                },
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "var": "v"
+                    },
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "ascii": "\r\n--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"g\"\r\n\r\n"
+                        },
+                        {
+                          "op": "concat",
+                          "args": [
+                            {
+                              "var": "w"
+                            },
+                            {
+                              "ascii": "\r\n--Xq7Bound9z--"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "d",
+            "value": {
+              "call": "multipartFieldData",
+              "args": [
+                {
+                  "var": "body"
+                },
+                {
+                  "str": "Xq7Bound9z"
+                },
+                {
+                  "str": "g"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "multipartPartCount",
+                  "args": [
+                    {
+                      "var": "body"
+                    },
+                    {
+                      "str": "Xq7Bound9z"
+                    }
+                  ]
+                },
+                {
+                  "int": 2
+                }
+              ]
+            },
+            {
+              "op": "notNull",
+              "args": [
+                {
+                  "var": "d"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "var": "d"
+                    }
+                  ]
+                },
+                {
+                  "var": "w"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-PREAMBLE",
+      "title": "a preamble and an epilogue of any octets are skipped",
+      "covers": ["R-PREAMBLE", "R-COUNT"],
+      "forall": [
+        {
+          "name": "p",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 32
+        },
+        {
+          "name": "e",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "multipartPartCount",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  {
+                    "var": "p"
+                  },
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "\r\n--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\nhi\r\n--Xq7Bound9z--"
+                      },
+                      {
+                        "var": "e"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "str": "Xq7Bound9z"
+              }
+            ]
+          },
+          {
+            "int": 1
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-PADDING",
+      "title": "any run of spaces and tabs after a delimiter is transport padding",
+      "covers": ["R-PADDING"],
+      "forall": [
+        {
+          "name": "t",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 16,
+          "alphabet": [" ", "\t"]
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "multipartPartCount",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  {
+                    "ascii": "--Xq7Bound9z"
+                  },
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "op": "utf8",
+                        "args": [
+                          {
+                            "var": "t"
+                          }
+                        ]
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "ascii": "\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\nhi\r\n--Xq7Bound9z--"
+                          },
+                          {
+                            "op": "utf8",
+                            "args": [
+                              {
+                                "var": "t"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "str": "Xq7Bound9z"
+              }
+            ]
+          },
+          {
+            "int": 1
+          }
+        ]
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-NEAR",
+      "title": "a longer boundary after a CRLF and two hyphens is data",
+      "covers": ["R-NEAR", "R-DATA"],
+      "forall": [
+        {
+          "name": "v",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 32
+        },
+        {
+          "name": "x",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 8,
+          "alphabet": ["alpha", "digit"]
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "kept",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "var": "v"
+                },
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "ascii": "\r\n--Xq7Bound9z"
+                    },
+                    {
+                      "op": "utf8",
+                      "args": [
+                        {
+                          "var": "x"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "d",
+            "value": {
+              "call": "multipartFieldData",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n"
+                    },
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "var": "kept"
+                        },
+                        {
+                          "ascii": "\r\n--Xq7Bound9z--"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "str": "Xq7Bound9z"
+                },
+                {
+                  "str": "f"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "notNull",
+              "args": [
+                {
+                  "var": "d"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "var": "d"
+                    }
+                  ]
+                },
+                {
+                  "var": "kept"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-NAME",
+      "title": "a part is found by the name it was sent under, and by no other",
+      "covers": ["R-DATA", "R-NAME"],
+      "forall": [
+        {
+          "name": "n",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 16,
+          "alphabet": ["alpha", "digit"]
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "body",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\""
+                },
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "op": "utf8",
+                      "args": [
+                        {
+                          "var": "n"
+                        }
+                      ]
+                    },
+                    {
+                      "ascii": "\"\r\n\r\nhi\r\n--Xq7Bound9z--"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "d",
+            "value": {
+              "call": "multipartFieldData",
+              "args": [
+                {
+                  "var": "body"
+                },
+                {
+                  "str": "Xq7Bound9z"
+                },
+                {
+                  "var": "n"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "notNull",
+              "args": [
+                {
+                  "var": "d"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "var": "d"
+                    }
+                  ]
+                },
+                {
+                  "op": "utf8",
+                  "args": [
+                    {
+                      "str": "hi"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "isNull",
+              "args": [
+                {
+                  "call": "multipartFieldData",
+                  "args": [
+                    {
+                      "var": "body"
+                    },
+                    {
+                      "str": "Xq7Bound9z"
+                    },
+                    {
+                      "op": "strConcat",
+                      "args": [
+                        {
+                          "var": "n"
+                        },
+                        {
+                          "str": "_"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-CASE",
+      "title": "a field name and a disposition type in another case are read",
+      "covers": ["R-FIELD-CASE", "R-TYPE-CASE"],
+      "forall": [
+        {
+          "name": "v",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\ncontent-disposition: FORM-DATA; name=f\r\n\r\n"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "var": "v"
+                          },
+                          {
+                            "ascii": "\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": 1
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nCONTENT-DISPOSITION: Form-Data; name=f\r\n\r\n"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "var": "v"
+                          },
+                          {
+                            "ascii": "\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": 1
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-OTHER",
+      "title": "a header field of any other name is ignored",
+      "covers": ["R-OTHER-FIELDS"],
+      "forall": [
+        {
+          "name": "n",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 16,
+          "alphabet": ["alpha"]
+        },
+        {
+          "name": "x",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 32,
+          "alphabet": ["alpha", "digit"]
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "d",
+            "value": {
+              "call": "multipartFieldData",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\nX-"
+                    },
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "op": "utf8",
+                          "args": [
+                            {
+                              "var": "n"
+                            }
+                          ]
+                        },
+                        {
+                          "op": "concat",
+                          "args": [
+                            {
+                              "ascii": ": "
+                            },
+                            {
+                              "op": "concat",
+                              "args": [
+                                {
+                                  "op": "utf8",
+                                  "args": [
+                                    {
+                                      "var": "x"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "ascii": "\r\n\r\nhi\r\n--Xq7Bound9z--"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "str": "Xq7Bound9z"
+                },
+                {
+                  "str": "f"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "notNull",
+              "args": [
+                {
+                  "var": "d"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "var": "d"
+                    }
+                  ]
+                },
+                {
+                  "op": "utf8",
+                  "args": [
+                    {
+                      "str": "hi"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-ABSENT",
+      "title": "a name no part has, and a body refused before its part, give null",
+      "covers": ["R-ABSENT"],
+      "forall": [
+        {
+          "name": "v",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "multipartFieldData",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "var": "v"
+                          },
+                          {
+                            "ascii": "\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  },
+                  {
+                    "str": "g"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "multipartFieldFilename",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "var": "v"
+                          },
+                          {
+                            "ascii": "\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  },
+                  {
+                    "str": "g"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "multipartFieldData",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n"
+                      },
+                      {
+                        "var": "v"
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  },
+                  {
+                    "str": "f"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-FILENAME",
+      "title": "a file name is returned as written, backslashes and percent signs kept",
+      "covers": ["R-FILENAME"],
+      "forall": [
+        {
+          "name": "f",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 32,
+          "alphabet": ["a", "Z", "0", "9", ".", "_", "-", ":", "/", "\\", "%"]
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "g",
+            "value": {
+              "call": "multipartFieldFilename",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"; filename=\""
+                    },
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "op": "utf8",
+                          "args": [
+                            {
+                              "var": "f"
+                            }
+                          ]
+                        },
+                        {
+                          "ascii": "\"\r\n\r\nxx\r\n--Xq7Bound9z--"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "str": "Xq7Bound9z"
+                },
+                {
+                  "str": "f"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "notNull",
+              "args": [
+                {
+                  "var": "g"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "var": "g"
+                    }
+                  ]
+                },
+                {
+                  "var": "f"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-FILENAME-NULL",
+      "title": "a part with no filename parameter has none, even with filename*",
+      "covers": ["R-FILENAME-NULL", "R-FILENAME-STAR"],
+      "forall": [
+        {
+          "name": "f",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 16,
+          "alphabet": ["alpha"]
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "multipartFieldFilename",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"; filename*=UTF-8''"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "op": "utf8",
+                            "args": [
+                              {
+                                "var": "f"
+                              }
+                            ]
+                          },
+                          {
+                            "ascii": "\r\n\r\nxx\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  },
+                  {
+                    "str": "f"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "multipartFieldFilename",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "op": "utf8",
+                            "args": [
+                              {
+                                "var": "f"
+                              }
+                            ]
+                          },
+                          {
+                            "ascii": "\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  },
+                  {
+                    "str": "f"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-BOUNDARY",
+      "title": "a boundary of 1 to 70 bchars frames, and one of 71 or more is -1",
+      "covers": ["R-BOUNDARY", "R-COUNT"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 90,
+          "alphabet": ["alpha", "digit"]
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "n",
+            "value": {
+              "call": "multipartPartCount",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "ascii": "--"
+                    },
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "op": "utf8",
+                          "args": [
+                            {
+                              "var": "b"
+                            }
+                          ]
+                        },
+                        {
+                          "op": "concat",
+                          "args": [
+                            {
+                              "ascii": "\r\nContent-Disposition: form-data; name=a\r\n\r\nhi\r\n--"
+                            },
+                            {
+                              "op": "concat",
+                              "args": [
+                                {
+                                  "op": "utf8",
+                                  "args": [
+                                    {
+                                      "var": "b"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "ascii": "--"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "var": "b"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "implies",
+              "args": [
+                {
+                  "op": "<=",
+                  "args": [
+                    {
+                      "op": "strLen",
+                      "args": [
+                        {
+                          "var": "b"
+                        }
+                      ]
+                    },
+                    {
+                      "int": 70
+                    }
+                  ]
+                },
+                {
+                  "op": "==",
+                  "args": [
+                    {
+                      "var": "n"
+                    },
+                    {
+                      "int": 1
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "implies",
+              "args": [
+                {
+                  "op": ">",
+                  "args": [
+                    {
+                      "op": "strLen",
+                      "args": [
+                        {
+                          "var": "b"
+                        }
+                      ]
+                    },
+                    {
+                      "int": 70
+                    }
+                  ]
+                },
+                {
+                  "op": "==",
+                  "args": [
+                    {
+                      "var": "n"
+                    },
+                    {
+                      "int": -1
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-BOUNDARY-CHARS",
+      "title": "an empty boundary, one with a semicolon and one ending in a space are -1",
+      "covers": ["R-BOUNDARY"],
+      "forall": [
+        {
+          "name": "b",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 16,
+          "alphabet": ["alpha", "digit"]
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "utf8",
+                    "args": [
+                      {
+                        "str": "--\r\nContent-Disposition: form-data; name=a\r\n\r\nhi\r\n----"
+                      }
+                    ]
+                  },
+                  {
+                    "str": ""
+                  }
+                ]
+              },
+              {
+                "int": -1
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "op": "utf8",
+                            "args": [
+                              {
+                                "op": "strConcat",
+                                "args": [
+                                  {
+                                    "var": "b"
+                                  },
+                                  {
+                                    "str": ";"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "concat",
+                            "args": [
+                              {
+                                "ascii": "\r\nContent-Disposition: form-data; name=a\r\n\r\nhi\r\n--"
+                              },
+                              {
+                                "op": "concat",
+                                "args": [
+                                  {
+                                    "op": "utf8",
+                                    "args": [
+                                      {
+                                        "op": "strConcat",
+                                        "args": [
+                                          {
+                                            "var": "b"
+                                          },
+                                          {
+                                            "str": ";"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "ascii": "--"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "strConcat",
+                    "args": [
+                      {
+                        "var": "b"
+                      },
+                      {
+                        "str": ";"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": -1
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "op": "utf8",
+                            "args": [
+                              {
+                                "op": "strConcat",
+                                "args": [
+                                  {
+                                    "var": "b"
+                                  },
+                                  {
+                                    "str": " "
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "concat",
+                            "args": [
+                              {
+                                "ascii": "\r\nContent-Disposition: form-data; name=a\r\n\r\nhi\r\n--"
+                              },
+                              {
+                                "op": "concat",
+                                "args": [
+                                  {
+                                    "op": "utf8",
+                                    "args": [
+                                      {
+                                        "op": "strConcat",
+                                        "args": [
+                                          {
+                                            "var": "b"
+                                          },
+                                          {
+                                            "str": " "
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "ascii": "--"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "strConcat",
+                    "args": [
+                      {
+                        "var": "b"
+                      },
+                      {
+                        "str": " "
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": -1
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-UNTERMINATED",
+      "title": "no opening delimiter, data to the end and header lines to the end are -2",
+      "covers": ["R-UNTERMINATED"],
+      "forall": [
+        {
+          "name": "v",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 64
+        },
+        {
+          "name": "x",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 32,
+          "alphabet": ["alpha", "digit"]
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "var": "v"
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": -2
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n"
+                      },
+                      {
+                        "var": "v"
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": -2
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\nX-Note: "
+                      },
+                      {
+                        "op": "utf8",
+                        "args": [
+                          {
+                            "var": "x"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": -2
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 96
+    },
+    {
+      "kind": "property",
+      "id": "P-HEADER",
+      "title": "a line with no colon, a folded line, a bare LF and a second Content-Type are -3",
+      "covers": ["R-HEADER"],
+      "forall": [
+        {
+          "name": "n",
+          "type": "string",
+          "minLen": 1,
+          "maxLen": 16,
+          "alphabet": ["alpha"]
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "head",
+            "value": {
+              "op": "utf8",
+              "args": [
+                {
+                  "str": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\n"
+                }
+              ]
+            }
+          },
+          {
+            "name": "tail",
+            "value": {
+              "op": "utf8",
+              "args": [
+                {
+                  "str": "\r\n\r\nhi\r\n--Xq7Bound9z--"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "multipartPartCount",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "var": "head"
+                        },
+                        {
+                          "op": "concat",
+                          "args": [
+                            {
+                              "op": "utf8",
+                              "args": [
+                                {
+                                  "var": "n"
+                                }
+                              ]
+                            },
+                            {
+                              "var": "tail"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "str": "Xq7Bound9z"
+                    }
+                  ]
+                },
+                {
+                  "int": -3
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "multipartPartCount",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "var": "head"
+                        },
+                        {
+                          "op": "concat",
+                          "args": [
+                            {
+                              "ascii": " X-"
+                            },
+                            {
+                              "op": "concat",
+                              "args": [
+                                {
+                                  "op": "utf8",
+                                  "args": [
+                                    {
+                                      "var": "n"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "concat",
+                                  "args": [
+                                    {
+                                      "ascii": ": 1"
+                                    },
+                                    {
+                                      "var": "tail"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "str": "Xq7Bound9z"
+                    }
+                  ]
+                },
+                {
+                  "int": -3
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "multipartPartCount",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "var": "head"
+                        },
+                        {
+                          "op": "concat",
+                          "args": [
+                            {
+                              "ascii": "X-"
+                            },
+                            {
+                              "op": "concat",
+                              "args": [
+                                {
+                                  "op": "utf8",
+                                  "args": [
+                                    {
+                                      "var": "n"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "concat",
+                                  "args": [
+                                    {
+                                      "ascii": ": 1\nX-Note: 1"
+                                    },
+                                    {
+                                      "var": "tail"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "str": "Xq7Bound9z"
+                    }
+                  ]
+                },
+                {
+                  "int": -3
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "multipartPartCount",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "var": "head"
+                        },
+                        {
+                          "op": "concat",
+                          "args": [
+                            {
+                              "ascii": "Content-Type: text/"
+                            },
+                            {
+                              "op": "concat",
+                              "args": [
+                                {
+                                  "op": "utf8",
+                                  "args": [
+                                    {
+                                      "var": "n"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "concat",
+                                  "args": [
+                                    {
+                                      "ascii": "\r\nContent-Type: text/plain"
+                                    },
+                                    {
+                                      "var": "tail"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "str": "Xq7Bound9z"
+                    }
+                  ]
+                },
+                {
+                  "int": -3
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-HEADERS",
+      "title": "17 header lines, or a line past 8192 octets of them, are -4",
+      "covers": ["R-HEADERS"],
+      "forall": [
+        {
+          "name": "v",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nX: 1\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "var": "v"
+                          },
+                          {
+                            "ascii": "\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": -4
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nX: "
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "op": "fill",
+                            "args": [
+                              {
+                                "int": 97
+                              },
+                              {
+                                "int": 8190
+                              }
+                            ]
+                          },
+                          {
+                            "op": "concat",
+                            "args": [
+                              {
+                                "ascii": "\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n"
+                              },
+                              {
+                                "op": "concat",
+                                "args": [
+                                  {
+                                    "var": "v"
+                                  },
+                                  {
+                                    "ascii": "\r\n--Xq7Bound9z--"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": -4
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 32
+    },
+    {
+      "kind": "property",
+      "id": "P-DISPOSITION",
+      "title": "no disposition, another type, no name or two dispositions are -5",
+      "covers": ["R-DISPOSITION", "R-NAME", "R-DISPOSITION-REFUSED"],
+      "forall": [
+        {
+          "name": "v",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nX-Note: 1\r\n\r\n"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "var": "v"
+                          },
+                          {
+                            "ascii": "\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": -5
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nContent-Disposition: attachment; name=f\r\n\r\n"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "var": "v"
+                          },
+                          {
+                            "ascii": "\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": -5
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; filename=x\r\n\r\n"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "var": "v"
+                          },
+                          {
+                            "ascii": "\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": -5
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "multipartPartCount",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "ascii": "--Xq7Bound9z\r\nContent-Disposition: form-data; name=\"f\"\r\nContent-Disposition: form-data; name=g\r\n\r\n"
+                      },
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "var": "v"
+                          },
+                          {
+                            "ascii": "\r\n--Xq7Bound9z--"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "str": "Xq7Bound9z"
+                  }
+                ]
+              },
+              {
+                "int": -5
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
+      "id": "P-PARTS",
+      "title": "64 parts are read, and a 65th is -6",
+      "covers": ["R-PARTS", "R-COUNT"],
+      "forall": [
+        {
+          "name": "v",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 8
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "p1",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "ascii": "\r\n--Xq7Bound9z\r\nContent-Disposition: form-data; name=a\r\n\r\n"
+                },
+                {
+                  "var": "v"
+                }
+              ]
+            }
+          },
+          {
+            "name": "p4",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "var": "p1"
+                    },
+                    {
+                      "var": "p1"
+                    }
+                  ]
+                },
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "var": "p1"
+                    },
+                    {
+                      "var": "p1"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "p16",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "var": "p4"
+                    },
+                    {
+                      "var": "p4"
+                    }
+                  ]
+                },
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "var": "p4"
+                    },
+                    {
+                      "var": "p4"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "p64",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "var": "p16"
+                    },
+                    {
+                      "var": "p16"
+                    }
+                  ]
+                },
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "var": "p16"
+                    },
+                    {
+                      "var": "p16"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "multipartPartCount",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "var": "p64"
+                        },
+                        {
+                          "ascii": "\r\n--Xq7Bound9z--"
+                        }
+                      ]
+                    },
+                    {
+                      "str": "Xq7Bound9z"
+                    }
+                  ]
+                },
+                {
+                  "int": 64
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "multipartPartCount",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "var": "p64"
+                        },
+                        {
+                          "op": "concat",
+                          "args": [
+                            {
+                              "var": "p1"
+                            },
+                            {
+                              "ascii": "\r\n--Xq7Bound9z--"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "str": "Xq7Bound9z"
+                    }
+                  ]
+                },
+                {
+                  "int": -6
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "samples": 16
+    }
+  ],
+  "outOfScope": [
+    {
+      "name": "MultipartReader",
+      "reason": "a class that vector does not call; the three functions of this spec read every part through it."
+    },
+    {
+      "name": "MultipartLimits",
+      "reason": "a class of three limits; this spec reads with its defaults, 64 parts, 16 header lines and 8192 octets of them."
+    }
+  ]
+}

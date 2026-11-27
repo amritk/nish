@@ -11759,6 +11759,8 @@ const JSON_PUT_STRING = "jsonPutString"
 const HTTP1_TICK = "Http1Server.tick"
 /** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
+/** The changelog words of WP90 S1, the multipart/form-data reader. */
+const MULTIPART_BODIES = "multipart/form-data bodies"
 
 /** WP80 S8's release-note words, a checked HTTP/1 server config and the twins the server examples call. */
 const CHECKED_CONFIG = "Http1Server caps once"
@@ -23794,6 +23796,58 @@ const DECLARED = [
     changelog: WP91_S3,
     why: "std/sync/ring.ts holds a byte size or offset past the i32 range at its end instead of wrapping it, and spells its counter arithmetic with wrappingAdd and wrappingSub, so ring.ll and the shm.ll it inlines move",
   })),
+  // WP91 S2: std/regex.ts drops its cast wraps for plain sums under guards
+  // the prover reads, which moves regex.ll in every program importing nish/regex.
+  ...[
+    "bench/regex/main.ts",
+    "tests/link/caps_dep_std_not_refused/main.ts",
+    "tests/link/std_json_format/main.ts",
+    "tests/link/std_regex/main.ts",
+    "tests/link/std_regex_f64/main.ts",
+    "tests/link/std_regex_node/main.ts",
+    "tests/link/std_regex_unicode/main.ts",
+    "tests/link/std_text_camel_case/main.ts",
+  ].map((program) => ({
+    program,
+    file: "regex.ll",
+    changelog: "WP91 S2 — std/regex.ts",
+    why: "std/regex.ts computes its sums in i32 under guards the prover reads instead of casting them through u32, and caps the text it matches below 2^31 - 2^20, so the program's nish/regex module has new compares and fewer conversions; its own module does not move",
+  })),
+  // WP90 S1: std/net/http-fields.ts gains `MediaType` and the media-type
+  // readers, and std/net/multipart.ts is new.
+  ...[
+    "tests/link/net_http2_stream/main.ts",
+    "tests/link/net_http_fields/main.ts",
+    "tests/link/net_http_fields_f64/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_release/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: MULTIPART_BODIES,
+    why: "std/net/http-fields.ts gains the `MediaType` class, so the header the program writes forward-declares `struct MediaType;`",
+  })),
+  {
+    program: "tests/link/net_media_type/main.ts",
+    file: "exit",
+    changelog: MULTIPART_BODIES,
+    why: "the case is new with this change and imports `mediaTypeParse`, `formDataDispositionParse` and `mediaTypeParam`, which the seed's std/net/http-fields.ts does not export, so the reference refuses it",
+  },
+  {
+    program: "tests/link/net_multipart_read/main.ts",
+    file: "exit",
+    changelog: MULTIPART_BODIES,
+    why: "the case is new with this change and imports nish/net/multipart, which the seed does not ship, so the reference refuses it",
+  },
 ]
 
 /**
