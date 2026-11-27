@@ -2015,6 +2015,8 @@ const TERM_TS_PANIC_FREE = "std/term.ts panic-free"
 const TEMPORAL_PANIC_FREE = "std/temporal.ts panic-free"
 /** The changelog words of WP85 S2: std's term-pixels, term-io, term-rate and term-probe modules prove or drop their panic sites. */
 const TERM_PANIC_FREE = "term-pixels, term-io, term-rate and term-probe panic-free"
+/** The changelog words of examples-strict S4b: Framebuffer's Result-returning factory and resize. */
+const TERM_TRY_FRAMEBUFFER = "add tryFramebuffer and Framebuffer.tryResize"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -23986,6 +23988,20 @@ const DECLARED = [
       "tests/link/std_term_rate/main.ts": ["main.h"],
       "tests/link/std_term_rate_f64/main.ts": ["main.h"],
     }
+  ),
+  // examples-strict S4b: Framebuffer's Result API and the term sites term-probe reaches.
+  ...byFinding(TERM_TRY_FRAMEBUFFER)(
+    "the program calls tryFramebuffer, Framebuffer.tryResize or base64EncodeIfFits, or reaches std/term-io.ts code that reads `PixelBytes.full`, which are new in this release (examples-strict S4b), so the seed's standard library has no such exports or field and refuses it",
+    {
+      "tests/link/break_game/main.ts": ["exit"],
+      "tests/link/break_gfx/main.ts": ["exit"],
+      "tests/link/std_base64_if_fits/main.ts": ["exit"],
+      "tests/link/std_term_pixels_try/main.ts": ["exit"],
+    }
+  ),
+  ...byFinding(TERM_TRY_FRAMEBUFFER)(
+    "std/term-pixels.ts's kittyFrame, sixelFrame and PixelBytes mark a frame too large for one buffer `full` instead of panicking (examples-strict S4b), so the program's copy of them moves",
+    { "tests/link/std_term_pixels_negative_desync/main.ts": ["main.ll"] }
   ),
   // WP87 S2: std/math, base64, random, regex, release, sqlite, testing and
   // text prove or remove their counted panic sites.
