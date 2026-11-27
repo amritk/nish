@@ -19,13 +19,17 @@ of its own, in a task that may await, uses [an async server](async-server.md).
 The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): they answer through
 the handler's panicking calls (`send`, `sendJson`, `problem`, ...), which
-panic on a bug in your program by design, and `nish/net/router` and the
-HTTP/1.1 server under the handler keep panic sites no proof removes yet. A
-program held to no panics answers through the `try` calls below instead;
-the router and the server under it still need `--allow-panics` until they are
-made panic-free.
+panic on a bug in your program by design. A program held to no panics
+answers through the `try` calls below instead, and builds its table with
+`routerChecked(limits)`, which gives `Err` for a limit outside its range
+where `new Router` panics. A program that matches by hand calls
+`router.tryMatch`, which answers `ROUTER_NOT_FOUND` for a range outside its
+buffer, and `router.tryParamCount`, which answers -1 for a route the table
+does not hold, where `match` and `paramCount` panic. The HTTP/1.1 codec and
+the body decoder under the handler keep panic sites no proof removes yet, so
+it too needs `--allow-panics` until they are made panic-free.
 
-<!-- allow-panics: answers through `std/net/handler.ts`'s panicking calls, and `std/net/router.ts` and `std/net/http1-server.ts` keep panic sites no proof removes yet -->
+<!-- allow-panics: answers through `std/net/handler.ts`'s panicking calls, and `std/net/http1-codec.ts` and `std/net/http-compress.ts` keep panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";
@@ -160,7 +164,7 @@ to `req.route`, lowest id first, then `HANDLER_NEXT` once all have run, or
 on `HANDLER_NEXT`. Once the body has chosen its answer, `h.after(req)` hands
 out the steps that ran, highest id first, before you send it:
 
-<!-- allow-panics: answers through `std/net/handler.ts`'s panicking calls, and `std/net/router.ts` and `std/net/http1-server.ts` keep panic sites no proof removes yet -->
+<!-- allow-panics: answers through `std/net/handler.ts`'s panicking calls, and `std/net/http1-codec.ts` and `std/net/http-compress.ts` keep panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HANDLER_ABSENT, HANDLER_NEXT, HandlerLimits, HttpHandler } from "nish/net/handler";
@@ -307,8 +311,8 @@ answer.
 `examples/http-app` is a JSON notes API on this page's pieces: command-line
 flags, a log line a request, problems for bad input, and the graceful stop
 above with a deadline. It answers through the `try` calls, so of the handler's own panic sites it
-reaches only one its header names; build it with `nish examples/http-app/main.ts --allow-panics
---link http-app` all the same, for the router, server and slice sites its
+reaches none; build it with `nish examples/http-app/main.ts --allow-panics
+--link http-app` all the same, for the codec, decoder and copy sites its
 header lists, and run `./http-app 8080`. Copy it and change it: logging and
 configuration are left to the example because every server wants them a
 little differently.
