@@ -753,7 +753,7 @@ function bytesRangeError(off: i32, width: i32, b: u8[]): string -> @nish.bytesRa
 module std/net/hpack.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 unsafe import 82:10 wrappingAdd from "nish:unsafe"
-unsafe call 1533:26 wrappingAdd (node 5881)
+unsafe call 1536:26 wrappingAdd (node 5881)
 const HPACK_OK: i32 = 0 [exported]
 const HPACK_LIST_TOO_LARGE: i32 = 1 [exported]
 const HPACK_ERR_TRUNCATED: i32 = -1 [exported]
@@ -916,20 +916,20 @@ function hpackWindowEnd(buf: u8[], off: i32, len: i32): i32 -> @nish.hpackWindow
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 end: i64 (const)
-function hpackWindowPanic(what: string, buf: u8[], off: i32, len: i32): void -> @nish.hpackWindowPanic
+function hpackCheckWindow(what: string, buf: u8[], off: i32, len: i32): void -> @nish.hpackCheckWindow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function hpackCheckWindow(what: string, buf: u8[], off: i32, len: i32): i32 -> @nish.hpackCheckWindow
+function hpackCheckedWindowEnd(what: string, buf: u8[], off: i32, len: i32): i32 -> @nish.hpackCheckedWindowEnd
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off what
-  calls: nish.hpackWindowEnd nish.hpackWindowPanic
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.hpackWindowEnd#0 nish.hpackWindowPanic#1
+  calls: nish.hpackCheckWindow nish.hpackWindowEnd
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.hpackWindowEnd#0 nish.hpackCheckWindow#1
   stackSites=0 stackLocals=0
   local +0:9 end: i32 (const)
   callee +0:20 hpackWindowEnd -> @nish.hpackWindowEnd
-  callee +2:5 hpackWindowPanic -> @nish.hpackWindowPanic
+  callee +2:5 hpackCheckWindow -> @nish.hpackCheckWindow
 function HpackHuffman.constructor(this: HpackHuffman): void -> @nish.HpackHuffman.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
@@ -952,11 +952,11 @@ function HpackHuffman.constructor(this: HpackHuffman): void -> @nish.HpackHuffma
 function hpackHuffmanLength(h: HpackHuffman, src: u8[], off: i32, len: i32): i32 -> @nish.hpackHuffmanLength [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
-  calls: nish.hpackCheckWindow
+  calls: nish.hpackCheckedWindowEnd
   pointer h: size=48 writesThrough=false captured=false
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckWindow#1
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckedWindowEnd#1
   stackSites=0 stackLocals=0
-  callee +0:3 hpackCheckWindow -> @nish.hpackCheckWindow
+  callee +0:3 hpackCheckedWindowEnd -> @nish.hpackCheckedWindowEnd
   local +2:7 bits: u64 (let)
   local +7:9 end: i64 (const)
   local +8:12 i: i32 (let)
@@ -966,12 +966,12 @@ function hpackHuffmanEncode(h: HpackHuffman, src: u8[], off: i32, len: i32, out:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: len off
-  calls: nish.hpackCheckWindow nish_array_grow
+  calls: nish.hpackCheckedWindowEnd nish_array_grow
   pointer h: size=48 writesThrough=false captured=false
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckWindow#1
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckedWindowEnd#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee -15:3 hpackCheckWindow -> @nish.hpackCheckWindow
+  callee -15:3 hpackCheckedWindowEnd -> @nish.hpackCheckedWindowEnd
   local -14:7 acc: u64 (let)
   local -12:7 bits: u32 (let)
   local -11:9 end: i64 (const)
@@ -983,12 +983,12 @@ function hpackHuffmanDecode(h: HpackHuffman, src: u8[], off: i32, len: i32, out:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: len off
-  calls: nish.hpackCheckWindow nish_array_grow
+  calls: nish.hpackCheckedWindowEnd nish_array_grow
   pointer h: size=48 writesThrough=false captured=false
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckWindow#1
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckedWindowEnd#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee -37:3 hpackCheckWindow -> @nish.hpackCheckWindow
+  callee -37:3 hpackCheckedWindowEnd -> @nish.hpackCheckedWindowEnd
   local -34:7 code: u32 (let)
   local -33:7 bits: u32 (let)
   local -32:9 end: i64 (const)
@@ -1002,20 +1002,20 @@ function hpackHuffmanDecode(h: HpackHuffman, src: u8[], off: i32, len: i32, out:
 function HpackCursor.constructor(this: HpackCursor, buf: u8[], off: i32, len: i32): void -> @nish.HpackCursor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: buf len off
-  calls: nish.hpackCheckWindow
+  calls: nish.hpackCheckedWindowEnd
   pointer this: size=16 writesThrough=true captured=false
-  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.hpackCheckWindow#1
+  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.hpackCheckedWindowEnd#1
   stackSites=0 stackLocals=0
-  callee +0:16 hpackCheckWindow -> @nish.hpackCheckWindow
+  callee +0:16 hpackCheckedWindowEnd -> @nish.hpackCheckedWindowEnd
 function HpackCursor.reset(this: HpackCursor, buf: u8[], off: i32, len: i32): void -> @nish.HpackCursor.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: buf len off
-  calls: nish.hpackCheckWindow
+  calls: nish.hpackCheckedWindowEnd
   pointer this: size=16 writesThrough=true captured=false
-  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.hpackCheckWindow#1
+  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.hpackCheckedWindowEnd#1
   stackSites=0 stackLocals=0
-  callee +2:16 hpackCheckWindow -> @nish.hpackCheckWindow
+  callee +2:16 hpackCheckedWindowEnd -> @nish.hpackCheckedWindowEnd
 function hpackEncodeInteger(out: u8[], flags: i32, prefixBits: i32, value: i32): void -> @nish.hpackEncodeInteger [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
