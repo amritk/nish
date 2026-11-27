@@ -14,6 +14,6 @@ declare class lpair {
 
 export const L_BIG: i64 = 4294967296
 
-declare function l_add(a: i64, b: i64): i64
-declare function l_count(): u64
+export declare function l_add(a: i64, b: i64): i64
+export declare function l_count(): u64
 declare function l_fill(p: lpair, out: OutI64): i32

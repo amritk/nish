@@ -558,13 +558,18 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
   // WP66 S3 (D5): a `declare class` with no members and no heritage clause
   // describes no struct at all. It is the C type a library hands out and
   // takes back, so it is opaque: a C pointer, never built or read here.
-  if (info.layout && decl.children[3].children.length === 0 && decl.children[2].children.length === 0) {
+  const opaque =
+    info.layout && decl.children[3].children.length === 0 && decl.children[2].children.length === 0
+  if (opaque) {
     ctx.table.markOpaque(info.type)
   }
-  if (info.layout && info.exported) {
+  // WP89 S3b: an opaque class is exported like a `declare function`, so one
+  // module holds a library's binding and the others import it. A layout with
+  // fields stays in its module: nothing outside it may build or read one.
+  if (info.layout && info.exported && !opaque) {
     ctx.error(
       decl.children[0],
-      `\`declare class ${name}\` cannot be exported: a C struct layout is used in the module that declares it`
+      `\`declare class ${name}\` cannot be exported: it has fields, and a C struct layout is built and read only in the module that declares it`
     )
   } else if (info.layout && ctx.pageModule) {
     // A layout exists to be lent to a `declare function`, which a module a

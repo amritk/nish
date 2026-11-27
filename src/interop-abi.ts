@@ -128,7 +128,9 @@ export class ExternalFunction {
  * An imported signature is skipped as well. Pass 1b appends it to the
  * importer's `functions` (`src/program.ts`), where stage0's `src/` leaves that list
  * holding only what the module declares, so `definedIn` is what keeps an
- * imported symbol from being declared once per importer.
+ * imported symbol from being declared once per importer. A `declare
+ * function` is skipped too, exported or not: it is C's symbol, not the
+ * program's.
  */
 export const externalFunctions = (compilation: Compilation): ExternalFunction[] => {
   const units: AnalysisUnit[] = []
@@ -166,6 +168,13 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
         continue
       }
       if (entryMain !== null && sig === entryMain) {
+        continue
+      }
+      // WP89 S3b: an exported `declare function` is a C function this
+      // program calls, offered to the modules that import it, not a symbol it
+      // defines for a host. A sidecar declaring it would describe C's own
+      // function as the program's (`export_declare_header`).
+      if (sig.foreign()) {
         continue
       }
       // `internal`, so no host can name it (the linkage condition, WP31 §9).

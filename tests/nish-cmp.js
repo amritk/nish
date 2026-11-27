@@ -1436,6 +1436,16 @@ const typedBuffers = () =>
     why: "the program passes an f32[], i32[], u16[] or u32[] buffer to a declared C function, which the reference refuses because it lends only u8[]",
   }))
 
+/** The changelog words of WP89 S3b, a module that exports its C bindings. */
+const EXPORTED_BINDINGS = "a module exports its C bindings"
+const exportedBindings = () =>
+  ["export_declare_handle", "export_declare_header"].map((name) => ({
+    program: `tests/link/${name}/main.ts`,
+    file: "exit",
+    changelog: EXPORTED_BINDINGS,
+    why: "the program imports an opaque `declare class` and the `declare function`s that take it from another module, which the candidate compiles and the reference refuses, because it lets no binding be exported",
+  }))
+
 /** The changelog words of WP89 S6, a module file chosen by target. */
 const TARGET_FILES = "a module file chosen by target"
 const targetFiles = () => [
@@ -11747,6 +11757,8 @@ const JSON_PUT_STRING = "jsonPutString"
 const HTTP1_TICK = "Http1Server.tick"
 /** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
+/** The changelog words of WP90 S1, the multipart/form-data reader. */
+const MULTIPART_BODIES = "multipart/form-data bodies"
 
 /** The release-note words of TLS RSA S1, RSA-PSS CertificateVerify on the TLS and QUIC servers. */
 const RSA_PSS_SERVER = "RSA-PSS CertificateVerify under an RSA certificate"
@@ -12190,8 +12202,136 @@ const RSA_PSS_SERVER_DECLARED = [
   })),
 ]
 
+/** WP80 S8's release-note words, a checked HTTP/1 server config and the twins the server examples call. */
+const CHECKED_CONFIG = "Http1Server caps once"
+const checkedConfig = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: CHECKED_CONFIG, why }))
+  )
 const DECLARED = [
   ...RSA_PSS_SERVER_DECLARED,
+  // WP80 S8: a checked HTTP/1 server config, and the router, handler and
+  // prefork twins the server examples call.
+  ...checkedConfig(
+    "Router's constructor checks its limits through routerCheckLimits and match checks its ranges before tryMatch, so router.ll and the modules that call into it move",
+    {
+      "bench/httparena/main.ts": ["router.ll"],
+      "tests/link/httparena_entry/main.ts": ["router.ll"],
+      "tests/link/net_grpc/main.ts": ["router.ll"],
+      "tests/link/net_grpc_interop/main.ts": ["router.ll"],
+      "tests/link/net_handler_batch_limits/main.ts": ["router.ll"],
+      "tests/link/net_handler_bomb/main.ts": ["router.ll"],
+      "tests/link/net_handler_open/main.ts": ["router.ll"],
+      "tests/link/net_handler_pipelined_stream/main.ts": ["router.ll"],
+      "tests/link/net_handler_refused/main.ts": ["router.ll"],
+      "tests/link/net_handler_steps/main.ts": ["router.ll"],
+      "tests/link/net_handler_steps_split/main.ts": ["router.ll"],
+      "tests/link/net_handler_try_answers/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h1_tls/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h1_tls_slots/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h1_tls_twice/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h1_tls_wait/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h2c_default_refused/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h2c_preface/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h2c_preface_drain/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h2c_preface_ended/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h2c_preface_full/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h2c_preface_h1/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h2c_preface_late/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h2c_preface_partial/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h2c_preface_pri/main.ts": ["router.ll"],
+      "tests/link/net_http_server_h2c_preface_silent/main.ts": ["router.ll"],
+      "tests/link/net_http_server_steps/main.ts": ["router.ll"],
+      "tests/link/net_http_server_steps_full/main.ts": ["router.ll"],
+      "tests/link/net_http_server_steps_split/main.ts": ["router.ll"],
+      "tests/link/net_http_server_stream/main.ts": ["router.ll"],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["router.ll"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["router.ll"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["router.ll"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["router.ll"],
+      "tests/link/net_http_server_trailers_h3/main.ts": ["router.ll"],
+      "tests/link/net_http_server_trailers_short/main.ts": ["router.ll"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["router.ll"],
+      "tests/link/net_router/main.ts": ["steps.ll"],
+      "tests/link/net_router_f64/main.ts": ["steps.ll"],
+      "tests/link/net_router_use_unknown/main.ts": ["main.ll", "router.ll"],
+      "tests/link/net_serve_rss_flat/main.ts": ["router.ll"],
+      "tests/link/net_serve_try/main.ts": ["router.ll"],
+      "tests/link/net_static/main.ts": ["router.ll"],
+    }
+  ),
+  ...checkedConfig(
+    "Router gains the outside flag tryMatch leaves for match, so the C header that names Router's struct gains a bool field",
+    {
+      "tests/link/net_http_server_h2c_default_refused/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_drain/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_ended/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_full/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_h1/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_late/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_partial/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_pri/main.ts": ["main.h"],
+      "tests/link/net_http_server_h2c_preface_silent/main.ts": ["main.h"],
+      "tests/link/net_router_use_unknown/main.ts": ["main.h"],
+    }
+  ),
+  ...checkedConfig(
+    "HttpHandler matches through Router.tryMatch and tryParamCount, so handler.ll moves in every program that reaches std/net/handler.ts",
+    {
+      "tests/link/net_http_server_h2c_default_refused/main.ts": ["handler.ll"],
+      "tests/link/net_http_server_h2c_preface/main.ts": ["handler.ll"],
+      "tests/link/net_http_server_h2c_preface_drain/main.ts": ["handler.ll"],
+      "tests/link/net_http_server_h2c_preface_ended/main.ts": ["handler.ll"],
+      "tests/link/net_http_server_h2c_preface_full/main.ts": ["handler.ll"],
+      "tests/link/net_http_server_h2c_preface_h1/main.ts": ["handler.ll"],
+      "tests/link/net_http_server_h2c_preface_late/main.ts": ["handler.ll"],
+      "tests/link/net_http_server_h2c_preface_partial/main.ts": ["handler.ll"],
+      "tests/link/net_http_server_h2c_preface_pri/main.ts": ["handler.ll"],
+      "tests/link/net_http_server_h2c_preface_silent/main.ts": ["handler.ll"],
+      "tests/link/net_serve_rss_flat/main.ts": ["handler.ll"],
+    }
+  ),
+  ...checkedConfig(
+    "Http1Server takes its caps from an Http1Config snapshot it checks once, so HttpServer's HTTP/1 side lays out again and every module that reaches it moves",
+    {
+      "tests/link/net_http_server_h2c_default_refused/main.ts": ["main.ll", "rig.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c_preface/main.ts": ["main.ll", "rig.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c_preface_drain/main.ts": ["main.ll", "rig.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c_preface_ended/main.ts": ["main.ll", "rig.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c_preface_full/main.ts": ["main.ll", "rig.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c_preface_h1/main.ts": ["main.ll", "rig.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c_preface_late/main.ts": ["main.ll", "rig.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c_preface_partial/main.ts": ["main.ll", "rig.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c_preface_pri/main.ts": ["main.ll", "rig.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c_preface_release/main.ts": ["main.ll"],
+      "tests/link/net_http_server_h2c_preface_silent/main.ts": ["main.ll", "rig.ll", "taken.ll"],
+    }
+  ),
+  {
+    program: "examples/prefork-server.ts",
+    file: "exit",
+    changelog: CHECKED_CONFIG,
+    why: "the example calls http1ServerChecked and tryConnection, which the seed's nish/net/http1-server does not export, so only the candidate compiles it",
+  },
+  {
+    program: "tests/link/net_http1_server_checked/main.ts",
+    file: "exit",
+    changelog: CHECKED_CONFIG,
+    why: "the program calls http1ConnectionChecked, which the seed's nish/net/http1-server does not export, so only the candidate compiles it",
+  },
+  {
+    program: "tests/link/net_prefork_try_supervise/main.ts",
+    file: "exit",
+    changelog: CHECKED_CONFIG,
+    why: "the program calls tryPreforkSupervise, which the seed's nish/net/prefork does not export, so only the candidate compiles it",
+  },
+  {
+    program: "tests/link/net_router_checked/main.ts",
+    file: "exit",
+    changelog: CHECKED_CONFIG,
+    why: "the program calls routerChecked, which the seed's nish/net/router does not export, so only the candidate compiles it",
+  },
   // #2297: the bounds walk proves `end - start` of two index locals with
   // `0 <= start <= end` cannot overflow, so `hasTwinWord`'s `i - from` and
   // the type table's `to - from` drop their overflow checks.
@@ -14317,6 +14457,7 @@ const DECLARED = [
   ...protoClasses(),
   ...typedBuffers(),
   ...targetFiles(),
+  ...exportedBindings(),
   {
     program: "tests/link/net_grpc/main.ts",
     file: "exit",
@@ -24073,6 +24214,58 @@ const DECLARED = [
     file: "exit",
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
+  },
+  // WP91 S2: std/regex.ts drops its cast wraps for plain sums under guards
+  // the prover reads, which moves regex.ll in every program importing nish/regex.
+  ...[
+    "bench/regex/main.ts",
+    "tests/link/caps_dep_std_not_refused/main.ts",
+    "tests/link/std_json_format/main.ts",
+    "tests/link/std_regex/main.ts",
+    "tests/link/std_regex_f64/main.ts",
+    "tests/link/std_regex_node/main.ts",
+    "tests/link/std_regex_unicode/main.ts",
+    "tests/link/std_text_camel_case/main.ts",
+  ].map((program) => ({
+    program,
+    file: "regex.ll",
+    changelog: "WP91 S2 — std/regex.ts",
+    why: "std/regex.ts computes its sums in i32 under guards the prover reads instead of casting them through u32, and caps the text it matches below 2^31 - 2^20, so the program's nish/regex module has new compares and fewer conversions; its own module does not move",
+  })),
+  // WP90 S1: std/net/http-fields.ts gains `MediaType` and the media-type
+  // readers, and std/net/multipart.ts is new.
+  ...[
+    "tests/link/net_http2_stream/main.ts",
+    "tests/link/net_http_fields/main.ts",
+    "tests/link/net_http_fields_f64/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_release/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: MULTIPART_BODIES,
+    why: "std/net/http-fields.ts gains the `MediaType` class, so the header the program writes forward-declares `struct MediaType;`",
+  })),
+  {
+    program: "tests/link/net_media_type/main.ts",
+    file: "exit",
+    changelog: MULTIPART_BODIES,
+    why: "the case is new with this change and imports `mediaTypeParse`, `formDataDispositionParse` and `mediaTypeParam`, which the seed's std/net/http-fields.ts does not export, so the reference refuses it",
+  },
+  {
+    program: "tests/link/net_multipart_read/main.ts",
+    file: "exit",
+    changelog: MULTIPART_BODIES,
+    why: "the case is new with this change and imports nish/net/multipart, which the seed does not ship, so the reference refuses it",
   },
 ]
 

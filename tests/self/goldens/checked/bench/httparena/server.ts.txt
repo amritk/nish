@@ -174,7 +174,7 @@ function ArenaServer.constructor(this: ArenaServer, fd1: i32, fd2: i32, slots: i
   pointer this: size=120 writesThrough=true captured=false
   pointer data: size=72 writesThrough=true captured=true
   pointer db: size=112 writesThrough=true captured=true
-  stackSites=2 stackLocals=1
+  stackSites=3 stackLocals=1
   local +0:11 router: Router (const)
   callee +0:20 new Router -> @nish.Router.constructor
   callee +1:5 Router.add -> @nish.Router.add

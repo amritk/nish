@@ -3,13 +3,13 @@
 // guard cannot be widened into silence without a golden moving.
 //
 // `abs` is external because C defines it, not because this module withheld an
-// `export`. Neither rewrite the message names is available for it: `export
-// declare function` is refused outright (`reject_ffi_export`), and dropping
-// `--no-strict-exports` would not make it `internal`, because there is no body
-// here to give linkage to -- the `declare` line below is the same under the
-// flag as under the default. Testing `exported` alone reported it anyway,
-// because `exported` is always false for a foreign declaration; the guard is
-// `FunctionSig.foreign`, the predicate that exists for this distinction.
+// `export`. Neither rewrite the message names helps it: an `export declare
+// function` (WP89 S3b) only lends the binding to the modules that import it
+// and still defines nothing, and dropping `--no-strict-exports` would not make
+// it `internal`, because there is no body here to give linkage to -- the
+// `declare` line below is the same under the flag as under the default.
+// Testing `exported` alone reported it, because this binding is not exported;
+// the guard is `FunctionSig.foreign`, the predicate for this distinction.
 //
 // `step` is the shape that must keep warning, in the same loop and on the same
 // pass, so the one reported diagnostic is the proof the guard is not too wide.

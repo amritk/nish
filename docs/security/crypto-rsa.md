@@ -450,12 +450,14 @@ Out of scope:
   the machine code for x86-64, aarch64 and x86-64-v3. A control case, a
   table read at a secret index, must be refused.
 - **Wipes.** The check "crypto: the wipes survive opt -O2 (rsaSignPrivateOp
-  seventeen, rsaSignKeySound fifteen, rsaSignPrecompute four,
+  seventeen, rsaSignKeySound nine, rsaSignFullOp seven, rsaSignPrecompute four,
   RsaSignScratch.saltInto three, rsaSignPssSha256 one, rsaSignPssSha256Into
   one, rsaParsePrivateKey one, x509ParseRsaPrivateKey two)" counts the
-  volatile stores left after `opt -O2`. `rsaSignKeySound`'s fifteen are the
-  eight of `rsaSignCrtSound` and the seven of `rsaSignFullOpens`, which `opt`
-  inlines into it. It builds
+  volatile stores left after `opt -O2`. `rsaSignKeySound`'s nine are the
+  eight of `rsaSignCrtSound` and the signature `rsaSignFullOpens` wipes, both
+  of which `opt` inlines into it; `rsaSignFullOp`'s seven, which that check
+  and a first-form key's signature both call, are `d`, the scratch, the
+  table, the entry, the power, the selection and the accumulator. It builds
   `tests/link/net_tls_rsa_server`, so it reads the signing path the TLS and
   QUIC servers run (`TlsKeySigner.sign`, `TlsRsaSigner.sign`,
   `rsaSignPssSha256Into`) and the PEM loader. Commenting out one
@@ -525,6 +527,6 @@ recorded.
 - The `ct_asm: ct_asm_rsa` checks, "ct_asm: ct_asm_rsa's copies match
   std/crypto/rsa-sign.ts" and "ct_asm_rsa: IR matches golden".
 - "crypto: the wipes survive opt -O2 (rsaSignPrivateOp seventeen,
-  rsaSignKeySound fifteen, rsaSignPrecompute four, RsaSignScratch.saltInto
+  rsaSignKeySound nine, rsaSignFullOp seven, rsaSignPrecompute four, RsaSignScratch.saltInto
   three, rsaSignPssSha256 one, rsaSignPssSha256Into one, rsaParsePrivateKey
   one, x509ParseRsaPrivateKey two)".

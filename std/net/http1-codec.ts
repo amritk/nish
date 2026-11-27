@@ -456,9 +456,11 @@ export class Http1Parser {
    * @param len how many bytes from `off` to append
    */
   feed(data: u8[], off: i32, len: i32): void {
-    if (!this.tryFeed(data, off, len)) {
+    const size: i32 = toI32(data.length)
+    if (off < 0 || len < 0 || off > size || len > size - off) {
       panic("Http1Parser: the window is outside the buffer")
     }
+    http1Append(this, data, off, len)
   }
 
   /**
@@ -477,23 +479,7 @@ export class Http1Parser {
     if (off < 0 || len < 0 || off > size || len > size - off) {
       return false
     }
-    if (this.state === HTTP1_S_CLOSED || this.state === HTTP1_S_ERROR) {
-      return true
-    }
-    if (!http1Reserve(this, len)) {
-      return true
-    }
-    const buf: u8[] = this.buf
-    const at: i32 = this.end
-    // One move: http1Reserve made room for `len` bytes at `at`, and the
-    // window was checked above, so it always succeeds; were it to fail, the
-    // parser refuses rather than drop the bytes.
-    if (!tryCopyBytes(buf, at, data, off, len)) {
-      http1Fail(this, 413, "the buffer could not take the input")
-      return true
-    }
-    // In range, because the move fit: `at + len` is at most `buf.length`.
-    this.end = toI32(toU32(at) + toU32(len))
+    http1Append(this, data, off, len)
     return true
   }
 
@@ -675,6 +661,31 @@ const HTTP1_FIRST_SPANS: i32 = 64
 
 /** The largest input buffer a parser grows to: 2^30 bytes. */
 const HTTP1_MOST_INPUT: i32 = 1073741824
+
+/**
+ * `feed`'s and `tryFeed`'s append, once each has checked that
+ * `data[off .. off + len)` is a window of `data`. A closed or refused parser
+ * drops the bytes; one that cannot make room refuses with a 413.
+ */
+const http1Append = (p: Http1Parser, data: u8[], off: i32, len: i32): void => {
+  if (p.state === HTTP1_S_CLOSED || p.state === HTTP1_S_ERROR) {
+    return
+  }
+  if (!http1Reserve(p, len)) {
+    return
+  }
+  const buf: u8[] = p.buf
+  const at: i32 = p.end
+  // One move: http1Reserve made room for `len` bytes at `at`, and the caller
+  // checked the window, so it always succeeds; were it to fail, the parser
+  // refuses rather than drop the bytes.
+  if (!tryCopyBytes(buf, at, data, off, len)) {
+    http1Fail(p, 413, "the buffer could not take the input")
+    return
+  }
+  // In range, because the move fit: `at + len` is at most `buf.length`.
+  p.end = toI32(toU32(at) + toU32(len))
+}
 
 /**
  * Makes room for `len` more bytes at `p.end`, moving the live bytes down

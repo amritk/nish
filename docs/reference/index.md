@@ -44,7 +44,7 @@ Terminal output and input, a step's input with no terminal, and command-line par
 
 <scalar-card title="Graphics and sound" icon="phosphor/regular/paint-brush" href="#graphics-and-sound">
 
-Drawing into a frame of pixels and making short sounds: 2 modules.
+Drawing into a frame of pixels and making short sounds: 3 modules.
 
 </scalar-card>
 
@@ -62,7 +62,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 58 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 59 modules.
 
 </scalar-card>
 
@@ -169,6 +169,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 
 | Module | |
 | --- | --- |
+| [`nish/gpu/sys`](gpu/sys.md) |  |
 | [`nish/raster`](raster.md) | Software drawing into a frame of `0xRRGGBB` pixels: colour arithmetic, rectangles, anti-aliased discs, additive glows, a vertical gradient, a 5×7 pixel font, and two fixed pools that move and draw themselves (a particle pool and a trail). |
 | [`nish/synth`](synth.md) | Short sounds made from nothing: square, triangle and noise voices with a pitch slide and a decaying envelope, mixed into an array of `f64` samples. |
 
@@ -219,6 +220,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 | [`nish/net/http3-frame`](net/http3-frame.md) | The frames and stream types of HTTP/3 (RFC 9114 §6.2, §7): frame headers, SETTINGS, the one-identifier frames (GOAWAY, MAX_PUSH_ID, CANCEL_PUSH), and which types are HTTP/2's reserved ones or unknown. |
 | [`nish/net/http3-server`](net/http3-server.md) | HTTP/3 over QUIC on one UDP socket: a pool of slots, each a reusable `QuicConnection` with an `Http3Connection` beside it, a `QuicListener` in front for the datagrams no slot owns, for a program that owns its readiness loop. |
 | [`nish/net/http3`](net/http3.md) | The server side of an HTTP/3 connection (RFC 9114) on the streams of a `QuicConnection` (`nish/net/quic`): the control stream and SETTINGS both ways, the QPACK encoder and decoder streams (opened, at dynamic table capacity 0), requests and responses on bidirectional streams with their bodies streamed both ways, GOAWAY, and RFC 9114's error codes. |
+| [`nish/net/multipart`](net/multipart.md) | A `multipart/form-data` body read part by part, as an HTML form with a file input sends it (RFC 7578, framed by RFC 2046 §5.1.1). |
 | [`nish/net/oidc`](net/oidc.md) | Verify a JWT from an OpenID Connect issuer: find the issuer's keys through discovery (OpenID Connect Discovery 1.0), read its JWK Set (RFC 7517, RFC 7518 §6, RFC 8037), follow its key rotation, and check a token's signature and claims with `nish/crypto/jwt`. |
 | [`nish/net/outbound`](net/outbound.md) | The policy for a program that fetches URLs it did not choose: a webhook sender, a link previewer, an importer that takes a URL from a form. |
 | [`nish/net/postgres-async`](net/postgres-async.md) | `PgAsyncPool`, PostgreSQL connections an `async` task awaits a query on, so a task's query waits on its socket while the executor runs the others. |

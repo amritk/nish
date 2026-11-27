@@ -13410,7 +13410,7 @@ if (dealtHere("fileServer")) {
     fs.mkdirSync(fsDir, { recursive: true })
     const exe = path.join(fsDir, "file-server")
     const built = spawnNish(
-      [path.join(root, "examples", "file-server.ts"), ALLOW_PANICS, "-o", fsDir + path.sep, "--link", exe, "--profile", "speed"],
+      [path.join(root, "examples", "file-server.ts"), "-o", fsDir + path.sep, "--link", exe, "--profile", "speed"],
       { cwd: root, encoding: "utf8", timeout: 300_000, killSignal: "SIGKILL" }
     )
     // One fetch from a fresh server: the response head, the body's length and
@@ -13768,7 +13768,7 @@ if (dealtHere("unboundedPass")) {
       calleeHits[2].includes("(the string built on line 72, in `Handler.constructor`) piles up"),
     shown(callees)
   )
-  const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [ALLOW_PANICS])
+  const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [])
   check(
     "nl9018: examples/file-server.ts, which allocates nothing per request, compiles with no NL9018",
     fileServer.status === 0 && nl9018Lines(fileServer.stderr).length === 0,
@@ -14643,9 +14643,10 @@ if (dealtHere("cryptoChecks")) {
   // selected entry, the power of `m`, the selection scratch, the two halves'
   // results and the joined signature (seventeen); `rsaSignKeySound` the CRT
   // check's primes, half exponents, `qInv`, R^2 mod `p`, product and scratch
-  // (eight, `rsaSignCrtSound` inlined) and the full-exponent check's `d`,
-  // scratch, table, entry, power, selection and accumulator (seven,
-  // `rsaSignFullOpens` inlined); `rsaSignPrecompute` the prime, its two
+  // (eight, `rsaSignCrtSound` inlined) and the full-exponent check's
+  // signature (one, `rsaSignFullOpens` inlined); `rsaSignFullOp`, which that
+  // check and a first-form key's signature call, `d`, scratch, table, entry,
+  // power, selection and accumulator (seven); `rsaSignPrecompute` the prime, its two
   // constants and the scratch (four);
   // `RsaSignScratch.saltInto` its hasher's state, block and schedule (three);
   // `rsaSignPssSha256` and `rsaSignPssSha256Into`, the one the TLS and QUIC
@@ -14661,7 +14662,7 @@ if (dealtHere("cryptoChecks")) {
   // `wipe`, `x509`, `crypto_rsa_sign` and `net_tls_rsa_server` filters all run it.
   {
     const name =
-      "crypto: the wipes survive opt -O2 (rsaSignPrivateOp seventeen, rsaSignKeySound fifteen, rsaSignPrecompute four, RsaSignScratch.saltInto three, rsaSignPssSha256 one, rsaSignPssSha256Into one, rsaParsePrivateKey one, x509ParseRsaPrivateKey two)"
+      "crypto: the wipes survive opt -O2 (rsaSignPrivateOp seventeen, rsaSignKeySound nine, rsaSignFullOp seven, rsaSignPrecompute four, RsaSignScratch.saltInto three, rsaSignPssSha256 one, rsaSignPssSha256Into one, rsaParsePrivateKey one, x509ParseRsaPrivateKey two)"
     if (!only || [name, "crypto_rsa_sign", "net_tls_rsa_server"].some((selector) => selector.includes(only))) {
       if (!has("opt")) {
         skip("crypto: no opt to show RSA signing's and RSA key loading's wipes survive -O2")
@@ -14683,7 +14684,8 @@ if (dealtHere("cryptoChecks")) {
         const modules = { "rsa-sign": optimise("rsa-sign"), x509: optimise("x509") }
         const want = [
           ["rsa-sign", "rsaSignPrivateOp", 17],
-          ["rsa-sign", "rsaSignKeySound", 15],
+          ["rsa-sign", "rsaSignKeySound", 9],
+          ["rsa-sign", "rsaSignFullOp", 7],
           ["rsa-sign", "rsaSignPrecompute", 4],
           ["rsa-sign", "RsaSignScratch.saltInto", 3],
           ["rsa-sign", "rsaSignPssSha256", 1],

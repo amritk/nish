@@ -63,7 +63,7 @@ function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, owner: i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: owner
-  calls: CheckContext.error collectOptional collectParamForm deferExportedLayout followsDefaultMessage functionParameterFormMessage functionTypeHereMessage isCompatOptional isForeignBuffer isFunctionParameter isThreadsSource nameLiftedFeature nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_new refuseMixedForms rejectForeignPointer rejectOpaque rejectStoredMask resolveType
+  calls: CheckContext.error TypeTable.isOpaque TypeTable.stripNull collectOptional collectParamForm deferExportedLayout followsDefaultMessage functionParameterFormMessage functionTypeHereMessage isCompatOptional isForeignBuffer isFunctionParameter isThreadsSource nameLiftedFeature nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_new refuseMixedForms rejectForeignPointer rejectOpaque rejectStoredMask resolveType
   pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 rejectForeignPointer#0 rejectOpaque#0 rejectStoredMask#0 deferExportedLayout#0 isCompatOptional#0 collectOptional#0 collectParamForm#0 nameLiftedFeature#0 refuseMixedForms#0
   pointer sig: size=296 writesThrough=true captured=true passedTo=collectOptional#1 collectParamForm#1 refuseMixedForms#1
   pointer list: size=40 writesThrough=false captured=false passedTo=collectParamForm#4 refuseMixedForms#2
@@ -100,14 +100,16 @@ function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, owner: i
   callee +86:7 rejectOpaque -> @rejectOpaque
   local +90:13 where: string (const)
   callee +91:7 rejectStoredMask -> @rejectStoredMask
-  local +94:13 where: string (const)
-  callee +96:7 deferExportedLayout -> @deferExportedLayout
-  callee +98:9 isCompatOptional -> @isCompatOptional
-  callee +99:7 collectOptional -> @collectOptional
-  local +109:13 before: i32 (const)
-  callee +110:7 collectParamForm -> @collectParamForm
-  callee +111:7 nameLiftedFeature -> @nameLiftedFeature
-  callee +114:3 refuseMixedForms -> @refuseMixedForms
+  callee +95:38 TypeTable.isOpaque -> @TypeTable.isOpaque
+  callee +95:57 TypeTable.stripNull -> @TypeTable.stripNull
+  local +96:13 where: string (const)
+  callee +98:7 deferExportedLayout -> @deferExportedLayout
+  callee +100:9 isCompatOptional -> @isCompatOptional
+  callee +101:7 collectOptional -> @collectOptional
+  local +111:13 before: i32 (const)
+  callee +112:7 collectParamForm -> @collectParamForm
+  callee +113:7 nameLiftedFeature -> @nameLiftedFeature
+  callee +116:3 refuseMixedForms -> @refuseMixedForms
 function collectParamForm(ctx: CheckContext, sig: FunctionSig, param: Node, type: i32, list: Node): void -> @collectParamForm
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -373,51 +375,50 @@ function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, 
   sharedWrite: via CheckContext.error
   escaping: name
   calls: CheckContext.error FunctionSig.body TypeTable.isOpaque TypeTable.isRanged TypeTable.kindOf TypeTable.refOf TypeTable.stripNull TypeTable.typeName checkCountedBuffers isForeignBuffer isForeignType layoutClass nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq refuseForeignRange refuseMixedRun
-  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseMixedRun#0 refuseForeignRange#0 CheckContext.error#0 CheckContext.error#0 checkCountedBuffers#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0
+  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 refuseMixedRun#0 refuseForeignRange#0 CheckContext.error#0 CheckContext.error#0 checkCountedBuffers#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0
   pointer sig: size=296 writesThrough=false captured=false passedTo=FunctionSig.body#0 refuseMixedRun#1 checkCountedBuffers#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 refuseMixedRun#2 refuseForeignRange#1 CheckContext.error#1 CheckContext.error#1 checkCountedBuffers#2
   stackSites=0 stackLocals=0
   callee +0:7 FunctionSig.body -> @FunctionSig.body
   callee +1:5 CheckContext.error -> @CheckContext.error
   callee +4:5 CheckContext.error -> @CheckContext.error
-  callee +10:5 CheckContext.error -> @CheckContext.error
-  local +19:7 run: i32 (let)
-  local +20:7 lastBuffer: string (let)
-  local +21:7 runElem: i32 (let)
-  local +22:7 runFirst: string (let)
-  local +23:7 i: i32 (let)
-  callee +25:9 isForeignBuffer -> @isForeignBuffer
-  local +28:15 elem: i32 (const)
-  callee +28:22 TypeTable.refOf -> @TypeTable.refOf
-  callee +33:11 refuseMixedRun -> @refuseMixedRun
-  local +43:9 rule: string (let)
-  local +44:11 bare: i32 (const)
-  callee +44:18 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +45:39 isForeignBuffer -> @isForeignBuffer
-  callee +65:16 layoutClass -> @layoutClass
-  callee +69:16 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +70:7 refuseForeignRange -> @refuseForeignRange
-  callee +71:29 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +74:17 isForeignType -> @isForeignType
-  callee +83:7 CheckContext.error -> @CheckContext.error
-  callee +85:82 TypeTable.typeName -> @TypeTable.typeName
-  callee +91:5 CheckContext.error -> @CheckContext.error
-  callee +96:3 checkCountedBuffers -> @checkCountedBuffers
-  callee +97:7 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +104:7 TypeTable.isOpaque -> @TypeTable.isOpaque
-  callee +104:26 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +109:7 layoutClass -> @layoutClass
-  callee +109:43 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +112:5 CheckContext.error -> @CheckContext.error
-  callee +114:69 TypeTable.typeName -> @TypeTable.typeName
-  callee +114:162 TypeTable.typeName -> @TypeTable.typeName
-  callee +114:181 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +116:14 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +117:5 refuseForeignRange -> @refuseForeignRange
-  callee +118:15 isForeignType -> @isForeignType
-  local +119:11 spelled: string (const)
-  callee +119:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +120:5 CheckContext.error -> @CheckContext.error
+  local +13:7 run: i32 (let)
+  local +14:7 lastBuffer: string (let)
+  local +15:7 runElem: i32 (let)
+  local +16:7 runFirst: string (let)
+  local +17:7 i: i32 (let)
+  callee +19:9 isForeignBuffer -> @isForeignBuffer
+  local +22:15 elem: i32 (const)
+  callee +22:22 TypeTable.refOf -> @TypeTable.refOf
+  callee +27:11 refuseMixedRun -> @refuseMixedRun
+  local +37:9 rule: string (let)
+  local +38:11 bare: i32 (const)
+  callee +38:18 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +39:39 isForeignBuffer -> @isForeignBuffer
+  callee +59:16 layoutClass -> @layoutClass
+  callee +63:16 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +64:7 refuseForeignRange -> @refuseForeignRange
+  callee +65:29 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +68:17 isForeignType -> @isForeignType
+  callee +77:7 CheckContext.error -> @CheckContext.error
+  callee +79:82 TypeTable.typeName -> @TypeTable.typeName
+  callee +85:5 CheckContext.error -> @CheckContext.error
+  callee +90:3 checkCountedBuffers -> @checkCountedBuffers
+  callee +91:7 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +98:7 TypeTable.isOpaque -> @TypeTable.isOpaque
+  callee +98:26 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +103:7 layoutClass -> @layoutClass
+  callee +103:43 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +106:5 CheckContext.error -> @CheckContext.error
+  callee +108:69 TypeTable.typeName -> @TypeTable.typeName
+  callee +108:162 TypeTable.typeName -> @TypeTable.typeName
+  callee +108:181 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +110:14 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +111:5 refuseForeignRange -> @refuseForeignRange
+  callee +112:15 isForeignType -> @isForeignType
+  local +113:11 spelled: string (const)
+  callee +113:21 TypeTable.typeName -> @TypeTable.typeName
+  callee +114:5 CheckContext.error -> @CheckContext.error
 function refuseMixedRun(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string, i: i32, first: string, elem: i32): void -> @refuseMixedRun
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

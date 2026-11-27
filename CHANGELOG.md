@@ -16,6 +16,17 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.49.1] - 2026-11-27
+
+### Fixed
+
+- checker: Build the histogram-atomic example without --allow-panics ([#2350](https://github.com/amritk/nish/pull/2350))
+
+### CI
+
+- Refuse an RFC a std/ module cites with no vector spec ([#2339](https://github.com/amritk/nish/pull/2339))
+
+
 ## [0.49.0] - 2026-11-26
 
 ### Added
@@ -2416,3 +2427,4 @@ file per release, and each release's notes and downloads are on the
 [0.47.0]: https://github.com/amritk/nish/releases/tag/v0.47.0
 [0.48.0]: https://github.com/amritk/nish/releases/tag/v0.48.0
 [0.49.0]: https://github.com/amritk/nish/releases/tag/v0.49.0
+[0.49.1]: https://github.com/amritk/nish/releases/tag/v0.49.1

@@ -53,7 +53,7 @@ the record that found it. The notes below the table name each such finding.
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
 | Static files | [static.md](static.md) | `std/net/static.ts` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 4 ³² |
-| Regular expressions | [regex.md](regex.md) | `std/regex.ts`; the `nish_regex_scan` kernel in `runtime/runtime-simd.c`, its contract in `runtime/nish.h` and its lowering in `src/kernels.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 ¹⁴ |
+| Regular expressions | [regex.md](regex.md) | `std/regex.ts`; the `nish_regex_scan` kernel in `runtime/runtime-simd.c`, its contract in `runtime/nish.h` and its lowering in `src/kernels.ts` | 0 / 0 / 1 / 5 | 0 / 0 / 0 / 0 ¹⁴ |
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
@@ -83,7 +83,8 @@ the record that found it. The notes below the table name each such finding.
 | Protobuf wire format | [protobuf.md](https://github.com/amritk/nish/blob/main/docs/security/protobuf.md) | `std/net/protobuf.ts`; `src/proto-lex.ts`, `src/proto-parse.ts`, `src/proto-emit.ts`, `src/proto-cli.ts` and the `decode` methods they write | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | gRPC calls, unary and streaming | [grpc.md](https://github.com/amritk/nish/blob/main/docs/security/grpc.md) | `std/net/grpc.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ³³ |
 | Graphics shim over wgpu-native and SDL3 | [gfx.md](https://github.com/amritk/nish/blob/main/docs/security/gfx.md) | `runtime/gfx/nish-gfx.c`, `runtime/gfx/nish-gfx.h` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 4 ³⁴ |
-| **Total** ⁸ | | | **3 / 19 / 110 / 231** | **0 / 0 / 2 / 51** |
+| multipart/form-data and media types | [multipart.md](https://github.com/amritk/nish/blob/main/docs/security/multipart.md) | `std/net/multipart.ts`; the media-type section of `std/net/http-fields.ts` (`MediaType`, `mediaTypeParse`, `formDataDispositionParse`, `mediaTypeParam` and their helpers) | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 1 ³⁵ |
+| **Total** ⁸ | | | **3 / 19 / 111 / 232** | **0 / 0 / 2 / 52** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -496,6 +497,12 @@ the record that found it. The notes below the table name each such finding.
 34. GFX-1 (Low) was fixed in the stage that wrote the record: a bind group
     entry of size 0 that aborted the process in wgpu-native. GFX-2 to GFX-5
     (Low) are open. The Total moves by this row: fixed +1 Low, open +4 Low.
+35. MP-11 (Medium), a repeated-parameter check that was quadratic in a header
+    line, and MP-12 (Low), a body cut after a CR refused as malformed, were
+    fixed in the stage that wrote the record. MP-13 (Low) is open. MP-1 to
+    MP-8 are properties and MP-9 and MP-10 are accepted decisions, and none
+    of them is counted. The Total moves by this row: fixed +1 Medium +1 Low,
+    open +1 Low.
 
 ## Fuzzed
 

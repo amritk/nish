@@ -20,6 +20,7 @@ import {
   ROUTER_TOO_MANY_PARAMS,
   Router,
   RouterLimits,
+  routerChecked,
   routerDecode,
 } from "nish/net/router";
 ```
@@ -40,6 +41,12 @@ switch (router.match(p.head, p.methodStart, p.methodEnd, p.head, p.targetStart, 
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="router​Checked" icon="phosphor/regular/function" href="#routerchecked">
+
+An empty table, the twin of `Router`'s constructor that refuses a limit outside the range `RouterLimits` gives it as an `Err` rather than panicking: for a program that reads its limits from a file or flags.
+
+</scalar-card>
 
 <scalar-card title="router​Decode" icon="phosphor/regular/function" href="#routerdecode">
 
@@ -148,6 +155,30 @@ Private helpers share the importing program's flat symbol namespace
 
 ## Functions
 
+### routerChecked
+
+An empty table, the twin of `Router`'s constructor that refuses a limit
+outside the range `RouterLimits` gives it as an `Err` rather than
+panicking: for a program that reads its limits from a file or flags.
+
+```ts
+const routerChecked: (
+  limits: RouterLimits,
+) => Result<Router, string>
+```
+
+<scalar-field name="limits" type="RouterLimits" required>
+
+the caps, copied out by the table, so changing them later has no effect on it
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;Router, string&gt;">
+
+the table, or the first limit outside its range, named with the range it must lie in
+
+</scalar-field>
+
 ### routerDecode
 
 Percent-decodes `target[start .. end)`, one range `match` answered, into
@@ -221,12 +252,15 @@ class Router
 | `staticCount(): i32` | How many routes the exact-path table holds: the routes `match` answers without the tree. Every route with no parameter and no `*` is one, but for a route whose slots were all taken, which the tree answers instead. |
 | `step(): i32` | Names a new step and answers its id, counting from 0, or `ROUTER_FULL` once the table names `ROUTER_MAX_STEPS`. A step runs for the routes `use` binds it to, in the order of the ids. |
 | `steps(route: i32): i32` | The steps bound to what `match` answered: bit `s` is set for step `s`. |
+| `tryMatch(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32` | `match` without its panic: a method or target range outside its array answers `ROUTER_NOT_FOUND`, `params` untouched, as a target that is not `/`-rooted does. For a server whose ranges come from a parser it does not want a mistake in to stop the process. |
+| `tryParamCount(route: i32): i32` | `paramCount` without its panic: a route the table does not hold answers -1, for a caller whose route came from somewhere it does not trust. |
 | `use(route: i32, step: i32): void` | Binds step `step` to `route`: every request `match` answers that route runs it. `ROUTER_NOT_FOUND` binds it to the requests no route matches, and `ROUTER_METHOD_NOT_ALLOWED` to those whose path only other methods' routes match. Binding a step twice binds it once. Panics on a route or a step the table does not hold. |
 
 ### RouterLimits
 
 What a `Router` holds and refuses past. Each field has a default a server
-can use as it is; the constructor panics on a value no table could work with.
+can use as it is; the constructor panics on a value no table could work with, and
+`routerChecked` refuses one.
 
 ```ts
 class RouterLimits

@@ -60,6 +60,16 @@ const isLibrary = (compilation: Compilation, unit: ModuleUnit): boolean =>
 const modulePath = (compilation: Compilation, root: string, unit: ModuleUnit): string =>
   isLibrary(compilation, unit) ? unit.name : relativePath(root, unit.path)
 
+/**
+ * Whether the report lists `sig` among `program`'s exports: a function the
+ * module defines and exports. An exported `declare function` (WP89 S3b) is
+ * C's symbol, lent to the modules that import it, so it is left out like an
+ * unexported one; the `ffi` its callers reach is theirs
+ * (`tests/link/export_declare_handle/expected.caps.json`).
+ */
+const listedExport = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  sig.exported && !sig.foreign() && sig.definedIn(program.source)
+
 /** The facts' mask for `sig`, or 0 when the fixpoint has none for it. */
 const capsOf = (facts: FactsTable, sig: FunctionSig): i32 => {
   const f = facts.get(sig.name)
@@ -79,7 +89,7 @@ const programCapabilities = (compilation: Compilation, facts: FactsTable): i32 =
   }
   let mask = 0
   for (const sig of entry.checker.program.functions) {
-    if (sig.exported && sig.definedIn(entry.checker.program.source)) {
+    if (listedExport(entry.checker.program, sig)) {
       mask = mask | capsOf(facts, sig)
     }
   }
@@ -806,7 +816,7 @@ export const writeCapabilityReport = (compilation: Compilation, file: string, cp
       const symbols: string[] = []
       const order: i32[] = []
       for (const sig of unitProgram.functions) {
-        if (sig.exported && sig.definedIn(unitProgram.source)) {
+        if (listedExport(unitProgram, sig)) {
           order.push(listed.length)
           listed.push(sig)
           names.push(sig.sourceName)

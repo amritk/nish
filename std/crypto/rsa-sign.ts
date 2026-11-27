@@ -41,7 +41,12 @@
  * `qInv`, then R^2 and R^3 modulo `p` and modulo `q`, each in `w` bytes, for
  * `w` four times half the modulus's 32-bit limbs, rounded up; then R^2 modulo
  * the modulus in `k` bytes: `4 k + 9 w` bytes, the constants computed once at
- * load.
+ * load. A `Secret` of the first `3 k` bytes alone, `n`, `d` and `e` (RFC 8017
+ * §3.2's first form), is a key here too: it signs by `m^d mod n`, the same
+ * fixed window over every nibble of `d` and the same check against `e`, about
+ * four times the CRT's work, and nothing checks it before its first
+ * signature, since no parse made it. Known-answer tests build one directly
+ * (`test/spec/rfc8017-rsa-pss-sha256.ts`).
  *
  * **The salt is derived, not drawn.** `rsaSignPssSha256` and
  * `rsaSignPssSha256Into` take as the salt the SHA-256 of a fixed label, the
@@ -426,8 +431,9 @@ export const rsaPrivateKeyExponent = (priv: Secret<u8[]>): u8[] => expose(priv, 
  * `m`, as `k` bytes, with no padding scheme around it. It is a primitive for
  * known-answer tests and for a caller that encodes its own message; signing a
  * value an attacker chose with it is a decryption oracle. `null` for an `m`
- * that is not exactly `k` bytes or not below `n`, a `Secret` that is not a key
- * from `rsaParsePrivateKey`, and a result that fails the check against `e`.
+ * that is not exactly `k` bytes or not below `n`, a `Secret` that is neither a
+ * key from `rsaParsePrivateKey` nor the first form `n`, `d` and `e` (the
+ * module's comment), and a result that fails the check against `e`.
  *
  * @param priv The key, borrowed.
  * @param m The message representative, `k` bytes.
@@ -516,7 +522,7 @@ export class RsaSignScratch {
  * bytes is taken; TLS's `rsa_pss_rsae_sha256` wants
  * `RSA_PSS_SHA256_SALT_SIZE` bytes, which `rsaSignPssSha256` derives. `null`
  * for a salt too long for the key, a
- * `Secret` that is not a key from `rsaParsePrivateKey`, and a signature that
+ * `Secret` that is not a key (the module's comment), and a signature that
  * fails the check against `e`.
  *
  * @param priv The key, borrowed.
@@ -599,7 +605,7 @@ export const rsaSignPssSha256SaltedInto = (
  * RSASSA-PSS-SIGN (RFC 8017 §8.1.1) with SHA-256, MGF1-SHA-256 and the
  * `RSA_PSS_SHA256_SALT_SIZE`-byte salt derived from the key and the message
  * (see the module's comment): TLS 1.3's `rsa_pss_rsae_sha256`. `null` for a
- * `Secret` that is not a key from `rsaParsePrivateKey` and a signature that
+ * `Secret` that is not a key (the module's comment) and a signature that
  * fails the check against `e`.
  *
  * @param priv The key, borrowed.
@@ -780,13 +786,15 @@ const rsaSignPssEncode = (
 // ---------------------------------------------------------------------------
 
 /**
- * `k` for a key value of `4 k + 9 w` bytes (`rsaSignKeyBytes`) with `k` 256
- * to 512, else 0. The length grows with `k`, so one `k` at most has it.
+ * `k` for a key value of `4 k + 9 w` bytes (`rsaSignKeyBytes`), or of the
+ * first form's `3 k` (`n`, `d` and `e`, RFC 8017 §3.2), with `k` 256 to 512,
+ * else 0. Each length grows with `k`, and every `3 k` is below every
+ * `4 k + 9 w`, so one `k` at most has it.
  */
 const rsaSignKeySize = (key: u8[]): i32 => {
   const total: i32 = toI32(key.length)
   for (let k: i32 = 256; k <= 512; k++) {
-    if (4 * k + 9 * rsaSignHalfWidth(k) === total) {
+    if (3 * k === total || 4 * k + 9 * rsaSignHalfWidth(k) === total) {
       return k
     }
   }
@@ -1406,10 +1414,13 @@ const rsaSignOpens = (
  * (Bellcore), answers `null`. `null` too for a key of the wrong shape and an
  * `m` of the wrong length or not below `n`. Every limb array that held a
  * prime, an exponent, a constant made from a prime or a power of `m` is
- * wiped.
+ * wiped. A key value of the first form, `3 k` bytes, is `rsaSignFullOp`'s.
  */
 const rsaSignPrivateOp = (key: u8[], m: u8[]): u8[] | null => {
   const k: i32 = rsaSignKeySize(key)
+  if (k >= 256 && k <= 512 && toI32(key.length) === 3 * k) {
+    return rsaSignFullOp(key, m)
+  }
   const w: i32 = rsaSignHalfWidth(k)
   if (
     k < 256 ||
@@ -1527,33 +1538,60 @@ const rsaSignPrivateOp = (key: u8[], m: u8[]): u8[] | null => {
 }
 
 /**
- * Whether `m^d mod n`, by the fixed 4-bit window over every nibble of the
- * `⌈k / 4⌉` limbs of `d`, opens to `m` under `e`: the load's check that `d`,
- * which signing no longer reads but the salt does, is `e`'s inverse. It is
- * run once per key, never per signature. Every limb array that held `d` or a
- * power of `m` is wiped.
+ * RSASP1 by the first form of the key (RFC 8017 §5.2.1, step 2a): `m^d mod
+ * n`, by the fixed 4-bit window over every nibble of the `⌈k / 4⌉` limbs of
+ * `d`, for the `k`-byte `m` below `n`. The key value is either form: `n`, `d`
+ * and `e` alone in `3 k` bytes, whose R^2 modulo `n` is made here, or
+ * `rsaSignKeyBytes`'s, whose R^2 modulo `n` is read. The answer is raised to
+ * `e` and compared with `m`, and checked below `n`, before any byte of it is
+ * returned, so a key whose exponents do not undo each other answers `null`,
+ * as do a key of the wrong shape and an `m` of the wrong length or not below
+ * `n`. Every limb array that held `d` or a power of `m` is wiped.
  */
-const rsaSignFullOpens = (key: u8[], m: u8[]): boolean => {
+const rsaSignFullOp = (key: u8[], m: u8[]): u8[] | null => {
   const k: i32 = rsaSignKeySize(key)
   const w: i32 = rsaSignHalfWidth(k)
-  if (k < 256 || k > 512 || w < 4 || w > 256 || toI32(m.length) !== k) {
-    return false
+  if (
+    k < 256 ||
+    k > 512 ||
+    w < 4 ||
+    w > 256 ||
+    toI32(m.length) !== k ||
+    toI32(key.length) < k ||
+    toI32(key.length) < 3 * k ||
+    (toI32(key[k - 1]) & 1) === 0
+  ) {
+    return null
   }
   const count: i32 = toI32((k + 3) / 4)
   const n: u32[] = new Array<u32>(128)
   rsaSignLimbs(n, key, 0, k, count)
   const ml: u32[] = new Array<u32>(128)
   rsaSignLimbs(ml, m, 0, k, count)
+  // `m < n`: both are public, so the compare may exit early.
+  let below: i32 = 0
+  for (let i: i32 = count - 1; i >= 0; i--) {
+    if (below === 0 && ml[i] !== n[i]) {
+      below = ml[i] < n[i] ? 1 : -1
+    }
+  }
+  if (below !== 1) {
+    return null
+  }
   const dl: u32[] = new Array<u32>(128)
   rsaSignLimbs(dl, key, k, k, count)
   const el: u32[] = new Array<u32>(128)
   rsaSignLimbs(el, key, 2 * k, k, count)
+  const t: u32[] = new Array<u32>(130)
   const r2n: u32[] = new Array<u32>(128)
-  rsaSignLimbs(r2n, key, 3 * k + 9 * w, k, count)
+  if (toI32(key.length) === 3 * k) {
+    rsaSignR2(r2n, n, t, count)
+  } else {
+    rsaSignLimbs(r2n, key, 3 * k + 9 * w, k, count)
+  }
   const one: u32[] = new Array<u32>(128)
   one[0] = 1
   const n0inv: u32 = rsaSignMontInverse(n[0])
-  const t: u32[] = new Array<u32>(130)
   const table: u32[] = new Array<u32>(2048)
   const entry: u32[] = new Array<u32>(128)
   const mm: u32[] = new Array<u32>(128)
@@ -1562,7 +1600,10 @@ const rsaSignFullOpens = (key: u8[], m: u8[]): boolean => {
   rsaSignMontMul(mm, ml, r2n, n, n0inv, t, count)
   rsaSignPow(acc, mm, dl, n, n0inv, r2n, one, table, entry, sel, t, count)
   rsaSignMontMul(acc, acc, one, n, n0inv, t, count)
-  const differ: u32 = rsaSignOpens(acc, ml, el, n, n0inv, r2n, one, entry, mm, t, count)
+  const differ: u32 =
+    (rsaSignLess(acc, n, count) ^ 1) | rsaSignOpens(acc, ml, el, n, n0inv, r2n, one, entry, mm, t, count)
+  const ok: boolean = differ === 0
+  const signature: u8[] = ok ? rsaSignBytes(acc, k) : []
   wipe(dl)
   wipe(t)
   wipe(table)
@@ -1570,5 +1611,22 @@ const rsaSignFullOpens = (key: u8[], m: u8[]): boolean => {
   wipe(mm)
   wipe(sel)
   wipe(acc)
-  return differ === 0
+  if (!ok) {
+    return null
+  }
+  return signature
+}
+
+/**
+ * Whether `m^d mod n` (`rsaSignFullOp`) opens to `m` under `e`: the load's
+ * check that `d`, which CRT signing does not read but the salt does, is
+ * `e`'s inverse. It is run once per key, never per signature.
+ */
+const rsaSignFullOpens = (key: u8[], m: u8[]): boolean => {
+  const s: u8[] | null = rsaSignFullOp(key, m)
+  if (s === null) {
+    return false
+  }
+  wipe(s)
+  return true
 }
