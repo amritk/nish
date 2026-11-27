@@ -69,28 +69,35 @@ for (const side of sides) {
 }
 ```
 
-The IR is readable. `examples/add.ts`, `a + b` on two `number`s (32-bit
-integers by default), compiles to a checked add: an overflow panics instead
-of wrapping, and a sum the compiler proves fits is a plain `add nsw`. That
-check is a panic site, so the compiler's default, which holds a package to no
-panic, refuses the file on purpose and `nish --allow-panics` builds it; each
-example that keeps a panic site says why in its first lines.
+`examples/add.ts` adds two `number`s (32-bit integers by
+default). The sum can leave the `i32` range, so `add` answers a `Result`
+whose `Err` arm is the overflow check, and the compiler's default, which
+holds a package to no panic, builds it as it is:
 
-```llvm
-define noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
-entry:
-  %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %a, i32 %b)
-  %1 = extractvalue { i32, i1 } %0, 0
-  %2 = extractvalue { i32, i1 } %0, 1
-  br i1 %2, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  ret i32 %1
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
+```ts
+export const add = (a: number, b: number): Result<number, number> => {
+  const sum: i64 = toI64(a) + toI64(b)
+  if (sum > 2147483647) {
+    return Err(1)
+  }
+  if (sum < -2147483648) {
+    return Err(-1)
+  }
+  return Ok(toI32(sum))
 }
+```
+
+The widened sum is a plain `add nsw i64`, and the `Result` comes back in one
+register. A C caller (`examples/main.c`) reads it as the word
+`nish --emit-header` declares, and takes the `Err` arm as the overflow:
+
+```c
+nish_result_i32_i32_word r = add(2, 3);
+if (!r.ok) {
+  fprintf(stderr, "add(2, 3) overflows int32_t\n");
+  return 1;
+}
+printf("add(2, 3) = %d\n", r.as.value);
 ```
 
 Next step: [Your first program](docs/guide/getting-started/first-program.md).

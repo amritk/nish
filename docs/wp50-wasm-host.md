@@ -805,8 +805,8 @@ So `--export-all` costs 68% of the hello world and 26% of a module with arrays.
 module storage, and the runtime entry points the loader calls (the arena mark,
 release and allocation), and nothing else. `--gc-sections` is already applied.
 `build.sh` runs `wasm-opt -Oz --strip-target-features` when it is on `PATH` and
-records in the build line whether it ran (binaryen 132: `add.wasm` 74 bytes,
-`arrays.wasm` 1,713). clang 18 also runs a `wasm-opt` it finds itself after an
+records in the build line whether it ran (binaryen 132: `add.wasm` 106 bytes,
+`arrays.wasm` 2,146, since both answer their overflows). clang 18 also runs a `wasm-opt` it finds itself after an
 `-O` link, keeping the `target_features` section, which made `add.wasm` 150
 bytes and broke the guard on a machine with binaryen (#1257).
 `NISH_WASM_OPT=0` links with neither pass; the size test measures that build,
