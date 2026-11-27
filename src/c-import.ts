@@ -965,6 +965,8 @@ class Importer {
   typedefDocs: string[]
   /** The header's own text, read once, for the doc comments clang points into it. */
   headerText: string = ""
+  /** Where each line of `headerText` starts, the first line's at 0: `docAbove` looks a macro's line up here. */
+  headerLineStarts: i32[]
   /** Per typedef, whether it carries its own `aligned` attribute. */
   typedefAligned: boolean[]
   tags: StringMap
@@ -1012,6 +1014,7 @@ class Importer {
     this.typedefs = new StringMap()
     this.typedefTypes = []
     this.typedefDocs = []
+    this.headerLineStarts = []
     this.typedefAligned = []
     this.tags = new StringMap()
     this.recordIds = new StringMap()
@@ -1231,6 +1234,12 @@ class Importer {
     }
     const bytes = readCapped(this.headerAbs)
     this.headerText = bytes === null ? "" : String.fromBytes(bytes, 0, bytes.length)
+    this.headerLineStarts = [0]
+    let nl = this.headerText.indexOf("\n", 0)
+    while (nl >= 0) {
+      this.headerLineStarts.push(nl + 1)
+      nl = this.headerText.indexOf("\n", nl + 1)
+    }
     const decls = this.inner(root)
     const n = this.count(decls)
     for (let i = 0; i < n; i++) {
@@ -1296,14 +1305,12 @@ class Importer {
    */
   docAbove(line: i32): string {
     const text = this.headerText
-    let start = 0
-    for (let at = 1; at < line && start >= 0; at++) {
-      start = text.indexOf("\n", start)
-      start = start < 0 ? -1 : start + 1
-    }
-    if (start <= 0) {
+    const starts = this.headerLineStarts
+    // Line 1 has nothing above it; a line past the header's last has no start.
+    if (line <= 1 || line > starts.length) {
       return ""
     }
+    const start = starts[line - 1]
     const lo = Math.max(0, start - DOC_MAX)
     let above = text.slice(lo, start - 1)
     if (above.endsWith("\r")) {
