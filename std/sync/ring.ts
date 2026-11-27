@@ -185,7 +185,7 @@ const ringBack = (pos: i64, mask: integer<0, 1073741823>): integer<0, 1073741823
 const ringBackAt = (
   last: integer<0, 2147483647>,
   back: integer<0, 1073741823>,
-  stride: integer<0, 2147483647>,
+  stride: integer<0, 2147483647>
 ): i32 => {
   const at: i64 = toI64(last) - toI64(back) * toI64(stride)
   return at >= toI64(0) ? toI32(at) : -1
@@ -934,7 +934,10 @@ export class MpscRing {
     const tailAt: i32 = this.tailAt
     let pos: i64 = this.region.loadI64(tailAt, RELAXED)
     while (true) {
-      const seq: i64 = this.region.loadI64(ringBackAt(this.lastSeqAt, ringBack(pos, this.mask), this.stride), ACQUIRE)
+      const seq: i64 = this.region.loadI64(
+        ringBackAt(this.lastSeqAt, ringBack(pos, this.mask), this.stride),
+        ACQUIRE
+      )
       if (seq === pos) {
         const seen: i64 = this.region.compareExchangeI64(tailAt, pos, ringPos(pos, toI64(1)), RELAXED)
         if (seen === pos) {
@@ -969,7 +972,10 @@ export class MpscRing {
 
   /** Whether the slot at the consumer's position is filled. */
   private ready(order: i32): boolean {
-    return this.region.loadI64(ringBackAt(this.lastSeqAt, ringBack(this.head, this.mask), this.stride), order) === ringPos(this.head, toI64(1))
+    return (
+      this.region.loadI64(ringBackAt(this.lastSeqAt, ringBack(this.head, this.mask), this.stride), order) ===
+      ringPos(this.head, toI64(1))
+    )
   }
 
   /** Empties the consumer's slot for the producer one lap on. */
@@ -987,7 +993,10 @@ export class MpscRing {
 
   /** The panic `tryPop` and `popWait` give for a slot `take` found corrupt. */
   private corrupt(): void {
-    const len: i32 = this.region.loadI32(ringBackAt(this.lastLenAt, ringBack(this.head, this.mask), this.stride), RELAXED)
+    const len: i32 = this.region.loadI32(
+      ringBackAt(this.lastLenAt, ringBack(this.head, this.mask), this.stride),
+      RELAXED
+    )
     panic(`nish/sync/ring: a record of length ${len} at position ${this.head}: the ring is corrupt`)
   }
 

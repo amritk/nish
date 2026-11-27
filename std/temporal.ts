@@ -137,7 +137,7 @@ const temporalJoin = (high: i64, low: i64): i64 => {
 const temporalAdd = (a: i64, b: i64): i64 => {
   // Operands under 2^62 in magnitude, a shift left and back leaving them as
   // they are, sum without overflow; the halves are the path for the rest.
-  if (((a << 1) >> 1) === a && ((b << 1) >> 1) === b) {
+  if ((a << 1) >> 1 === a && (b << 1) >> 1 === b) {
     return ((a << 1) >> 1) + ((b << 1) >> 1)
   }
   const low: i64 = (a & 4294967295) + (b & 4294967295)
@@ -147,7 +147,7 @@ const temporalAdd = (a: i64, b: i64): i64 => {
 
 /** `a - b`, raising a `RangeError` where it leaves the i64 range. */
 const temporalSub = (a: i64, b: i64): i64 => {
-  if (((a << 1) >> 1) === a && ((b << 1) >> 1) === b) {
+  if ((a << 1) >> 1 === a && (b << 1) >> 1 === b) {
     return ((a << 1) >> 1) - ((b << 1) >> 1)
   }
   // The low halves' difference is in (-2^32, 2^32): its shift is the borrow.
@@ -1007,7 +1007,10 @@ const temporalBalance = (span: TemporalSpan, largest: i32): Duration => {
       ms = 0
     } else {
       ns = temporalAdd(
-        temporalAdd(temporalAdd(temporalMul(temporalMul(s, 1000000), 1000), temporalMul(ms, 1000000)), temporalMul(us, 1000)),
+        temporalAdd(
+          temporalAdd(temporalMul(temporalMul(s, 1000000), 1000), temporalMul(ms, 1000000)),
+          temporalMul(us, 1000)
+        ),
         ns
       )
       ms = 0
@@ -2433,10 +2436,8 @@ export class PlainDateTime {
       const nanos: i64 = temporalAdd(temporalDurationNanos(duration), this.nanoOfDay)
       const total: i64 = temporalAdd(seconds, temporalFloorDiv(nanos, TEMPORAL_NS_PER_SECOND))
       carryDays = temporalFloorDiv(total, TEMPORAL_SECONDS_PER_DAY)
-      nanoOfDay = (
-        toI64(temporalModSmall(total, 86400)) * 1000000000 +
-          toI64(temporalModSmall(nanos, 1000000000))
-      )
+      nanoOfDay =
+        toI64(temporalModSmall(total, 86400)) * 1000000000 + toI64(temporalModSmall(nanos, 1000000000))
     }
     const epochDay: i64 = temporalAddToDate(
       this.year,
@@ -2909,7 +2910,8 @@ const temporalWholeSeconds = (
   // low 32 bits in `low`, so no partial sum overflows; a product's three
   // 16-bit pieces go to the halves they land in. The join carries `low` into
   // `high` and raises if the total leaves the `i64` range.
-  const remainders: i64 = (milliseconds % 1000) * 1000000 + (microseconds % 1000000) * 1000 + (nanoseconds % 1000000000)
+  const remainders: i64 =
+    (milliseconds % 1000) * 1000000 + (microseconds % 1000000) * 1000 + (nanoseconds % 1000000000)
   const ms: i64 = milliseconds / 1000
   const us: i64 = microseconds / 1000000
   const ns: i64 = nanoseconds / 1000000000
@@ -2918,15 +2920,30 @@ const temporalWholeSeconds = (
   const hMid: i64 = ((hours >> 16) & 65535) * 3600
   const mMid: i64 = ((minutes >> 16) & 65535) * 60
   const low: i64 =
-    (days & 65535) * 86400 + (dMid & 65535) * 65536 +
-    (hours & 65535) * 3600 + (hMid & 65535) * 65536 +
-    (minutes & 65535) * 60 + (mMid & 65535) * 65536 +
-    (seconds & 4294967295) + (ms & 4294967295) + (us & 4294967295) + (ns & 4294967295) + (rest & 4294967295)
+    (days & 65535) * 86400 +
+    (dMid & 65535) * 65536 +
+    (hours & 65535) * 3600 +
+    (hMid & 65535) * 65536 +
+    (minutes & 65535) * 60 +
+    (mMid & 65535) * 65536 +
+    (seconds & 4294967295) +
+    (ms & 4294967295) +
+    (us & 4294967295) +
+    (ns & 4294967295) +
+    (rest & 4294967295)
   const high: i64 =
-    (days >> 32) * 86400 + (dMid >> 16) +
-    (hours >> 32) * 3600 + (hMid >> 16) +
-    (minutes >> 32) * 60 + (mMid >> 16) +
-    (seconds >> 32) + (ms >> 32) + (us >> 32) + (ns >> 32) + (rest >> 32) + (low >> 32)
+    (days >> 32) * 86400 +
+    (dMid >> 16) +
+    (hours >> 32) * 3600 +
+    (hMid >> 16) +
+    (minutes >> 32) * 60 +
+    (mMid >> 16) +
+    (seconds >> 32) +
+    (ms >> 32) +
+    (us >> 32) +
+    (ns >> 32) +
+    (rest >> 32) +
+    (low >> 32)
   const whole: i64 = temporalJoin(high, low)
   return whole < 0 ? temporalSub(0, whole) : whole
 }
@@ -3305,7 +3322,8 @@ export class Instant {
     const civil: i64 = temporalCivilOfEpochDay(day)
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
     const year: i32 = temporalCivilYear(civil)
-    const nanoOfDay: i64 = toI64(temporalModSmall(this.epochSeconds, 86400)) * 1000000000 + toI64(this.nanosecondOfSecond)
+    const nanoOfDay: i64 =
+      toI64(temporalModSmall(this.epochSeconds, 86400)) * 1000000000 + toI64(this.nanosecondOfSecond)
     let i: i32 = 0
     if (year >= 0 && year <= 9999) {
       const secs: i32 = toI32(secondOfDay)
