@@ -12,10 +12,20 @@
 #   1. bench/quickack/probe.c: each call's cost, and the pure ACKs per request
 #      each mode sends on one connection under a fast, a slow and an idle
 #      client
-#   2. bench/http.mjs --acks over the keep-alive scenarios, every mode in one
+#   2. the alternatives to the socket option Linux offers per host, each
+#      measured with probe.c on one connection and with bench/http.mjs --acks
+#      on the plaintext scenario, `none` and `reset0`, then put back:
+#        route    `quickack 1` on the local route to 127.0.0.1
+#        sysctl   net.ipv4.tcp_pingpong_thresh at 3, and the write of 0
+#        sockops  a BPF sockops program on a cgroup v2 (sockops.c) calling
+#                 bpf_setsockopt with TCP_BPF_DELACK_MAX 8000 us, and with
+#                 TCP_QUICKACK 0
+#      Each needs root (CAP_NET_ADMIN, CAP_BPF, CAP_SYS_ADMIN); where the box
+#      refuses one, the refusal is printed in its place and the run goes on
+#   3. bench/http.mjs --acks over the keep-alive scenarios, every mode in one
 #      interleaved session with `copy`, a byte-identical copy of the `none`
 #      build, whose distance from `none` is the noise band
-#   3. bench/http.mjs --syscalls over the same scenarios
+#   4. bench/http.mjs --syscalls over the same scenarios
 #
 # Each mode is a wrapper script under build/bench/quickack/ that execs the one
 # build with BENCH_QUICKACK set, so every row runs the same bytes and the
@@ -102,6 +112,136 @@ echo
 echo "# probe.c"
 echo
 "$out/probe"
+
+# The alternatives. Each one changes host state, so the trap puts every change
+# back however the run ends.
+cc -O2 -Wall -o "$out/sockops" bench/quickack/sockops.c
+route_was=()
+thresh_was=""
+cgroup_mount=""
+cgroup_dir=""
+restore() {
+  if [ ${#route_was[@]} -gt 0 ]; then
+    ip route replace table local "${route_was[@]}" || echo "could not restore the route: ${route_was[*]}" >&2
+  fi
+  if [ -n "$thresh_was" ]; then
+    echo "$thresh_was" >/proc/sys/net/ipv4/tcp_pingpong_thresh || echo "could not restore tcp_pingpong_thresh=$thresh_was" >&2
+  fi
+  if [ -n "$cgroup_dir" ]; then
+    rmdir "$cgroup_dir" 2>/dev/null || true
+  fi
+  if [ -n "$cgroup_mount" ]; then
+    umount "$cgroup_mount" 2>/dev/null || true
+    rmdir "$cgroup_mount" 2>/dev/null || true
+  fi
+}
+trap restore EXIT
+alt_load() {
+  node bench/http.mjs --acks --rounds "$rounds" --duration "$duration" --only "plaintext keep-alive c=256" \
+    "none=$out/none" "reset0=$out/reset0"
+}
+echo
+echo "# alternatives"
+echo
+echo "Figures from a cloud VM when the box above reports a hypervisor."
+echo
+echo "## baseline, the host as it is"
+echo
+"$out/probe" acks none reset0
+alt_load
+
+echo
+echo "## route: quickack 1 on the local route to 127.0.0.1"
+echo
+if ! command -v ip >/dev/null; then
+  echo "refused: ip (iproute2) is not installed"
+else
+  # The route's words, as ip prints them, are what puts it back.
+  read -ra route <<<"$(ip route show table local 127.0.0.1 | head -n1)"
+  echo "before: ${route[*]}"
+  if [ ${#route[@]} -eq 0 ]; then
+    echo "refused: no local route to 127.0.0.1 to change"
+  elif err="$(ip route replace table local "${route[@]}" quickack 1 2>&1)"; then
+    route_was=("${route[@]}")
+    echo "during: $(ip route show table local 127.0.0.1 | head -n1)"
+    echo
+    "$out/probe" acks none reset0
+    alt_load
+    ip route replace table local "${route_was[@]}"
+    route_was=()
+    echo "after: $(ip route show table local 127.0.0.1 | head -n1)"
+  else
+    echo "refused: ip route replace table local ${route[*]} quickack 1: $err"
+  fi
+fi
+
+echo
+echo "## sysctl: net.ipv4.tcp_pingpong_thresh"
+echo
+f=/proc/sys/net/ipv4/tcp_pingpong_thresh
+if [ ! -r "$f" ]; then
+  echo "refused: $f does not exist on this kernel"
+else
+  was="$(cat "$f")"
+  echo "before: $was"
+  if err="$( { echo 0 >"$f"; } 2>&1)"; then
+    thresh_was="$was"
+    echo "the write of 0 was taken"
+  else
+    echo "the write of 0: refused: ${err##*: }"
+  fi
+  if err="$( { echo 3 >"$f"; } 2>&1)"; then
+    thresh_was="$was"
+    echo "during: $(cat "$f")"
+    echo
+    "$out/probe" acks none reset0
+    alt_load
+    echo "$thresh_was" >"$f"
+    thresh_was=""
+    echo "after: $(cat "$f")"
+  else
+    echo "the write of 3: refused: ${err##*: }"
+  fi
+fi
+
+echo
+echo "## sockops: a BPF program on a cgroup v2"
+echo
+if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+  root_cg=/sys/fs/cgroup
+else
+  # A cgroup v1 host: mount a v2 hierarchy beside it for the run.
+  cgroup_mount="$(mktemp -d)"
+  if ! err="$(mount -t cgroup2 none "$cgroup_mount" 2>&1)"; then
+    echo "refused: mount -t cgroup2: $err"
+    rmdir "$cgroup_mount"
+    cgroup_mount=""
+  fi
+  root_cg="$cgroup_mount"
+fi
+if [ -n "$root_cg" ]; then
+  cgroup_dir="$root_cg/nish-quickack-$$"
+  if ! err="$(mkdir "$cgroup_dir" 2>&1)"; then
+    echo "refused: mkdir $cgroup_dir: $err"
+    cgroup_dir=""
+  else
+    echo "### TCP_BPF_DELACK_MAX 8000 us"
+    echo
+    "$out/sockops" "$cgroup_dir" delack_max 8000 "$out/probe" acks none reset0 || true
+    "$out/sockops" "$cgroup_dir" delack_max 8000 node bench/http.mjs --acks --rounds "$rounds" \
+      --duration "$duration" --only "plaintext keep-alive c=256" "none=$out/none" "reset0=$out/reset0" || true
+    echo
+    echo "### TCP_QUICKACK 0"
+    echo
+    "$out/sockops" "$cgroup_dir" quickack 0 "$out/probe" acks none || true
+  fi
+fi
+restore
+trap - EXIT
+route_was=()
+thresh_was=""
+cgroup_dir=""
+cgroup_mount=""
 
 scenarios="ping keep-alive,plaintext keep-alive c=256,json keep-alive c=256"
 echo
