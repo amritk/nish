@@ -71,7 +71,7 @@ const document = (): string => {
 }
 
 export const main = (): i32 => {
-  const n: i32 = 300 // bench:n
+  const n: i32 = 100 // bench:n
   const text = document()
   let sum: i64 = 0
   for (let round: i32 = 0; round < n; round++) {

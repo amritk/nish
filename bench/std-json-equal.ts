@@ -29,7 +29,7 @@ const document = (other: boolean): string => {
 }
 
 export const main = (): i32 => {
-  const n: i32 = 300 // bench:n
+  const n: i32 = 60 // bench:n
   const left = document(false)
   const right = document(true)
   const da = new JsonDocument(new JsonLimits())

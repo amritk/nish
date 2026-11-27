@@ -44,7 +44,7 @@ const document = (): string => {
 }
 
 export const main = (): i32 => {
-  const n: i32 = 300 // bench:n
+  const n: i32 = 150 // bench:n
   const text = document()
   const stream = parseYaml(text)
   const index = new YamlLineIndex(text)
