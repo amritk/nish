@@ -10,7 +10,9 @@ export const HIGH_A: u32 = 2147483648
 export const HIGH_B: u32 = 2147483649
 export const CAST_A: i32 = 3
 export const CAST_B: i32 = 4
+/** The first. */
 export const DOC_A: i32 = 5
+/** The second, implicit. */
 export const DOC_B: i32 = 6
 
 declare function take_small(s: i32): i32
