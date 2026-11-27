@@ -740,3 +740,23 @@ export const rsaVerifyPss = (key: RsaPublicKey, hash: i32, saltLen: i32, msg: u8
   }
   return timingSafeEqual(rsaDigest(hash, prime), h)
 }
+
+/**
+ * Verifies an RSASSA-PSS signature under a public key given as its DER, as
+ * `rsaVerifyPss` does after `rsaParsePublicKey`: for a caller that holds the
+ * key's bytes and no `RsaPublicKey`.
+ *
+ * @param der The key as `rsaParsePublicKey` reads it, whole.
+ * @param hash `RSA_HASH_SHA256`, `RSA_HASH_SHA384` or `RSA_HASH_SHA512`.
+ * @param saltLen The salt's length in bytes.
+ * @param msg The message signed, whole.
+ * @param sig The signature, big-endian.
+ * @returns `true` only when `der` parses and `sig` is its signature of `msg`.
+ */
+export const rsaVerifyPssDer = (der: u8[], hash: i32, saltLen: i32, msg: u8[], sig: u8[]): boolean => {
+  const key: RsaPublicKey | null = rsaParsePublicKey(der)
+  if (key === null) {
+    return false
+  }
+  return rsaVerifyPss(key, hash, saltLen, msg, sig)
+}

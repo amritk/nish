@@ -1,9 +1,10 @@
-// Opt-out (`--allow-panics`), recorded against #2208, for the two sites left
+// Opt-out (`--allow-panics`), recorded against #2208, for the std sites left
 // between this file and the no-panic default; it keeps none of its own:
 // `fb.set` reaches the `panic` `Framebuffer.set` keeps in std/term-pixels.ts
 // for a pixel store out of step with its size, and `runTerminal` reaches a
-// `slice` in std/term.ts. Follow-up: make those two calls panic-free, then
-// build this file without `--allow-panics`.
+// `slice` site in std/term-io.ts (#2385). The compiler names one site per
+// call. Follow-up: make both calls panic-free, then build this file without
+// `--allow-panics`.
 //
 // What `nish/term-io` found out about this terminal, and how its frame loop
 // settled: attach the output to a bug report about a terminal that draws

@@ -4,6 +4,7 @@
      build/bench/quickack-probe            both parts
      build/bench/quickack-probe calls      the per-call cost only
      build/bench/quickack-probe acks       the per-mode ACK table only
+     build/bench/quickack-probe acks none  the ACK table for the modes named
 
    Part one, `calls`: nanoseconds per call of setsockopt(TCP_QUICKACK, 0),
    setsockopt(TCP_QUICKACK, 1), getsockopt(TCP_QUICKACK), getsockopt(TCP_INFO)
@@ -174,19 +175,32 @@ static void exchange(const char *mode, const char *pattern) {
   close(server);
 }
 
-static void acks(void) {
+/* The ACK table for the `n` modes in `only`, or for every mode when n is 0. */
+static void acks(int n, char **only) {
   static const char *modes[] = {"none", "once0", "reset0", "reset1"};
   static const char *patterns[] = {"fast", "slow", "idle"};
+  for (int k = 0; k < n; k++) {
+    int known = 0;
+    for (int m = 0; m < 4; m++) known |= strcmp(only[k], modes[m]) == 0;
+    if (!known) {
+      fprintf(stderr, "probe: unknown mode %s (none, once0, reset0, reset1)\n", only[k]);
+      exit(2);
+    }
+  }
   printf("| mode | pattern | server pure ACKs/request | requests met out of delayed-ACK mode |\n");
   printf("| --- | --- | ---: | ---: |\n");
   for (int p = 0; p < 3; p++)
-    for (int m = 0; m < 4; m++) exchange(modes[m], patterns[p]);
+    for (int m = 0; m < 4; m++) {
+      int wanted = n == 0;
+      for (int k = 0; k < n; k++) wanted |= strcmp(only[k], modes[m]) == 0;
+      if (wanted) exchange(modes[m], patterns[p]);
+    }
 }
 
 int main(int argc, char **argv) {
   const char *part = argc > 1 ? argv[1] : "both";
   if (strcmp(part, "acks") != 0) calls();
   if (strcmp(part, "both") == 0) printf("\n");
-  if (strcmp(part, "calls") != 0) acks();
+  if (strcmp(part, "calls") != 0) acks(argc > 2 ? argc - 2 : 0, argv + 2);
   return 0;
 }

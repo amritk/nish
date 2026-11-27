@@ -1253,9 +1253,9 @@ kernel time is the entry and exit. [`syscall-cost/`](syscall-cost/) answers it
 for the box it runs on:
 
 ```bash
-bash bench/syscall-cost/run.sh                     # 7 interleaved rounds of 10^6 calls
-bash bench/syscall-cost/run.sh --quick             # 3 rounds of 10^5, about a second
-bash bench/syscall-cost/run.sh --split 2.07 4.89   # also split a server's sys µs/request
+bash bench/syscall-cost/run.sh                # 7 rounds of 10^6 calls, then 5 server rounds of 5 s
+bash bench/syscall-cost/run.sh --quick        # 3 rounds of 10^5, then 1 server round of 2 s
+bash bench/syscall-cost/run.sh --entry-only   # the entry table alone, no server
 ```
 
 `run.sh` builds `entry.c` with the system `cc -O2`, prints the CPU, the
@@ -1277,65 +1277,76 @@ around it, and the rows' rounds are interleaved:
   figure is per call, a quarter of the round, and the TCP work per call is
   that less the `getppid` row.
 
-**Measured on 2026-10-30** at `ce8f92ce`, on a cloud container: Intel Xeon
-Processor @ 2.10 GHz, 4 logical CPUs, a KVM virtual machine (Firecracker),
-Linux 6.18.44, `mitigations=auto,no_guest_host,no_guest_guest`. Its
-vulnerabilities files read `Not affected` for everything but `spectre_v1`
-(usercopy/swapgs barriers), `spectre_v2` (Enhanced / Automatic IBRS, IBPB
-conditional, PBRSB-eIBRS SW sequence, BHI vulnerable) and `spec_store_bypass`
-(disabled via prctl); `meltdown` is not affected, so there is no KPTI page
-table switch on entry. Seven rounds of 10^6 calls, pinned to CPU 0:
+Then it splits a server's kernel time in the same run. It builds
+`http1-server.ts` and a byte-identical copy, counts each keep-alive scenario's
+syscalls a request with `node bench/http.mjs --syscalls`, and times both builds
+in one interleaved `bench/http.mjs` session. Each scenario's system CPU a
+request, read from `/proc/<pid>/stat`, splits into **(a)**, the syscalls a
+request × the `getppid` median, and **(b)**, the system time less (a). The
+copy's distance from the build is the noise band. That part needs `node`,
+`wrk`, `strace` and `build/nish`; `--entry-only` skips it.
+
+**Measured on 2026-11-27** on a cloud VM: Intel Xeon Processor @ 2.10 GHz,
+4 logical CPUs, a KVM virtual machine, Linux 6.18.44,
+`mitigations=auto,no_guest_host,no_guest_guest`. Its vulnerabilities files
+read `Not affected` for everything but `spectre_v1` (usercopy/swapgs
+barriers), `spectre_v2` (Enhanced / Automatic IBRS, IBPB conditional,
+PBRSB-eIBRS SW sequence, BHI vulnerable) and `spec_store_bypass` (disabled via
+prctl); `meltdown` is not affected, so there is no KPTI page table switch on
+entry. The bench code is that of this section's commit, the squash commit of
+the pull request that added the in-run split; the server was built by
+`build/nish` from `src/` at `9533b5d5`, that pull request's base, which it
+does not change. One `bash bench/syscall-cost/run.sh`, seven rounds of 10^6
+calls pinned to CPU 0:
 
 | call | median ns | min–max ns |
 | --- | ---: | ---: |
-| `getppid` (entry and exit) | 106.0 | 101.9–113.2 |
-| `recv`, nothing queued (`EAGAIN`) | 173.7 | 170.2–206.6 |
-| `setsockopt(TCP_QUICKACK, 0)` | 179.7 | 176.2–210.9 |
-| `getsockopt(TCP_INFO)` | 283.0 | 279.1–333.6 |
-| round `/plaintext`, per call | 778.8 | 747.9–788.0 |
-| round `/json`, per call | 759.2 | 739.5–891.2 |
-| TCP work per call, `/plaintext` | 672.8 | |
-| TCP work per call, `/json` | 653.2 | |
+| `getppid` (entry and exit) | 80.5 | 73.1–83.2 |
+| `recv`, nothing queued (`EAGAIN`) | 136.6 | 123.1–161.1 |
+| `setsockopt(TCP_QUICKACK, 0)` | 138.6 | 120.6–164.4 |
+| `getsockopt(TCP_INFO)` | 256.7 | 222.7–334.8 |
+| round `/plaintext`, per call | 604.1 | 530.4–691.4 |
+| round `/json`, per call | 591.7 | 527.3–676.0 |
+| TCP work per call, `/plaintext` | 523.6 | |
+| TCP work per call, `/json` | 511.2 | |
 
 The `TCP_QUICKACK` reset that the reported app makes after every response is
-about 180 ns here, 74 ns more than a bare entry; reading `TCP_INFO` is about
-283 ns. In the loopback round, a send or recv does about six times the entry
+about 139 ns here, 58 ns more than a bare entry; reading `TCP_INFO` is about
+257 ns. In the loopback round, a send or recv does about six and a half times the entry
 cost in TCP work.
 
-**The split for `http1-server.ts`, this box.** `node bench/http.mjs --syscalls`
-counted 2.07 syscalls a request on plaintext keep-alive at c=256 and 2.08 on
-json: `recvfrom` 1.00 and `sendto` 1.00 on plaintext, then `accept4`,
-`epoll_ctl`, `getsockopt` and `epoll_wait` at 0.02 each; strace's counts are
-rounded one by one, so they sum to 2.08. A re-run gave 2.09 (1.01, 1.01 and
-the same four at 0.02).
-A five-round `node bench/http.mjs --rounds 5` run against a byte-identical
-copy (`h1-copy`) gave the server's system CPU per request, from
-`/proc/<pid>/stat`. (a) is syscalls a request × 106.0 ns, and (b) is the
-system time less (a):
+**The split for `http1-server.ts`, the same run.** `--syscalls` counted 2.11
+syscalls a request on plaintext and post-json keep-alive at c=256 and 2.12 on
+json: `recvfrom` 1.01 and `sendto` 1.00 on plaintext, then `getsockopt` 0.03
+and `accept4`, `epoll_ctl`, `getpeername` and `epoll_wait` at 0.02 each;
+strace's counts are rounded one by one. Five interleaved rounds of 5 s, the
+server on CPU 0 and `wrk -t3` on CPUs 1 to 3; (a) is syscalls a request ×
+80.5 ns:
 
-| scenario | syscalls/req | sys µs/req, h1 / copy | (a) µs/req | (b) µs/req | (a) share |
+| scenario | syscalls/req | sys µs/req, h1 / copy | (a) µs/req | (b) µs/req, h1 / copy | (a) share, h1 / copy |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| plaintext keep-alive c=256 | 2.07 | 4.89 / 5.51 | 0.22 | 4.67 / 5.29 | 4.5% / 4.0% |
-| json keep-alive c=256 | 2.08 | 5.71 / 5.04 | 0.22 | 5.49 / 4.82 | 3.9% / 4.4% |
-| post-json keep-alive c=256 | 2.09 | 7.53 / 8.06 | 0.22 | 7.31 / 7.84 | 2.9% / 2.8% |
+| plaintext keep-alive c=256 | 2.11 | 4.37 / 4.28 | 0.17 | 4.20 / 4.11 | 3.9% / 4.0% |
+| json keep-alive c=256 | 2.12 | 4.25 / 4.20 | 0.17 | 4.08 / 4.03 | 4.0% / 4.1% |
+| post-json keep-alive c=256 | 2.11 | 5.60 / 5.13 | 0.17 | 5.43 / 4.96 | 3.0% / 3.3% |
 
-The copy's distance from `h1` (−8.8% and +10.5% in req/s, 0.6 µs in sys time)
-is wider than all of (a): taking every entry and exit away would move the
-system time by less than this run's noise band.
+The copy's distance from `h1` (+0.7% to +3.6% in req/s, 0.05 to 0.47 µs in
+system time) reaches past all of (a) on post-json and is about half of it or less on
+the other two: taking every entry and exit away would move the system
+time by about 3% to 4%.
 
 **The split for the reported workload, an estimate for another box.** That
 workload ran on a Xeon Platinum 8260 VM on Linux 6.8, not here: 4 prefork
 workers, about 31.6k req/s, `recvfrom` 1.18, `sendto` 1.05, `setsockopt` 1.00
 and `epoll_wait` 0.38 a request (3.61), and kernel time about 27% of its CPU. At
-this box's entry cost, (a) is 3.61 × 106.0 ns = 0.38 µs a request. If its
+this box's entry cost, (a) is 3.61 × 80.5 ns = 0.29 µs a request. If its
 four workers each kept a vCPU busy, a request cost 4 / 31,600 s = 127 µs of
-CPU and 34 µs of it in the kernel, so (a) would be about 1.1% of the kernel
+CPU and 34 µs of it in the kernel, so (a) would be about 0.9% of the kernel
 time and (b) about 34 µs; were they only a quarter busy, (a) would still be
-about 4.5%. The 8260's entry cost is not measured here: its mitigations
+about 3.4%. The 8260's entry cost is not measured here: its mitigations
 under Linux 6.8 differ from this box's, so run the benchmark there with
 `bash bench/syscall-cost/run.sh` and read its last line.
 
-Verdict: on this box (Intel Xeon @ 2.10 GHz, KVM VM, Linux 6.18.44, eIBRS, no KPTI), syscall entry and exit cost 106 ns, under the 0.5 µs per syscall line, and they are about 4% of a keep-alive request's 5 µs of system time, so io_uring is not worth building on this evidence.
+Verdict: on this box (Intel Xeon @ 2.10 GHz, KVM VM, Linux 6.18.44, eIBRS, no KPTI), syscall entry and exit cost 80.5 ns, under the 0.5 µs per syscall line, and in the same run they are 3.0% to 4.1% of a keep-alive request's 4.2 to 5.6 µs of system time, so io_uring is not worth building on this evidence.
 
 ## Descriptor limit
 

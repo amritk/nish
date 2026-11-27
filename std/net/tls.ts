@@ -102,6 +102,7 @@ import {
   p256SignSha256,
   p256SignSha256Into,
 } from "nish/crypto/p256"
+import { RsaSignScratch, rsaPrivateKeyBits, rsaSignPssSha256Into } from "nish/crypto/rsa-sign"
 import { timingSafeEqual, timingSafeEqualAt } from "nish/crypto/ct"
 import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519"
 import {
@@ -121,6 +122,8 @@ import {
   TLS_EXT_RECORD_SIZE_LIMIT,
   TLS_RANDOM_SIZE,
   TLS_RECORD_SIZE_LIMIT_MAX,
+  TLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
+  TLS_SIGNATURE_RSA_PSS_RSAE_SHA256,
   TLS_VERSION_13,
   TLS_P256_SHARE_SIZE,
   TLS_X25519_SHARE_SIZE,
@@ -229,7 +232,9 @@ export interface TlsServerConfig {
   /**
    * The signature scheme the caller's key signs with, sent in
    * CertificateVerify: `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256` for a P-256
-   * key. A client that does not list it is refused with `handshake_failure`.
+   * key, `TLS_SIGNATURE_RSA_PSS_RSAE_SHA256` for an RSA key of 2048 to 4096
+   * bits (`TlsKeySigner` signs either). A client that does not list it is
+   * refused with `handshake_failure`.
    */
   signatureScheme: i32
   /** Whether the carrier is QUIC, which turns `quic_transport_parameters` on both ways. */
@@ -499,6 +504,103 @@ export class TlsP256Signer {
     const der: u8[] = this.ders[at]
     tlsEcdsaDerInto(der, this.rs)
     return der
+  }
+}
+
+/**
+ * Signs CertificateVerify inputs for `rsa_pss_rsae_sha256` (RFC 8446
+ * §4.2.3) with nothing kept per signature: `rsaSignPssSha256Into` hashes in
+ * this signer's scratch, releases what it allocates, and writes the
+ * signature into this signer's own array of the key's length, which
+ * `TlsServer.sign` stores as it stores a P-256 one. The array is made by the
+ * first signature with a key of a new length and kept, so a server with one
+ * key allocates it once. A carrier keeps one signer, not one per slot.
+ */
+export class TlsRsaSigner {
+  /** The hashers every signature hashes in. */
+  private scratch: RsaSignScratch
+  /** The last signature, as long as the key's modulus; empty before the first. */
+  private out: u8[]
+
+  /** Makes the hashers; the signature array waits for the first key. */
+  constructor() {
+    this.scratch = new RsaSignScratch()
+    this.out = []
+  }
+
+  /**
+   * The `rsa_pss_rsae_sha256` signature of `content` under `priv`, in this
+   * signer's own array; `null` for a `Secret` that is not an RSA key from
+   * `rsaParsePrivateKey` or `x509ParseRsaPrivateKey`, and for a signature
+   * that fails the check against the public exponent. The key is borrowed.
+   *
+   * @param priv The server's RSA private key, borrowed.
+   * @param content The CertificateVerify input, as `TlsServer.signatureInput` answers it.
+   * @returns This signer's own array, which the next `sign` overwrites, or `null`.
+   */
+  sign(priv: Secret<u8[]>, content: u8[]): u8[] | null {
+    const bits: i32 = rsaPrivateKeyBits(priv)
+    if (bits < 2048 || bits > 4096) {
+      return null
+    }
+    const k: i32 = (bits + 7) >> 3
+    if (k < 256 || k > 512) {
+      return null
+    }
+    if (toI32(this.out.length) !== k) {
+      this.out = new Array<u8>(k)
+    }
+    if (
+      !rsaSignPssSha256Into(this.scratch, priv, content, TLS_FROM, toI32(content.length), this.out, TLS_FROM)
+    ) {
+      return null
+    }
+    return this.out
+  }
+}
+
+/**
+ * The CertificateVerify signer for a configuration's `signatureScheme`: a
+ * `TlsP256Signer` for `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`, a
+ * `TlsRsaSigner` for `TLS_SIGNATURE_RSA_PSS_RSAE_SHA256`, and for any other
+ * scheme none, so every signature answers `null` and the connection fails
+ * with `internal_error`. Only the one the scheme names is made.
+ */
+export class TlsKeySigner {
+  /** The P-256 signer, with that scheme. */
+  private p256: TlsP256Signer | null
+  /** The RSA-PSS signer, with that scheme. */
+  private rsa: TlsRsaSigner | null
+
+  /**
+   * Makes the signer `scheme` names.
+   *
+   * @param scheme The configuration's `signatureScheme`.
+   */
+  constructor(scheme: i32) {
+    this.p256 = scheme === TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 ? new TlsP256Signer() : null
+    this.rsa = scheme === TLS_SIGNATURE_RSA_PSS_RSAE_SHA256 ? new TlsRsaSigner() : null
+  }
+
+  /**
+   * `content` signed under `priv` in the scheme this signer was made for,
+   * in the inner signer's own array; `null` for a key that is not of that
+   * kind, a signature that fails, or a scheme with no signer.
+   *
+   * @param priv The server's private key, borrowed.
+   * @param content The CertificateVerify input, as `TlsServer.signatureInput` answers it.
+   * @returns The inner signer's own array, or `null`.
+   */
+  sign(priv: Secret<u8[]>, content: u8[]): u8[] | null {
+    const p256: TlsP256Signer | null = this.p256
+    if (p256 !== null) {
+      return p256.sign(priv, content)
+    }
+    const rsa: TlsRsaSigner | null = this.rsa
+    if (rsa !== null) {
+      return rsa.sign(priv, content)
+    }
+    return null
   }
 }
 

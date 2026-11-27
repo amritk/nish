@@ -3473,6 +3473,18 @@ function rsaVerifyPss(key: RsaPublicKey, hash: i32, saltLen: i32, msg: u8[], sig
   local +53:9 v: i32 (let)
   callee +73:10 timingSafeEqual -> @nish.timingSafeEqual
   callee +73:26 rsaDigest -> @nish.rsaDigest
+function rsaVerifyPssDer(der: u8[], hash: i32, saltLen: i32, msg: u8[], sig: u8[]): boolean -> @nish.rsaVerifyPssDer [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.rsaVerifyPss
+  escaping: hash saltLen
+  calls: nish.rsaParsePublicKey nish.rsaVerifyPss
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.rsaParsePublicKey#0
+  pointer msg: size=0 writesThrough=false captured=false passedTo=nish.rsaVerifyPss#3
+  pointer sig: size=0 writesThrough=false captured=false passedTo=nish.rsaVerifyPss#4
+  stackSites=0 stackLocals=0
+  local +0:9 key: RsaPublicKey | null (const)
+  callee +0:36 rsaParsePublicKey -> @nish.rsaParsePublicKey
+  callee +4:10 rsaVerifyPss -> @nish.rsaVerifyPss
 function (_b, k) => ...(_b: u8, k: i32, first: i32, end: i32): boolean -> @nish.rsaDerUnsigned$arrow0
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

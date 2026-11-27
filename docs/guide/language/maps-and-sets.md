@@ -92,11 +92,10 @@ string on every lookup.
 may not be there. Nish lets you use that answer in three ways, the three a
 program checked by `tsc --strict` would use:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 export const main = (): i32 => {
-  const counts = new Map<string, i32>();
+  const counts = new Map<string, u32>();
   for (const word of ["a", "b", "a"]) {
     counts.set(word, (counts.get(word) ?? 0) + 1);
   }
@@ -118,7 +117,7 @@ This prints `a appears 2 times` and then `no z`.
 - **Give it a default with `??`.** `counts.get(word) ?? 0` is the value, or `0`
   when the key is missing.
 - **Bind it to a `const` and test it.** After `a !== undefined`, or after an
-  early `if (a === undefined) return …`, `a` is a plain `i32`.
+  early `if (a === undefined) return …`, `a` is a plain `u32`.
 - **Compare it with `undefined`** to ask only whether the key is there, though
   `has` says the same thing.
 
@@ -155,8 +154,7 @@ run.
 `for...of` walks a map's `keys()` or `values()`, or a set directly, in
 insertion order:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 export const main = (): i32 => {
   const ages = new Map<string, i32>();
@@ -167,6 +165,9 @@ export const main = (): i32 => {
     console.log(name);
   }
   for (const age of ages.values()) {
+    if (age < 0 || age > 200 || total > 1000000) {
+      continue;
+    }
     total += age;
   }
   console.log(`total ${total}`);
@@ -180,7 +181,9 @@ export const main = (): i32 => {
 };
 ```
 
-This prints `ada`, `grace`, `total 121`, `x` and `y`, one to a line.
+This prints `ada`, `grace`, `total 121`, `x` and `y`, one to a line. The
+test in the second loop skips an age no person has and stops adding past a
+million, which is what proves `total += age` fits an `i32`.
 
 There is no `entries()`, because a `[key, value]` pair holds two types, a
 tuple, which Nish does not have; `ages.forEach((age, name) => ...)` hands you both

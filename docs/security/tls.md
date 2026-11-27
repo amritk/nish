@@ -129,14 +129,14 @@ resumption", what the tests pin and where the code departs from the design.
 
 | File | Functions |
 | --- | --- |
-| `std/net/tls.ts` | `TlsServer` (`restart`, `receive`, `reserveInput`, `reserveOutput`, `handleMessage`, `handleClientHello`, `ownRecordSizeLimit`, `chooseSuite`, `chooseAlpn`, `takeServerName`, `exchangeKeys`, `writeServerFlight`, `signatureInput`, `sign`, `handleFinished`, `fail`, `wipeResumption`, `enableTickets`, `ticketFits`, `selectTicket`, `bindTicket`, `saltFromEarly`, `resume`, `writeResumedFlight`, `writeResumedHello`, `masterSecretStep`, `resumptionPsk`, `writeTicket`, `issue`, `sent`, `takeOutput`, `clearOutput`, `secrets`, `known`, `readKnown`, `writeKnown`, `wipeSecret`, `wipeEphemeral`, `wipe`), `TlsSecretPool` (`zero`, `wipe`), `tlsExchange` and its `TlsExchangeWords`, `tlsServerStrikeProbe`, `tlsServerTicketCapacity`, `tlsSignEcdsaP256`, `tlsEcdsaDerSignature`, `TlsP256Signer` (`sign`), and the in-place DER writers both encoders share (`tlsEcdsaDerLength`, `tlsEcdsaDerInto`, `tlsDerIntegerLength`, `tlsDerIntegerInto`) |
+| `std/net/tls.ts` | `TlsServer` (`restart`, `receive`, `reserveInput`, `reserveOutput`, `handleMessage`, `handleClientHello`, `ownRecordSizeLimit`, `chooseSuite`, `chooseAlpn`, `takeServerName`, `exchangeKeys`, `writeServerFlight`, `signatureInput`, `sign`, `handleFinished`, `fail`, `wipeResumption`, `enableTickets`, `ticketFits`, `selectTicket`, `bindTicket`, `saltFromEarly`, `resume`, `writeResumedFlight`, `writeResumedHello`, `masterSecretStep`, `resumptionPsk`, `writeTicket`, `issue`, `sent`, `takeOutput`, `clearOutput`, `secrets`, `known`, `readKnown`, `writeKnown`, `wipeSecret`, `wipeEphemeral`, `wipe`), `TlsSecretPool` (`zero`, `wipe`), `tlsExchange` and its `TlsExchangeWords`, `tlsServerStrikeProbe`, `tlsServerTicketCapacity`, `tlsSignEcdsaP256`, `tlsEcdsaDerSignature`, `TlsP256Signer` (`sign`), `TlsRsaSigner` (`sign`, which signs through `rsaSignPssSha256Into`, recorded in [crypto-rsa.md](crypto-rsa.md)), `TlsKeySigner` (`sign`), and the in-place DER writers both encoders share (`tlsEcdsaDerLength`, `tlsEcdsaDerInto`, `tlsDerIntegerLength`, `tlsDerIntegerInto`) |
 | `std/net/tls/codec.ts` | `tlsReadClientHello` into a `TlsClientHelloView` and its readers (`tlsRead*`, `tlsReadServerName`, `tlsReadKeyShare`, `tlsReadAlpn`, `tlsReadRecordSizeLimit`, `tlsReadExtension`, `tlsMarkSeen`), `tlsParseClientHello`, the six `tlsWrite*` writers with their `tlsEncode*` wrappers, and `tlsWriteCertificateVerifyContent` / `tlsCertificateVerifyContent`; for the client, `tlsWriteClientHello` / `tlsEncodeClientHello`, and the readers into a `TlsServerFlightView` (`tlsReadServerHello`, `tlsServerHelloDowngrade`, `tlsReadEncryptedExtensions`, `tlsReadCertificate`, `tlsReadCertificateVerify`, `tlsReadNewSessionTicket`, `tlsCopyCertificates`, and under them `tlsFlightOpen`, `tlsFlightClose`, `tlsFlightRefuseExtension`, `tlsReadServerHelloExtension`, `tlsReadEncryptedExtension`, `tlsReadServerExtensions`) |
 | `std/net/tls/schedule.ts` | the key schedule (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`), its in-place forms (`tlsDeriveSecretInto`, `tlsMasterSecretInto`, `tlsFinishedVerifyDataInto`, `tlsTrafficKeysInto`) and `TlsTranscript` |
 | `std/net/tls/record.ts` (T2) | `tlsRecordLength`, `TlsRecordReader`, `TlsRecordProtection` (`install`, `reserve`, `derive`, `clear`, `nonceInto`, `seal`, `open`), `tlsNextTrafficSecret` |
 | `std/net/tls/record-server.ts` (T2) | `TlsRecordServer`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sendKeyUpdate`, `keyUpdate`, `read`, `write`, `writeCap`, `maxChunk`, `sealRecord`, `close`, `sealClose`, `sign`, `resume`, `issue`, `end`, `checkTruncation`, `abort`, `fail`, `wipeKeys`, `wipe`, `wipeTraffic`, `wipeRead`, `wipeWrite` |
 | `std/net/tls/client.ts` (the client) | `TlsClientConfig`, `tlsClientIsIpLiteral`, `TlsClient` (`start`, `writeHello`, `receive`, `drain`, `handleMessage`, `checkHello`, `handleServerHello`, `handleRetry`, `exchangeKeys`, `handleEncryptedExtensions`, `handleCertificate`, `handleCertificateVerify`, `authenticate`, `reject`, `handleFinished`, `handleTicket`, `peerCertificates`, `verifyScheme`, `verifyContent`, `verifySignature`, `alpn`, `expectedLevel`, `startTranscript`, `reserveInput`, `reserveOutput`, `takeOutput`, `clearOutput`, `sent`, `secrets`, `known`, `readKnown`, `writeKnown`, `fail`, `wipeKeys`, `wipeUnpicked`, `wipeSecret`, `wipe`) and the helpers under it (`tlsClientConfigFits`, `tlsClientKnowsSuite`, `tlsClientKnowsGroup`, `tlsClientIsAscii`; it shares `tlsIsZeroSecret` and `tlsZeroHeld` with `nish/net/tls` and `tlsCopyWindow` with the codec) |
 | `std/net/tls/record-client.ts` (the client) | `TlsRecordClient`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sealChangeCipherSpec`, `sealQueue`, `sealRecord`, `sealWith`, `sendKeyUpdate`, `keyUpdate`, `authenticate`, `reject`, `interest`, `read`, `write`, `consume`, `close`, `sealClose`, `sendAlert`, `end`, `checkTruncation`, `abort`, `fail`, `wipe`, `wipeRead`, `wipeWrite`; `tlsClientInstallHeld`, `tlsClientAdvanceHeld` |
-| `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signP256`, `enableTickets`, `resume`, `issue`, `keyUpdate`, `close`; for the client, `TlsTcpClient` (`fd`, `open`, `failure`, `interest`, `connected`, `readable`, `writable`, `flush`, `read`, `write`, `keyUpdate`, `shutdown`, `close`), `tlsConnect` and `tlsConnectWith` |
+| `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signKey`, `signP256`, `enableTickets`, `resume`, `issue`, `keyUpdate`, `close`; for the client, `TlsTcpClient` (`fd`, `open`, `failure`, `interest`, `connected`, `readable`, `writable`, `flush`, `read`, `write`, `keyUpdate`, `shutdown`, `close`), `tlsConnect` and `tlsConnectWith` |
 | `std/net/tls/verify.ts` (the client) | `tlsVerifyCertificateVerify`, `tlsVerifyKeyUsable`, `tlsClientChain`, `tlsClientVerdict`, `tlsClientAuthenticate`, `TlsClientTrust`, `tlsClientTrust`, `tlsClientSystemTrust` |
 
 Out of scope: the primitives underneath (`nish/crypto/*`, each with its own
@@ -235,8 +235,10 @@ them — and every traffic key and IV; the ServerHello, EncryptedExtensions,
 Certificate, CertificateVerify and Finished the server writes; the CertificateVerify input; and acceptance
 of the trace's client Finished, fed whole and a byte at a time.
 
-The trace signs with RSA-PSS, which the stack does not have and which is
-randomised, so its signature is injected through the hand-off and every byte
+The trace signs with RSA-PSS under a random salt. The stack signs RSA-PSS
+with a salt derived from the key and the message (RSA-S3 in
+[crypto-rsa.md](crypto-rsa.md)), so it cannot reproduce the trace's
+signature: that signature is injected through the hand-off and every byte
 after it is checked.
 
 The same server answering a ClientHello that offers only
@@ -249,6 +251,39 @@ model's client Finished and the resumption master secret after it, since RFC
 each of the three suites a client verifies the CertificateVerify with
 `p256VerifySha256` under the certificate's key, verifies the server's
 Finished, and is accepted with its own.
+
+**A production handshake also signs with RSA-PSS** under an RSA-2048
+certificate (`net_tls_rsa_server`). The stack's own client reads
+`rsa_pss_rsae_sha256` in the CertificateVerify, checks that the signature
+verifies under the certificate's key with a 32-byte salt and that one with a
+flipped bit does not ("the signature verifies under the certificate's key,
+salt 32", "a signature with one bit flipped does not"), and connects. The
+same check runs over QUIC ("HTTP/3: the handshake, its RSA-PSS signature
+verified"). A hello offering only ECDSA P-256 to this server is refused with
+`handshake_failure`, and the P-256 signer refuses the RSA key. Against
+OpenSSL, `tests/run.js` checks "net_tls_rsa_server: openssl s_client -tls1_3
+completes under the RSA certificate: TLSv1.3, an AEAD suite, peer signature
+RSA-PSS", the two curl checks ("... GETs the page over HTTP/1.1 under the RSA
+certificate" and "... over HTTP/2 under the RSA certificate"), and
+"net_tls_rsa_server: an s_client offering only ecdsa_secp256r1_sha256 is
+refused with handshake_failure". OpenSSL 3.0 prints the peer's scheme as
+`RSA-PSS` and 3.5 as `rsa_pss_rsae_sha256`; the checks accept either. Over
+QUIC, "net_tls_rsa_server: openssl s_client -quic -alpn h3 completes the QUIC
+handshake under the RSA certificate: an AEAD suite, peer signature RSA-PSS"
+and "net_tls_rsa_server: the HTTP/3 listener opens the s_client -quic
+connection, closes it and exits 0" meet a third-party QUIC client.
+**Untested** there:
+
+- `s_client -quic` came with OpenSSL 3.2, so on an older host both checks
+  skip with the version they found. CI's runner has 3.5.5. The container this
+  was written in has 3.0.13, so the two checks were first run on CI.
+- `s_client` only shakes hands over QUIC. No third-party client sends an
+  HTTP/3 request to the RSA server: the GET over HTTP/3 is the in-repo
+  client's ("HTTP/3: the handshake, its RSA-PSS signature verified"), and
+  curl's HTTP/3 build is not on the runner.
+- The refusal is checked only over TCP. No check offers only
+  `ecdsa_secp256r1_sha256` over `s_client -quic` and expects the RSA
+  listener to refuse it.
 
 **Every refusal is an alert** (`net_tls_ext_refusals`, and every case again
 under `f64` in `net_tls_ext_f64`):

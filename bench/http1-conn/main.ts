@@ -36,6 +36,13 @@
 //                                                off, so a parked connection
 //                                                keeps its input and head
 //                                                buffers
+//   main rss-serving <passes> <connections> 0    the rss shape, then every
+//                                                connection reads one more
+//                                                request and writes its
+//                                                response, which is not sent:
+//                                                each holds a lent input and
+//                                                head buffer and a borrowed
+//                                                output buffer at the peak
 //
 // With `[evict]` MiB (default 0), the idle and direct shapes write one byte
 // of every cache line of an eviction ring that big between requests, a slice
@@ -370,6 +377,19 @@ class IdlePool {
 
   /** One request on `slot`, as a program's loop over the server serves it. */
   serve(slot: i32, req: u8[]): void {
+    this.answer(slot, req)
+    if (this.flush(slot) !== 1) {
+      panic("bench: the connection does not want to read")
+    }
+  }
+
+  /**
+   * `serve` up to its flush: the request read, routed and answered, and the
+   * response written but not sent, so the connection holds the input and head
+   * buffers it was lent and the output buffer it borrowed, as one does whose
+   * socket has not yet taken its response.
+   */
+  answer(slot: i32, req: u8[]): void {
     if (this.readable(slot, req) !== 1) {
       panic("bench: the connection does not want to read")
     }
@@ -401,9 +421,6 @@ class IdlePool {
         panic(`bench: unexpected event ${event}`)
       }
       event = this.next(slot)
-    }
-    if (this.flush(slot) !== 1) {
-      panic("bench: the connection does not want to read")
     }
   }
 
@@ -468,7 +485,8 @@ const IDLE_FIRST_HEAD: i32 = 256
  * `i` is even, the other way round when it is odd.
  */
 const idle = (shape: string, requests: i32, count: i32, batches: i32, evictMib: i32): i32 => {
-  const measuring: boolean = shape === "rss" || shape === "rss-kept"
+  const serving: boolean = shape === "rss-serving"
+  const measuring: boolean = shape === "rss" || shape === "rss-kept" || serving
   const b: IdlePool = new IdlePool(count, shape === "direct", evictMib, shape !== "rss-kept")
   const evicting: boolean = b.slice > 0
   // One untimed pass, as for the other shapes: every slot's connection has
@@ -483,6 +501,15 @@ const idle = (shape: string, requests: i32, count: i32, batches: i32, evictMib: 
       }
       const pick: i32 = (i + pass) & 1
       b.serve(i, b.requests[pick])
+    }
+  }
+  if (serving) {
+    // Every slot then reads one more request and writes its response, which
+    // no socket takes: all of them hold their buffers at once.
+    for (let i: i32 = 0; i < count; i += 1) {
+      const pick: i32 = (i + passes) & 1
+      b.answer(i, b.requests[pick])
+      b.date.unhold()
     }
   }
   if (measuring) {
@@ -741,7 +768,13 @@ export const main = (): i32 => {
   if (shape === "stages" || shape === "stages-loop") {
     return stages(requests, count, batches, shape === "stages")
   }
-  if (shape === "idle" || shape === "direct" || shape === "rss" || shape === "rss-kept") {
+  if (
+    shape === "idle" ||
+    shape === "direct" ||
+    shape === "rss" ||
+    shape === "rss-kept" ||
+    shape === "rss-serving"
+  ) {
     return idle(shape, requests, count, batches, evictMib)
   }
   if (shape === "hot") {
