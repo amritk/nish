@@ -10,7 +10,7 @@
 import { Suite } from "nish/testing"
 import { netClose } from "nish:net"
 import { H2_FLAG_END_STREAM } from "nish/net/http2-frame"
-import { H1_INVALID } from "nish/net/http1-server"
+import { H1_INVALID, Http1Config } from "nish/net/http1-server"
 import {
   WS_CLOSE,
   WS_CLOSE_NORMAL,
@@ -69,7 +69,7 @@ const settles = (rig: Rig): boolean => {
 
 /** An upgrade, text and a large binary message echoed, a ping answered, and a close from the client. */
 const echoes = (t: Suite): void => {
-  const rig = new Rig(rigLimits(4, 30000), 4)
+  const rig = new Rig(rigLimits(4, 30000), 4, new Http1Config(), 0)
   const c = new WsClient(rig)
   const head: string = c.open(rig.port, "/ws")
   t.ok("the handshake is answered 101 with RFC 6455's accept value", head.startsWith("HTTP/1.1 101 ") && head.indexOf(ACCEPT) >= 0)
@@ -99,7 +99,7 @@ const echoes = (t: Suite): void => {
 
 /** A client that stops reading: the echo stops on `H1_AGAIN`, then goes on when `writable` comes, every message whole. */
 const resumes = (t: Suite): void => {
-  const rig = new Rig(rigLimits(4, 30000), 4)
+  const rig = new Rig(rigLimits(4, 30000), 4, new Http1Config(), 0)
   const c = new WsClient(rig)
   c.open(rig.port, "/ws")
   const chunk: u8[] = pattern(65536)
@@ -123,7 +123,7 @@ const resumes = (t: Suite): void => {
 
 /** The program closes with 1000; then a malformed frame, and a connection dropped without a close. */
 const closes = (t: Suite): void => {
-  const rig = new Rig(rigLimits(4, 30000), 4)
+  const rig = new Rig(rigLimits(4, 30000), 4, new Http1Config(), 0)
   const bye = new WsClient(rig)
   bye.open(rig.port, "/ws")
   bye.send(true, WS_OP_TEXT, ascii("bye"))
@@ -148,7 +148,7 @@ const closes = (t: Suite): void => {
 
 /** A pool of one request: each WebSocket's request is handed back for the next. */
 const reused = (t: Suite): void => {
-  const rig = new Rig(rigLimits(1, 30000), 4)
+  const rig = new Rig(rigLimits(1, 30000), 4, new Http1Config(), 0)
   let opened: i32 = 0
   for (let k: i32 = 0; k < 3; k++) {
     const c = new WsClient(rig)
@@ -165,7 +165,7 @@ const reused = (t: Suite): void => {
 
 /** `Arena.used()` stays flat over warmed round trips, the server's calls and the echo both. */
 const flat = (t: Suite): void => {
-  const rig = new Rig(rigLimits(4, 30000), 4)
+  const rig = new Rig(rigLimits(4, 30000), 4, new Http1Config(), 0)
   const c = new WsClient(rig)
   c.open(rig.port, "/ws")
   const small: u8[] = ascii("hello")
@@ -194,7 +194,7 @@ const flat = (t: Suite): void => {
 
 /** Only an HTTP/1.1 request upgrades: h2c and a plain HTTP/1.1 GET are answered 400. */
 const refused = (t: Suite): void => {
-  const rig = new Rig(rigLimits(4, 30000), 4)
+  const rig = new Rig(rigLimits(4, 30000), 4, new Http1Config(), 0)
   const h2 = new H2cClient(rig)
   t.ok("h2c: a connection", h2.peer.connect(rig.h2cPort))
   const wire = new Wire()
@@ -226,7 +226,7 @@ const refused = (t: Suite): void => {
 
 /** `bodyTimeout` does not apply to a WebSocket: one quiet for longer still echoes. */
 const quiet = (t: Suite): void => {
-  const rig = new Rig(rigLimits(4, 1), 4)
+  const rig = new Rig(rigLimits(4, 1), 4, new Http1Config(), 0)
   const c = new WsClient(rig)
   c.open(rig.port, "/ws")
   const start: i64 = monotonicNanos()

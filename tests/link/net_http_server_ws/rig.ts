@@ -2,7 +2,7 @@
 // HTTP/1.1 listener and an h2c listener, and the program that upgrades every
 // request it takes to a WebSocket and echoes each message, fragmented as
 // `tests/link/net_interop_server/ws.ts` does, until the peer closes or sends
-// `bye`.
+// `bye` (`autobahn.ts` turns that off).
 import { netLocalPort, tcpListen } from "nish:net"
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server"
 import { H1_AGAIN, Http1Config } from "nish/net/http1-server"
@@ -35,14 +35,16 @@ export class Rig {
   codes: i32[]
   /** Arena bytes the server's own calls left allocated, summed over every `step`. */
   kept: i64 = 0
+  /** Whether a 3-byte text message starting `b` has the program close the WebSocket with 1000. */
+  bye: boolean = true
 
-  /** A server under `limits` with `slots` connections on each listener. */
-  constructor(limits: HttpServerLimits, slots: i32) {
+  /** A server under `limits` with `slots` connections on each listener, its HTTP/1.1 one under `config` on `port` (0 for any). */
+  constructor(limits: HttpServerLimits, slots: i32, config: Http1Config, port: i32) {
     const router = new Router(new RouterLimits())
     router.add("GET", "/ws")
     this.h = new HttpServer(limits, router)
-    const plain: i32 = tcpListen("127.0.0.1", 0, 16)
-    this.h.listenHttp1(plain, new Http1Config(), slots)
+    const plain: i32 = tcpListen("127.0.0.1", port, 16)
+    this.h.listenHttp1(plain, config, slots)
     this.port = netLocalPort(plain)
     const clear: i32 = tcpListen("127.0.0.1", 0, 16)
     this.h.listenH2c(clear, new Http2Config(), slots)
@@ -112,7 +114,7 @@ export class Rig {
       return
     }
     if (this.sent[i] < 0) {
-      if (r.opcode === WS_OP_TEXT && r.messageLength === 3 && r.messageData[r.messageStart] === toU8(98)) {
+      if (this.bye && r.opcode === WS_OP_TEXT && r.messageLength === 3 && r.messageData[r.messageStart] === toU8(98)) {
         this.forget(i)
         h.closeWebSocket(r, WS_CLOSE_NORMAL)
         return
