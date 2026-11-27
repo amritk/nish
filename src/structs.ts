@@ -56,6 +56,7 @@ import {
   ROLE_METHOD,
   STRUCT_CLASS,
   STRUCT_INTERFACE,
+  OwnedField,
   StructInfo,
   TemplateInfo,
 } from "./program"
@@ -587,30 +588,42 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
 }
 
 /**
- * WP53 §4a: a class with a `CPtr` field owns the C resource it points to, and
- * is a handle class. Marked before any field is collected, so the field's
- * own rules (`collectField`) and every annotation naming the class know it.
+ * WP53 §4a, WP89 S5a: a class with a `CPtr` field or a `[Symbol.dispose]`
+ * owns the native resources its owned fields hold, and is a handle class.
+ * Marked before any field is collected, so the fields' own rules
+ * (`collectField`) and every annotation naming the class know it. In
+ * `nish/threads` a dispose is a scope's, and marks nothing.
  */
 const declareHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void => {
+  const threads = isThreadsSource(ctx.program)
   for (const member of decl.children[3].children) {
     if (
-      member.kind === NodeKind.Field &&
-      (member.flags & FLAG_STATIC) === 0 &&
-      isHandleFieldAnnotation(member.children[1])
+      (member.kind === NodeKind.Field &&
+        (member.flags & FLAG_STATIC) === 0 &&
+        isHandleFieldAnnotation(member.children[1])) ||
+      (member.kind === NodeKind.Method && member.children[0].text === DISPOSE_METHOD && !threads)
     ) {
       info.handle = true
-      info.handleField = member.children[0].text
       break
     }
   }
-  if (!info.handle) {
-    return
-  }
-  if (decl.children[2].children.length > 0) {
+  if (info.handle && decl.children[2].children.length > 0) {
     ctx.error(decl.children[0], handleHeaderMessage(info.name, "implement an interface"))
-  } else if (info.exported) {
-    ctx.error(decl.children[0], handleHeaderMessage(info.name, "be exported"))
   }
+}
+
+/**
+ * WP89 S5a: whether a field of a handle class typed `type` is one it owns: a
+ * `CPtr`, an opaque `declare class`, a `HostHandle<K>` or another handle
+ * class, each perhaps `| null`.
+ */
+const ownedFieldType = (ctx: CheckContext, type: i32): boolean => {
+  const bare = ctx.table.stripNull(type)
+  if (bare === T_CPTR || ctx.table.isOpaque(bare) || ctx.table.isHostHandle(bare)) {
+    return true
+  }
+  const held = ctx.table.isStruct(bare) ? ctx.program.structByType(bare) : null
+  return held !== null && held.handle
 }
 
 /**
@@ -785,16 +798,22 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     ctx.error(decl.children[1], `${what} cannot have type void`)
     return
   }
-  // WP53 §4a D1: a handle class's one pointer, `readonly` and written only by
-  // its constructor. Any other field holding a foreign address is refused, as
-  // WP27 S2 refuses it everywhere: it would sit inside a value the arena owns
-  // and the escape analysis walks (`src/annotations.ts`).
-  if (owner.handle && ctx.table.stripNull(type) === T_CPTR) {
-    const sole = name === owner.handleField && isHandleFieldAnnotation(decl.children[1])
-    if (!sole || (decl.flags & FLAG_READONLY) === 0 || decl.children[2].kind !== NodeKind.Empty) {
+  // WP53 §4a D1, WP89 S5a: a handle class's owned fields, each `readonly`
+  // and written only by its constructor. Any other field holding a foreign
+  // address is refused, as WP27 S2 refuses it everywhere: it would sit inside
+  // a value the arena owns and the escape analysis walks (`src/annotations.ts`).
+  let owned = false
+  if (owner.handle && ownedFieldType(ctx, type)) {
+    const pointer = ctx.table.stripNull(type) === T_CPTR
+    if (
+      (pointer && !isHandleFieldAnnotation(decl.children[1])) ||
+      (decl.flags & FLAG_READONLY) === 0 ||
+      decl.children[2].kind !== NodeKind.Empty
+    ) {
       ctx.error(decl.children[1], handleFieldMessage(owner.name))
       return
     }
+    owned = true
   } else if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
     return
   } else if (rejectOpaque(ctx, type, "a field", decl.children[1])) {
@@ -818,6 +837,9 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   field.index = owner.fields.length
   field.readonly = (decl.flags & FLAG_READONLY) !== 0
   field.spelling = annotationSpelling(ctx, true, decl.children[1])
+  if (owned) {
+    owner.owned.push(new OwnedField(name))
+  }
   const initializer = decl.children[2]
   if (initializer.kind !== NodeKind.Empty) {
     const notLiteral = `${what}: initializers must be literals (assign other values in the constructor)`
