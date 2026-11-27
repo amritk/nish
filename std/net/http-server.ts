@@ -4002,7 +4002,7 @@ export class HttpServer {
       return H1_CLOSED
     }
     let sent: i32 = H1_INVALID
-    if (off >= 0 && off <= end && end <= buf.length) {
+    if (off >= 0 && off <= end && end <= toI32(buf.length)) {
       sent = conn.sendFrame(fin, opcode, buf, off, end - off)
     }
     if (sent === 0) {

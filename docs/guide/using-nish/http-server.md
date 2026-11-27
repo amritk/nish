@@ -373,7 +373,7 @@ connection and never reach you.
 ```ts
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server";
 import { Http1Config } from "nish/net/http1-server";
-import { Router, RouterLimits } from "nish/net/router";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { WS_CLOSE_INTERNAL_ERROR, WS_CLOSE_NORMAL } from "nish/net/websocket";
 import { tcpListen } from "nish:net";
 
@@ -396,7 +396,11 @@ const echo = (server: HttpServer, r: HttpServerRequest): void => {
 };
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    return 1;
+  }
+  const router = table.value;
   router.add("GET", "/ws");
   const listener: i32 = tcpListen("127.0.0.1", 8080, 1024);
   if (listener < 0) {
