@@ -11758,6 +11758,9 @@ const HTTP1_TICK = "Http1Server.tick"
 /** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
 
+/** WP91 S4: the cast wraps in std/net's HTTP, HPACK, URL and server modules, spelled. */
+const WP91_S4_NET_HTTP = "std/net HTTP, HPACK, URL and the server stack"
+
 /** WP80 S8's release-note words, a checked HTTP/1 server config and the twins the server examples call. */
 const CHECKED_CONFIG = "Http1Server caps once"
 const checkedConfig = (why, filesByProgram) =>
@@ -23770,6 +23773,12 @@ const DECLARED = [
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
   },
+  ...["hpack.ll", "http2-tls.ll"].map((file) => ({
+    program: "bench/httparena/main.ts",
+    file,
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/hpack.ts and std/net/http2-tls.ts spell their cast wraps as sums the prover proves, a wrappingAdd, or the codec's existing error, so the two modules' IR moves in the one corpus program whose other differences from the seed are not yet declared",
+  })),
 ]
 
 /**
