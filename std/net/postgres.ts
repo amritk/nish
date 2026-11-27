@@ -824,7 +824,12 @@ export class PgText {
       acc = acc * toU64(10) + digit
       i++
     }
-    return negative ? toI64(toU64(0) - acc) : toI64(acc)
+    if (!negative) {
+      return toI64(acc)
+    }
+    // 2^63 reads back as the most negative i64, which is already the answer.
+    const magnitude: i64 = toI64(acc)
+    return magnitude < 0 ? magnitude : -magnitude
   }
 
   /**
@@ -5465,6 +5470,25 @@ export class PgBatcher {
 
 // --- Batch timing --------------------------------------------------------------
 
+/** 2^62 - 1, past any clock reading in microseconds; a clock sum stops there. */
+const PG_CLOCK_MOST: i64 = 1073741824 * 4294967296 - 1
+
+/**
+ * `a + b` for two non-negative clock values, stopping at `PG_CLOCK_MOST`;
+ * -1 for a negative one. Taken below the top, so it cannot overflow.
+ */
+const pgClockSum = (a: i64, b: i64): i64 => {
+  if (a < 0 || b < 0) {
+    return -1
+  }
+  const room: i64 = PG_CLOCK_MOST - a
+  if (room < 0) {
+    return PG_CLOCK_MOST
+  }
+  const left: i64 = room - b
+  return left > 0 ? PG_CLOCK_MOST - left : PG_CLOCK_MOST
+}
+
 /** `PgBatchClock.check`: not yet; wait for an item or for `deadline()`. */
 export const PG_CLOCK_WAIT: i32 = 0
 /** `PgBatchClock.check`: `minCount` items are waiting, and the average asks no more. */
@@ -5703,12 +5727,12 @@ export class PgBatchClock {
   deadline(): i64 {
     const oldest: i64 = this.oldest()
     const wait: i64 = this.maxWaitUs
-    // The times are clock times and `maxWaitUs` is at most a minute, so the sum is below 2^53
-    // and the unsigned add cannot wrap; the test states those bounds.
+    // The times are clock times and `maxWaitUs` is at most a minute, so the sum is below 2^53;
+    // the test states those bounds.
     if (oldest < 0 || oldest > 4503599627370496 || wait < 0 || wait > 60000000) {
       return -1
     }
-    return toI64(toU64(oldest) + toU64(wait))
+    return pgClockSum(oldest, wait)
   }
 
   /**
@@ -5746,9 +5770,9 @@ export class PgBatchClock {
     this.lastSize = size
     this.lastReason = due
     const started: i64 = starts[due]
-    // 2^52 batches cannot start in the clock's 2^52 microseconds, so the unsigned add cannot wrap.
+    // 2^52 batches cannot start in the clock's 2^52 microseconds.
     if (started >= 0 && started < 4503599627370496) {
-      starts[due] = toI64(toU64(started) + toU64(1))
+      starts[due] = pgClockSum(started, 1)
     }
     this.due = PG_CLOCK_WAIT
   }
