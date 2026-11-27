@@ -1315,7 +1315,11 @@ const signatureHandle = (program: CheckedProgram, table: TypeTable, type: i32): 
  * module refuses such an export (NL2827); a library module's export links to
  * its importers and is left out of the C ABI's sidecars (`externalFunctions`).
  */
-export const signatureNamesHandle = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): boolean => {
+export const signatureNamesHandle = (
+  program: CheckedProgram,
+  table: TypeTable,
+  sig: FunctionSig
+): boolean => {
   const owner = sig.owner
   if (owner !== null && owner.handle) {
     return true
