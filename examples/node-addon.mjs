@@ -3,7 +3,7 @@
 // full -O3 machine code, the C runtime (strings, arena) linked in, and Node's
 // stable ABI so the .node file survives Node upgrades.
 //
-//   nish --allow-panics examples/add.ts -o build/add.ll --emit-napi build/add_napi.c
+//   nish examples/add.ts -o build/add.ll --emit-napi build/add_napi.c
 //   scripts/build.sh build/add.ll runtime/runtime.c build/add_napi.c -o build/add.node --profile napi
 //   node examples/node-addon.mjs build/add.node
 //
@@ -32,7 +32,10 @@ const attempt = (label, fn) => {
 }
 
 if (typeof addon.add === "function") {
-  console.log(`add(2, 3) = ${addon.add(2, 3)}`)
+  // `add` answers a Result, which crosses as `{ ok: true, value }` or, when the
+  // sum overflows i32, `{ ok: false, error }`.
+  const sum = addon.add(2, 3)
+  console.log(`add(2, 3) = ${sum.ok ? sum.value : `overflow (${sum.error})`}`)
   // The shim type-checks every argument and throws a TypeError otherwise.
   attempt('add("2", 3)', () => addon.add("2", 3))
 }

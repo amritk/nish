@@ -22,12 +22,6 @@
 2 std/crypto/sha256.ts
 3 std/crypto/x25519.ts
 14 std/crypto/x509.ts
-5 std/json-format.ts
-2 std/json-number.ts
-1 std/json-tokenizer.ts
-1 std/json-typed.ts
-29 std/json-value.ts
-16 std/json.ts
 17 std/net/fetch.ts
 4 std/net/handler.ts
 25 std/net/hpack.ts
@@ -48,8 +42,3 @@
 6 std/net/static.ts
 8 std/net/upstream.ts
 17 std/net/url.ts
-6 std/sqlite.ts
-9 std/sync/ring.ts
-1 std/sync/shm.ts
-22 std/temporal.ts
-3 std/text.ts
