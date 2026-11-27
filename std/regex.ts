@@ -1456,7 +1456,7 @@ class RegexParser {
       }
       // A script's entry is its Script list, a comma, then its Script_Extensions list.
       if (extensions) {
-        const comma: i32 = REGEX_PROPERTY_NAMES.indexOf(",", entry)
+        const comma: i32 = toI32(REGEX_PROPERTY_NAMES.indexOf(",", entry))
         if (comma < 0 || comma > 1073741823) {
           this.fail("invalid property value", at)
           return
@@ -1502,7 +1502,8 @@ class RegexParser {
       this.addRange(toI32(from), REGEX_MAX_CP)
     }
     const now: i32 = this.tmpCount
-    this.countPropertyRanges(now >= before && before >= 0 ? now - before : 0, at)
+    const added: i32 = now >= before && before >= 0 ? now - before : 0
+    this.countPropertyRanges(added, at)
   }
 
   /** Count `n` more ranges against `REGEX_MAX_PROPERTY_RANGES`, failing at `at` past it. */
@@ -1723,9 +1724,9 @@ class RegexParser {
       const lo: i32 = lows[i]
       const hi: i32 = highs[i]
       const last: i32 = out - 1
-      const top: i32 = last >= 0 && last < highs.length ? highs[last] : -1
+      const top: i32 = last >= 0 && last < toI32(highs.length) ? highs[last] : -1
       // A code point at the top of the range adjoins anything after it.
-      if (out > from && last >= 0 && last < highs.length && (top >= 1114111 || lo <= top + 1)) {
+      if (out > from && last >= 0 && last < toI32(highs.length) && (top >= 1114111 || lo <= top + 1)) {
         if (hi > top) {
           highs[last] = hi
         }
@@ -2318,7 +2319,7 @@ const regexLetterPerMille = (i: i32): i32 => {
     return 0
   }
   // Two decimal digits, so the unsigned sum stays below 100.
-  return (table.charCodeAt(at) - 48) * 10 + table.charCodeAt(at + 1) - 48
+  return (toI32(table.charCodeAt(at)) - 48) * 10 + toI32(table.charCodeAt(at + 1)) - 48
 }
 
 /** How many of every thousand bytes of text are ASCII byte `b`, roughly: what a scan window is chosen by. */
@@ -4290,7 +4291,7 @@ export class Regex {
       return n
     }
     let k: i32 = 0
-    while (k < 2 * n && k < remap.length) {
+    while (k < 2 * n && k < toI32(remap.length)) {
       remap[k] = -1
       k += 1
     }
@@ -5069,11 +5070,11 @@ export class Regex {
       // the search to the NFA.
       while (p >= 0 && p < len) {
         const b: i32 = toI32(text.charCodeAt(p))
-        if (b >= cls.length) {
+        if (b >= toI32(cls.length)) {
           return DFA_GAVE_UP
         }
         const slot: i32 = off | cls[b]
-        if (slot < 0 || slot >= trans.length) {
+        if (slot < 0 || slot >= toI32(trans.length)) {
           return DFA_GAVE_UP
         }
         const e: i32 = trans[slot]
@@ -5104,7 +5105,7 @@ export class Regex {
           const packed: i32 = regexDecodeAt(text, p)
           c = this.dWideClass(packed >> 3)
           w = packed & 7
-        } else if (b < cls.length) {
+        } else if (b < toI32(cls.length)) {
           c = cls[b]
         } else {
           return DFA_GAVE_UP
@@ -5210,11 +5211,11 @@ export class Regex {
       while (q >= from && q >= 0 && q < len) {
         const b: i32 = toI32(text.charCodeAt(q))
         // A byte or a slot outside its table gives up, as in `dfaForward`.
-        if (b >= cls.length) {
+        if (b >= toI32(cls.length)) {
           return DFA_GAVE_UP
         }
         const slot: i32 = off | cls[b]
-        if (slot < 0 || slot >= trans.length) {
+        if (slot < 0 || slot >= toI32(trans.length)) {
           return DFA_GAVE_UP
         }
         const t: i32 = trans[slot]
@@ -5246,7 +5247,7 @@ export class Regex {
       let w: i32 = 1
       if (q >= 0 && q < len) {
         const b: i32 = toI32(text.charCodeAt(q))
-        if (b < 128 && b < cls.length) {
+        if (b < 128 && b < toI32(cls.length)) {
           c = cls[b]
         } else if (b < 128) {
           return DFA_GAVE_UP
@@ -5706,7 +5707,7 @@ export class Regex {
     let n: u32 = 0
     let pos: i32 = 0
     if (this.literal && this.prefix !== "") {
-      const n0: i32 = this.prefix.length
+      const n0: i32 = toI32(this.prefix.length)
       // `run` finds no match in a longer text, and `findPrefilters` keeps
       // the prefix far shorter.
       if (len > 2146435071 || n0 > 1048576) {
