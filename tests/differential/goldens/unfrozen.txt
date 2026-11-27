@@ -249,6 +249,7 @@ cases/deny_panics_overflow_proven added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it with
 cases/deny_panics_ranges added after R6: no rewriter to freeze it with
 cases/deny_panics_ranges_shapes added after R6: no rewriter to freeze it with
+cases/deny_panics_storage_index added after R6: no rewriter to freeze it with
 cases/deny_panics_trim_end added after R6: no rewriter to freeze it with
 cases/deny_panics_unsafe added after R6: no rewriter to freeze it with
 cases/deny_panics_window added after R6: no rewriter to freeze it with
