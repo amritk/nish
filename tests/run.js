@@ -27144,7 +27144,7 @@ if (dealtHere("cliChecks")) {
     // build's IR is `--compact off`'s byte for byte.
     const holderWant = {
       "json-doc":
-        "std/json-tokenizer.ts:604:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 120 → 120 bytes",
+        "std/json-tokenizer.ts:606:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 120 → 120 bytes",
       "zlib-each":
         "std/compress/deflate.ts:894:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
       "request-slot":

@@ -667,8 +667,7 @@ number, `true`, `false` or `null`. It reads a window of a `u8[]` and
 allocates nothing per token, so one tokenizer, `reset` for each new body,
 serves a whole connection.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; slices with bounds it does not test -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_TOK_END, JSON_TOK_KEY, JSON_TOK_NUMBER, JsonLimits, JsonTokenizer } from "nish/json-tokenizer";
 
@@ -1147,8 +1146,7 @@ do not know — a configuration file, a body you pass on after changing one
 field, a tool that prints whatever it is given — parse the document into a
 `JsonDocument` and walk it.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JSON_VALUE_NUMBER, JsonDocument } from "nish/json-value";
@@ -1345,8 +1343,7 @@ are equal, and its rule is not JavaScript's: numbers are equal by value, so
 `1` and `1.0` are, objects are equal whatever the order of their members, and
 `true` is not `1`.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; pops an array it does not test for empty; calls `std/json-equal.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { jsonEqual, jsonEqualCanonical, jsonEqualFirstDuplicate } from "nish/json-equal";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1627,7 +1624,7 @@ Because the ranges are byte offsets into the text either way, one
 `YamlLineIndex` turns them into `line:column` whether the document came from
 JSON or from YAML:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; builds an array whose length it does not bound; calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/yaml.ts`, `std/yaml-lines.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1676,7 +1673,7 @@ and `false` plain, a number as its JSON text, and a trailing newline. It
 answers `""` for a handle that names no value and for a tree deeper than
 `JSON_WRITER_MAX_DEPTH`, the limit `stringify` keeps.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
