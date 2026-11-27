@@ -161,7 +161,7 @@ const HTTP_SERVER_HELD: i32 = 4
 const HTTP_SERVER_STREAMING: i32 = 5
 const HTTP_SERVER_FLUSHING: i32 = 6
 const HTTP_SERVER_SOCKET: i32 = 7
-/** The close code a WebSocket gets when its connection ends with no close frame (RFC 6455 §7.1.5). */
+/** The close code a WebSocket gets when its connection ends with no close frame: 1006, which `nish/net/websocket` reserves as report-only. */
 const HTTP_SERVER_WS_ABNORMAL: i32 = 1006
 /** `checkParam`'s `end` for a parameter's start offset (an i32 under `--number-mode f64`). */
 const HTTP_SERVER_PARAM_START: i32 = 0
@@ -2798,9 +2798,7 @@ export class HttpServer {
   private requeue(r: HttpServerRequest): void {
     if (
       r.again ||
-      (r.state !== HTTP_SERVER_HELD &&
-        r.state !== HTTP_SERVER_STREAMING &&
-        r.state !== HTTP_SERVER_SOCKET)
+      (r.state !== HTTP_SERVER_HELD && r.state !== HTTP_SERVER_STREAMING && r.state !== HTTP_SERVER_SOCKET)
     ) {
       return
     }
@@ -2910,9 +2908,7 @@ export class HttpServer {
       // A streaming request queued again is the program's, live or not: it learns of a reset by taking it.
       // One whose answer ended since (`end`, `trailers`) is flushing on its own, and stays out of `take`.
       const held: boolean =
-        r.state === HTTP_SERVER_HELD ||
-        r.state === HTTP_SERVER_STREAMING ||
-        r.state === HTTP_SERVER_SOCKET
+        r.state === HTTP_SERVER_HELD || r.state === HTTP_SERVER_STREAMING || r.state === HTTP_SERVER_SOCKET
       if ((r.again && held) || (!r.again && this.live(r))) {
         return r
       }
@@ -3920,13 +3916,13 @@ export class HttpServer {
   // ---- WebSockets ------------------------------------------------------------------
 
   /**
-   * Accepts `r`'s WebSocket opening handshake (RFC 6455 §4.2.2) with
+   * Accepts `r`'s WebSocket opening handshake, as `Http1Connection` checks it, with
    * `protocol`, empty for none: the 101 is queued and `r` becomes a WebSocket,
    * `socket` set, the program's until `closeWebSocket`. It then comes out of
    * `take` again whenever a message is held (`message`), the connection has
    * room after `sendFrame` answered `H1_AGAIN` (`writable`), or the WebSocket
    * is over (`closed`). Only an HTTP/1.1 request upgrades: one on HTTP/2 or
-   * HTTP/3 answers `H1_INVALID` (RFC 8441's extended CONNECT is not served).
+   * HTTP/3 answers `H1_INVALID` (HTTP/2's extended CONNECT is not served).
    * On anything but 0, `r` is still held and unanswered, and the program
    * answers it as any other: 400, or 426 for a wrong `Sec-WebSocket-Version`.
    * The slot's `idleTimeout` (`Http1Config`) closes a WebSocket nothing moves
@@ -4019,7 +4015,7 @@ export class HttpServer {
    * Panics on another server's request, or when `r` is not a WebSocket the
    * program holds.
    * @param r a request `acceptWebSocket` upgraded; the server's again unless this answers `H1_INVALID`
-   * @param code the close status code to send (RFC 6455 §7.4), such as 1000 for a normal close
+   * @param code a close status code `nish/net/websocket` may send, such as 1000 for a normal close
    * @returns 0 once `r` is handed back; `H1_INVALID`, with `r` still the
    *   program's, for a code that may not be sent
    */

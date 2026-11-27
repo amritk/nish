@@ -1,0 +1,34 @@
+PASS  the handshake is answered 101 with RFC 6455's accept value
+PASS  the program upgraded one request
+PASS  a text message is echoed as text
+PASS  a 300000-byte binary message in three fragments is echoed whole
+PASS  two messages echoed
+PASS  a ping is answered with a pong by the connection
+PASS  and not handed to the program
+PASS  a close from the client is answered with 1000
+PASS  then the server closes the connection
+PASS  the program saw it closed with the client's 1000
+PASS  a client that stops reading stalls the echo on H1_AGAIN
+PASS  the echo went on when the connection was writable again
+PASS  every message sent while it stalled came back whole
+PASS  closeWebSocket sends a close with 1000
+PASS  and the connection closes once it is sent
+PASS  the program's own close does not come back as closed
+PASS  an unmasked client frame is closed with 1002
+PASS  and its connection closes
+PASS  the program saw it closed with 1002
+PASS  a connection dropped without a close settles
+PASS  the program saw it closed with 1006
+PASS  every WebSocket was handed back
+PASS  a pool of one serves three WebSockets one after another
+PASS  200 warmed round trips are echoed
+PASS  and leave the arena where it was (0 bytes kept)
+PASS  h2c: a connection
+PASS  acceptWebSocket answers H1_INVALID on HTTP/2
+PASS  and the program answers it 400
+PASS  a GET with no Upgrade: acceptWebSocket answers H1_INVALID
+PASS  and the program answers it 400
+PASS  no request was upgraded
+PASS  bodyTimeout 1: a WebSocket quiet for 1.5 s is still open
+PASS  and still echoes
+net_http_server_ws: 33 passed, 0 failed, 0 skipped
