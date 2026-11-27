@@ -558,3 +558,80 @@ builds and reads near these figures; they are not comparable to the
 Figures: 63 numbers in the tables (27 timing and 36 memory medians and
 ranges) and 6 timing ratios, each checked against the recorded runs' printed
 tables; the percentages above are recomputed from the medians.
+
+## Measured: a parked flag in the hot block, and a slot-indexed block (2026-11-27)
+
+Issue #1225 left two ideas from #1211 unmeasured: the lent read buffer's
+start and capacity inline in `Http1Connection`'s hot block, where on `main`
+2.56 of an idle request's D1 read misses fall in `IdlePool.readable`, into
+which `inputRoom` inlines; and a struct-of-arrays hot block on `Http1Server`
+indexed by slot. Neither is adopted: the first moves a miss and saves none,
+and the second is already how `Http1Server` keeps a resting slot.
+
+**The parked flag.** `parked-flag.patch` (apply it to `3a5bbbaf` with
+`git apply bench/http1-conn/parked-flag.patch`) is the first idea as far as
+`std/net/http1-server.ts` reaches: the start and end offsets are the parser's
+own fields in `std/net/http1-codec.ts`, which the codec moves, so the
+connection keeps the one fact it can keep in step, that `park` lent the input
+buffer away and left the parser nothing unread. A private boolean beside the
+other front flags says so; `inputRoom` answers `bufferLimit` from it without
+loading the parser, and `unpark` takes a buffer on it without loading
+`parser.buf`. It adds no bytes to an idle connection (1,105 B a connection
+with and without it, below).
+
+`node bench/http1-conn/run.mjs --connections 10000 --rounds 15 --base 3a5bbbaf`
+with the patch applied to the working tree, Intel(R) Xeon(R) Processor @ 2.10GHz,
+4 cores on a shared cloud VM (L1d 48 KiB and L2 2 MiB a core, L3 260 MiB),
+pinned to core 1; ns per request, median (min–max) over 15 rounds, ratio of
+medians to `old`:
+
+| shape | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| hot | 243.0 (228.9–321.8) | 289.3 (229.4–319.6) 1.191 | 236.4 (220.2–302.1) 0.973 |
+| cold | 294.1 (273.6–360.9) | 284.1 (269.9–356.3) 0.966 | 317.2 (249.0–347.1) 1.079 |
+| idle | 398.6 (330.9–485.7) | 386.0 (332.3–426.9) 0.968 | 398.5 (320.3–415.9) 1.000 |
+| direct | 406.1 (317.6–423.7) | 360.5 (320.1–417.6) 0.888 | 345.5 (304.9–409.0) 0.851 |
+| idle-dram | 662.9 (612.1–755.2) | 651.3 (618.3–778.5) 0.983 | 623.6 (567.8–728.1) 0.941 |
+| direct-dram | 645.4 (588.4–702.3) | 640.8 (586.1–792.2) 0.993 | 596.6 (551.1–727.3) 0.924 |
+| peak RSS per idle connection (idleInput, 1 request), bytes | 1105 (1105–1107) | 1106 (1105–1107) | 1105 (1105–1109) |
+
+`old′`, the same binary as `old`, lands from 0.888 to 1.191 of it, so this
+run's noise band is −11% to +19%. Every `new` ratio but `direct`'s sits inside
+it. `direct` reads 0.851, under the band, but against `old′` it is 0.958, and
+cachegrind finds its misses unchanged in total (below): `old`'s `direct`
+median is that row's high one. `idle`, the shape that does what
+`Http1Server`'s readable path does, is 1.000.
+`cold` reads 7.9% slower, though it never parks, so the patch adds it one
+load from a line `inputRoom` already reads: that is the band, not the change.
+
+`bash bench/http1-conn/misses.sh` on the same two builds (100,000 requests
+less 0 over 10,000 connections; 20,000 in `idle-dram`) shows why. An idle
+request misses D1 on reads 12.05 times on `main` and 10.67 with the flag, and
+on writes 3.23 and 4.60 times, so 15.28 and 15.27 misses in all. The read
+misses saved are in `IdlePool.readable` (2.56 to 1.62, `inputRoom` inlined)
+and come back in `Http1Connection.feed` (read misses 0.75 to 1.19, write
+misses 0 to 1.38): `unpark` still writes `parser.buf` and `parser.body`, so
+the parser's line is loaded one call later, as a write miss instead of a read
+miss. `direct` gives the same totals. In `idle-dram` LL read misses fall by
+1.38 a request and LL write misses rise by 1.38, and the run's LL misses are
+33,856,519 on both builds. The stages profile agrees: `recv` goes from 4.50
+read misses and 0 write misses to 3.13 and 1.38, every other stage the same.
+
+**A slot-indexed hot block.** `Http1Server` on `main` already keeps a
+resting slot as five slot-indexed arrays, `fds`, `at`, `rested`,
+`restedMss` and `owner`, and hands its `Http1Connection` back to a LIFO stack
+of spare connections at `flush`; `attach` lends the next readable slot the
+stack's top, the connection the server touched last. The block the idea
+names is that, and a request on `Http1Server` finds its connection's lines
+where the last request left them. `IdlePool` in `main.ts` keeps one
+connection per slot instead, as `Http1Server` did before the lending, so its
+`idle` shapes measure a connection out of cache that `Http1Server` no longer
+serves from; it stands for a carrier that holds a connection per slot, as
+`Http1TlsServer` does. No struct-of-arrays copy of the connection's own
+fields was tried: `Http1Connection`'s methods read those fields with no slot
+to index by, and a copy on the server would have to be kept in step at every
+state change for a request that, on `Http1Server`, already takes a warm
+connection.
+
+The bench code is `main`'s at `3a5bbbaf`; this section adds
+`parked-flag.patch` and no change to `main.ts` or `run.mjs`.
