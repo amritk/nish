@@ -39512,17 +39512,18 @@ if (!only || "host-import".includes(only)) {
 
     // A program with no host module is compiled as it was before host modules:
     // its native and wasm32 IR are these bytes (the .d.ts, the loader and both
-    // profiles' .wasm are held below, against WASM_PLAIN_DIGESTS).
+    // profiles' .wasm are held below, against WASM_PLAIN_DIGESTS). examples-strict S3
+    // (#2385) moved both: add and arrays answer their overflows instead of panicking.
     for (const [src, native, wasm32] of [
       [
         "examples/add.ts",
-        "c9c8b3abb2a28d8d983ca06439bf07fb2d03fd373c18c185caa837eeacd8027b",
-        "2b682ad80229098976b5d710898209a5be40e28fc43bdcb3529e3353fb48ee8a",
+        "2d399ccafb6e3e473b5cab1acfd3286e2c7f7a4cf34f36d32db1af5e04b6382e",
+        "bf638279fc79dc874a8e2f9a8f6c2d7cd247f1bf3899f3b6b2deeb3fdb59fdce",
       ],
       [
         "examples/arrays.ts",
-        "7dc834476d88c90760e9de579ad9ae7d2ede58e3e709a0614bd68f7d6b17c89d",
-        "7e3db328ba5975f0ad3a14cd62f4c22660ce254dcfb697ba46a646f6a8921293",
+        "40109143fedb6bcbd02b4f9bfef1874c247b5dafb2bdfee3c8cb8811f30056a1",
+        "edf2d5730be5813751d30005110e7b7e4e7debaf0f43994c68fa6a0b4a583fb3",
       ],
     ]) {
       const stem = path.basename(src, ".ts")

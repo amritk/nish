@@ -795,10 +795,14 @@ wasm` as it is, then the same IR linked with an explicit export list instead of
 
 | | `--export-all` (today) | explicit exports |
 | --- | --- | --- |
-| `examples/add.ts` (one function, no runtime) | 316 / 233 / 211 | **102 / 111 / 87** |
-| `examples/arrays.ts` with `runtime-wasm.c` | 2,827 / 1,479 / 1,302 | **2,091 / 1,092 / 970** |
+| `examples/add.ts` (one function, no runtime) | 316 / 233 / 211 | **102 / 111 / 87**; 122 / 127 / 126 since it answers a `Result` |
+| `examples/arrays.ts` with `runtime-wasm.c` | 2,827 / 1,479 / 1,302 | **2,091 / 1,092 / 970**; 2,661 / 1,413 / 1,306 since it answers its overflows |
 | the generated loader, `add.mjs` | 691 / 399 / 322 | — |
 | the generated loader, `arrays.mjs` | 3,623 / 1,278 / 1,114 | — |
+
+The second figures in the explicit column are examples-strict S3's (#2385), measured
+2026-11-27 with clang 18 and no wasm-opt, and are the `wasm-size` ceilings in
+`tests/runtime-budgets.js`, which says where the bytes went.
 
 So `--export-all` costs 68% of the hello world and 26% of a module with arrays.
 `--profile wasm-host` exports the program's exported functions, its exported
