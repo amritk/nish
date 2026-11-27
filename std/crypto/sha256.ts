@@ -36,6 +36,8 @@
  * Written from the specification, not ported from another implementation.
  */
 
+import { wrappingAdd } from "nish:unsafe"
+
 /** The length of a digest in bytes (FIPS 180-4 §1, "Message Digest Size"). */
 export const SHA256_SIZE: i32 = 32
 
@@ -531,8 +533,8 @@ export class Sha256 {
     if (off < 0 || len < 0 || off > size || len > size - off) {
       panic("Sha256: the window is outside the buffer")
     }
-    // §5.1.1 appends the length modulo 2^64, so the count wraps as a `u64`.
-    this.total = toI64(toU64(this.total) + toU64(toI64(len)))
+    // §5.1.1 appends the length modulo 2^64, so the wrap is the count's answer.
+    this.total = wrappingAdd(this.total, toI64(len))
     const state: u32[] = this.state
     const schedule: u32[] = this.schedule
     const block: u8[] = this.block
@@ -590,7 +592,8 @@ export class Sha256 {
       this.update(data, from, toI32(n))
       return
     }
-    this.total = toI64(toU64(this.total) + toU64(toI64(n)))
+    // The count is modulo 2^64, as in `update`.
+    this.total = wrappingAdd(this.total, toI64(n))
     const state: u32[] = this.state
     const schedule: u32[] = this.schedule
     const block: u8[] = this.block

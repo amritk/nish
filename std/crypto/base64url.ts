@@ -46,16 +46,19 @@
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
 
+import { wrappingAdd, wrappingSub } from "nish:unsafe"
+
 /**
  * All ones when `lo <= c <= hi`, else zero, without a branch. `c` is a byte or
- * a sextet, so neither subtraction could leave `i32`; they are written in
- * `u32`, which wraps by definition, because a signed one would be checked for
- * an overflow it cannot have, and the check is a branch on the secret. The
- * sign bit `>> 31` reads is the same either way. `base64urlCharOf` and
- * `base64urlSextetOf` do their sums in `u32` for the same reason.
+ * a sextet, so neither subtraction could leave `i32`; they are wrapping calls
+ * from `nish:unsafe` because a plain one would be checked for an overflow it
+ * cannot have, and the check is a branch on the secret. The sign bit `>> 31`
+ * reads is the same either way. `base64urlCharOf` and `base64urlSextetOf` add
+ * `v` or `c` through a wrapping call for the same reason; their masked steps
+ * are small constants the compiler proves fit.
  */
 const base64urlRangeMask = (c: i32, lo: i32, hi: i32): i32 =>
-  toI32((toU32(lo) - 1 - toU32(c)) & (toU32(c) - toU32(hi) - 1)) >> 31
+  (wrappingSub(wrappingSub(lo, 1), c) & wrappingSub(wrappingSub(c, hi), 1)) >> 31
 
 /**
  * The URL-alphabet character for the sextet `v` (`0 <= v <= 63`).
@@ -65,13 +68,13 @@ const base64urlRangeMask = (c: i32, lo: i32, hi: i32): i32 =>
  * on `0`, 62 on `-` and 63 on `_`.
  */
 const base64urlCharOf = (v: i32): i32 =>
-  toI32(
+  wrappingAdd(
+    v,
     65 +
-      toU32(v) +
-      toU32(base64urlRangeMask(v, 26, 63) & 6) -
-      toU32(base64urlRangeMask(v, 52, 63) & 75) -
-      toU32(base64urlRangeMask(v, 62, 63) & 13) +
-      toU32(base64urlRangeMask(v, 63, 63) & 49)
+      (base64urlRangeMask(v, 26, 63) & 6) -
+      (base64urlRangeMask(v, 52, 63) & 75) -
+      (base64urlRangeMask(v, 62, 63) & 13) +
+      (base64urlRangeMask(v, 63, 63) & 49)
   )
 
 /**
@@ -86,9 +89,9 @@ const base64urlSextetOf = (c: i32): i32 => {
   const dash: i32 = base64urlRangeMask(c, 45, 45)
   const underscore: i32 = base64urlRangeMask(c, 95, 95)
   const value: i32 =
-    (upper & toI32(toU32(c) - 65)) |
-    (lower & toI32(toU32(c) - 71)) |
-    (digit & toI32(toU32(c) + 4)) |
+    (upper & wrappingSub(c, 65)) |
+    (lower & wrappingSub(c, 71)) |
+    (digit & wrappingAdd(c, 4)) |
     (dash & 62) |
     (underscore & 63)
   return value | ~(upper | lower | digit | dash | underscore)
@@ -248,13 +251,13 @@ export const base64urlDecode = (text: string): u8[] | null => {
  * `base64urlCharOf` until 62, which lands on `+` and 63 on `/`.
  */
 const base64StdPadCharOf = (v: i32): i32 =>
-  toI32(
+  wrappingAdd(
+    v,
     65 +
-      toU32(v) +
-      toU32(base64urlRangeMask(v, 26, 63) & 6) -
-      toU32(base64urlRangeMask(v, 52, 63) & 75) -
-      toU32(base64urlRangeMask(v, 62, 63) & 15) +
-      toU32(base64urlRangeMask(v, 63, 63) & 3)
+      (base64urlRangeMask(v, 26, 63) & 6) -
+      (base64urlRangeMask(v, 52, 63) & 75) -
+      (base64urlRangeMask(v, 62, 63) & 15) +
+      (base64urlRangeMask(v, 63, 63) & 3)
   )
 
 /** The sextet the byte `c` stands for in standard base64, or `-1` when it is not in the alphabet. */
@@ -265,9 +268,9 @@ const base64StdPadSextetOf = (c: i32): i32 => {
   const plus: i32 = base64urlRangeMask(c, 43, 43)
   const slash: i32 = base64urlRangeMask(c, 47, 47)
   const value: i32 =
-    (upper & toI32(toU32(c) - 65)) |
-    (lower & toI32(toU32(c) - 71)) |
-    (digit & toI32(toU32(c) + 4)) |
+    (upper & wrappingSub(c, 65)) |
+    (lower & wrappingSub(c, 71)) |
+    (digit & wrappingAdd(c, 4)) |
     (plus & 62) |
     (slash & 63)
   return value | ~(upper | lower | digit | plus | slash)

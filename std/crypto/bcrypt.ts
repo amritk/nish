@@ -130,6 +130,7 @@
 import { timingSafeEqual } from "nish/crypto/ct"
 import { Secret, exposeWith, secret, wipe } from "nish:secret"
 import { monotonicNanos } from "nish:process"
+import { wrappingAdd, wrappingSub } from "nish:unsafe"
 
 /** The length of a bcrypt hash string: `$2b$`, two cost digits, `$`, 22 salt and 31 digest characters. */
 export const BCRYPT_HASH_LENGTH: i32 = 60
@@ -190,11 +191,12 @@ interface BcryptParsed {
 /**
  * All ones when `lo <= c <= hi`, else zero, without a branch: the encoding
  * reads the digest, which is the stored hash when the password is right. The
- * sums are in `u32`, as in `base64urlRangeMask` (std/crypto/base64url.ts), so
- * no overflow check branches on them.
+ * differences are wrapping calls, as in `base64urlRangeMask`
+ * (std/crypto/base64url.ts): the sign bit of each is the answer, wrapped or
+ * not, and a checked subtraction would branch on `c`.
  */
 const bcryptRangeMask = (c: i32, lo: i32, hi: i32): i32 =>
-  toI32((toU32(lo) - 1 - toU32(c)) & (toU32(c) - toU32(hi) - 1)) >> 31
+  (wrappingSub(wrappingSub(lo, 1), c) & wrappingSub(wrappingSub(c, hi), 1)) >> 31
 
 /**
  * The bcrypt alphabet's character for the sextet `v`, `./A-Za-z0-9`: `.` + `v`,
@@ -216,11 +218,14 @@ const bcryptSextetOf = (c: i32): i32 => {
   const upper: i32 = bcryptRangeMask(c, 65, 90)
   const lower: i32 = bcryptRangeMask(c, 97, 122)
   const digit: i32 = bcryptRangeMask(c, 48, 57)
+  // Each offset is a wrapping call so that no overflow check branches on `c`;
+  // a class's mask keeps its offset only when `c` is in that class, where it
+  // is a sextet and nothing wraps.
   const value: i32 =
-    (punct & toI32(toU32(c) - 46)) |
-    (upper & toI32(toU32(c) - 63)) |
-    (lower & toI32(toU32(c) - 69)) |
-    (digit & toI32(toU32(c) + 6))
+    (punct & wrappingSub(c, 46)) |
+    (upper & wrappingSub(c, 63)) |
+    (lower & wrappingSub(c, 69)) |
+    (digit & wrappingAdd(c, 6))
   return value | ~(punct | upper | lower | digit)
 }
 

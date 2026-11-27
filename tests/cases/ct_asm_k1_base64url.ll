@@ -13,19 +13,19 @@ entry:
 
 define noundef i32 @base64urlCharOf(i32 noundef %v) #0 {
 entry:
-  %0 = add i32 65, %v
-  %1 = call i32 @base64urlRangeMask(i32 %v, i32 26, i32 63)
-  %2 = and i32 %1, 6
-  %3 = add i32 %0, %2
-  %4 = call i32 @base64urlRangeMask(i32 %v, i32 52, i32 63)
-  %5 = and i32 %4, 75
-  %6 = sub i32 %3, %5
-  %7 = call i32 @base64urlRangeMask(i32 %v, i32 62, i32 63)
-  %8 = and i32 %7, 13
-  %9 = sub i32 %6, %8
-  %10 = call i32 @base64urlRangeMask(i32 %v, i32 63, i32 63)
-  %11 = and i32 %10, 49
-  %12 = add i32 %9, %11
+  %0 = call i32 @base64urlRangeMask(i32 %v, i32 26, i32 63)
+  %1 = and i32 %0, 6
+  %2 = add nsw i32 65, %1
+  %3 = call i32 @base64urlRangeMask(i32 %v, i32 52, i32 63)
+  %4 = and i32 %3, 75
+  %5 = sub nsw i32 %2, %4
+  %6 = call i32 @base64urlRangeMask(i32 %v, i32 62, i32 63)
+  %7 = and i32 %6, 13
+  %8 = sub nsw i32 %5, %7
+  %9 = call i32 @base64urlRangeMask(i32 %v, i32 63, i32 63)
+  %10 = and i32 %9, 49
+  %11 = add nsw i32 %8, %10
+  %12 = add i32 %v, %11
   ret i32 %12
 }
 

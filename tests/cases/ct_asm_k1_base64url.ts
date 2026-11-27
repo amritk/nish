@@ -28,21 +28,21 @@
 // ct-check: base64urlEncodeGroup secret=contents
 // ct-check: base64urlDecodeGroup secret=contents
 
-import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
+import { uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub } from "nish:unsafe";
 
 // Verbatim: `base64urlRangeMask`.
 const base64urlRangeMask = (c: i32, lo: i32, hi: i32): i32 =>
-  toI32((toU32(lo) - 1 - toU32(c)) & (toU32(c) - toU32(hi) - 1)) >> 31
+  (wrappingSub(wrappingSub(lo, 1), c) & wrappingSub(wrappingSub(c, hi), 1)) >> 31
 
 // Verbatim: `base64urlCharOf`.
 export const base64urlCharOf = (v: i32): i32 =>
-  toI32(
+  wrappingAdd(
+    v,
     65 +
-      toU32(v) +
-      toU32(base64urlRangeMask(v, 26, 63) & 6) -
-      toU32(base64urlRangeMask(v, 52, 63) & 75) -
-      toU32(base64urlRangeMask(v, 62, 63) & 13) +
-      toU32(base64urlRangeMask(v, 63, 63) & 49)
+      (base64urlRangeMask(v, 26, 63) & 6) -
+      (base64urlRangeMask(v, 52, 63) & 75) -
+      (base64urlRangeMask(v, 62, 63) & 13) +
+      (base64urlRangeMask(v, 63, 63) & 49)
   )
 
 // Verbatim: `base64urlSextetOf`.
@@ -53,9 +53,9 @@ export const base64urlSextetOf = (c: i32): i32 => {
   const dash: i32 = base64urlRangeMask(c, 45, 45)
   const underscore: i32 = base64urlRangeMask(c, 95, 95)
   const value: i32 =
-    (upper & toI32(toU32(c) - 65)) |
-    (lower & toI32(toU32(c) - 71)) |
-    (digit & toI32(toU32(c) + 4)) |
+    (upper & wrappingSub(c, 65)) |
+    (lower & wrappingSub(c, 71)) |
+    (digit & wrappingAdd(c, 4)) |
     (dash & 62) |
     (underscore & 63)
   return value | ~(upper | lower | digit | dash | underscore)
