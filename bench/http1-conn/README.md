@@ -66,6 +66,12 @@ builds the idle pool with `idleInput` on, as it is by default, its `rss-kept`
 mode with it off, serves every connection one request, or `--passes` (default 4)
 in turn so each has kept its response head, so each parks, and prints its
 `VmHWM` from `/proc/self/status`; the table gives a row for each of the four,
+and a fifth for the `rss-serving` mode: the rss mode's passes, then every
+connection fed one more request and answered, its output buffer taken and
+written and the date held, but not flushed, so all of them hold their input,
+head and output buffers at once, as a server answering every connection in the
+same moment does. Its row is a serving connection's RSS, against the bytes
+`bytes.ts` sums by object for the same state,
 over `--rss` runs (default 5), the median and min–max of the peak at
 `--connections` less the peak at 0, divided by `--connections`. `getrusage`'s `ru_maxrss` cannot stand in for
 it, because it keeps the peak of the image `exec` replaced too, and under
@@ -86,6 +92,30 @@ many input, head and output buffers the pools made, which with the lending
 LIFO is one each however many connections there are; `run.mjs` fails the run
 if it is not.
 The rss shape prints its peak in KiB where the others print nanoseconds.
+
+`--shape parts` (not in the default list) builds `parts.ts` beside `main.ts`
+against the same three `std/` copies and times the http-lean-get record's
+components on one hot connection, in the same rotating rounds: the GET's head
+parse apart from its header spans, and `Date` with its clock read. The
+parser's line scan and its field-line work are one inlined loop, so the
+header spans are told apart by input, not by a clock read inside `next`: the
+GET with and without its four field lines after Host, less the same four lines
+sent as a chunked POST's trailer section with and without them, which the
+same scan reads with a token check and a count and no span. `Date` is
+`hold`, `current` and `unhold` on the wall clock against a pinned date, and a
+whole served GET between `hold` and `unhold` on each. The clock-read loop,
+the three-call `Date` loop and the held-serve loop are the bench's own; every
+other call is the shipped one. The table gives ns per request, median and
+min–max over the rounds, with `old′` as the band; `parts.ts`'s header comment
+lists each shape and how each row is derived.
+
+`bytes.ts` also measures a pooled connection holding its buffers while it
+answers: `pooled-holding-read` is the arena bytes after the next request is
+read (the input and head buffers back from the pools), and
+`pooled-holding-answered` after the response is written into the output
+buffer. That buffer is 65,536 bytes, past the arena's chunk, so it lands in
+its own chunk and the count prints `chunk`; the record sums it by object, its
+length printed under `holding` plus its 24-byte array header.
 
 ## idle.sh: an idle connection through a real server
 
