@@ -8540,11 +8540,11 @@ function quicFrameReadAck(r: QuicFrameReader, d: u8[], frame: QuicFrame, ecn: bo
   local +27:11 bottom: i64 (const)
   callee +27:25 quicAckSpan -> @nish.quicAckSpan
   callee +32:7 quicFrameStoreRange -> @nish.quicFrameStoreRange
-  local +41:9 total: i64 (const)
-  callee +41:22 quicFrameNext -> @nish.quicFrameNext
-  callee +47:18 quicFrameVarint -> @nish.quicFrameVarint
-  callee +48:18 quicFrameVarint -> @nish.quicFrameVarint
-  callee +49:16 quicFrameVarint -> @nish.quicFrameVarint
+  local +43:9 total: i64 (const)
+  callee +43:22 quicFrameNext -> @nish.quicFrameNext
+  callee +49:18 quicFrameVarint -> @nish.quicFrameVarint
+  callee +50:18 quicFrameVarint -> @nish.quicFrameVarint
+  callee +51:16 quicFrameVarint -> @nish.quicFrameVarint
 function quicFrameReadData(r: QuicFrameReader, frame: QuicFrame, length: i64): i64 -> @nish.quicFrameReadData
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -10751,7 +10751,7 @@ function QuicCidTable.addLocal(this: QuicCidTable, cid: u8[], resetToken: u8[]):
   local -2:11 length: i32 (const)
   callee -1:5 quicCidCopy -> @nish.quicCidCopy
   callee +2:5 quicCidCopy -> @nish.quicCidCopy
-  local +9:11 left: i64 (const)
+  local +12:11 left: i64 (const)
 function QuicCidTable.activeLocal(this: QuicCidTable): i32 -> @nish.QuicCidTable.activeLocal [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=64 writesThrough=false captured=false

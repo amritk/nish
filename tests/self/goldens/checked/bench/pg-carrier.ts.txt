@@ -40094,7 +40094,7 @@ function pgPutDecimal(out: u8[], at: i32, value: i64, n: i32): i32 -> @nish.pgPu
   escaping: at
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -7:9 first: i32 (const)
+  local -8:9 first: i32 (const)
   local -6:7 m: u64 (let)
   local -4:7 j: i32 (let)
   local -2:11 pair: u32 (const)
