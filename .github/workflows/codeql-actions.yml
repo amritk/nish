@@ -1,0 +1,30 @@
+# CodeQL over the workflow files themselves (the `actions` language): script
+# injection from event text, over-broad tokens, untrusted checkouts in a
+# privileged job. codeql.yml covers the C runtime; src/ and std/ are Nish,
+# which CodeQL does not read. This runs amritk/workflows' reusable CodeQL
+# workflow, pinned to a commit like every other action here.
+name: codeql-actions
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/**"]
+  pull_request:
+    paths: [".github/**"]
+  schedule:
+    # Mondays, 05:43 UTC: off the hour, and a new query pack is picked up
+    # without a workflow change.
+    - cron: "43 5 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  codeql:
+    uses: amritk/workflows/.github/workflows/codeql.yml@a07fd4bbde41858c86f578b0f8b008c16a4a12b9 # amritk/workflows#7, unreleased
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    with:
+      languages: '["actions"]'
