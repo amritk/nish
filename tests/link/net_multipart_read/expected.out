@@ -1,0 +1,77 @@
+PASS  Node vector 0, parts: 2
+PASS  Node vector 1, parts: 2
+PASS  Node vector 2, parts: 2
+PASS  Node vector 3, parts: 1
+PASS  Node vector 4, parts: 2
+PASS  Node vector 5, parts: 1
+PASS  a preamble and an epilogue are skipped
+PASS  a body that opens with CR LF before its first delimiter
+PASS  transport padding after a delimiter
+PASS  a boundary-like run followed by another octet is data
+PASS  a delimiter followed by an LF alone is data
+PASS  a part with no data
+PASS  data that opens with the boundary is data, its CR LF taken by the empty line
+PASS  CR LF at the end of data is kept, the one before the delimiter is not
+PASS  a filename, a content type and a header the reader does not know
+PASS  data holding every octet value
+PASS  a length short of the array reads only that much
+PASS  every prefix of a 126-octet body answers only whole parts and closes only when whole
+PASS  so no prefix answers otherwise
+PASS  a part
+PASS  then the end
+PASS  and the end again
+PASS  with no data span left
+PASS  a boundary of 70 octets
+PASS  a boundary of every bchar
+PASS  refused: an empty boundary
+PASS  refused: a boundary of 71 octets
+PASS  refused: a boundary ending in a space
+PASS  refused: a boundary holding a quote
+PASS  refused: a boundary holding a CR
+PASS  refused: a boundary holding an @
+PASS  refused: a length below 0
+PASS  refused: a length past the array
+PASS  refused unterminated: an empty body
+PASS  refused unterminated: no delimiter
+PASS  refused unterminated: a delimiter with no CR LF after it
+PASS  refused unterminated: header lines to the end
+PASS  refused unterminated: data to the end
+PASS  refused unterminated: no close delimiter
+PASS  refused unterminated: a close delimiter with one dash
+PASS  refused header: a line ended by LF alone
+PASS  refused header: a line ended by CR alone
+PASS  refused header: a folded line
+PASS  refused header: a line with no colon
+PASS  refused header: a name with a space
+PASS  refused header: an empty name
+PASS  refused header: a NUL in a value
+PASS  refused header: a Content-Type twice
+PASS  refused header: a Content-Type that is not a media type
+PASS  an empty value is a value
+PASS  whitespace around a value is trimmed
+PASS  refused disposition: none
+PASS  refused disposition: no header lines
+PASS  refused disposition: two
+PASS  refused disposition: not form-data
+PASS  refused disposition: no name
+PASS  refused disposition: one that does not parse
+PASS  a part before a refused one
+PASS  the refused one
+PASS  is refused from then on
+PASS  with no data span left
+PASS  three parts with maxParts 3
+PASS  refused: three parts with maxParts 2
+PASS  refused: a part with maxParts 0
+PASS  64 parts with the default limits
+PASS  refused: 65 parts with the default limits
+PASS  three header lines with maxHeaders 3
+PASS  refused: three header lines with maxHeaders 2
+PASS  16 header lines with the default limits
+PASS  refused: 17 header lines with the default limits
+PASS  a 42-octet header line with maxHeaderBytes 42
+PASS  refused: a 42-octet header line with maxHeaderBytes 41
+PASS  refused: the line longer than the cap, before its end
+PASS  8,192 octets of header lines with the default limits
+PASS  refused: 8,193 octets of header lines with the default limits
+PASS  refused: a header line with no end, at the cap and not at the body's end
+net_multipart_read: 76 passed, 0 failed, 0 skipped
