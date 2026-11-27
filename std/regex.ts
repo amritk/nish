@@ -1964,7 +1964,7 @@ const regexNullable = (p: RegexParser, n: i32): boolean => {
 // the reverse program. A transition is one i32, 0 until it is computed. A
 // plain one is the next state's offset itself, which is never 0 because the
 // first row is never a state, so the hot loop's chain from one byte to the
-// next is a load and an `|`. Any other is `-(next << 4 | flags)`, with
+// next is a load and an `|`. Any other is `~(next << 4 | flags)`, with
 // `DFA_MATCH` when a match ends before the character, `DFA_DEAD` when no
 // thread survives it and `DFA_IDLE` when the next state waits for a match to
 // start and a prefilter can find one. The hot loop follows a plain entry and
@@ -2047,15 +2047,6 @@ const regexSlot = (g: i32): i32 => (g >= 0 && g < 1073741823 ? 2 * g : 0)
 
 /** The second slot of group `g`'s pair, or 1 where `regexSlot` gives 0. */
 const regexSlotEnd = (g: i32): i32 => (g >= 0 && g < 1073741823 ? 2 * g + 1 : 1)
-
-/**
- * Minus `e`, a negative transition entry, or 0 for any other `e`. `~e` is
- * `-e - 1`; entries are state offsets, far below 2^30.
- */
-const regexNegated = (e: i32): i32 => {
-  const v: i32 = ~e
-  return v >= 0 && v < 1073741823 ? v + 1 : 0
-}
 
 /** `a[i]`, or `missing` outside `a`. */
 const regexItem = (a: i32[], i: i32, missing: i32): i32 => {
@@ -4339,14 +4330,15 @@ export class Regex {
     if (wide <= 0) {
       return 0
     }
-    let lo: i32 = 0
-    let hi: i32 = wide - 1
-    // Both are indexes into the arrays, which `dfaInit` caps far below 2^30,
-    // so the test on `hi` always holds; `mid` is above `lo`, so `mid - 1` is
-    // not negative.
-    while (lo >= 0 && lo < 1073741824 && lo < hi && hi < 1073741824) {
-      const mid: i32 = (lo + hi + 1) >>> 1
-      if (mid < 0 || mid >= toI32(wlo.length)) {
+    // The search runs in u32 from start to end, as `regexFoldsIn`'s does:
+    // `lo` and `hi` are indexes into the arrays, which `dfaInit` caps far
+    // below 2^31, so `lo + hi + 1` is exact, and an unsigned index needs only
+    // its upper test. `mid` is above `lo`, so `mid - 1` does not go below 0.
+    let lo: u32 = 0
+    let hi: u32 = toU32(wide - 1)
+    while (lo < hi) {
+      const mid: u32 = (lo + hi + 1) >>> 1
+      if (mid >= toU32(wlo.length)) {
         return 0
       }
       if (wlo[mid] <= cp) {
@@ -4355,7 +4347,7 @@ export class Regex {
         hi = mid - 1
       }
     }
-    if (lo < 0 || lo >= toI32(wcls.length)) {
+    if (lo >= toU32(wcls.length)) {
       return 0
     }
     return wcls[lo]
@@ -4616,8 +4608,9 @@ export class Regex {
       entry = to
     } else {
       // A state below `DFA_MAX_STATES` shifted left by 4 with its flags is
-      // never negative, so this never gives the search up.
-      entry = entry >= 0 ? 0 - entry : 0
+      // never negative, so this never gives the search up. `~` keeps the
+      // decoding free of a sign test: `~entry` is below -1, never 0.
+      entry = entry >= 0 ? ~entry : 0
     }
     // The table is a cache: a slot outside it would only go unremembered.
     const trans: i32[] = this.dTrans
@@ -4870,17 +4863,19 @@ export class Regex {
 
   /** The start state for `mode` after a character of kind `ctx`, or -1. */
   private dStartAt(mode: i32, ctx: i32, p: i32): i32 {
-    // Modes and contexts are small constants, so the slot cannot wrap, and
-    // `dStartOff` has one per pair and `dBuf` room for a state: the -1 for a
-    // slot outside either, which hands the search to the NFA, is never
-    // answered.
-    if (mode < 0 || mode > 15 || ctx < 0 || ctx > 15) {
+    // Modes and contexts are small constants, and `dStartOff` has one slot
+    // per pair and `dBuf` room for a state: the -1 for a slot outside either,
+    // which hands the search to the NFA, is never answered. In u32 a negative
+    // mode or context is far above 15, so one test each bounds the slot.
+    const m: u32 = toU32(mode)
+    const x: u32 = toU32(ctx)
+    if (m > 15 || x > 15) {
       return -1
     }
-    const k: i32 = mode * CTX_SLOTS + ctx
+    const k: u32 = m * toU32(CTX_SLOTS) + x
     const startOff: i32[] = this.dStartOff
     const buf: i32[] = this.dBuf
-    if (k < 0 || k >= toI32(startOff.length) || toI32(buf.length) < 1) {
+    if (k >= toU32(startOff.length) || toI32(buf.length) < 1) {
       return -1
     }
     const cached: i32 = startOff[k]
@@ -4902,7 +4897,7 @@ export class Regex {
     const off: i32 = this.dIntern(n, flags, p)
     // `dIntern` can flush the cache, which clears `dStartOff` in place.
     const after: i32[] = this.dStartOff
-    if (off >= 0 && off < 1073741823 && k < toI32(after.length)) {
+    if (off >= 0 && off < 1073741823 && k < toU32(after.length)) {
       // A state's offset is inside the transition table, far below the test.
       after[k] = off + 1
     }
@@ -5082,8 +5077,8 @@ export class Regex {
           off = e
           p += 1
         } else {
-          // A negative entry is minus a state and its flags.
-          const neg: i32 = regexNegated(e)
+          // A negative entry is the complement of a state and its flags.
+          const neg: i32 = ~e
           if (e === 0 || (neg & (DFA_DEAD | DFA_IDLE)) !== 0) {
             break
           }
@@ -5111,14 +5106,10 @@ export class Regex {
           return DFA_GAVE_UP
         }
       }
-      // States and classes are both non-negative, and a state's row holds
-      // every class, so the slot is in the table; were it not, giving up
-      // hands the search to the NFA.
-      if (off < 0 || off > 1073741823 || c < 0 || c > 1073741823) {
-        return DFA_GAVE_UP
-      }
-      const at: i32 = off + c
-      if (at >= toI32(trans.length)) {
+      // A row starts at a multiple of `1 << dShift` and every class is below
+      // that, so `|` is the sum, as in the hot loop, and cannot overflow.
+      const at: i32 = off | c
+      if (at < 0 || at >= toI32(trans.length)) {
         return DFA_GAVE_UP
       }
       let e: i32 = trans[at]
@@ -5140,7 +5131,7 @@ export class Regex {
         p = p + w
         continue
       }
-      e = regexNegated(e)
+      e = ~e
       if ((e & DFA_MATCH) !== 0) {
         if (first) {
           this.dStop = p
@@ -5223,8 +5214,8 @@ export class Regex {
           off = t
           q -= 1
         } else {
-          // Minus a state and its flags, as in `dfaForward`.
-          const neg: i32 = regexNegated(t)
+          // The complement of a state and its flags, as in `dfaForward`.
+          const neg: i32 = ~t
           if (t === 0 || (neg & DFA_DEAD) !== 0) {
             break
           }
@@ -5278,12 +5269,9 @@ export class Regex {
           c = this.dWideClass(cp)
         }
       }
-      // As in `dfaForward`: the slot is in the table.
-      if (off < 0 || off > 1073741823 || c < 0 || c > 1073741823) {
-        return DFA_GAVE_UP
-      }
-      const at: i32 = off + c
-      if (at >= toI32(trans.length)) {
+      // As in `dfaForward`: `|` is the sum and cannot overflow.
+      const at: i32 = off | c
+      if (at < 0 || at >= toI32(trans.length)) {
         return DFA_GAVE_UP
       }
       let t: i32 = trans[at]
@@ -5304,7 +5292,7 @@ export class Regex {
         p = p - (w & 7)
         continue
       }
-      t = regexNegated(t)
+      t = ~t
       if ((t & DFA_MATCH) !== 0) {
         s = p
       }
