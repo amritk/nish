@@ -1151,21 +1151,31 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fall
   // Each card links to its member's own `### name` heading, the first one
   // after the previous card's: `sha256` and `Sha256` share a slug, and the
   // second is numbered (`#sha256-1`), the same on GitHub and the docs site.
+  // A heading the sites slug apart (the docs site drops `_`, GitHub keeps
+  // it) gets GitHub's slug as an explicit `<a id>` above it, as the spec
+  // pages write it, and its card links to that.
   const lines = draft.split("\n")
   const hs = headings(draft)
+  const explicit = new Map()
   let at = 0
   const anchors = sections.map((m) => {
     while (at < hs.length && lines[hs[at].index] !== `### ${m.name}`) {
       at++
     }
     const h = hs[at++]
-    if (!h || h.github !== h.site) {
-      throw new Error(`${page}: no heading both sites give one anchor for the card of ${m.name}`)
+    if (!h) {
+      throw new Error(`${page}: no \`### ${m.name}\` heading for its card`)
+    }
+    if (h.github !== h.site) {
+      explicit.set(h.index, h.github)
     }
     return h.github
   })
+  const anchored = lines.flatMap((line, i) =>
+    explicit.has(i) ? [`<a id="${explicit.get(i)}" style="scroll-margin-top: 65px"></a>`, "", line] : [line]
+  )
   let n = 0
-  const text = codeGroups(draft.replaceAll(`href="#${CARD}"`, () => `href="#${anchors[n++]}"`))
+  const text = codeGroups(anchored.join("\n").replaceAll(`href="#${CARD}"`, () => `href="#${anchors[n++]}"`))
   return { text, lead: lead || intro }
 }
 
