@@ -23,10 +23,7 @@
 3 std/crypto/x25519.ts
 14 std/crypto/x509.ts
 5 std/json-format.ts
-2 std/json-number.ts
-1 std/json-tokenizer.ts
 1 std/json-typed.ts
-29 std/json-value.ts
 16 std/json.ts
 1 std/net/dns.ts
 17 std/net/fetch.ts

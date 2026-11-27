@@ -323,7 +323,9 @@ const jsonTokSigned = (m: u64, negative: boolean): i64 => {
   if (m === toU64(0)) {
     return toI64(0)
   }
-  return ~toI64(m - toU64(1))
+  // `m` is at least 1 here, so taking one away is exact.
+  const less: u64 = m - toU64(1)
+  return ~toI64(less)
 }
 
 /**
@@ -1841,8 +1843,7 @@ export class JsonTokenizer {
     const src: u8[] = this.src
     const start: i32 = this.tokStart
     const end: i32 = this.tokEnd
-    const n: i32 = toI32(src.length)
-    if (start < 0 || start > end || end > n) {
+    if (start < 0 || start > end || end > toI32(src.length)) {
       return 0
     }
     return parseFloat(String.fromBytes(src, start, end))

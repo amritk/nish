@@ -53,19 +53,23 @@ export class YamlLineIndex {
     const length: i32 = toI32(text.length)
     let nl: i32 = toI32(text.indexOf("\n"))
     let cr: i32 = toI32(text.indexOf("\r"))
-    while (nl >= 0 || cr >= 0) {
-      if (cr >= 0 && (nl < 0 || cr < nl)) {
+    // A search's answer is a break only from 0 to below `length`; anything
+    // else is none left, and the scan stops when neither search has one.
+    while (true) {
+      if (cr >= 0 && cr < length && (nl < 0 || cr < nl)) {
         // CR LF is one break: step over both, and move the LF search past it.
-        if (cr + 1 < length && toI32(text.charCodeAt(cr + 1)) === YAML_LINES_LF) {
+        if (cr < length - 1 && toI32(text.charCodeAt(cr + 1)) === YAML_LINES_LF) {
           this.starts.push(cr + 2)
           nl = toI32(text.indexOf("\n", cr + 2))
         } else {
           this.starts.push(cr + 1)
         }
         cr = toI32(text.indexOf("\r", cr + 1))
-      } else {
+      } else if (nl >= 0 && nl < length) {
         this.starts.push(nl + 1)
         nl = toI32(text.indexOf("\n", nl + 1))
+      } else {
+        break
       }
     }
   }
@@ -86,15 +90,18 @@ export class YamlLineIndex {
    * @returns The byte offset of the line's first byte.
    */
   lineStart(line: i32): i32 {
-    const count: i32 = toI32(this.starts.length)
-    let index: i32 = line - 1
-    if (index >= count) {
-      index = count - 1
+    const starts: i32[] = this.starts
+    const count: i32 = toI32(starts.length)
+    if (line > count) {
+      return count > 0 ? starts[count - 1] : 0
     }
-    if (index < 0) {
-      index = 0
+    if (line > 1) {
+      const at: i32 = line - 1
+      if (at < count) {
+        return starts[at]
+      }
     }
-    return index < count ? this.starts[index] : 0
+    return 0
   }
 
   /**
@@ -104,7 +111,7 @@ export class YamlLineIndex {
    * @returns The 1-based line; a break belongs to the line it ends.
    */
   line(offset: i32): i32 {
-    return this.lineIndexOf(this.clamp(offset)) + 1
+    return this.linesFrom(this.clamp(offset))
   }
 
   /**
@@ -117,11 +124,9 @@ export class YamlLineIndex {
    */
   column(offset: i32): i32 {
     const at: i32 = this.clamp(offset)
-    const index: i32 = this.lineIndexOf(at)
-    const starts: i32[] = this.starts
-    let i: i32 = index >= 0 && index < toI32(starts.length) ? starts[index] : 0
     const text: string = this.text
     const length: i32 = toI32(text.length)
+    let i: i32 = this.lineStart(this.linesFrom(at))
     let column: i32 = 1
     while (i >= 0 && i < at && i < length) {
       const code: i32 = toI32(text.charCodeAt(i))
@@ -142,7 +147,7 @@ export class YamlLineIndex {
    */
   byteColumn(offset: i32): i32 {
     const at: i32 = this.clamp(offset)
-    return at - this.lineStart(this.lineIndexOf(at) + 1) + 1
+    return at - this.lineStart(this.linesFrom(at)) + 1
   }
 
   /** `offset` clamped to `[0, text.length]`. */
@@ -154,18 +159,21 @@ export class YamlLineIndex {
     return offset > length ? length : offset
   }
 
-  /** The 0-based line holding byte `at`, by binary search over `starts`. */
-  private lineIndexOf(at: i32): i32 {
+  /**
+   * How many lines start at or before byte `at`, by binary search over
+   * `starts`: the 1-based line holding `at`, since line 1 starts at 0.
+   */
+  private linesFrom(at: i32): i32 {
     const starts: i32[] = this.starts
+    const count: i32 = toI32(starts.length)
     let low: i32 = 0
-    let high: i32 = toI32(starts.length) - 1
-    while (low < high) {
-      const mid: i32 = (low + high + 1) >> 1
-      const start: i32 = mid >= 0 && mid < toI32(starts.length) ? starts[mid] : 0
-      if (start <= at) {
-        low = mid
+    let high: i32 = count
+    while (low >= 0 && low < high && high <= count) {
+      const mid: i32 = toI32((toI64(low) + toI64(high)) >> toI64(1))
+      if (mid >= 0 && mid < count && starts[mid] <= at) {
+        low = mid + 1
       } else {
-        high = mid - 1
+        high = mid
       }
     }
     return low

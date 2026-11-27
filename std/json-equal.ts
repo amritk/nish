@@ -165,13 +165,19 @@ export const jsonEqual = (da: JsonDocument, a: i32, db: JsonDocument, b: i32): b
   const left: i32[] = [a]
   const right: i32[] = [b]
   while (left.length > 0) {
-    const x: i32 = left[left.length - 1]
+    // Never taken, as the loop's test says; the spelling is what proves the index and the pop.
+    const top: i32 = toI32(left.length) - 1
+    if (top < 0) {
+      break
+    }
+    const x: i32 = left[top]
     left.pop()
     // Never taken: the two stacks are pushed in pairs, so they empty together.
-    if (right.length === 0) {
+    const rightTop: i32 = toI32(right.length) - 1
+    if (rightTop < 0 || !(right.length > 0)) {
       return false
     }
-    const y: i32 = right[right.length - 1]
+    const y: i32 = right[rightTop]
     right.pop()
     const kind: i32 = da.kind(x)
     if (kind === JSON_VALUE_NONE || kind !== db.kind(y)) {
@@ -251,13 +257,20 @@ const jsonEqualCanonicalText = (doc: JsonDocument, v: i32): string => {
   const tasks: i32[] = [v]
   const keyStack: string[] = []
   while (tasks.length > 0) {
-    const x: i32 = tasks[tasks.length - 1]
+    // Never taken, as the loop's test says; the spelling is what proves the index and the pop.
+    const top: i32 = toI32(tasks.length) - 1
+    if (top < 0) {
+      break
+    }
+    const x: i32 = tasks[top]
     tasks.pop()
     if (x === JSON_EQUAL_KEY_TASK) {
       // Each key task is pushed with its key, so the key stack holds one here.
-      if (keyStack.length > 0) {
-        jsonEqualPutText(out, keyStack[keyStack.length - 1])
+      const keyTop: i32 = toI32(keyStack.length) - 1
+      if (keyTop >= 0 && keyStack.length > 0) {
+        const key: string = keyStack[keyTop]
         keyStack.pop()
+        jsonEqualPutText(out, key)
       }
       continue
     }

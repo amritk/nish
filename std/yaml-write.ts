@@ -82,6 +82,22 @@ const YAML_WRITE_BACKSLASH: i32 = 92
 const yamlWriteByte = (text: string, i: i32): i32 =>
   i >= 0 && i < toI32(text.length) ? toI32(text.charCodeAt(i)) : -1
 
+/** Byte `i + ahead` of `text`, or `-1` past either end; the sum is in `i64`, so it cannot overflow. */
+const yamlWriteByteAt = (text: string, i: i32, ahead: i32): i32 => {
+  const at: i64 = toI64(i) + toI64(ahead)
+  return at >= 0 && at < toI64(toI32(text.length)) ? yamlWriteByte(text, toI32(at)) : -1
+}
+
+/**
+ * Where a scan of `text` that stands at `i` goes next: past the `step` bytes of
+ * one character, `n` at most. Summed in `i64`, so `i + step` cannot overflow; the
+ * cap never binds, as a character's bytes are all in `text`.
+ */
+const yamlWriteStep = (i: i32, step: i32, n: i32): i32 => {
+  const next: i64 = toI64(i) + toI64(step)
+  return next < toI64(n) ? toI32(next) : n
+}
+
 const yamlWriteIsDigit = (c: i32): boolean => c >= 48 && c <= 57
 
 /** Whether `c` is an indicator that cannot start a plain scalar, whatever follows it. */
@@ -166,7 +182,7 @@ const yamlWriteEscapedLength = (text: string, i: i32): i32 => {
   if (c === 194 && next >= 128 && next <= 159) {
     return 2
   }
-  const third: i32 = yamlWriteByte(text, i + 2)
+  const third: i32 = yamlWriteByteAt(text, i, 2)
   if (c === 226 && next === 128 && (third === 168 || third === 169)) {
     return 3
   }
@@ -204,29 +220,35 @@ const yamlWriteNeedsQuotes = (text: string, key: boolean): boolean => {
 }
 
 /**
- * How many bytes `text` takes as written: its own, or quoted, two more for the
- * quotes and, for each escape, the bytes it adds to the character it replaces.
+ * Whether `text` as written takes more than `YAML_WRITE_MAX_KEY_LENGTH` bytes:
+ * its own, or quoted, two more for the quotes and, for each escape, the bytes
+ * it adds to the character it replaces. The count stops once it is past the
+ * limit, so it stays far below 2^31.
  */
-const yamlWriteLength = (text: string, quoted: boolean): i32 => {
+const yamlWriteKeyTooLong = (text: string, quoted: boolean): boolean => {
   const n: i32 = toI32(text.length)
   if (!quoted) {
-    return n
+    return n > YAML_WRITE_MAX_KEY_LENGTH
   }
-  let length: i32 = n + 2
+  let length: i32 = 2
   let i: i32 = 0
-  while (i < n) {
+  while (i >= 0 && i < n && length <= 1024) {
     const c: i32 = yamlWriteByte(text, i)
     const escaped: i32 = yamlWriteEscapedLength(text, i)
     if (c === 34 || c === 92 || c === 10 || c === 9 || c === 13) {
-      length += 1
+      length += 2
     } else if (escaped === 1) {
-      length += 3
-    } else if (escaped > 1) {
-      length += escaped
+      length += 4
+    } else if (escaped === 2) {
+      length += 4
+    } else if (escaped === 3) {
+      length += 6
+    } else {
+      length += 1
     }
-    i += escaped > 1 ? escaped : 1
+    i = yamlWriteStep(i, escaped > 1 ? escaped : 1, n)
   }
-  return length
+  return length > YAML_WRITE_MAX_KEY_LENGTH
 }
 
 /** Writes one JSON value as block YAML, byte by byte, into `out`. */
@@ -279,7 +301,7 @@ class YamlWriter {
   private escape(text: string, i: i32, length: i32): void {
     const c: i32 = yamlWriteByte(text, i)
     const second: i32 = yamlWriteByte(text, i + 1)
-    const third: i32 = yamlWriteByte(text, i + 2)
+    const third: i32 = yamlWriteByteAt(text, i, 2)
     if (length === 2) {
       this.hex(second)
     } else if (length === 3 && second === 128) {
@@ -313,7 +335,7 @@ class YamlWriter {
         i += 1
       } else if (length > 0) {
         this.escape(text, i, length)
-        i += length
+        i = yamlWriteStep(i, length, n)
       } else {
         this.byte(c)
         i += 1
@@ -358,11 +380,12 @@ class YamlWriter {
   }
 
   /**
-   * Writes `v` starting at column `indent`, where the line has already reached
-   * it, and ends its last line; `depth` is how many collections hold it.
+   * Writes `v` starting at column `2 * depth`, where the line has already
+   * reached it, and ends its last line; `depth` is how many collections hold
+   * it, and each indents its members two spaces.
    * @internal Called by `stringifyYaml`.
    */
-  node(v: JsonValue, indent: i32, depth: i32): void {
+  node(v: JsonValue, depth: i32): void {
     const doc: JsonDocument = this.doc
     const kind: i32 = doc.kind(v)
     if ((kind === JSON_VALUE_ARRAY || kind === JSON_VALUE_OBJECT) && depth >= JSON_WRITER_MAX_DEPTH) {
@@ -374,6 +397,16 @@ class YamlWriter {
       this.byte(YAML_WRITE_LF)
       return
     }
+    // Never taken: a block is a collection, refused above at this depth, and
+    // `depth` starts at 0 and only grows. The literal, under 2^30, is what the
+    // prover reads to bound the indent's arithmetic; it does not read a constant's value.
+    if (depth < 0 || depth >= JSON_WRITER_MAX_DEPTH || depth >= 1073741823) {
+      this.tooDeep = true
+      return
+    }
+    const indent: i32 = depth * 2
+    const inner: i32 = indent + 2
+    const deeper: i32 = depth + 1
     const object: boolean = kind === JSON_VALUE_OBJECT
     for (let i: i32 = 0; i < doc.length(v) && !this.tooDeep; i += 1) {
       if (i > 0) {
@@ -382,12 +415,12 @@ class YamlWriter {
       const member: JsonValue = doc.at(v, i)
       if (!object) {
         this.text("- ")
-        this.node(member, indent + 2, depth + 1)
+        this.node(member, deeper)
         continue
       }
       const key: string = doc.keyAt(v, i)
       const quoted: boolean = yamlWriteNeedsQuotes(key, true)
-      const explicit: boolean = yamlWriteLength(key, quoted) > YAML_WRITE_MAX_KEY_LENGTH
+      const explicit: boolean = yamlWriteKeyTooLong(key, quoted)
       if (explicit) {
         this.text("? ")
       }
@@ -399,11 +432,11 @@ class YamlWriter {
       this.byte(YAML_WRITE_COLON)
       if (this.isBlock(member)) {
         this.byte(YAML_WRITE_LF)
-        this.spaces(indent + 2)
+        this.spaces(inner)
       } else {
         this.byte(YAML_WRITE_SPACE)
       }
-      this.node(member, indent + 2, depth + 1)
+      this.node(member, deeper)
     }
   }
 }
@@ -422,9 +455,8 @@ export const stringifyYaml = (doc: JsonDocument, v: JsonValue): string => {
     return ""
   }
   const writer: YamlWriter = new YamlWriter(doc)
-  const indent: i32 = 0
   const depth: i32 = 0
-  writer.node(v, indent, depth)
+  writer.node(v, depth)
   const from: i32 = 0
   return writer.tooDeep ? "" : String.fromBytes(writer.out, from, toI32(writer.out.length))
 }
