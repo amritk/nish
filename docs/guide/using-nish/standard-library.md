@@ -1622,7 +1622,7 @@ Because the ranges are byte offsets into the text either way, one
 `YamlLineIndex` turns them into `line:column` whether the document came from
 JSON or from YAML:
 
-<!-- allow-panics: calls `std/yaml-lines.ts` and `std/yaml.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";

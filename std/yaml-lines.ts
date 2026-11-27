@@ -31,6 +31,8 @@ const YAML_LINES_LF: i32 = 10
 /** A UTF-8 continuation byte is `10xxxxxx`: at least this and below `0xC0`. */
 const YAML_LINES_CONTINUATION: i32 = 128
 const YAML_LINES_LEAD: i32 = 192
+/** The largest column an `i32` holds; one past a line this long has none. */
+const YAML_LINES_MAX_COLUMN: i32 = 2147483647
 
 /**
  * Where each line of one text starts, for turning byte offsets into lines and
@@ -120,7 +122,8 @@ export class YamlLineIndex {
    * @param offset A byte offset into the text; clamped to `[0, text.length]`.
    * @returns The 1-based column: one more than the characters between the line's start and
    *   `offset`, a UTF-8 continuation byte not counting (under Node, a UTF-16 unit from `0x80` to `0xBF`
-   *   not counting either, so `©` is not a column).
+   *   not counting either, so `©` is not a column); `-1` past a line of 2^31 - 1 characters, whose
+   *   next column no `i32` holds.
    */
   column(offset: i32): i32 {
     const at: i32 = this.clamp(offset)
@@ -131,6 +134,9 @@ export class YamlLineIndex {
     while (i >= 0 && i < at && i < length) {
       const code: i32 = toI32(text.charCodeAt(i))
       if (code < YAML_LINES_CONTINUATION || code >= YAML_LINES_LEAD) {
+        if (column >= YAML_LINES_MAX_COLUMN) {
+          return -1
+        }
         column += 1
       }
       i += 1
@@ -143,11 +149,17 @@ export class YamlLineIndex {
    *
    * @param offset A byte offset into the text; clamped to `[0, text.length]`.
    * @returns The 1-based column: one more than the bytes between the line's start and `offset`
-   *   (under Node, UTF-16 units).
+   *   (under Node, UTF-16 units); `-1` past a line of 2^31 - 1 bytes, whose next column no `i32`
+   *   holds.
    */
   byteColumn(offset: i32): i32 {
     const at: i32 = this.clamp(offset)
-    return at - this.lineStart(this.linesFrom(at)) + 1
+    const start: i32 = this.lineStart(this.linesFrom(at))
+    if (start < 0 || start > at) {
+      return -1
+    }
+    const span: i32 = at - start
+    return span < YAML_LINES_MAX_COLUMN ? span + 1 : -1
   }
 
   /** `offset` clamped to `[0, text.length]`. */

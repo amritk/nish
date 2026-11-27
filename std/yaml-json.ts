@@ -156,6 +156,10 @@ export const YAML_JSON_SCAN_KEYS: i32 = 16
 
 /** How many merge keys deep a merged map is searched, as `YAML_ALIAS_HOPS` bounds `pathNode`. */
 const YAML_JSON_MERGE_HOPS: i32 = 100
+/** What a merge key's own pair takes from the load's merge budget. */
+const YAML_JSON_MERGE_PAIR: i32 = 1
+/** A part `plus` adds whole, with no merge adjustment taken off. */
+const YAML_JSON_WHOLE: i32 = 0
 
 const YAML_JSON_PLUS: i32 = 43
 const YAML_JSON_DASH: i32 = 45
@@ -464,7 +468,7 @@ export class YamlJsonLoader {
         for (let i: i32 = 0; i < parts; i += 1) {
           const child: i32 = yamlJsonAtPlus(kids, from, i)
           if (kind === YAML_SEQ) {
-            total = this.plus(total, this.quickPart(child, lo, n), 0, 0)
+            total = this.plus(total, this.quickPart(child, lo, n), YAML_JSON_WHOLE, YAML_JSON_WHOLE)
           } else {
             // As `sizeOf` takes a merge's members in, less the merge itself;
             // read straight, as `stream.value` and `stream.key` read a pair.
@@ -475,7 +479,8 @@ export class YamlJsonLoader {
             const part: i32 = this.quickPart(value, lo, n)
             const listed: boolean = merged && stream.kind(stream.resolved(value)) === YAML_SEQ
             const maps: i32 = listed ? stream.count(stream.resolved(value)) : 0
-            total = part > cap ? over : this.plus(total, part, merged ? 1 : 0, maps)
+            const less: i32 = merged ? 1 : 0
+            total = part > cap ? over : this.plus(total, part, less, maps)
           }
         }
       }
@@ -553,7 +558,7 @@ export class YamlJsonLoader {
     let total: i32 = 1
     if (kind === YAML_SEQ) {
       for (let i: i32 = 0; i < stream.count(n); i += 1) {
-        total = this.plus(total, this.partSize(stream.child(n, i)), 0, 0)
+        total = this.plus(total, this.partSize(stream.child(n, i)), YAML_JSON_WHOLE, YAML_JSON_WHOLE)
       }
     } else if (kind === YAML_MAP) {
       for (let i: i32 = 0; i < stream.count(n); i += 1) {
@@ -565,9 +570,10 @@ export class YamlJsonLoader {
         // A list of maps: the list itself is not one either, nor any map in it.
         const listed: boolean = merged && stream.kind(stream.resolved(value)) === YAML_SEQ
         const maps: i32 = listed ? stream.count(stream.resolved(value)) : 0
+        const less: i32 = merged ? 1 : 0
         // A saturated part stays saturated: taking the adjustment off it
         // would bring a bomb back under the cap.
-        total = part > this.cap ? this.over : this.plus(total, part, merged ? 1 : 0, maps)
+        total = part > this.cap ? this.over : this.plus(total, part, less, maps)
       }
     }
     return total
@@ -1023,7 +1029,7 @@ export class YamlJsonLoader {
     if (!this.markMerged(m)) {
       return 0
     }
-    if (!this.spendMerges(stream.count(m)) || !this.spendMerges(1)) {
+    if (!this.spendMerges(stream.count(m)) || !this.spendMerges(YAML_JSON_MERGE_PAIR)) {
       return this.fail(YAML_JSON_ERR_EXPANSION, stream.start(pair), stream.end(pair))
     }
     for (let i: i32 = 0; i < stream.count(m); i += 1) {
