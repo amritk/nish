@@ -9818,12 +9818,12 @@ function TlsServer.receive(this: TlsServer, level: i32, data: u8[], off: i32, le
   local -4:11 k: i32 (let)
   local +12:11 type: i32 (const)
   local +14:11 length: i32 (const)
-  callee +16:14 TlsServer.fail -> @nish.TlsServer.fail
-  local +18:11 whole: i32 (const)
-  callee +23:14 TlsServer.fail -> @nish.TlsServer.fail
-  local +28:11 alert: i32 (const)
-  callee +28:24 TlsServer.handleMessage -> @nish.TlsServer.handleMessage
-  callee +30:14 TlsServer.fail -> @nish.TlsServer.fail
+  callee +17:14 TlsServer.fail -> @nish.TlsServer.fail
+  local +19:11 whole: i32 (const)
+  callee +24:14 TlsServer.fail -> @nish.TlsServer.fail
+  local +29:11 alert: i32 (const)
+  callee +29:24 TlsServer.handleMessage -> @nish.TlsServer.handleMessage
+  callee +31:14 TlsServer.fail -> @nish.TlsServer.fail
 function TlsServer.handleMessage(this: TlsServer, type: i32, length: i32): i32 -> @nish.TlsServer.handleMessage [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsServer.handleClientHello
