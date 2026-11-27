@@ -281,9 +281,7 @@ const lastIndexOf = (s: string, sub: string): i32 => {
 const DOC_MAX: i32 = 65536
 
 /** A blank, newline or `*`: what lies between a doc comment's opening and its first word. */
-function isDocMargin(c: i32): boolean {
-  return c === 32 || c === 9 || c === 10 || c === 13 || c === 42
-}
+const isDocMargin = (c: i32): boolean => c === 32 || c === 9 || c === 10 || c === 13 || c === 42
 
 /**
  * The text of the doc comment (`/**` to its close) `s` starts with, one line per line of
@@ -3516,7 +3514,9 @@ class Importer {
           reportLines.push(r.line)
         }
       } else if (r.opaque) {
-        out.add(`${this.docComment(this.recordDoc(r))}export declare class ${this.word(r.className, AS_IDENT)} {}\n\n`)
+        out.add(
+          `${this.docComment(this.recordDoc(r))}export declare class ${this.word(r.className, AS_IDENT)} {}\n\n`
+        )
         names.set(r.className, owners.length)
         owners.push(`the struct \`${r.key}\``)
       } else if (r.opaqueWhy.length > 0) {
@@ -3565,7 +3565,9 @@ class Importer {
         report.push(reportLine(m.name, why))
         reportLines.push(m.line)
       } else if (m.type === "string") {
-        consts.add(`${this.docComment(this.docAbove(m.line))}export const ${this.word(m.name, AS_IDENT)}: string = ${this.word(m.body, AS_STRING)}\n`)
+        consts.add(
+          `${this.docComment(this.docAbove(m.line))}export const ${this.word(m.name, AS_IDENT)}: string = ${this.word(m.body, AS_STRING)}\n`
+        )
       } else {
         consts.add(
           `${this.docComment(this.docAbove(m.line))}export const ${this.word(m.name, AS_IDENT)}: ${this.word(m.type, AS_IDENT)} = ${this.word(`${m.value}`, AS_INTEGER)}\n`

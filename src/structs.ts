@@ -558,7 +558,8 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
   // WP66 S3 (D5): a `declare class` with no members and no heritage clause
   // describes no struct at all. It is the C type a library hands out and
   // takes back, so it is opaque: a C pointer, never built or read here.
-  const opaque = info.layout && decl.children[3].children.length === 0 && decl.children[2].children.length === 0
+  const opaque =
+    info.layout && decl.children[3].children.length === 0 && decl.children[2].children.length === 0
   if (opaque) {
     ctx.table.markOpaque(info.type)
   }
