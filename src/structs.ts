@@ -604,6 +604,7 @@ const declareHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void =>
       (member.kind === NodeKind.Method && member.children[0].text === DISPOSE_METHOD && !threads)
     ) {
       info.handle = true
+      ctx.table.setHandle(info.type, true)
       break
     }
   }
@@ -623,15 +624,17 @@ const rejectEmptyHandle = (ctx: CheckContext, info: StructInfo, decl: Node): voi
     return
   }
   info.handle = false
+  ctx.table.setHandle(info.type, false)
   // A pointer field refused by `collectField` has said why already.
   for (const member of decl.children[3].children) {
     if (member.kind === NodeKind.Field && isHandleFieldAnnotation(member.children[1])) {
       return
     }
   }
+  const message = disposeElsewhereMessage(spelled(ctx, info))
   for (const member of decl.children[3].children) {
     if (member.kind === NodeKind.Method && member.children[0].text === DISPOSE_METHOD) {
-      ctx.error(member.children[0], disposeElsewhereMessage(spelled(ctx, info)))
+      ctx.error(member.children[0], message)
     }
   }
 }
@@ -646,8 +649,7 @@ const ownedFieldType = (ctx: CheckContext, type: i32): boolean => {
   if (bare === T_CPTR || ctx.table.isOpaque(bare) || ctx.table.isHostHandle(bare)) {
     return true
   }
-  const held: StructInfo | null = ctx.table.isStruct(bare) ? ctx.program.structByType(bare) : null
-  return held !== null && held.handle
+  return ctx.table.isStruct(bare) && ctx.table.isHandleClass(bare)
 }
 
 /**

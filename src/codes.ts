@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 1003
+export const RULE_COUNT: i32 = 1005
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -225,6 +225,10 @@ const diagnosticRules = (): string[] => [
   "NL4018",
   "` = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there: any other write would drop a handle the object owns or own one twice",
   "NL2825",
+  "` opened as an argument of a `new` that takes ownership of it cannot be followed by an argument that may leave the function, as `.orReturn()` does: the handle is open by then and the object that would close it is never built; compute that argument first, into a `const`",
+  "NL2826",
+  "` cannot cross an export of the entry module: the entry's exports are C symbols, and a foreign caller that is given or lent a handle runs no close; export the class and the functions that take it from a module the entry imports",
+  "NL2827",
   ", and the array is older than the block: a `push` moves the array's storage into the arena, which the block releases when it ends (push only onto a `const` the block binds to a fresh array)",
   "NL2422",
   "` is a variable of the entry module's top-level code, which runs as `main`, so a function cannot read it; pass it as a parameter, or declare it as an annotated module `const` above the code",

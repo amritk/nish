@@ -4,7 +4,7 @@
 // "none", `0`; `using` emits that dispose once, at the end of the scope.
 import { Canvas, hCanvas, hSame } from "../host-import/host"
 
-export class View {
+class View {
   readonly canvas: Canvas
   constructor(name: i32) {
     this.canvas = hCanvas(name)

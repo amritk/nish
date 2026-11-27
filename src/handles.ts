@@ -57,6 +57,12 @@ const handlePointerMessage = (cls: string, field: string): string =>
 const handleValueMessage = (cls: string): string =>
   `A \`${cls}\` cannot be used here: a handle may only be opened by \`using\`, returned by a function that opens it, moved into an owning field of a handle class, called, or lent to a parameter of its type, so that the close its owner emits is the last thing that names it`
 
+const leaveAfterMessage = (cls: string): string =>
+  `A \`${cls}\` opened as an argument of a \`new\` that takes ownership of it cannot be followed by an argument that may leave the function, as \`.orReturn()\` does: the handle is open by then and the object that would close it is never built; compute that argument first, into a \`const\``
+
+const entryExportMessage = (cls: string): string =>
+  `Handle class \`${cls}\` cannot cross an export of the entry module: the entry's exports are C symbols, and a foreign caller that is given or lent a handle runs no close; export the class and the functions that take it from a module the entry imports`
+
 const handleTypeMessage = (cls: string): string =>
   `\`${cls}\` is a handle class, and its name may be written only as the type of a parameter that borrows one, of a field of a handle class that owns one, or of the result of a top-level function that opens one: a value of this type anywhere else could outlive the close`
 
@@ -88,7 +94,9 @@ const disposeShapeMessage = (cls: string, natives: string[]): string => {
   } else if (natives.length > 1) {
     const order: string[] = []
     for (let i = natives.length - 1; i >= 0; i--) {
-      order.push(`\`this.${natives[i]}\``)
+      if (i < natives.length) {
+        order.push(`\`this.${natives[i]}\``)
+      }
     }
     body = `close ${order.join(", then ")}, the reverse of their declaration, each as ${stepShapes("f")}`
   }
@@ -365,6 +373,51 @@ const foreignNamed = (program: CheckedProgram, name: string): FunctionSig | null
   return sig !== null && sig.foreign() ? sig : null
 }
 
+/**
+ * The finding the dispose step `step` earns as the close of the native field
+ * `owned` of `info`, or null when it is sound, when it records the close.
+ */
+const closeStepFinding = (
+  program: CheckedProgram,
+  table: TypeTable,
+  info: StructInfo,
+  step: DisposeStep,
+  owned: OwnedField
+): HandleFinding | null => {
+  const call = step.call
+  const name = call.children[0].text
+  const sig = foreignNamed(program, name)
+  if (sig === null) {
+    return new HandleFinding(call.children[0], closeUnknownMessage(name, info.name))
+  }
+  if (call.children[1].children.length !== 1 || sig.paramTypes.length !== 1) {
+    return new HandleFinding(call, closeArityMessage(name, info.name))
+  }
+  const field = info.field(owned.name)
+  if (field === null) {
+    return null
+  }
+  // The bare shape passes the field as it is typed; the tested one the `const` its test narrowed.
+  const arg = step.tested ? table.stripNull(field.type) : field.type
+  if (!table.assignable(arg, sig.paramTypes[0])) {
+    const shown = step.tested ? call.children[1].children[0].text : `this.${owned.name}`
+    return new HandleFinding(
+      call.children[1].children[0],
+      closeTypeMessage(
+        name,
+        info.name,
+        owned.name,
+        table.typeName(sig.paramTypes[0]),
+        shown,
+        table.typeName(arg)
+      )
+    )
+  }
+  owned.close = sig // H1.2: what each exit of its owner calls
+  owned.tested = step.tested
+  return null
+}
+
 /** §4b: the dispose of a handle class this module declares; each native field's close is set when it is sound. */
 const checkDispose = (
   program: CheckedProgram,
@@ -404,45 +457,19 @@ const checkDispose = (
     out.push(new HandleFinding(method.children[0], disposeShapeMessage(cls, names)))
     return
   }
+  // Every sound step records its close; only the first unsound one is reported, built
+  // after the loop so that no pass keeps what its message allocates.
+  let bad = -1
   for (let i = 0; i < steps.length; i++) {
-    const step = steps[i]
-    const owned = natives[natives.length - 1 - i]
-    const call = step.call
-    const name = call.children[0].text
-    const sig = foreignNamed(program, name)
-    if (sig === null) {
-      out.push(new HandleFinding(call.children[0], closeUnknownMessage(name, cls)))
-      continue
+    if (closeStepFinding(program, table, info, steps[i], natives[natives.length - 1 - i]) !== null && bad < 0) {
+      bad = i
     }
-    if (call.children[1].children.length !== 1 || sig.paramTypes.length !== 1) {
-      out.push(new HandleFinding(call, closeArityMessage(name, cls)))
-      continue
+  }
+  if (bad >= 0) {
+    const finding = closeStepFinding(program, table, info, steps[bad], natives[natives.length - 1 - bad])
+    if (finding !== null) {
+      out.push(finding)
     }
-    const field = info.field(owned.name)
-    if (field === null) {
-      continue
-    }
-    // The bare shape passes the field as it is typed; the tested one the `const` its test narrowed.
-    const arg = step.tested ? table.stripNull(field.type) : field.type
-    if (!table.assignable(arg, sig.paramTypes[0])) {
-      const shown = step.tested ? call.children[1].children[0].text : `this.${owned.name}`
-      out.push(
-        new HandleFinding(
-          call.children[1].children[0],
-          closeTypeMessage(
-            name,
-            cls,
-            owned.name,
-            table.typeName(sig.paramTypes[0]),
-            shown,
-            table.typeName(arg)
-          )
-        )
-      )
-      continue
-    }
-    owned.close = sig // H1.2: what each exit of its owner calls
-    owned.tested = step.tested
   }
 }
 
@@ -836,10 +863,17 @@ const checkOwnedWrite = (
   const cls = walk.cls
   let sound = cls !== null && cls === owner && topWrite(walk, member, field.name)
   if (sound && field.child === null) {
-    sound = walk.program.nodeCallees[bare.id] !== null
+    // Only a foreign call hands out a pointer no other object owns: a Nish
+    // function could return one value to two owners, as a `HostHandle`'s `i32`.
+    const sig = walk.program.nodeCallees[bare.id]
+    sound = sig !== null && sig.foreign()
   } else if (sound) {
+    // A `null` the checker let into the field leaves it owning nothing.
     const fresh =
-      bare.kind === NodeKind.New || bare.kind === NodeKind.Call || bare.kind === NodeKind.Conditional
+      bare.kind === NodeKind.New ||
+      bare.kind === NodeKind.Call ||
+      bare.kind === NodeKind.Conditional ||
+      bare.kind === NodeKind.Null
     const stmt = walk.parent(2)
     const moved = field.sinkAt
     sound = (stmt !== null && moved !== null && stmt === moved) || fresh
@@ -941,6 +975,40 @@ const isOkCall = (walk: HandleWalk, call: Node): boolean =>
   call.children[0].text === "Ok" &&
   walk.table.isResult(walk.program.nodeTypes[call.id])
 
+/** Whether `node` holds an `orReturn()`, which leaves the function, outside an arrow of its own. */
+const argLeaves = (walk: HandleWalk, node: Node): boolean => {
+  if (node.kind === NodeKind.Arrow || node.kind === NodeKind.FunctionDecl || isTypeNode(node.kind)) {
+    return false
+  }
+  if (node.kind === NodeKind.Call && node.children[0].kind === NodeKind.Member) {
+    const callee = node.children[0]
+    const receiver = walk.program.nodeTypes[unwrapParens(callee.children[0]).id]
+    if (callee.text === "orReturn" && walk.table.isResult(receiver)) {
+      return true
+    }
+  }
+  for (const child of node.children) {
+    if (argLeaves(walk, child)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether an argument after the one at `at` of the argument list `list` may
+ * leave the function: the handle at `at` is open by then, and the `new` that
+ * would own it never runs.
+ */
+const leavesAfter = (walk: HandleWalk, list: Node, at: i32): boolean => {
+  for (let i = at + 1; i < list.children.length; i++) {
+    if (argLeaves(walk, list.children[i])) {
+      return true
+    }
+  }
+  return false
+}
+
 /**
  * Whether a fresh handle — a `new`, a call or a conditional typed one — ends
  * where something owns it, climbing parentheses, the arms of a conditional and
@@ -990,7 +1058,13 @@ const freshAdmitted = (walk: HandleWalk, node: Node, depth: i32): boolean => {
       above.kind === NodeKind.New &&
       above.children[2] === parent
     ) {
-      return !wrapped && sinkAt(walk, walk.program.nodeTypes[above.id], indexIn(parent, child))
+      const at = indexIn(parent, child)
+      const owned = !wrapped && sinkAt(walk, walk.program.nodeTypes[above.id], at)
+      const info = handleOf(walk.program, walk.table, walk.program.nodeTypes[node.id])
+      if (owned && info !== null && leavesAfter(walk, parent, at)) {
+        walk.out.push(new HandleFinding(node, leaveAfterMessage(info.name)))
+      }
+      return owned
     }
     return false
   }
@@ -1047,10 +1121,18 @@ const namedAdmitted = (walk: HandleWalk, node: Node, type: i32, depth: i32): boo
     return false
   }
   if (node.kind === NodeKind.This && walk.ctor) {
-    // In its constructor the object is half built. Its writes,
-    // `this.<field> = ...`, are taken by the member above it, so `this`
-    // reaches here only as a value or a method's receiver.
-    return false
+    // In its constructor the object is half built. An owned field's write is
+    // taken by the member above it, so `this` reaches here as the target of a
+    // plain field's write, which names no handle, or as a value or a method's
+    // receiver, which could reach a field not yet written.
+    const write = walk.parent(up + 1)
+    return (
+      parent.kind === NodeKind.Member &&
+      write !== null &&
+      write.kind === NodeKind.Binary &&
+      write.text === "=" &&
+      write.children[0] === parent
+    )
   }
   const arg = outermost(walk, node, up)
   if (walk.isAdmitted(arg)) {
@@ -1211,6 +1293,41 @@ const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
   walk.parents.pop()
 }
 
+/** The handle class a signature's type names, itself or as the value of a `Result`; `null` otherwise. */
+const signatureHandle = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null => {
+  const info = handleOf(program, table, type)
+  return info !== null ? info : resultHandleOf(program, table, type)
+}
+
+/**
+ * The entry module's refusals: its exports are the C ABI of the program, not
+ * Nish imports, so no exported class may be a handle class and no exported
+ * function or method of an exported class may take or give one.
+ */
+const refuseEntryExports = (program: CheckedProgram, table: TypeTable, found: HandleFinding[]): void => {
+  for (const info of program.structList) {
+    if (info.handle && info.exported && info.origin === program.source) {
+      found.push(new HandleFinding(info.decl.children[0], entryExportMessage(info.name)))
+    }
+  }
+  for (const sig of program.functions) {
+    const owner = sig.owner
+    const exported = owner === null ? sig.exported : owner.exported && !owner.handle
+    if (!exported || sig.instance !== null || !sig.definedIn(program.source)) {
+      continue
+    }
+    let info = signatureHandle(program, table, sig.returnType)
+    for (const type of sig.paramTypes) {
+      if (info === null) {
+        info = signatureHandle(program, table, type)
+      }
+    }
+    if (info !== null) {
+      found.push(new HandleFinding(sig.decl, entryExportMessage(info.name)))
+    }
+  }
+}
+
 /** Whether the module declares or names a handle class, so the second pass has anything to check. */
 const namesHandle = (program: CheckedProgram): boolean => {
   for (const info of program.structList) {
@@ -1245,6 +1362,9 @@ export const handleFindings = (program: CheckedProgram, table: TypeTable): Handl
     }
   }
   walkTypes(program, program.file, [], found)
+  if (program.isEntry) {
+    refuseEntryExports(program, table, found)
+  }
   for (const sig of program.functions) {
     const body = sig.body()
     if (body === null || sig.lifted || !sig.definedIn(program.source)) {
