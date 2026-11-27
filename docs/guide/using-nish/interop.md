@@ -1321,8 +1321,59 @@ export const main = (): i32 => {
 -1
 ```
 
-A handle is never copied, stored or returned: you call its methods, or lend
-it to a parameter of its own type. Several declarators in one `using` open
+A handle is never copied into a local or captured: you call its methods,
+lend it to a parameter of its own type, or hand it on to something that owns
+it. A class may own several native objects — `CPtr` fields, opaque
+`declare class` pointers, `HostHandle`s — and other handle classes, and a
+library can export it with a top-level factory that returns it as the
+class, `| null`, or a `Result`:
+
+<!-- nish:ok -->
+```ts
+declare function slot_open(): CPtr;
+declare function slot_close(p: CPtr): i32;
+declare function slot_read(p: CPtr): i32;
+
+export class Pair {
+  readonly first: CPtr;
+  readonly second: CPtr;
+  constructor() {
+    this.first = slot_open();
+    this.second = slot_open();
+  }
+  read(): i32 {
+    return slot_read(this.second);
+  }
+  [Symbol.dispose](): void {
+    slot_close(this.second);
+    slot_close(this.first);
+  }
+}
+
+export class Stack {
+  readonly pair: Pair;
+  readonly top: CPtr;
+  constructor(pair: Pair) {
+    this.pair = pair;
+    this.top = slot_open();
+  }
+  [Symbol.dispose](): void {
+    slot_close(this.top);
+  }
+}
+
+export function openStack(): Stack {
+  return new Stack(new Pair());
+}
+
+export const depth = (s: Stack): i32 => s.pair.read();
+```
+
+A caller in another module writes `using s = openStack()`. At every exit
+`Stack`'s dispose closes `top`, then the `Pair` it owns closes `second` and
+`first`: each owner closes its own fields, the last declared first, and then
+the handles it owns. `s.pair.read()` is one load of the field and the C
+call. Several declarators in one `using` open
 one at a time, so an `orReturn()` in a later initialiser closes the ones
 before it. Falling off the end, `break` and `continue` close them in reverse
 order beside an `arena()`, a `scope()` or a lock.
