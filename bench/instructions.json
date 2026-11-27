@@ -63,8 +63,8 @@
     "std-temporal-parse": { "n": 150, "instructions": 144739727, "commit": "826cfd04", "valgrind": "valgrind-3.26.0" },
     "std-base64-encode": { "n": 1200, "instructions": 122002283 },
     "std-math-kernel": { "n": 240, "instructions": 139016271 },
-    "std-yaml-parse": { "n": 100, "instructions": 150908294, "commit": "d5fdf44e", "valgrind": "valgrind-3.22.0" },
-    "std-yaml-json": { "n": 150, "instructions": 173556208, "commit": "d5fdf44e", "valgrind": "valgrind-3.22.0" },
-    "std-json-equal": { "n": 60, "instructions": 168814661, "commit": "d5fdf44e", "valgrind": "valgrind-3.22.0" }
+    "std-yaml-parse": { "n": 100, "instructions": 150348576, "commit": "bb064c74", "valgrind": "valgrind-3.26.0" },
+    "std-yaml-json": { "n": 150, "instructions": 173702199, "commit": "bb064c74", "valgrind": "valgrind-3.26.0" },
+    "std-json-equal": { "n": 60, "instructions": 170171109, "commit": "bb064c74", "valgrind": "valgrind-3.26.0" }
   }
 }
