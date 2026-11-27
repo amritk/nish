@@ -5,9 +5,9 @@
 
 export const NARROW_ONE: i32 = 1
 
-declare function no_params(): i32
-declare function target_fn(x: i32): i32
-declare function pair(arg0_1: i32, arg0: i32): i32
+export declare function no_params(): i32
+export declare function target_fn(x: i32): i32
+export declare function pair(arg0_1: i32, arg0: i32): i32
 
 /* Not bound:
  *   die: declared noreturn, which a `declare function` cannot say

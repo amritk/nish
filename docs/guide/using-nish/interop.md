@@ -1562,7 +1562,12 @@ wasm32 build without `--profile wasi` has no C library, so `cErrno` is refused
 there. The rules are in
 [`cErrno`](../../reference/language/declarations.md#cerrno-the-errno-a-c-call-left).
 
-A declared function has no body and cannot be exported. Calling C has a cost
+A declared function has no body. One module can bind a library and export
+its functions and opaque classes for the others to import: each module that
+calls one is charged `ffi`, and a `declare class` with fields stays in the
+module that declares it, as
+[A binding exported from one module](../../reference/language/declarations.md#a-binding-exported-from-one-module)
+sets out. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
 so it drops the optimisation facts it would otherwise give the caller and
 everything that calls it. The rules are in

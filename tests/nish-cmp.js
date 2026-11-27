@@ -1436,6 +1436,16 @@ const typedBuffers = () =>
     why: "the program passes an f32[], i32[], u16[] or u32[] buffer to a declared C function, which the reference refuses because it lends only u8[]",
   }))
 
+/** The changelog words of WP89 S3b, a module that exports its C bindings. */
+const EXPORTED_BINDINGS = "a module exports its C bindings"
+const exportedBindings = () =>
+  ["export_declare_handle", "export_declare_header"].map((name) => ({
+    program: `tests/link/${name}/main.ts`,
+    file: "exit",
+    changelog: EXPORTED_BINDINGS,
+    why: "the program imports an opaque `declare class` and the `declare function`s that take it from another module, which the candidate compiles and the reference refuses, because it lets no binding be exported",
+  }))
+
 /** The changelog words of WP89 S6, a module file chosen by target. */
 const TARGET_FILES = "a module file chosen by target"
 const targetFiles = () => [
@@ -13874,6 +13884,7 @@ const DECLARED = [
   ...protoClasses(),
   ...typedBuffers(),
   ...targetFiles(),
+  ...exportedBindings(),
   {
     program: "tests/link/net_grpc/main.ts",
     file: "exit",

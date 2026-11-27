@@ -6110,7 +6110,9 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   nothing else**: no `readonly`, `static` or optional field (NL2747), no initializer,
   because `new` zero-fills (NL2748), no constructor, method, accessor or other
   member such as an index signature (NL2751, `reject_ffi_struct_index_signature`), no type parameter (NL2741, `reject_generic_declare_class`), no `extends` or `implements` (NL2750),
-  and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
+  and no `export` (NL2746; an opaque one may be exported, see
+  [A binding exported from one module](#a-binding-exported-from-one-module)) —
+  each pinned by a `reject_ffi_struct_*` case.
 - **It stays in its module.** It cannot be a parameter or the return type of an
   exported function or an exported class's method, or a field of an exported
   class or interface: `` `declare class Point` cannot be a parameter of an
@@ -6250,6 +6252,71 @@ ffi.null:
   C by pointer like any other `declare class`. It is now an opaque pointer, and
   `new Db()` is NL2806: a program that built one declares the C function that
   makes it instead, or gives the class the fields C lays out.
+
+### A binding exported from one module
+
+**One module may hold a C library's binding and export it: an exported
+`declare function`, and an exported opaque `declare class`, are imported like
+any other export.** A module that imports one names the class in its types,
+passes it to the imported functions and calls them under the rules above, with
+the same `declare` and the same call in its own IR as a declaration it wrote
+itself (`tests/link/export_declare_handle`, `docs/wp89-gfx.md` S3b):
+
+```ts
+// sys.ts
+export declare class Counter {}
+export declare function counter_new(start: i32): Counter | null
+export declare function counter_bump(c: Counter, by: i32): i32
+export declare function counter_free(c: Counter): void
+
+// main.ts
+import { Counter, counter_new, counter_bump, counter_free } from "./sys"
+
+const c: Counter | null = counter_new(40)
+if (c !== null) {
+  console.log(counter_bump(c, 1))
+  counter_free(c)
+}
+```
+
+```llvm
+; main.ll
+declare i8* @counter_new(i32)
+declare i32 @counter_bump(i8*, i32)
+declare void @counter_free(i8*)
+  %0 = call i8* @counter_new(i32 40)
+  %4 = call i32 @counter_bump(i8* %3, i32 1)
+```
+
+- **The importer reaches `ffi`, not the binding's module.** The call is where
+  C runs, so the capability report and `expected.caps.json` charge `ffi` to the
+  function that makes it, through every function that calls that one, and
+  `--deny ffi` refuses the program with the chain from `main` to the call
+  (`tests/link/export_declare_deny_ffi`). The module that only declares the
+  binding reaches nothing.
+- **A `declare class` with fields stays in its module**:
+  `` `declare class Point` cannot be exported: it has fields, and a C struct
+  layout is built and read only in the module that declares it `` (NL2746,
+  `tests/link/export_declare_layout`), and an exported `declare function` that
+  takes one, `| null` or not, is refused as an exported function of this
+  program is (NL2756, `tests/link/export_declare_layout_param`,
+  `export_declare_layout_nullable`). Behind an array or in a `Result` arm it
+  is refused before that, because no `declare function` takes either
+  (`export_declare_layout_array`, `export_declare_layout_result`). Only an
+  opaque class, which every module holds as the same C pointer, crosses.
+- **A binding is not re-exported.** `export { counter_new } from "./sys"` is
+  refused as every re-export is (`tests/link/export_declare_reexport`), and
+  so is `import * as sys from "./sys"` (`tests/link/export_declare_namespace`):
+  a module that wants the binding imports it by name from the module that
+  declares it.
+- **It is a binding between modules of one program, and the program links the
+  C library** as it would for a declaration of its own. The symbol stays C's:
+  no module defines it, so `--emit-header`, `--emit-dts` and `--emit-napi`,
+  which describe the functions the program defines for a host, leave it out
+  however it is exported (`tests/link/export_declare_header`). The
+  `--emit-capabilities` report lists it under no module's functions either:
+  the `ffi` a call of it reaches is the caller's, witnessed at the call
+  (`tests/link/export_declare_handle`).
 
 ### `readStruct`: a struct out of memory C owns
 

@@ -326,11 +326,12 @@ function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructInfo | n
   callee +27:43 TypeTable.declaredStructOf -> @TypeTable.declaredStructOf
   callee +28:19 isExported -> @isExported
   callee +33:5 declareHandle -> @declareHandle
-  callee +39:5 TypeTable.markOpaque -> @TypeTable.markOpaque
-  callee +42:5 CheckContext.error -> @CheckContext.error
-  callee +51:5 CheckContext.error -> @CheckContext.error
-  callee +56:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
-  callee +57:3 StringSet.add -> @StringSet.add
+  local +38:9 opaque: boolean (const)
+  callee +41:5 TypeTable.markOpaque -> @TypeTable.markOpaque
+  callee +47:5 CheckContext.error -> @CheckContext.error
+  callee +56:5 CheckContext.error -> @CheckContext.error
+  callee +61:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
+  callee +62:3 StringSet.add -> @StringSet.add
 function declareHandle(ctx: CheckContext, info: StructInfo, decl: Node): void -> @declareHandle
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

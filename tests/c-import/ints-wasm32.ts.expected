@@ -3,10 +3,10 @@
 // Data model: ILP32
 // Regenerate: nish c-import ints-wasm32.h --target wasm32-unknown-unknown -o ints-wasm32.ts
 
-declare function span(a: i32, b: u32, n: u32, u: u32, ll: i64): i32
-declare function byte_at(p: CPtr | null, i: i32): u8
-declare function mean(xs: CPtr | null, n: u32): f64
-declare function ready(): boolean
+export declare function span(a: i32, b: u32, n: u32, u: u32, ll: i64): i32
+export declare function byte_at(p: CPtr | null, i: i32): u8
+export declare function mean(xs: CPtr | null, n: u32): f64
+export declare function ready(): boolean
 
 /* Not bound:
  *   first: returns plain `char`, which is signed on wasm32-unknown-unknown and has no Nish type

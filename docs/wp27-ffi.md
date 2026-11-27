@@ -115,9 +115,11 @@ pure Nish and chose pure Nish, partly because the C route needed S3 and S4.
 
 ## 4. What S1 refuses
 
-A declared function with a body (`reject_ffi_body`), an exported one
-(`reject_ffi_export`, since `export` offers a function this module defines), a
-and a generic one (`reject_ffi_generic`) are each refused by name. A `string`
+A declared function with a body (`reject_ffi_body`) and a generic one
+(`reject_ffi_generic`) are each refused by name. An exported one was too, since
+`export` offered a function this module defines, until WP89 S3b let a module
+lend its bindings to the modules that import it; `reject_ffi_export` now pins
+the C struct layout an exported binding's signature may not carry. A `string`
 parameter was refused too (`reject_ffi_string_param`) until S3.1 accepted it,
 and a `string` return (`reject_ffi_string_return`) until S3.2 did; a
 `string[]` is refused in either position (`reject_ffi_string_array_param`,

@@ -209,9 +209,11 @@ export const deferExportedLayout = (ctx: CheckContext, type: i32, position: stri
  * exported signature or an exported class's field: the header, `.d.ts` and
  * N-API generators describe every class as a pointer to an arena object, and
  * a layout is C's struct, embedded by value where it nests and lent only to a
- * `declare function` (docs/wp27-ffi.md §9g). Holding is transitive -- an
- * element, a `Result` arm, a field of a record named there -- because each of
- * those is a type the generators would have to describe.
+ * `declare function` of its own module (docs/wp27-ffi.md §9g). An exported
+ * `declare function` (WP89 S3b) is checked here too: its signature reaches
+ * the importing modules, where the layout does not. Holding is transitive --
+ * an element, a `Result` arm, a field of a record named there -- because each
+ * of those is a type the generators would have to describe.
  */
 export const checkExportedLayouts = (ctx: CheckContext): void => {
   for (const use of ctx.exportedLayoutUses) {

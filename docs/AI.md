@@ -1617,6 +1617,12 @@ export const main = (): i32 => {
   may not keep the address. It stays in its module: no exported signature
   holds one, however deep (NL2746, NL2756), and a page module (freestanding
   wasm, `--emit-dts`) refuses one (NL2757).
+- **One module may export its bindings.** `export declare function` and an
+  opaque `export declare class Handle {}` are imported by name like any
+  export; each module that calls one is charged `ffi`. A `declare class` with
+  fields is never exported (NL2746), nor is a function whose signature holds
+  one (NL2756), and a binding is not re-exported. `nish c-import` writes
+  `export` on every binding that may cross.
 
 <!-- nish:ok -->
 ```ts

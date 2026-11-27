@@ -56,7 +56,7 @@ declare class OutI64 {
   value: i64
 }
 
-declare class counter {}
+export declare class counter {}
 
 declare class wc_span {
   start: i64
@@ -68,13 +68,13 @@ export const WC_WORDS: i32 = 2
 export const WC_MAX_WORD: i32 = 64
 export const WC_NAME: string = "wc"
 
-declare function wc_new(mode: i32): counter | null
-declare function wc_feed(c: counter, text: string): i32
+export declare function wc_new(mode: i32): counter | null
+export declare function wc_feed(c: counter, text: string): i32
 declare function wc_total(c: counter, words: OutI64): i64
 declare function wc_last(c: counter, span: wc_span): i32
-declare function wc_report(c: counter): CPtr | null
-declare function wc_free(c: counter): void
-declare function wc_free_report(r: CPtr): void
+export declare function wc_report(c: counter): CPtr | null
+export declare function wc_free(c: counter): void
+export declare function wc_free_report(r: CPtr): void
 
 /* Not bound:
  *   wc_log: variadic
@@ -85,13 +85,14 @@ Each part of the header becomes one kind of declaration:
 
 | In the header | In the module |
 | --- | --- |
-| a function | a `declare function` with the same name |
+| a function | a `declare function` with the same name, exported unless it takes an out class or a struct with fields |
 | a struct of numbers and pointers | a `declare class` with the same fields; a pointer field is `CPtr \| null` |
 | a fixed-length array field of numbers (`uint32_t h[8]`) | a field of type `Record<integer<0, 7>, u32>`, indexed `d.h[i]` |
-| a struct the header only names (`typedef struct counter counter`) that a bound function returns | an opaque class, `declare class counter {}`: a pointer to it is a `counter` |
+| a struct the header only names (`typedef struct counter counter`) that a bound function returns | an exported opaque class, `export declare class counter {}`: a pointer to it is a `counter` |
 | an enum constant, an integer `#define` | an `export const` of `i32`, `u32`, `i64` or `u64`, by the C type of the constant or of its enum |
 | a string `#define` of printable ASCII | an `export const` of `string` |
 | a pointer to a number a function writes into (`int64_t *`) | an out class, `OutI64`, with one `value` field |
+| a `/** … */` comment just before a function, struct, enum constant or `#define` | the same comment, on the declaration it writes |
 
 The C integer types become the Nish width of the same size and sign on the
 target: `int` is `i32`, `int64_t` and `long long` are `i64`, `size_t` is `u64`
@@ -182,6 +183,50 @@ export const count = (): i64 => {
   return bytes + words.value;
 };
 ```
+
+### Importing the bindings from another module
+
+The module exports each binding another module can use: the opaque classes,
+the constants, and every function whose parameters and result are numbers,
+strings, `CPtr` or opaque classes. Import them by name, as you would any
+export. An opaque class is named, as in its own module, only on a local a
+binding fills. The importer calls C, so it is charged the `ffi` capability that
+[`--deny ffi`](cli.md#asking-what-a-program-can-do) refuses:
+
+<!-- nish:ok -->
+```ts wc.ts
+export declare class counter {}
+
+export const WC_WORDS: i32 = 2
+
+export declare function wc_new(mode: i32): counter | null
+export declare function wc_feed(c: counter, text: string): i32
+export declare function wc_free(c: counter): void
+```
+
+<!-- nish:ok -->
+```ts words.ts
+import { counter, wc_feed, wc_free, wc_new, WC_WORDS } from "./wc";
+
+export const words = (text: string): i32 => {
+  if (text.indexOf("\u0000") >= 0) {
+    return -1;
+  }
+  const c: counter | null = wc_new(WC_WORDS);
+  if (c === null) {
+    return -1;
+  }
+  const n = wc_feed(c, text);
+  wc_free(c);
+  return n;
+};
+```
+
+A function that takes an out class or a struct with fields (`wc_total`,
+`wc_last` above) is not exported: a struct's layout is built and read only in
+the module that declares it. Call it there, from a function of your own in
+that module, or generate the module with `allow` naming only the functions a
+program imports.
 
 ## What is not bound
 

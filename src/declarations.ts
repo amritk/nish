@@ -174,7 +174,9 @@ export const collectParams = (
       const where = sig.exported ? "a parameter of an exported function" : "a parameter of a method"
       rejectStoredMask(ctx, type, where, param.children[1])
     }
-    if (sig.exported) {
+    // WP89 S3b: an opaque class is a C pointer, which every module that
+    // imports the binding passes as one; a layout with fields stays refused.
+    if (sig.exported && !(foreign && ctx.table.isOpaque(ctx.table.stripNull(type)))) {
       const where =
         owner >= 0 ? "a parameter of an exported class's method" : "a parameter of an exported function"
       deferExportedLayout(ctx, type, where, param.children[1])
@@ -686,8 +688,9 @@ const refuseHostParameter = (ctx: CheckContext, sig: FunctionSig, decl: Node, na
 
 /**
  * The rules a `declare function` adds (WP27 S1, widened by S2, S3.1 and S3.2):
- * no body, not exported, a scalar or a `CPtr` in every position, and a
- * `string` or `string | null` as a parameter or as the result.
+ * no body, a scalar or a `CPtr` in every position, and a `string` or
+ * `string | null` as a parameter or as the result. WP89 S3b lets one be
+ * exported: an importing module calls it under these same rules.
  *
  * S2 adds a pointer coming back that the compiler must never mistake for one
  * of its own (`docs/wp27-ffi.md` §2, §3). S3.1 is the first pointer this
@@ -705,12 +708,6 @@ const refuseHostParameter = (ctx: CheckContext, sig: FunctionSig, decl: Node, na
 const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {
   if (sig.body() !== null) {
     ctx.error(decl, "`declare function` declares a C function this program calls, so it must have no body")
-  }
-  if (sig.exported) {
-    ctx.error(
-      decl.children[0],
-      `\`declare function ${name}\` cannot be exported: it is a C function this program calls, not one it defines`
-    )
   }
   if (name === "syscall") {
     ctx.error(
