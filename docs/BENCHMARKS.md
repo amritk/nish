@@ -3098,7 +3098,7 @@ At `e66cf339`, `node bench/http1-parse/run.mjs` refused to run: since #1460 the 
 
 | # | criterion | follow-up |
 | --- | --- | --- |
-| 1 | `/plaintext` Ir per request against 3,251 | **NOT MET, accepted**: 4,125, 874 over the target and 242 (+6.2%) over `e66cf339`'s 3,883. `urlIsHostPort` costs 412.3 of them: since #1532 the codec checks that the one `Host` is a host and an optional port, a check `e66cf339` did not make. The owner accepted the miss in #1525 and the follow-up does not cut Ir |
+| 1 | `/plaintext` Ir per request against 3,251 | **NOT MET, and over the accepted miss**: 4,125, 874 over the target. The owner accepted 3,873 to 3,883 (the WP39 plan's note on #1525, `.claude/plans/wp39-http-server.plan.md`); 4,125 is 242 (+6.2%) over its top, 3,883. `urlIsHostPort`, the check #1532 added that the one `Host` is a host and an optional port, costs 412.3 Ir of self time, more than the 242; the cause of the rise is unproven: no build before #1532 was profiled against `9533b5d5`, so the 242 is not split between that check and other changes. The follow-up does not cut Ir |
 | 3 | explicit `/json` no worse than the baseline | **not reproduced**: interleaved in one run, `main` is not below the base outside the band in any cell |
 | 8 | `varied` | **no change**: 61 rounds put the base +0.6% against `main`, inside the base's ±0.9% band; its instructions are 1.4% lower on `main` |
 | 9 | browser-head `/json` at 256 | **not reproduced**: the base is 3.5% below `main`, `main` is not below it |
@@ -3116,8 +3116,8 @@ At `e66cf339`, `node bench/http1-parse/run.mjs` refused to run: since #1460 the 
 
 - No cell puts `main` below the base outside its band: at 128 and 256 the base sits inside the band, and at 512 and with the browser head it is below `main`.
 - That is not a gain either. `entry`'s rounds spread 18.8% to 24.8% between their slowest and fastest in every cell, and at 512 the copy's median landed on `entry`'s by chance (its rounds spread 63.8%), so a ±0.0% band there says nothing about the noise.
-- The kept head costs nothing measurable: turning it off moves the explicit cells by +0.8%, +0.5% and −0.8%, inside the band at 128 and 256, and leaves the browser head 2.3% below `main`.
-- The "worse" cells at `e66cf339` came from runs that could not interleave the two builds, with the machine drifting between them; interleaved, they do not recur.
+- Turning the kept head off moves the explicit cells by +0.8%, +0.5% and −0.8%: inside the band (±2.4%, ±3.4%) at 128 and 256, and outside the ±0.0% band at 512 by 0.8%. In the browser cell the kept head is measurably better: with it off, the cell is 2.3% below `main` against a ±0.5% band.
+- The loss recorded at `e66cf339` did not reproduce on this VM within these bands. Neither candidate, #1460's section scan or #1457's per-connection head state, was isolated: no contestant built `main` without the section scan, and turning the head state off is the `nokeep` row above.
 
 #### Follow-up: `/plaintext` profile and the codec benches
 

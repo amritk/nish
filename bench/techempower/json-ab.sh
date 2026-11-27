@@ -57,7 +57,8 @@ while [ $# -gt 0 ]; do
       ;;
     --no-keep-head) nokeep=1 ;;
     --cells)
-      read -r -a cells <<<"${2:-}"
+      [ -n "${2:-}" ] || { echo "json-ab.sh: --cells takes a list such as \"explicit:128 browser:256\"" >&2; exit 2; }
+      read -r -a cells <<<"$2"
       shift
       ;;
     -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
@@ -173,7 +174,9 @@ for cell in "${cells[@]}"; do
       t0=$(awk '{ print $14 + $15 }' "/proc/$pid/stat")
       out=$(taskset -c 1-3 wrk -t 3 -c "$c" -d "${duration}s" --timeout 8 "${hdr[@]}" "http://127.0.0.1:$port/json" 2>&1) || true
       t1=$(awk '{ print $14 + $15 }' "/proc/$pid/stat")
-      kill -TERM "$pid"
+      # The server can have died during the run; its log and the empty
+      # figure below report that, so a failed kill does not end the script.
+      kill -TERM "$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
       pid=""
       rps=$(awk '/^Requests\/sec:/ { print $2 }' <<<"$out")
