@@ -1834,26 +1834,27 @@ function Terminal.present(this: Terminal): void -> @nish.Terminal.present [expor
   callee +7:15 kittyDelete -> @nish.kittyDelete
   callee +9:7 Screen.invalidate -> @nish.Screen.invalidate
   local +12:9 withPixels: boolean (let)
-  local +13:11 fb: Framebuffer (const)
-  callee +15:7 Terminal.fit -> @nish.Terminal.fit
-  local +16:11 src: Framebuffer (let)
-  callee +18:9 scaleFramebuffer -> @nish.scaleFramebuffer
-  callee +22:9 PixelBytes.reset -> @nish.PixelBytes.reset
-  callee +23:9 kittyFrame -> @nish.kittyFrame
-  callee +27:9 PixelBytes.reset -> @nish.PixelBytes.reset
-  callee +28:9 sixelFrame -> @nish.sixelFrame
-  callee +31:9 drawHalfBlocks -> @nish.drawHalfBlocks
-  callee +33:9 drawAscii -> @nish.drawAscii
-  callee +38:15 kittyDelete -> @nish.kittyDelete
-  callee +40:7 Screen.invalidate -> @nish.Screen.invalidate
-  callee +44:7 drawStatsOverlay -> @nish.drawStatsOverlay
-  callee +44:37 Terminal.stats -> @nish.Terminal.stats
-  local +46:11 bytes: i32 (const)
-  callee +46:24 Terminal.send -> @nish.Terminal.send
-  local +47:11 sentAtMs: f64 (const)
-  callee +48:5 Terminal.dropLost -> @nish.Terminal.dropLost
-  callee +51:5 RateController.frameSent -> @nish.RateController.frameSent
-  callee +53:5 Terminal.ackPush -> @nish.Terminal.ackPush
+  local +14:9 skipped: boolean (let)
+  local +15:11 fb: Framebuffer (const)
+  callee +17:7 Terminal.fit -> @nish.Terminal.fit
+  local +18:11 src: Framebuffer (let)
+  callee +20:9 scaleFramebuffer -> @nish.scaleFramebuffer
+  callee +24:9 PixelBytes.reset -> @nish.PixelBytes.reset
+  callee +25:9 kittyFrame -> @nish.kittyFrame
+  callee +29:9 PixelBytes.reset -> @nish.PixelBytes.reset
+  callee +30:9 sixelFrame -> @nish.sixelFrame
+  callee +34:9 drawHalfBlocks -> @nish.drawHalfBlocks
+  callee +36:9 drawAscii -> @nish.drawAscii
+  callee +41:15 kittyDelete -> @nish.kittyDelete
+  callee +43:7 Screen.invalidate -> @nish.Screen.invalidate
+  callee +49:7 drawStatsOverlay -> @nish.drawStatsOverlay
+  callee +49:37 Terminal.stats -> @nish.Terminal.stats
+  local +51:11 bytes: i32 (const)
+  callee +51:24 Terminal.send -> @nish.Terminal.send
+  local +52:11 sentAtMs: f64 (const)
+  callee +53:5 Terminal.dropLost -> @nish.Terminal.dropLost
+  callee +56:5 RateController.frameSent -> @nish.RateController.frameSent
+  callee +58:5 Terminal.ackPush -> @nish.Terminal.ackPush
 function termIoRefusal(): string -> @nish.termIoRefusal
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_is_terminal

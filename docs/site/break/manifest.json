@@ -27,7 +27,7 @@
     "std/random.ts": "ca09ff71df26311dadeda12fd3d4e7976c310a5aef8a1ecc5934a04f6596239e",
     "std/raster.ts": "ddecb2fb1556964aa51ad565d56b747aea6a7e8c169bcc629781d4a5712d0842",
     "std/synth.ts": "ab54dc2da8ae24809c7f61cca540e1830406c07c1ce5624baabd602deee7e7e7",
-    "std/term-pixels.ts": "38f9aaf98a22e0dc887065d3656535c77e2d00d287ecad04b1a9d2043a6e2906",
+    "std/term-pixels.ts": "90421573e3e4e88f219eb58fb948c592bccf7e24edb2755095f5b97b492ef146",
     "std/term-rate.ts": "3c38ead3c452db3232754b0f485bd35bea5672c6a1f502259c16e8c8797b1644",
     "std/term.ts": "d676c66ab1c2c7e2205af5d7268b4b061238a64fc1e619cbb82511747eae0229"
   },
