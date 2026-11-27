@@ -8,8 +8,8 @@ unsafe import 73:10 wrappingAdd from "nish:unsafe"
 unsafe import 73:23 wrappingSub from "nish:unsafe"
 unsafe call 579:18 wrappingAdd (node 1394)
 unsafe call 591:18 wrappingSub (node 1424)
-unsafe call 865:22 wrappingAdd (node 1925)
-unsafe call 879:22 wrappingSub (node 1963)
+unsafe call 875:22 wrappingAdd (node 1965)
+unsafe call 889:22 wrappingSub (node 2003)
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 const MIN_STACK: i32 = 131072
@@ -187,17 +187,23 @@ function AtomicI64.compareExchange(this: AtomicI64, expected: i64, desired: i64)
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 old: i64 (const)
-function negativeAtomicLength(): void -> @nish.negativeAtomicLength
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+function atomicArrayLengthFault(length: i32): string -> @nish.atomicArrayLengthFault [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function atomicArrayCheckLength(length: i32): void -> @nish.atomicArrayCheckLength
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: length
+  calls: nish.atomicArrayLengthFault nish_panic
+  stackSites=0 stackLocals=0
+  local +0:9 fault: string (const)
+  callee +0:25 atomicArrayLengthFault -> @nish.atomicArrayLengthFault
 function AtomicI32Array.constructor(this: AtomicI32Array, length: i32): void -> @nish.AtomicI32Array.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: length
-  calls: nish.negativeAtomicLength
+  calls: nish.atomicArrayCheckLength
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee +0:7 negativeAtomicLength -> @nish.negativeAtomicLength
+  callee +0:5 atomicArrayCheckLength -> @nish.atomicArrayCheckLength
 function AtomicI32Array.load(this: AtomicI32Array, i: i32): i32 -> @nish.AtomicI32Array.load [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
@@ -247,10 +253,10 @@ function AtomicI32Array.compareExchange(this: AtomicI32Array, i: i32, expected: 
 function AtomicI64Array.constructor(this: AtomicI64Array, length: i32): void -> @nish.AtomicI64Array.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: length
-  calls: nish.negativeAtomicLength
+  calls: nish.atomicArrayCheckLength
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee +0:7 negativeAtomicLength -> @nish.negativeAtomicLength
+  callee +0:5 atomicArrayCheckLength -> @nish.atomicArrayCheckLength
 function AtomicI64Array.load(this: AtomicI64Array, i: i32): i64 -> @nish.AtomicI64Array.load [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
@@ -297,6 +303,22 @@ function AtomicI64Array.compareExchange(this: AtomicI64Array, i: i32, expected: 
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 old: i64 (const)
+function atomicI32ArrayChecked(length: i32): Result<AtomicI32Array, string> -> @nish.atomicI32ArrayChecked [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  escaping: length
+  calls: nish.AtomicI32Array.constructor nish.atomicArrayLengthFault nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local +0:9 fault: string (const)
+  callee +0:25 atomicArrayLengthFault -> @nish.atomicArrayLengthFault
+  callee +4:13 new AtomicI32Array -> @nish.AtomicI32Array.constructor
+function atomicI64ArrayChecked(length: i32): Result<AtomicI64Array, string> -> @nish.atomicI64ArrayChecked [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  escaping: length
+  calls: nish.AtomicI64Array.constructor nish.atomicArrayLengthFault nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local +0:9 fault: string (const)
+  callee +0:25 atomicArrayLengthFault -> @nish.atomicArrayLengthFault
+  callee +4:13 new AtomicI64Array -> @nish.AtomicI64Array.constructor
 function MutexGuard<Hist>.constructor(this: MutexGuard<Hist>, value: Hist): void -> @nish.MutexGuard$$Hist.constructor [exported constructor instance]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: value
@@ -394,6 +416,7 @@ function storeResult<i32>(dst: i32[], at: i32, r: i32): void -> @nish.storeResul
   callee +2:5 slotOutOfRange -> @nish.slotOutOfRange
 import AtomicI32Array from "nish/threads" -> struct AtomicI32Array
 import Mutex from "nish/threads" -> generic class Mutex
+import atomicI32ArrayChecked from "nish/threads" -> function @nish.atomicI32ArrayChecked
 import scope from "nish/threads" -> function @nish.scope
 const BINS: i32 = 256
 const TASKS: i32 = 4
@@ -472,10 +495,10 @@ function binPlain(seed: i32, n: i32, bins: u32[]): i32 -> @binPlain
   local -7:7 x: i32 (let)
   local -6:12 i: i32 (let)
   local -2:11 bin: i32 (const)
-function round(mode: string, high: i32, first: u32): u32[] -> @round$
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function round(mode: string, high: i32, first: u32): Result<u32[], string> -> @round$
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via nish.ThreadScope.spawn$$LockedShard$i32$fn.9.binLocked
-  calls: Hist.constructor LockedShard.constructor Shard.constructor binPlain nish.AtomicI32Array.constructor nish.AtomicI32Array.load nish.Mutex$$Hist.constructor nish.Mutex$$Hist.lock nish.ThreadScope.spawn$$LockedShard$i32$fn.9.binLocked nish.ThreadScope.spawn$$Shard$i32$fn.11.binPerValue nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard nish.scope nish_alloc_struct nish_array_grow nish_str_eq
+  calls: Hist.constructor LockedShard.constructor Shard.constructor binPlain nish.AtomicI32Array.load nish.Mutex$$Hist.constructor nish.Mutex$$Hist.lock nish.ThreadScope.spawn$$LockedShard$i32$fn.9.binLocked nish.ThreadScope.spawn$$Shard$i32$fn.11.binPerValue nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard nish.atomicI32ArrayChecked nish.scope nish_alloc_struct nish_array_grow nish_str_eq
   stackSites=0 stackLocals=0
   local +0:9 out: u32[] (const)
   local +2:14 b: i32 (let)
@@ -494,23 +517,24 @@ function round(mode: string, high: i32, first: u32): u32[] -> @round$
   local +23:11 g: MutexGuard<Hist> (const)
   callee +23:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
   local +24:14 b: i32 (let)
-  local +28:11 bins: AtomicI32Array (const)
-  callee +28:18 new AtomicI32Array -> @nish.AtomicI32Array.constructor
-  local +29:11 binned: i32[] (const)
-  local +30:11 perValue: boolean (const)
-  local +32:13 s: ThreadScope (const)
-  callee +32:17 scope -> @nish.scope
-  local +33:16 t: i32 (let)
-  local +34:15 shard: Shard (const)
-  callee +34:23 new Shard -> @Shard.constructor
-  callee +38:13 ThreadScope.spawn<Shard, i32, binPerValue> -> @nish.ThreadScope.spawn$$Shard$i32$fn.11.binPerValue
-  callee +40:13 ThreadScope.spawn<Shard, i32, binShard> -> @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard
-  local +45:14 b: i32 (let)
-  callee +46:22 AtomicI32Array.load -> @nish.AtomicI32Array.load
+  local +30:11 made: Result<AtomicI32Array, string> (const)
+  callee +30:18 atomicI32ArrayChecked -> @nish.atomicI32ArrayChecked
+  local +34:11 bins: AtomicI32Array (const)
+  local +35:11 binned: i32[] (const)
+  local +36:11 perValue: boolean (const)
+  local +38:13 s: ThreadScope (const)
+  callee +38:17 scope -> @nish.scope
+  local +39:16 t: i32 (let)
+  local +40:15 shard: Shard (const)
+  callee +40:23 new Shard -> @Shard.constructor
+  callee +44:13 ThreadScope.spawn<Shard, i32, binPerValue> -> @nish.ThreadScope.spawn$$Shard$i32$fn.11.binPerValue
+  callee +46:13 ThreadScope.spawn<Shard, i32, binShard> -> @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard
+  local +51:14 b: i32 (let)
+  callee +52:22 AtomicI32Array.load -> @nish.AtomicI32Array.load
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via round$
-  calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_u64 round$
+  calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_u64 nish_write round$
   stackSites=0 stackLocals=0
   local +0:9 args: string[] (const)
   local +1:7 mode: string (let)
@@ -520,6 +544,7 @@ function main(): i32 -> @nish_main [exported entry]
   local +13:7 total: u32 (let)
   local +14:7 checksum: u32 (let)
   local +17:12 r: u32 (let)
-  local +19:11 bins: u32[] (const)
+  local +19:11 made: Result<u32[], string> (const)
   callee +19:18 round -> @round$
-  local +20:14 b: i32 (let)
+  local +24:11 bins: u32[] (const)
+  local +25:14 b: i32 (let)

@@ -1677,7 +1677,9 @@ export const main = (): i32 => {
   write; a C function that does either is declared to take a `CPtr` instead.
   `string | null` passes `NULL` for `null`. A string with a NUL byte in it
   panics (`ffi-nul`) before the call, because C would read only up to it; a
-  literal with no NUL is not checked.
+  literal with no NUL is not checked, nor is a local after
+  `if (s.indexOf("\u0000") >= 0) { return … }`, which is how a
+  `--deny-panics` program hands C a string it did not write.
 
 <!-- nish:ok -->
 ```ts

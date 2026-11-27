@@ -1696,6 +1696,7 @@ const S2_REST_TESTING = [
   "tests/link/crypto_x509_f64/main.ts",
   "tests/link/crypto_x509_malformed/main.ts",
   "tests/link/crypto_x509_random/main.ts",
+  "tests/link/httparena_entry/main.ts",
   "tests/link/json_merge_patch/main.ts",
   "tests/link/json_presence/main.ts",
   "tests/link/net_buffer_pool/main.ts",
@@ -2022,6 +2023,7 @@ const PROVER_READS_FILES = {
   "bench/http-app-carrier.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "bench/http1-request/main.ts": ["chacha20poly1305.ll", "gzip.ll"],
   "bench/http1-server.ts": ["chacha20poly1305.ll", "gzip.ll"],
+  "bench/httparena/main.ts": ["chacha20poly1305.ll"],
   "bench/lexer.ts": ["src_lexer.ll"],
   "bench/map-keys/main.ts": ["main.ll"],
   "bench/map-presize.ts": ["map-presize.ll"],
@@ -9244,6 +9246,7 @@ const PROVER_READS_FILES = {
   "tests/link/crypto_x509/main.ts": ["chacha20poly1305.ll"],
   "tests/link/crypto_x509_random/main.ts": ["x509-random.ll"],
   "tests/link/enum_export_uses/main.ts": ["main.ll"],
+  "tests/link/httparena_entry/main.ts": ["chacha20poly1305.ll"],
   "tests/link/map_extras_two_modules/main.ts": ["main.ll", "words.ll"],
   "tests/link/map_extras_user_names/main.ts": ["main.ll"],
   "tests/link/map_own_class/main.ts": ["unique.ll"],
@@ -10599,6 +10602,42 @@ const serverH1TlsDeclared = () =>
     why: "the program calls HttpServer.listenHttp1Tls, which the seed's std/net does not have, so only the candidate compiles it",
   }))
 
+/** The changelog words of WP39 G7, which takes an h2c peer by its preface on nish/net/http-server's HTTP/1.1 listener. */
+const SERVER_H2C_PREFACE = "an h2c peer by its preface on an opted-in HTTP/1.1 listener"
+/** WP39 G7's preface programs call `listenHttp1` with an `Http2Config` or `Http1Server.release`, which the seed's std/net does not have. */
+const serverH2cPrefaceDeclared = () =>
+  ["default_refused", "preface", "preface_drain", "preface_ended", "preface_full", "preface_h1"]
+    .concat(["preface_late", "preface_partial", "preface_pri", "preface_release", "preface_silent"])
+    .map((name) => ({
+      program: `tests/link/net_http_server_h2c_${name}/main.ts`,
+      file: "exit",
+      changelog: SERVER_H2C_PREFACE,
+      why: "the program calls HttpServer.listenHttp1 with a fourth argument or Http1Server.release, which the seed's std/net does not have, so only the candidate compiles it",
+    }))
+    .concat(
+      ["server.ll", "server.h", "handler.ll"].map((file) => ({
+        program: "bench/http-server-ring/server.ts",
+        file,
+        changelog: SERVER_H2C_PREFACE,
+        why: "HttpServerH1Slot gains the sniff's head, count and timestamp and is laid out widest first and Http1Server gains release, so the modules that lay out or declare the façade's HTTP/1.1 slots move",
+      }))
+    )
+    .concat(
+      [
+        ["", ["client.ll", "handler.ll", "main.h", "main.ll", "rig.ll"]],
+        ["_slots", ["handler.ll", "main.h", "main.ll", "taken.ll"]],
+        ["_twice", ["handler.ll", "main.h", "main.ll", "taken.ll"]],
+        ["_wait", ["handler.ll", "main.h", "main.ll", "taken.ll"]],
+      ].flatMap(([name, files]) =>
+        files.map((file) => ({
+          program: `tests/link/net_http_server_h1_tls${name}/main.ts`,
+          file,
+          changelog: SERVER_H2C_PREFACE,
+          why: "HttpServerH1Slot gains the sniff's head, count and timestamp and Http1Server gains release, so the modules that lay out or declare the façade's HTTP/1.1 slots move",
+        }))
+      )
+    )
+
 /** The changelog words of WP82 S6, which proves or removes the HTTP/3 stack's panic sites. */
 const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free"
 const http3PanicFree = (why, filesByProgram) =>
@@ -11706,6 +11745,8 @@ const cursorReadRow = (why, filesByProgram) =>
 const JSON_PUT_STRING = "jsonPutString"
 /** The release-note words of `Http1Server.tick` (std/net/http1-server.ts). */
 const HTTP1_TICK = "Http1Server.tick"
+/** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
+const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
 
 /** The release-note words of TLS RSA S1, RSA-PSS CertificateVerify on the TLS and QUIC servers. */
 const RSA_PSS_SERVER = "RSA-PSS CertificateVerify under an RSA certificate"
@@ -13715,6 +13756,7 @@ const DECLARED = [
   ...proverReadsDeclared(),
   ...serverTrailersDeclared(),
   ...serverH1TlsDeclared(),
+  ...serverH2cPrefaceDeclared(),
   ...http3PanicFree(
     "a probe new with this change: it feeds malformed frames to std/net's HTTP/3 frame and QPACK readers, whose proved indexes and Results differ from the seed's, so each module it writes differs, the std/crypto ones it reaches included",
     {
@@ -15694,6 +15736,7 @@ const DECLARED = [
     ["bench/http-app-carrier.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["bench/http1-request/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["bench/http1-server.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["bench/httparena/main.ts", "hmac.ll"],
     ["bench/jwt-verify/main.ts", "hmac.ll jwt.ll main.ll"],
     ["bench/pg-batch-clock.ts", "hmac.ll"],
     ["bench/pg-decode/main.ts", "hmac.ll"],
@@ -15769,6 +15812,7 @@ const DECLARED = [
     ["tests/link/crypto_tls_held_hash/main.ts", "hkdf.ll hmac.ll"],
     ["tests/link/crypto_tls_held_length/main.ts", "hkdf.ll hmac.ll"],
     ["tests/link/crypto_x509/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/httparena_entry/main.ts", "hmac.ll"],
     ["tests/link/net_fetch_async/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_fetch_async_deadline/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_fetch_async_dns_slow/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
@@ -19159,6 +19203,7 @@ const DECLARED = [
         "json-value.ll",
       ],
       "bench/http1-server.ts": ["json-tokenizer.ll", "json-typed.ll", "json-value.ll"],
+      "bench/httparena/main.ts": ["json-value.ll"],
       "bench/json-compare/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
       "bench/json-tokenizer/main.ts": ["json-tokenizer.ll", "main.ll"],
       "bench/json-value/main.ts": ["json-tokenizer.ll", "json-value.ll", "loop.ll", "main.ll"],
@@ -19178,6 +19223,7 @@ const DECLARED = [
       ],
       "docs/cookbook/json-value.ts": ["json-tokenizer.ll", "json-value.ll", "std_json-value.ll"],
       "examples/merge-patch.ts": ["json-tokenizer.ll", "json-typed.ll", "merge-patch.h", "merge-patch.ll"],
+      "tests/link/httparena_entry/main.ts": ["json-value.ll"],
       "tests/link/json_merge_patch/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
       "tests/link/json_presence/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
       "tests/link/std_json_conformance/main.ts": ["conformance.ll", "json-tokenizer.ll", "rewrite.ll"],
@@ -21199,7 +21245,9 @@ const DECLARED = [
     "examples/relay/main.ts": ["exit"],
     "bench/http-app-carrier.ts": ["prefork.ll"],
     "bench/http1-server.ts": ["prefork.ll"],
+    "bench/httparena/main.ts": ["prefork.ll"],
     "bench/techempower/main.ts": ["prefork.ll"],
+    "tests/link/httparena_entry/main.ts": ["prefork.ll"],
     "tests/link/net_http3/main.ts": ["exit"],
     "tests/link/net_http3_bad_body_chunk/main.ts": ["exit"],
     "tests/link/net_http3_bad_config/main.ts": ["exit"],
@@ -23948,6 +23996,26 @@ const DECLARED = [
     changelog: HANDLER_PIPELINED_STREAM_END,
     why: "the case is new to the corpus and the seed's std predates HttpHandler.drive's `unended` gate (#1556) and the HTTP stack this branch links, so every module it writes differs from the seed's",
   })),
+  ...byFinding(WP80_EXAMPLES_FREED)(
+    "std/json-typed.ts tests the window of its string-field slice where the prover reads it, so json-typed.ll moves in every program that decodes a typed string field",
+    {
+      "docs/cookbook/json-union.ts": ["json-typed.ll"],
+      "tests/link/json_enum_string/main.ts": ["json-typed.ll"],
+      "tests/link/json_tagged_union/main.ts": ["json-typed.ll"],
+    }
+  ),
+  {
+    program: "tests/link/atomic_index_proven/main.ts",
+    file: "threads.ll",
+    changelog: WP80_EXAMPLES_FREED,
+    why: "AtomicI32Array's and AtomicI64Array's constructors forward their length to the shared `atomicArrayCheckLength` guard, and std/threads.ts gains their checked twins, so threads.ll moves",
+  },
+  {
+    program: "tests/link/atomic_array_checked/main.ts",
+    file: "exit",
+    changelog: WP80_EXAMPLES_FREED,
+    why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
+  },
 ]
 
 /**

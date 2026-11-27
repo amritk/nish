@@ -1,11 +1,13 @@
 // `NET_LISTEN_RING` and `netRingState` (WP63 S2), checked by `net_ring_calls.c`:
 // what the state answers before a listen and after one, the flags
-// tcpListenFlags takes with the ring bit and the -22 past 15, an accept with
+// tcpListenFlags takes with the ring bit and the wide bit, the -22 for the
+// wide bit without the ring bit and past 31, an accept with
 // nothing waiting, and the -9 a slot handle no listener issued answers on
 // every path that takes one. The connections themselves are tests/run.js's
 // `net_ring` section.
 import {
   NET_LISTEN_RING,
+  NET_LISTEN_RING_WIDE,
   netClose,
   netLocalPort,
   netRead,
@@ -23,6 +25,9 @@ export const state = (): i32 => netRingState();
 
 /** The ring bit's value. */
 export const ringBit = (): i32 => NET_LISTEN_RING;
+
+/** The wide-ring bit's value. */
+export const wideBit = (): i32 => NET_LISTEN_RING_WIDE;
 
 /** 0 when a loopback listen with `flags` succeeds (and is closed), else its failure. */
 export const listenWith = (flags: i32): i32 => {

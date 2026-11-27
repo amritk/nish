@@ -48,6 +48,19 @@ const DELAY_CAP_MS: i32 = 10000
 const MULTIPLIER_CAP: i64 = 1000000
 /** The JSON answer buffer: 50 items are under 16 KiB. */
 const JSON_BYTES: i32 = 65536
+/** `connections-1m`'s fleet: the held connections every worker's HTTP/1.1 slots share. */
+export const ARENA_FLEET: i32 = 1000000
+/**
+ * How many times its even share of the fleet a worker's HTTP/1.1 slots
+ * hold. The kernel steers a loopback connection by the CPU that sent it, and
+ * HttpArena's load generator runs on CPUs the workers do not, so the shares
+ * are uneven: see README.md, "Held connections".
+ */
+const FLEET_HEADROOM: i32 = 4
+/** The fewest HTTP/1.1 slots a worker has, and its h2c slots when `slots` is 0. */
+const MIN_SLOTS: i32 = 16384
+/** The most HTTP/1.1 slots one `HttpServer` holds. */
+const MAX_SLOTS: i32 = 1048576
 
 /** The bytes of an ASCII string. */
 export const arenaBytes = (s: string): u8[] => {
@@ -154,6 +167,23 @@ class ArenaHeld {
   }
 }
 
+/**
+ * A worker's HTTP/1.1 slots: `asked` when above 0, else `FLEET_HEADROOM`
+ * times its share of `ARENA_FLEET` over `workers`, at least `MIN_SLOTS` and at
+ * most `MAX_SLOTS`.
+ */
+export const arenaSlots = (asked: i32, workers: i32): i32 => {
+  if (asked > 0) {
+    return asked
+  }
+  const n: i32 = workers < 1 ? 1 : workers
+  const share: i64 = (toI64(ARENA_FLEET) * toI64(FLEET_HEADROOM) + toI64(n - 1)) / toI64(n)
+  if (share < toI64(MIN_SLOTS)) {
+    return MIN_SLOTS
+  }
+  return share > toI64(MAX_SLOTS) ? MAX_SLOTS : toI32(share)
+}
+
 /** One worker's server: its `HttpServer`, the dataset, the held delays and the database. */
 export class ArenaServer {
   h: HttpServer
@@ -171,12 +201,16 @@ export class ArenaServer {
   okBody: u8[]
   /** How many requests this worker answered. */
   answered: i64 = 0
+  /** The HTTP/1.1 listener's connection slots. */
+  h1Slots: i32 = 0
+  /** The h2c listener's connection slots, 0 with no h2c listener. */
+  h2cSlots: i32 = 0
 
   /**
-   * Serves HTTP/1.1 on `fd1` and h2c on `fd2` (when not negative), with
-   * `slots` connections on each, the dataset `data` and the database `db`.
+   * Serves HTTP/1.1 on `fd1` with `slots` connections and h2c on `fd2` (when
+   * not negative) with `h2cSlots`, the dataset `data` and the database `db`.
    */
-  constructor(fd1: i32, fd2: i32, slots: i32, data: ArenaDataset, db: ArenaDb) {
+  constructor(fd1: i32, fd2: i32, slots: i32, h2cSlots: i32, data: ArenaDataset, db: ArenaDb) {
     const router = new Router(new RouterLimits())
     router.add("GET", "/baseline11")
     router.add("POST", "/baseline11")
@@ -190,8 +224,10 @@ export class ArenaServer {
     limits.maxBody = 65536
     this.h = new HttpServer(limits, router)
     this.h.listenHttp1(fd1, new Http1Config(), slots)
+    this.h1Slots = slots
     if (fd2 >= 0) {
-      this.h.listenH2c(fd2, new Http2Config(), slots)
+      this.h.listenH2c(fd2, new Http2Config(), h2cSlots)
+      this.h2cSlots = h2cSlots
     }
     this.data = data
     this.db = db
@@ -420,15 +456,17 @@ const arenaArg = (args: string[], k: i32, fallback: string): string =>
 
 /**
  * The entry's program: `args[at ..]` are `[port] [h2c port] [host] [slots]
- * [workers] [dataset]`, defaulting to 8080, 8082, 0.0.0.0, 16384, 0 (one
- * worker a core; `NISH_WORKERS` overrides any but 1) and
- * `/data/dataset.json`. With more than one worker, `nish/net/prefork` binds
- * one steered `SO_REUSEPORT` listener a worker on the main port and pins
- * worker `k` to CPU `k`; the h2c port is a plain `SO_REUSEPORT` listener each
- * worker binds itself. Each serving process calls `listening(worker, port,
- * h2cPort)` once it is ready and `stopped(worker, server)` on SIGINT or
- * SIGTERM, then answers 0; the supervisor answers 0 once its workers are
- * gone, and 1 when it or a listener could not start.
+ * [workers] [dataset]`, defaulting to 8080, 8082, 0.0.0.0, 0, 0 (one worker
+ * a core; `NISH_WORKERS` overrides any but 1) and `/data/dataset.json`.
+ * `slots` above 0 is each listener's connections a worker; 0 sizes the
+ * HTTP/1.1 slots for the fleet (`arenaSlots`) and gives h2c `MIN_SLOTS`.
+ * With more than one worker, `nish/net/prefork` binds one steered
+ * `SO_REUSEPORT` listener a worker on the main port and pins worker `k` to CPU
+ * `k`; the h2c port is a plain `SO_REUSEPORT` listener each worker binds
+ * itself. Each serving process calls `listening(worker, port, h2cPort)` once it
+ * is ready and `stopped(worker, server)` on SIGINT or SIGTERM, then answers 0;
+ * the supervisor answers 0 once its workers are gone, and 1 when it or a
+ * listener could not start.
  */
 export const arenaMain = (
   args: string[],
@@ -440,7 +478,7 @@ export const arenaMain = (
   const port: i32 = parseInt(arenaArg(given, at, "8080"))
   const h2cPort: i32 = parseInt(arenaArg(given, at + 1, "8082"))
   const host: string = arenaArg(given, at + 2, "0.0.0.0")
-  const slots: i32 = parseInt(arenaArg(given, at + 3, "16384"))
+  const slots: i32 = parseInt(arenaArg(given, at + 3, "0"))
   const asked: i32 = parseInt(arenaArg(given, at + 4, "0"))
   const path: string = arenaArg(given, at + 5, "/data/dataset.json")
   const workers: i32 = asked === 1 ? 1 : preforkWorkerCount(asked, getenv("NISH_WORKERS"))
@@ -474,7 +512,9 @@ export const arenaMain = (
   // A missing dataset ends the worker, as `readFileSync` does: HttpArena always mounts it.
   const text: string = readFileSync(path)
   const db = new ArenaDb(getenv("DATABASE_URL"), getenv("DATABASE_MAX_CONN"), workers)
-  const server = new ArenaServer(listener, h2c, slots, arenaDataset(text), db)
+  const h1Slots: i32 = arenaSlots(slots, workers)
+  const h2cSlots: i32 = slots > 0 ? slots : MIN_SLOTS
+  const server = new ArenaServer(listener, h2c, h1Slots, h2cSlots, arenaDataset(text), db)
   server.h.watch(signalFd(), SIGNAL_ID)
   listening(worker, netLocalPort(listener), netLocalPort(h2c))
   while (server.turn()) {

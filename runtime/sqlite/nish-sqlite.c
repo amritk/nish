@@ -54,6 +54,103 @@
 
 #include "../nish.h"
 
+/* SQLite's page cache, pcache1, with its largest key kept honest.
+ *
+ * pcache1 keeps `iMaxKey`, the largest page number it has held since the
+ * last truncate, so that a truncate after a commit scans only the hash
+ * slots from the database's end to `iMaxKey`; when that span is as wide as
+ * the hash table, it scans the whole table. When a B-tree split hands its
+ * new pages page numbers out of order, `balance_nonroot` swaps two of them
+ * through a free key, the lock-byte page's (262,145 at 4 KiB pages), and
+ * the rekey into it raises `iMaxKey` there for good. Every commit after
+ * such a split then scans every slot of the hash table, which grows with
+ * the cache: an index written at random keys splits often enough that, with
+ * a 64 MiB cache, that scan measured 1.5% of a write-heavy server's CPU.
+ *
+ * sqlite3.c is never edited (README.md), so the fix is here: the same
+ * pcache1, installed through SQLITE_CONFIG_PCACHE2 before SQLite starts,
+ * with three of its methods wrapped. A rekey that raises the largest key
+ * parks a page above every other; until the page leaves that key, every
+ * fetch and rekey of the cache records the largest key it brings in. When
+ * the parked page moves down again and still holds the largest key, the
+ * largest key goes back to the larger of what was recorded and the page's
+ * new number. Anything else - a fetch above the parked key, a truncate, the
+ * cache destroyed, a second cache parking meanwhile - leaves pcache1's own
+ * value standing, which is too large at worst, and too large costs only the
+ * scan. One record serves a thread: a split's three rekeys run back to back
+ * on one connection. */
+typedef struct nishsqlite_park {
+  PCache1 *cache;   /* the cache with a parked page, NULL when none */
+  unsigned int key; /* the parked page's key */
+  unsigned int max; /* the cache's largest key apart from the parked page */
+} nishsqlite_park;
+
+static NISH_TLS nishsqlite_park nishsqlite_parked;
+
+static sqlite3_pcache_page *nishsqlite_pcache_fetch(sqlite3_pcache *p, unsigned int key, int create) {
+  sqlite3_pcache_page *page = pcache1Fetch(p, key, create);
+  if (nishsqlite_parked.cache == (PCache1 *)p && page != NULL && key > nishsqlite_parked.max) {
+    nishsqlite_parked.max = key;
+  }
+  return page;
+}
+
+static void nishsqlite_pcache_rekey(sqlite3_pcache *p, sqlite3_pcache_page *page, unsigned int from,
+                                    unsigned int to) {
+  PCache1 *cache = (PCache1 *)p;
+  unsigned int before = cache->iMaxKey;
+  pcache1Rekey(p, page, from, to);
+  if (to > before) {
+    nishsqlite_parked.cache = cache;
+    nishsqlite_parked.key = to;
+    nishsqlite_parked.max = before;
+  } else if (nishsqlite_parked.cache == cache) {
+    if (from == nishsqlite_parked.key) {
+      if (cache->iMaxKey == from) {
+        cache->iMaxKey = nishsqlite_parked.max > to ? nishsqlite_parked.max : to;
+      }
+      nishsqlite_parked.cache = NULL;
+    } else if (to > nishsqlite_parked.max) {
+      nishsqlite_parked.max = to;
+    }
+  }
+}
+
+static void nishsqlite_pcache_truncate(sqlite3_pcache *p, unsigned int limit) {
+  if (nishsqlite_parked.cache == (PCache1 *)p) {
+    nishsqlite_parked.cache = NULL;
+  }
+  pcache1Truncate(p, limit);
+}
+
+static void nishsqlite_pcache_destroy(sqlite3_pcache *p) {
+  if (nishsqlite_parked.cache == (PCache1 *)p) {
+    nishsqlite_parked.cache = NULL;
+  }
+  pcache1Destroy(p);
+}
+
+/* Before main, so before any thread can start SQLite: sqlite3_config is
+ * refused once SQLite is initialised and is not itself thread-safe. */
+__attribute__((constructor)) static void nishsqlite_pcache_install(void) {
+  static const sqlite3_pcache_methods2 methods = {
+      1,
+      0,
+      pcache1Init,
+      pcache1Shutdown,
+      pcache1Create,
+      pcache1Cachesize,
+      pcache1Pagecount,
+      nishsqlite_pcache_fetch,
+      pcache1Unpin,
+      nishsqlite_pcache_rekey,
+      nishsqlite_pcache_truncate,
+      nishsqlite_pcache_destroy,
+      pcache1Shrink,
+  };
+  sqlite3_config(SQLITE_CONFIG_PCACHE2, &methods);
+}
+
 typedef struct nishsqlite_slot {
   void *p;        /* the connection, statement or cursor; NULL while free */
   int32_t gen;    /* 1..32767, the high bits of the slot's handle */

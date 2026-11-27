@@ -42,7 +42,7 @@ with its own `WS_HS_*` code; it adds no finding.
 | File | Functions |
 | --- | --- |
 | `std/net/http1-codec.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead` (with `nish/net/url`'s `urlIsHostPort` for the `Host` value), `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1ChunkExtValid`, `http1QuotedStringEnd`, `http1SkipOws`, `http1BodyWindow`, `http1HeadAppend`, `http1HeadGrow`, `http1FramingField`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
-| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `sendBody`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; the kept response head (`sameHead`, `keepHead`, `http1ServerKept`, `http1ServerSame8`, `http1ServerSame4`, `http1ServerSameByByte`); `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
+| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `sendBody`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; the kept response head (`sameHead`, `keepHead`, `http1ServerKept`, `http1ServerSame8`, `http1ServerSame4`, `http1ServerSameByByte`); `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`, `Http1Server.release`; `HttpDate` (`current`, `pin`, `unpin`) |
 | `std/net/http-fields.ts` | `httpDateWrite` and its helpers (`httpFieldsPutName`, `httpFieldsPutTwo`) — the date alone; the header model is `docs/security/http2.md`'s |
 | `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, the allocation-free `WsAcceptKey`, `websocketRequestKeyField` and `websocketWriteUpgradeResponse` they are built on, `websocketClosePayload`, `websocketIsUtf8`; the handshake's `websocketAcceptKey`, `websocketKeyIsValid`, `websocketOfferedProtocols`, `websocketOriginAllowed` (with `websocketSpanFolds`); the client's `websocketClientKey`, `websocketUpgradeRequest`, `WsHandshake`, `websocketCheckResponse` and their helpers (`websocketSpanIs`, `websocketListInto`, `websocketListHas`) |
 
@@ -117,6 +117,21 @@ The other targets each ran for 31 minutes (1,861 s, one core each, four at a tim
 ## Properties verified
 
 Each property below is pinned by a test that fails if it stops holding.
+
+**A released slot was never read** (`tests/link/net_http_server_h2c_preface`, `_release`):
+`Http1Server.release` frees a slot without closing its socket only while the
+slot holds no connection (`at[slot] < 0`), so no parser state, input byte or
+queued response leaves the pool with the socket; it answers -1 for any other
+slot. Its one caller, `nish/net/http-server`'s opted-in `listenHttp1`, reads a
+new socket's first 24 bytes itself before the pool reads anything, and
+releases the slot to hand an HTTP/2 preface to the h2c carrier
+([http-server.md](http-server.md), HTTPSRV-24). The check: the h2c peer's
+request arrives as version 2 and its first frame back is SETTINGS, which fails
+if `release` answers -1 (the slot is closed instead) or closes the socket.
+`_release` calls it directly: "unknown: -1, before any accept: -1", an
+unread slot gives "a socket true, again -1, held false" and is the next
+accept's, and a slot that has read answers "read slot 0: -1, held true",
+which fails without the `at[slot] >= 0` test.
 
 **Cut anywhere, framed the same** (`tests/link/net_http1`, `_f64`): a corpus
 of pipelined keep-alive requests, both body framings, an upgrade and the
@@ -790,6 +805,30 @@ buffer in `Http1Connection.feed` (`net_http1_server_feed_window`), `write`
 (`net_http1_write_chunk_window`), `websocketIsUtf8`
 (`net_websocket_utf8_window`), and the parser's and decoder's own `feed`
 (`net_http1_feed_window`, `net_websocket_feed_window`).
+
+**A window the program proves is not a panic it answers for** (#2296).
+`Http1Connection.feed`, `write`, `sendBody` and `sendFrame` each hand their
+window to `http1ServerCheckWindow` first, the one guard shape the checker
+reads ([`window`](../reference/language/semantics-decisions.md#panic-sites)), so each call is a `window`
+site of its caller, proven where the caller has proved `off` and `len` inside
+`buf`, and the guard's own `panic` is reached by no call. The rule is pinned by
+`link/window_contract_proven: --emit-panics matches expected.panics`, and an
+unproven call is refused by `link/window_contract_unproven` (`expected.err`).
+`write` writes a chunk through `http1TryWriteChunk` and answers `H1_INVALID`
+on its `HTTP1_BAD_WINDOW`, a branch the checked window on entry leaves
+unreachable, so it reaches no `http1WriteChunk` panic. Untested here: that
+`examples/file-server.ts` no longer reaches `std/net/http1-server.ts:507:5`
+was read from `--emit-panics` and is pinned by no check. The connection's
+constructor still panics on a cap out of range (`http1-server.ts:499:5`): an
+`Http1Config` is a mutable object the constructor stores as given, so no
+caller makes the check, and every program that serves HTTP/1.1 reaches it.
+The [`fault`](../reference/language/semantics-decisions.md#panic-sites)
+contract that proves `HttpHandler`'s limit check (`handler.md`) is not used
+here: the constructor's callers are the connection pool's `build` and
+`make`, which must answer an `Http1Connection` (the public `connection(slot)`
+among their callers), so checking the config there and refusing it would need
+a nullable answer, a change to a public signature, and panicking there
+instead only moves the panic.
 
 **`websocket.ts` panics only in those two window checks.** Every index,
 overflow, slice and array-length site in the module is proven by a guard, by

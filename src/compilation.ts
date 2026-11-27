@@ -89,6 +89,8 @@ import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
 import { forgetProofs } from "./bounds"
+import { noteWindowContracts } from "./window-contract"
+import { noteFaultContracts } from "./fault-contract"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
 import { CalleeDrops, arenaJson, unboundedPassFindings } from "./arena-report"
 import {
@@ -1591,6 +1593,13 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.foldConstants()
     }
+    // The window and fault contracts (#2296) before any body: bounds reads them at each call.
+    const contracted: CheckedProgram[] = []
+    for (const unit of this.modules) {
+      contracted.push(unit.checker.program)
+    }
+    noteWindowContracts(contracted, this.table)
+    noteFaultContracts(contracted)
     for (const unit of this.modules) {
       unit.checker.checkBodies()
     }
@@ -1744,7 +1753,7 @@ export class Compilation {
     // fixpoint `reportArenaLoops` paid for has its call graph (`src/panics.ts`).
     if (this.opts.recordsPanics()) {
       const facts = this.analyze()
-      resolvePanicSites(this.analysisUnits, facts)
+      resolvePanicSites(this.analysisUnits, facts, this.opts.strictExports)
       this.denyPanicSites(facts)
       if (this.sink.hasErrors()) {
         return false

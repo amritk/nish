@@ -25,6 +25,11 @@ entry:
   ret i32 8
 }
 
+define noundef i32 @wideBit() #1 {
+entry:
+  ret i32 16
+}
+
 define noundef i32 @listenWith(i32 noundef %flags) #2 {
 entry:
   %fd.addr = alloca i32, align 4

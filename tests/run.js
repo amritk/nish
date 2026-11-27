@@ -70,6 +70,7 @@ import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms, extraArgs as corpusArgs } from "./self/corpus.js"
 import * as ciScope from "../scripts/ci-scope.mjs"
+import * as ciVerdict from "../scripts/ci-verdict.mjs"
 import { cwdFor } from "./differential/lib.js"
 import { ACCEPTED_ROWS as emitTsAcceptedRows, HOST as emitTsHost, NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
@@ -138,6 +139,8 @@ const spawnNish = (args, options) => spawnSync(NISH, withAllowPanics(NISH, args)
  * opt-out, its header says why), else `[]`: a check that walks examples
  * builds each as that line does. `file` is relative to the root.
  */
+/** The codes a build out of no-panic scope is refused with: a site of its own (NL2457), or one a call reaches (NL2458). */
+const NO_PANIC_CODES = ["NL2457", "NL2458"]
 const optOutArgs = (file) => corpusArgs(path.join(root, file)).filter((arg) => arg === ALLOW_PANICS)
 const casesDir = path.join(root, "tests", "cases")
 const buildDir = path.join(root, "build", "test")
@@ -6740,17 +6743,30 @@ if (dealtHere("performance")) {
   const optOuts = gateSources.filter((source) => source.startsWith("examples/") && optOutArgs(source).length > 0)
   const strictResults = await pool(optOuts, defaultJobs(), (source) => {
     const args = corpusArgs(path.join(root, source)).filter((arg) => arg !== ALLOW_PANICS)
+    const out = path.join(buildDir, "perf_gate", "strict", source.replace(/[/.]/g, "_"))
+    // Both ways a user builds it: `-o` alone is an open world, and `--link`
+    // (as smoke builds it) a closed one, whose call-site ranges prove some
+    // sites the open world cannot and leave others unproven that it proves.
+    // The opt-out is needed while either refuses.
     // strict: proves the example's opt-out is still needed
-    return spawnAsync(NISH, [source, ...args, "-o", `${path.join(buildDir, "perf_gate", "strict", source.replace(/[/.]/g, "_"))}/`], {
+    const open = spawnAsync(NISH, [source, ...args, "--json", "-o", `${out}/`], { cwd: root, encoding: "utf8" })
+    // strict: proves the example's opt-out is still needed
+    const linked = spawnAsync(NISH, [source, ...args, "--json", "-o", `${out}_link/`, "--link", path.join(out, "bin")], {
       cwd: root,
       encoding: "utf8",
     })
+    return Promise.all([open, linked])
   })
   for (const [at, source] of optOuts.entries()) {
+    const builds = strictResults[at]
+    const refused = builds.filter((r) => r.status !== 0)
+    const forPanic = refused.some((r) => diagnosticsOf(r.stdout).some((d) => NO_PANIC_CODES.includes(d.code)))
     check(
       `performance gate: ${source}'s --allow-panics opt-out is still needed`,
-      strictResults[at].status !== 0,
-      "it builds without the flag: drop --allow-panics from its `// smoke: args` line and its header's words about it"
+      forPanic,
+      refused.length === 0
+        ? "it builds without the flag, with -o and with --link: drop --allow-panics from its `// smoke: args` line and its header's words about it"
+        : `refused, but not for a panic site:\n${refused.map((r) => r.stdout + r.stderr).join("\n")}`
     )
   }
 
@@ -8313,7 +8329,8 @@ if (dealtHere("fix")) {
 //                  module with a golden is compared, so there is no missing one to write;
 //                  `--update-link-goldens` rewrites each golden that differs from what
 //                  this run's compiler emitted, prints `WROTE link/<name>/<module>.ll`,
-//                  and compares again. Narrow it with a filter
+//                  and compares again; it rewrites a differing `expected.panics` and
+//                  `expected.caps.json` the same way. Narrow it with a filter
 //                  (`node tests/run.js <name> --update-link-goldens`) and read the diff
 //                  before committing it, as for any regenerated golden.
 // Every positive test is also assembled (llvm-as), verified (opt -passes=verify),
@@ -8766,8 +8783,13 @@ const runLinkProgram = async (name) => {
           : `no listed function names ${side("main.ts")} as its module`
       )
       if (fs.existsSync(side("expected.panics"))) {
-        const want = read("expected.panics").trim()
+        let want = read("expected.panics").trim()
         const got = listText.split(`${root}/`).join("").trim()
+        if (UPDATE_LINK_GOLDENS && got !== want) {
+          fs.writeFileSync(side("expected.panics"), got + "\n")
+          steps.push({ kind: "log", text: `WROTE link/${name}/expected.panics` })
+          want = got
+        }
         expect(
           `link/${name}: --emit-panics matches expected.panics`,
           got === want,
@@ -8777,8 +8799,13 @@ const runLinkProgram = async (name) => {
     }
 
     if (capsArgs.length > 0) {
-      const want = read("expected.caps.json")
+      let want = read("expected.caps.json")
       const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
+      if (UPDATE_LINK_GOLDENS && got.length > 0 && got !== want) {
+        fs.writeFileSync(side("expected.caps.json"), got)
+        steps.push({ kind: "log", text: `WROTE link/${name}/expected.caps.json` })
+        want = got
+      }
       expect(
         `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
         got === want,
@@ -12620,6 +12647,39 @@ int main(void) {
         "sqlite-link: a cursor answers SQLITE_MISUSE after SQLite rolls its read back on its own, on another thread, and after its connection closes",
         ran !== null && ran.status === 0,
         built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stderr}` : "")
+      )
+    }
+
+    // The page cache the adapter installs keeps its largest key at the
+    // database's end across B-tree splits that swap page numbers through the
+    // lock-byte page's key, so a commit's truncate scans only the slots past
+    // the end, not the whole hash table: tests/runtime/sqlite-pcache-test.c
+    // is one unit with the adapter and reads pcache1's own `iMaxKey`.
+    {
+      const exe = path.join(sqDir, "pcache-park")
+      const db = path.join(sqDir, "pcache-park.db")
+      for (const f of [db, `${db}-wal`, `${db}-shm`]) fs.rmSync(f, { force: true })
+      const built = spawnSync(
+        "clang",
+        [
+          "-O1",
+          "-w",
+          `-I${path.join(root, "runtime", "sqlite")}`,
+          "-DSQLITE_OMIT_SHARED_CACHE",
+          "-DSQLITE_THREADSAFE=1",
+          path.join(root, "tests", "runtime", "sqlite-pcache-test.c"),
+          "-o",
+          exe,
+          "-lpthread",
+          "-lm",
+        ],
+        { encoding: "utf8" }
+      )
+      const ran = built.status === 0 ? spawnSync(exe, [db], { encoding: "utf8" }) : null
+      check(
+        "sqlite-link: after every commit of random index keys the page cache's largest key is the database's last page, though splits parked pages past it",
+        ran !== null && ran.status === 0 && Number(ran.stdout) > 0,
+        built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stdout} ${ran.stderr}` : "")
       )
     }
 
@@ -19642,6 +19702,7 @@ if (dealtHere("runtimeChecks")) {
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
         ["hupheld", "a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)"],
         ["direct", "a direct wait on the ring (IORING_ENTER_EXT_ARG) sleeps its bound idle, ends early on its minimum, waits the bound out short of it, answers a watched pipe by POLL_ADD, does not sleep while that answer is untaken, and a ring without EXT_ARG is refused it (NURING-45)"],
+        ["direct_rings", "a set of several rings takes the direct wait only while busy, sleeps in its first ring for at most the busy bound, goes back to its descriptor once a sleep finds nothing, and still takes a byte that arrives on its second ring alone (NURING-55)"],
         ["shutclose", "a close waits for its slot's shutdown, which io-wq resolves late, so the slot's next connection reads no end of the stream (NURING-39)"],
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
@@ -30454,11 +30515,18 @@ if (dealtHere("releaseChecks")) {
           // strict, so its marker, its `allow-panics:` line and the page's
           // sentence about the flag come out.
           if (run.status === 0 && s.args.includes(ALLOW_PANICS)) {
-            const strictEntry = { ...s, args: s.args.filter((arg) => arg !== ALLOW_PANICS) }
-            const bare = compileProgram({ ...program, entry: strictEntry }, `${prefix}_${s.line}_strict`)
+            // Built with `-o` alone, an open world, and linked, a closed one:
+            // each proves sites the other leaves, so the opt-out is needed
+            // while either refuses for a panic site.
+            const strictArgs = s.args.filter((arg) => arg !== ALLOW_PANICS)
+            const exe = path.join(snippetDir, `${prefix}_${s.line}_strict_bin`)
+            const bare = [
+              compileProgram({ ...program, entry: { ...s, args: strictArgs } }, `${prefix}_${s.line}_strict`),
+              compileProgram({ ...program, entry: { ...s, args: [...strictArgs, "--link", exe] } }, `${prefix}_${s.line}_strict_link`),
+            ]
             check(
               `${rel}:${s.line}: its --allow-panics opt-out is still needed`,
-              bare.run.status !== 0,
+              bare.some((b) => b.run.status !== 0 && b.errors.some((e) => NO_PANIC_CODES.includes(e.code))),
               "it builds without the flag: drop --allow-panics from its marker, the `<!-- allow-panics: -->` line above, and the page's words about it"
             )
           }
@@ -36933,11 +37001,13 @@ if (!only || "net_ring".includes(only)) {
         stats,
         `import { spawn } from "node:child_process"
 import net from "node:net"
-const [exe, knob] = process.argv.slice(2)
+const [exe, knob, limit = "1024", wide = ""] = process.argv.slice(2)
 const env = { ...process.env }
 delete env.NISH_URING_STATS
+delete env.NET_RING_WIDE
 if (knob) env.NISH_URING_STATS = knob
-const server = spawn("bash", ["-c", 'ulimit -n 1024 && exec "$0"', exe], { stdio: ["ignore", "pipe", "pipe"], env })
+if (wide) env.NET_RING_WIDE = wide
+const server = spawn("bash", ["-c", 'ulimit -n "$1" && exec "$0"', exe, limit], { stdio: ["ignore", "pipe", "pipe"], env })
 let out = "", err = "", echoed = 0, asked = false
 const sockets = []
 const finish = (why) => {
@@ -36986,9 +37056,9 @@ server.on("exit", (code, sig) => {
 })
 `
       )
-      const drive = (knob) => {
+      const drive = (knob, limit = "1024", wide = "") => {
         if (b.exe === null) return null
-        const r = spawnSync(process.execPath, [stats, b.exe, knob], { encoding: "utf8", timeout: 180000 })
+        const r = spawnSync(process.execPath, [stats, b.exe, knob, limit, wide], { encoding: "utf8", timeout: 180000 })
         try {
           return JSON.parse(r.stdout)
         } catch {
@@ -36999,11 +37069,11 @@ server.on("exit", (code, sig) => {
       if (on !== null && on.why === "exit 2" && on.out.includes("rings refused: ")) {
         skip("net_ring: NISH_URING_STATS: this kernel refuses io_uring")
       } else {
-        const line = (why) => {
+        const line = (why, run = on) => {
           const m = new RegExp(
             `^uring-stats ${why} port=\\d+ sends=(\\d+) pool_new=(\\d+) pool_held=(\\d+) pool_cached=(\\d+) live=(\\d+) slots=(\\d+) enters=(\\d+) windows=(\\d+) window_waits=(\\d+)$`,
             "m"
-          ).exec(on?.err ?? "")
+          ).exec(run?.err ?? "")
           return m === null ? null : m.slice(1).map(Number)
         }
         const sig = line("signal")
@@ -37037,6 +37107,24 @@ server.on("exit", (code, sig) => {
           off !== null && off.why === "signal SIGUSR1" && off.err === "",
           off === null ? `does not compile and link\n${shown(b.c)}` : `${off.why}\nstdout: ${off.out}\nstderr: ${off.err}`
         )
+        // NET_LISTEN_RING_WIDE (NURING-54): under a limit of 20,000 the 3,000
+        // connections share one ring either way, so the set's `slots` is that
+        // ring's width: the limit with the wide bit, 16,384 without it. The
+        // wide set's handles are split 2^21 a ring, so its echoes and closes
+        // also cover the wider split.
+        if (room >= 20000) {
+          const wide = drive("1", "20000", "1")
+          const narrow = drive("1", "20000", "")
+          const w = line("close", wide)
+          const n = line("close", narrow)
+          check(
+            "net_ring: NET_LISTEN_RING_WIDE makes a ring as wide as the descriptor limit (20,000), where a ring without it stops at 16,384 (NURING-54)",
+            wide !== null && wide.why === "exit 0" && narrow !== null && narrow.why === "exit 0" && w !== null && n !== null && w[5] === 20000 && n[5] === 16384 && w[4] === 0,
+            wide === null ? `does not compile and link\n${shown(b.c)}` : `wide: ${wide.why}\nstdout: ${wide.out}\nstderr: ${wide.err}\nnarrow: ${narrow?.why}\nstderr: ${narrow?.err}`
+          )
+        } else {
+          skip(`net_ring: NET_LISTEN_RING_WIDE: the hard descriptor limit here is ${hard.stdout.trim()}, under 20,000`)
+        }
       }
     } else {
       skip(`net_ring: NISH_URING_STATS: the hard descriptor limit here is ${hard.stdout.trim()}, under 1,024`)
@@ -37380,6 +37468,46 @@ if (!only || "net_handler_ring".includes(only)) {
         r !== null &&
           r.status === 0 &&
           r.stdout.includes("answered -23 with a rest, and took the freed slot after a close\n"),
+        r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+  }
+}
+
+// WP71 S3: `nish/net/http-server` on io_uring slots. The program in
+// tests/link/net_http_server_ring starts itself as a child under a descriptor
+// limit of 32; the child serves `HttpServer.listenHttp1` on a
+// `NET_LISTEN_RING` listener, and the parent opens 100 keep-alive connections
+// the child must hold at once and answer, so the check fails if the
+// listener's carriers are not on ring slots. The verdict is the program's exit
+// status; 2 with "rings refused: " says the kernel refused rings, a counted
+// skip, as is a hard descriptor limit under 32.
+if (!only || "net_http_server_ring".includes(only)) {
+  const hard = process.platform === "linux" ? spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" }) : null
+  const name = "net_http_server: on io_uring slots, the façade holds 100 connections under a descriptor limit of 32 and answers each"
+  if (!HAS_CLANG || hard === null) {
+    skip("net_http_server: io_uring slot handles are Linux's, and this host has no clang or is not Linux")
+  } else if (!(hardNofile(hard) >= 32)) {
+    skip(`${name}: the hard descriptor limit here is ${hard.stdout.trim()}, under the 32 the check sets`)
+  } else {
+    const dir = path.join(buildDir, "net_http_server_ring")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "ring")
+    const c = spawnNish([path.join(linkDir, "net_http_server_ring", "ring.ts"), "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const r = c.status === 0 ? spawnSync(exe, [], { encoding: "utf8", timeout: 180000 }) : null
+    if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+      skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n")[0]})`)
+    } else {
+      check(
+        name,
+        r !== null &&
+          r.status === 0 &&
+          r.stdout.includes("child: held 100 connections at once under a descriptor limit of 32, and answered each\n") &&
+          r.stdout.includes("parent: every one of 100 clients was answered\n"),
         r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
       )
     }
@@ -42888,6 +43016,385 @@ if (!only || "spec".includes(only)) {
   }
 }
 
+// ---- rfc-specs: every RFC std/ cites has a vector spec of its module, or a list line ----
+// CLAUDE.md, "Definition of done": a module that implements an RFC lands spec-first.
+// `npm run lint` runs the live check too; the rows below are what it refuses. The
+// `spec` filter reaches this section as well as `rfc-specs`.
+if (!only || "rfc-specs".includes(only)) {
+  const rfcScript = path.join(root, "scripts", "rfc-specs.mjs")
+  const rfcLive = spawnSync(process.execPath, [rfcScript], { cwd: root, encoding: "utf8" })
+  check(
+    "spec: rfc-specs: every RFC std/ cites is covered by a vector spec of its module or listed in scripts/rfc-unspecified.txt",
+    rfcLive.status === 0,
+    rfcLive.stdout + rfcLive.stderr
+  )
+  // A contract covers only with its spec and the test emitted from it, which
+  // pins its hash: `rfcSpec` writes all three, `rfcContract` the contract alone.
+  const rfcContract = (mod, ...rfcs) =>
+    JSON.stringify({ target: { module: mod }, sources: rfcs.map((rfc) => ({ id: `rfc${rfc}`, rfc })) })
+  const rfcSpec = (name, mod, ...rfcs) => {
+    const contract = rfcContract(mod, ...rfcs)
+    const sha = crypto.createHash("sha256").update(contract).digest("hex")
+    return {
+      [`contracts/${name}.json`]: contract,
+      [`specs/${name}.md`]: "# spec\n",
+      [`test/spec/${name}.ts`]: `// vector-contract-sha256: ${sha}\n`,
+    }
+  }
+  // The script's preRuleDigest: the pairs sorted, one per line.
+  const rfcPin = (...keys) =>
+    crypto
+      .createHash("sha256")
+      .update(
+        [...keys]
+          .sort()
+          .map((k) => `${k}\n`)
+          .join("")
+      )
+      .digest("hex")
+  const rfcRun = (files, flags = [], { root: useRoot = true, links = {} } = {}) => {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), "nish-rfc-specs-"))
+    fs.mkdirSync(path.join(tree, "std"), { recursive: true })
+    for (const [rel, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true })
+      fs.writeFileSync(path.join(tree, rel), text)
+    }
+    for (const [rel, target] of Object.entries(links)) {
+      fs.symlinkSync(path.join(tree, target), path.join(tree, rel))
+    }
+    const argv = useRoot ? [rfcScript, "--root", tree, ...flags] : [rfcScript, ...flags]
+    const r = spawnSync(process.execPath, argv, { encoding: "utf8" })
+    const listPath = path.join(tree, "scripts", "rfc-unspecified.txt")
+    const list = fs.existsSync(listPath) ? fs.readFileSync(listPath, "utf8") : ""
+    fs.rmSync(tree, { recursive: true, force: true })
+    return { ...r, list }
+  }
+  const listRel = "scripts/rfc-unspecified.txt"
+  const oldNet = "std/net/old.ts RFC9999"
+  const rfcRows = [
+    {
+      name: "refuses an RFC a module cites with no contract and no line, naming the file and line",
+      files: { "std/net/new.ts": "// one\n// Framing per RFC 9999 section 4.\n" },
+      exit: 1,
+      has: ["std/net/new.ts:2: cites RFC9999, which no vector spec"],
+    },
+    {
+      name: "reads RFC9999, RFC-9999, a no-break space, RFCs 9 and 10, RFC 11/12, a lowercase rfc13 in a URL and rfc822Name",
+      files: {
+        "std/a.ts": "// RFC9999\n",
+        "std/b.ts": "// RFC-9998\n",
+        "std/c.ts": "// RFC 9997\n",
+        "std/d.ts": "// RFCs 9 and 10, RFC 11/12\n// https://www.rfc-editor.org/rfc/rfc13\n",
+        "std/e.ts": "// rfc822Name\n",
+      },
+      exit: 1,
+      has: [
+        "std/a.ts:1: cites RFC9999",
+        "std/b.ts:1: cites RFC9998",
+        "std/c.ts:1: cites RFC9997",
+        "std/d.ts:1: cites RFC9,",
+        "std/d.ts:1: cites RFC10,",
+        "std/d.ts:1: cites RFC11,",
+        "std/d.ts:1: cites RFC12,",
+        "std/d.ts:2: cites RFC13,",
+        "std/e.ts:1: cites RFC822,",
+      ],
+    },
+    {
+      name: "reads a citation wrapped across a comment line, a list with `, and`, `&` and `or`, and a range",
+      files: {
+        "std/w.ts":
+          "/**\n * Written from RFC\n * 9001, RFCs 9002, 9003, and 9004, rfcs 9005 & 9006 or 9007\n * and RFC\n// 9010-9012, RFC 100-900\n */\n",
+      },
+      exit: 1,
+      // One citation runs on across the wrapped lines, so each pair names line 2.
+      has: [9001, 9002, 9003, 9004, 9005, 9006, 9007, 9010, 9011, 9012, 100, 900].map(
+        (rfc) => `std/w.ts:2: cites RFC${rfc},`
+      ),
+      lacks: ["cites RFC101,"],
+    },
+    {
+      name: "reads no citation in rfc-editor or RFCX with no number, and none in a file that is not .ts",
+      files: { "std/x.ts": "// see the rfc-editor, RFCX\n", "std/notes.md": "RFC 9999\n" },
+      exit: 0,
+      has: ["0 RFC citations"],
+    },
+    {
+      name: "follows a symbolic link to a directory under std/",
+      files: { "elsewhere/new.ts": "// RFC 9999\n" },
+      links: { "std/linked": "elsewhere" },
+      exit: 1,
+      has: ["std/linked/new.ts:1: cites RFC9999"],
+    },
+    {
+      name: "accepts a citation a spec of that module covers",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", ...rfcSpec("new", "nish/crypto/new", 9999) },
+      exit: 0,
+      has: ["1 covered by a spec"],
+    },
+    {
+      name: "refuses a citation a spec of another module covers",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", ...rfcSpec("other", "nish/crypto/other", 9999) },
+      exit: 1,
+      has: ["std/crypto/new.ts:1: cites RFC9999"],
+    },
+    {
+      name: "refuses a citation a spec of that module covers for another RFC",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", ...rfcSpec("new", "nish/crypto/new", 9998) },
+      exit: 1,
+      has: ["std/crypto/new.ts:1: cites RFC9999"],
+    },
+    {
+      name: "refuses a contract no test was emitted from, which covers nothing",
+      files: { "std/crypto/new.ts": "// RFC 9999\n", "contracts/new.json": rfcContract("nish/crypto/new", 9999), "specs/new.md": "" },
+      exit: 1,
+      has: ["contracts/new.json: test/spec/new.ts was not emitted from it", "std/crypto/new.ts:1: cites RFC9999"],
+    },
+    {
+      name: "refuses a contract whose test pins another hash",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999),
+        "test/spec/new.ts": `// vector-contract-sha256: ${"0".repeat(64)}\n`,
+      },
+      exit: 1,
+      has: ["contracts/new.json: test/spec/new.ts was not emitted from it"],
+    },
+    {
+      name: "refuses a contract whose test pins it twice, once rightly",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999),
+        "test/spec/new.ts": `${rfcSpec("new", "nish/crypto/new", 9999)["test/spec/new.ts"]}// vector-contract-sha256: ${"0".repeat(64)}\n`,
+      },
+      exit: 1,
+      has: ["contracts/new.json: test/spec/new.ts was not emitted from it"],
+    },
+    {
+      name: "refuses a contract with no spec",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999),
+        "specs/new.md": undefined,
+      },
+      exit: 1,
+      has: ["contracts/new.json: has no spec specs/new.md"],
+    },
+    {
+      name: "refuses a contract that does not parse, has no nish/ target, or names an RFC that is not a number",
+      files: {
+        "contracts/a.json": "{",
+        "contracts/b.json": rfcContract("std/crypto/b", 9999),
+        "contracts/c.json": JSON.stringify({ sources: [{ rfc: 9999 }] }),
+        "contracts/d.json": JSON.stringify({ target: { module: "nish/d" }, sources: [{ rfc: "9999" }] }),
+      },
+      exit: 1,
+      has: [
+        "contracts/a.json: does not parse",
+        "contracts/b.json: target.module is",
+        "contracts/c.json: target.module is undefined",
+        "contracts/d.json: a sources[].rfc is not an RFC number",
+      ],
+    },
+    {
+      name: "accepts a line from before the rule that the pin pins",
+      files: { "std/net/old.ts": "// RFC 9999\n", [listRel]: `${oldNet}\n` },
+      flags: ["--pin", rfcPin(oldNet)],
+      exit: 0,
+      has: ["1 listed from before the rule"],
+    },
+    {
+      name: "refuses a line from before the rule added by hand",
+      files: { "std/net/old.ts": "// RFC 9999\n", [listRel]: `${oldNet}\n` },
+      exit: 1,
+      has: ["lines from before the rule are not the set --pin pins"],
+    },
+    {
+      name: "refuses a line swapped by hand for another the pin does not pin",
+      files: { "std/net/old.ts": "// RFC 9999 and RFC 9998\n", [listRel]: "std/net/old.ts RFC9998\n" },
+      flags: ["--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: ["lines from before the rule are not the set --pin pins", "std/net/old.ts:1: cites RFC9999"],
+    },
+    {
+      name: "refuses a line deleted by hand",
+      files: { "std/net/old.ts": "// RFC 9999 and RFC 9998\n", [listRel]: `${oldNet}\n` },
+      flags: ["--pin", rfcPin(oldNet, "std/net/old.ts RFC9998")],
+      exit: 1,
+      has: ["lines from before the rule are not the set --pin pins"],
+    },
+    {
+      name: "accepts a `cites:` line with its reason",
+      files: { "std/net/old.ts": "// RFC 9999 is out of scope\n", [listRel]: `${oldNet} cites: out of scope\n` },
+      exit: 0,
+      has: ["1 cited and not implemented"],
+    },
+    {
+      name: "refuses a `cites:` line with no reason",
+      files: { "std/net/old.ts": "// RFC 9999\n", [listRel]: `${oldNet} cites: \n` },
+      exit: 1,
+      has: ["a `cites:` line gives its reason"],
+    },
+    {
+      name: "refuses a listed line, from before the rule or `cites:`, that a spec now covers",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999 and RFC 9998\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999, 9998),
+        [listRel]: "std/crypto/new.ts RFC9999\nstd/crypto/new.ts RFC9998 cites: x\n",
+      },
+      flags: ["--pin", rfcPin("std/crypto/new.ts RFC9999")],
+      exit: 1,
+      has: ["std/crypto/new.ts RFC9999: a contract covers it now", "std/crypto/new.ts RFC9998: a contract covers it now"],
+    },
+    {
+      name: "refuses a listed line, from before the rule or `cites:`, the file no longer cites",
+      files: { "std/net/old.ts": "// nothing\n", [listRel]: `${oldNet}\nstd/net/old.ts RFC9998 cites: gone\n` },
+      flags: ["--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: [`${oldNet}: no longer cited`, "std/net/old.ts RFC9998: no longer cited"],
+    },
+    {
+      name: "refuses a malformed line and a line listed twice, either way",
+      files: {
+        "std/net/old.ts": "// RFC 9999 and RFC 9998\n",
+        [listRel]: `std/net/old.ts 9999\n${oldNet}\n${oldNet}\n${oldNet} cites: twice\n`,
+      },
+      flags: ["--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: [`${listRel}:1: not`, `${listRel}:3: ${oldNet} is listed twice`, `${listRel}:4: ${oldNet} is listed twice`],
+    },
+    {
+      name: "--update-baseline drops a covered and a gone line, keeps the rest and the `cites:` lines, rewrites the header and names the new pin",
+      files: {
+        "std/crypto/new.ts": "// RFC 9999\n",
+        "std/net/old.ts": "// RFC 9998 and RFC 9996\n",
+        ...rfcSpec("new", "nish/crypto/new", 9999),
+        [listRel]: "# a hand-written note\nstd/crypto/new.ts RFC9999\nstd/net/gone.ts RFC9997\nstd/net/old.ts RFC9998\nstd/net/old.ts RFC9996 cites: a pointer\n",
+      },
+      flags: ["--update-baseline", "--pin", rfcPin("std/crypto/new.ts RFC9999", "std/net/gone.ts RFC9997", "std/net/old.ts RFC9998")],
+      exit: 0,
+      has: [`--pin moves to ${rfcPin("std/net/old.ts RFC9998")} (1 lines)`],
+      list: (l) =>
+        l.startsWith("# RFCs a std/ module cites") &&
+        !l.includes("hand-written") &&
+        l.includes("\nstd/net/old.ts RFC9998\n") &&
+        l.includes("\nstd/net/old.ts RFC9996 cites: a pointer\n") &&
+        !l.includes("RFC9999") &&
+        !l.includes("RFC9997"),
+    },
+    {
+      name: "--update-baseline refuses a file whose lines from before the rule were edited by hand",
+      files: { "std/net/old.ts": "// RFC 9999 and RFC 9998\n", [listRel]: `${oldNet}\nstd/net/old.ts RFC9998\n` },
+      flags: ["--update-baseline", "--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: ["are not the set --pin pins: restore them"],
+      list: (l) => l === `${oldNet}\nstd/net/old.ts RFC9998\n`,
+    },
+    {
+      name: "--update-baseline refuses to add a line",
+      files: { "std/net/new.ts": "// RFC 9999\n" },
+      flags: ["--update-baseline"],
+      exit: 1,
+      has: ["std/net/new.ts:1: cites RFC9999"],
+      list: (l) => l === "",
+    },
+    {
+      name: "--grow-baseline refuses a file whose lines from before the rule were edited by hand",
+      files: { "std/net/old.ts": "// RFC 9999 and RFC 9998\n", [listRel]: `${oldNet}\nstd/net/old.ts RFC9998\n` },
+      flags: ["--grow-baseline", "--pin", rfcPin(oldNet)],
+      exit: 1,
+      has: ["are not the set --pin pins: restore them"],
+      list: (l) => l === `${oldNet}\nstd/net/old.ts RFC9998\n`,
+    },
+    {
+      name: "--grow-baseline adds the line and names it and the new pin",
+      files: { "std/net/new.ts": "// RFC 9999\n" },
+      flags: ["--grow-baseline"],
+      exit: 0,
+      has: [`grows ${listRel}: std/net/new.ts RFC9999`, `--pin moves to ${rfcPin("std/net/new.ts RFC9999")}`],
+      list: (l) => l.includes("\nstd/net/new.ts RFC9999\n"),
+    },
+    {
+      name: "exits 2 on an unknown flag, a positional argument, --root with no value or no std/, and --pin without --root",
+      runs: [
+        [["--bogus"], {}],
+        [["update-baseline"], {}],
+        [["--pin", rfcPin()], { root: false }],
+      ],
+      exit: 2,
+      has: ["unknown argument --bogus", "unknown argument update-baseline", "--pin is for a --root tree"],
+    },
+  ]
+  const rfcScriptBefore = fs.readFileSync(rfcScript, "utf8")
+  for (const row of rfcRows) {
+    const files = Object.fromEntries(Object.entries(row.files ?? {}).filter(([, v]) => v !== undefined))
+    const runs = row.runs ?? [[row.flags ?? [], { links: row.links }]]
+    const results = runs.map(([flags, opts]) => rfcRun(files, flags, opts))
+    const out = results.map((r) => r.stdout + r.stderr).join("\n")
+    check(
+      `spec: rfc-specs: ${row.name}`,
+      results.every((r) => r.status === row.exit) &&
+        (row.has ?? []).every((h) => out.includes(h)) &&
+        !(row.lacks ?? []).some((h) => out.includes(h)) &&
+        (!row.list || results.every((r) => row.list(r.list))),
+      `exit ${results.map((r) => r.status).join(", ")}\n${out}${row.list ? `\n${listRel}:\n${results.map((r) => r.list).join("\n")}` : ""}`
+    )
+  }
+  // The --update-baseline and --grow-baseline rows above moved their tree's pin:
+  // under --root that is --pin's, and the script's own PRE_RULE_SHA256 stays.
+  check(
+    "spec: rfc-specs: an --update-baseline or --grow-baseline run under --root leaves scripts/rfc-specs.mjs as it was",
+    fs.readFileSync(rfcScript, "utf8") === rfcScriptBefore,
+    "scripts/rfc-specs.mjs changed during the fixture runs"
+  )
+  {
+    // On its own tree, --update-baseline re-pins the script's constants: a copy of
+    // the script in a scratch tree's scripts/ is that tree's live script.
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), "nish-rfc-specs-"))
+    const put = (rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true })
+      fs.writeFileSync(path.join(tree, rel), text)
+    }
+    const kept = "std/net/old.ts RFC9998"
+    put("std/net/old.ts", "// RFC 9998\n")
+    put(listRel, `${oldNet}\n${kept}\n`)
+    put(
+      "scripts/rfc-specs.mjs",
+      rfcScriptBefore
+        .replace(/^const PRE_RULE_LINES = \d+$/m, "const PRE_RULE_LINES = 2")
+        .replace(/^const PRE_RULE_SHA256 = "[0-9a-f]+"$/m, `const PRE_RULE_SHA256 = "${rfcPin(oldNet, kept)}"`)
+    )
+    const copy = path.join(tree, "scripts", "rfc-specs.mjs")
+    const r = spawnSync(process.execPath, [copy, "--update-baseline"], { encoding: "utf8" })
+    const after = fs.readFileSync(copy, "utf8")
+    const again = spawnSync(process.execPath, [copy], { encoding: "utf8" })
+    fs.rmSync(tree, { recursive: true, force: true })
+    check(
+      "spec: rfc-specs: --update-baseline on its own tree re-pins PRE_RULE_LINES and PRE_RULE_SHA256, and the check then passes",
+      r.status === 0 &&
+        after.includes("\nconst PRE_RULE_LINES = 1\n") &&
+        after.includes(`\nconst PRE_RULE_SHA256 = "${rfcPin(kept)}"\n`) &&
+        again.status === 0,
+      `exit ${r.status}, then ${again.status}\n${r.stdout}${r.stderr}${again.stdout}${again.stderr}`
+    )
+  }
+  {
+    // --root with no value, and a --root with no std/ under it, are usage errors too.
+    const noValue = spawnSync(process.execPath, [rfcScript, "--root"], { encoding: "utf8" })
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "nish-rfc-specs-"))
+    const noStd = spawnSync(process.execPath, [rfcScript, "--root", empty], { encoding: "utf8" })
+    fs.rmSync(empty, { recursive: true, force: true })
+    check(
+      "spec: rfc-specs: exits 2 on --root with no value and on a --root tree with no std/",
+      noValue.status === 2 &&
+        noValue.stderr.includes("--root needs a value") &&
+        noStd.status === 2 &&
+        noStd.stderr.includes("has no std/ directory"),
+      `exit ${noValue.status}, ${noStd.status}\n${noValue.stderr}${noStd.stderr}`
+    )
+  }
+}
+
 // ---- The release train's version: the implied bump and the `Release-As:` trailer -----
 // `scripts/changelog-gen.mjs --next` is the number the Release PR proposes and every
 // file it bumps. Its suite builds throwaway repositories, so it needs git and nothing else.
@@ -43981,6 +44488,20 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
         "bench/techempower/async-db-main.ts",
       ],
     },
+    gfx: {
+      "compiler-cache": compilerCache,
+      "sh scripts/fetch-gfx.sh": ["scripts/fetch-gfx.sh"],
+      "node tests/run.js gfx": [
+        ...importsOf("tests/run.js"),
+        "scripts/build.sh",
+        "src/run-cache.ts",
+        "src/c-symbols.ts",
+        "runtime/gfx/nish-gfx.c",
+        "runtime/gfx/nish-gfx.h",
+        "runtime/gfx/nish-gfx.overrides.json",
+        "tests/gfx/triangle.c",
+      ],
+    },
   }
   const commandGaps = Object.entries(laneCommands).flatMap(([lane, commands]) => [
     ...(ciScope.LANES.some((l) => l.name === lane) ? [] : [`${lane}: not a lane`]),
@@ -43992,7 +44513,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   ])
   const uncoveredLanes = ciScope.LANES.map((l) => l.name).filter((l) => !(l in laneCommands))
   check(
-    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (21) of all seven lanes",
+    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (24) of all eight lanes",
     commandGaps.length === 0 && uncoveredLanes.length === 0,
     `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
   )
@@ -44170,6 +44691,157 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
       "github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'" &&
       /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m.test(ciJob(releaseYml, "ci")),
     `runner job's if: ${runnerIf || "(none)"}`
+  )
+
+  // interop.yml's `build`, which every interop job needs, skips the Release
+  // PR's push to main. release.yml calls interop.yml on the tag with the tag
+  // push as `github.event`, whose head commit has the same `chore(release)`
+  // subject, so a skip that read only the message would skip the release's
+  // own interop run, and release.yml's `interop` job would still pass.
+  const interopBuildIf = /^ {4}if: (.*)$/m.exec(ciJob(interopYml, "build"))?.[1] ?? ""
+  check(
+    "interop.yml: `build` skips only a `chore(release)` push to main, never the tag run release.yml calls",
+    interopBuildIf ===
+      "${{ github.event_name != 'push' || github.ref != 'refs/heads/main' || !startsWith(github.event.head_commit.message, 'chore(release)') }}" &&
+      /^ {4}uses: \.\/\.github\/workflows\/interop\.yml$/m.test(ciJob(releaseYml, "interop")),
+    `build job's if: ${interopBuildIf || "(none)"}`
+  )
+
+  // crosstraffic, the runner's longest row, runs on a release's tag and no
+  // other run: release.yml's call is the only one that sets the input, so a
+  // matrix that dropped the gate would put it back on every pull request, and
+  // a call that dropped `crosstraffic: true` would run it nowhere.
+  const runnerGroups = /^ {8}group: (.*)$/m.exec(ciJob(interopYml, "quic-interop-runner"))?.[1] ?? ""
+  check(
+    "interop.yml: the quic-interop-runner's crosstraffic row runs only when release.yml's call asks for it",
+    runnerGroups ===
+      `\${{ fromJSON(inputs.crosstraffic && '["tests","rebind","goodput","crosstraffic"]' || '["tests","rebind","goodput"]') }}` &&
+      /^ {6}crosstraffic: true$/m.test(ciJob(releaseYml, "interop")) &&
+      !/crosstraffic: /.test(ciJob(interopYml, "quic-interop-runner").replace(/^ *#.*$/gm, "")),
+    `matrix group: ${runnerGroups || "(none)"}`
+  )
+}
+// release.yml runs ci.yml again only when no green run tested the tag's tree
+// (docs/wp10-ci.md, "The release reuses the Release PR's run"). These checks
+// hold scripts/ci-verdict.mjs to taking only a dispatched, green ci.yml run of
+// this repository on `release/next` whose commit has that tree, and release.yml
+// to publishing only behind a `ci` that passed or a verdict that named a run.
+if (selects("ci.yml", "ci-verdict", "release.yml")) {
+  // The verdict trusts a dispatched `release/next` run to have run what the
+  // tag's run would: every lane (the ci-scope checks) and `runner` (its `if:`,
+  // pinned above). That holds only while nothing else in ci.yml reads the ref
+  // or the event, so a new read has to be weighed here before it lands.
+  const refReadRe = /github\.(?:ref|head_ref|ref_type|ref_name|base_ref|event_name|event\.)/
+  const refReads = fs
+    .readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => !line.startsWith("#") && refReadRe.test(line))
+  const knownRefReads = [
+    (l) => l.startsWith("ci-${{ github.workflow }}-"), // concurrency group
+    (l) => l.startsWith("${{ github.event_name == 'pull_request' || "), // cancel-in-progress
+    (l) =>
+      l ===
+      "if: github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next'",
+    (l) => l.startsWith('["runtime-net"${{ !(github.ref_type == \'tag\''), // the gate's expected skips
+    (l) => l === "if: always() && github.event_name == 'workflow_dispatch'", // the dispatch status
+    (l) => l === "PR_NUMBER: ${{ github.event.pull_request.number }}",
+    (l) => l === "PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}",
+  ]
+  const unknownRefReads = refReads.filter((l) => !knownRefReads.some((known) => known(l)))
+  check(
+    "ci.yml: only the concurrency group, the `runner` job, the gate, the dispatch status and the scope job read the ref or event",
+    unknownRefReads.length === 0 && refReads.length === knownRefReads.length,
+    `reads: ${refReads.length} of ${knownRefReads.length} expected\nunknown: ${unknownRefReads.join("\n") || "none"}`
+  )
+  const repo = "amritk/nish"
+  const sha = (c) => c.repeat(40)
+  const good = {
+    id: 7,
+    path: ".github/workflows/ci.yml",
+    event: "workflow_dispatch",
+    head_branch: "release/next",
+    status: "completed",
+    conclusion: "success",
+    repository: { full_name: repo },
+    head_repository: { full_name: repo },
+    head_sha: sha("a"),
+  }
+  const refused = {
+    "a pull_request run": { event: "pull_request" },
+    "a push run": { event: "push" },
+    "a run on main": { head_branch: "main" },
+    "a failed run": { conclusion: "failure" },
+    "a cancelled run": { conclusion: "cancelled" },
+    "a run still going": { status: "in_progress", conclusion: null },
+    "a fork's run": { head_repository: { full_name: "someone/nish" } },
+    "another repository's run": { repository: { full_name: "someone/nish" } },
+    "another workflow's run": { path: ".github/workflows/interop.yml" },
+    "a run with no commit": { head_sha: "abc" },
+  }
+  const wrongly = Object.entries(refused)
+    .filter(([, change]) => ciVerdict.eligible({ ...good, ...change }, repo))
+    .map(([what]) => what)
+  check(
+    "ci-verdict: only a green, dispatched ci.yml run of this repository on release/next is eligible",
+    ciVerdict.eligible(good, repo) && ciVerdict.eligible(null, repo) === false && wrongly.length === 0,
+    `eligible though refused: ${wrongly.join(", ") || "none"}`
+  )
+  const trees = { [sha("a")]: sha("1"), [sha("b")]: sha("2"), [sha("c")]: sha("2") }
+  const treeOf = async (commit) => trees[commit] ?? ""
+  const runs = [
+    { ...good, id: 1, head_sha: sha("a") },
+    { ...good, id: 2, head_sha: sha("b"), conclusion: "failure" },
+    { ...good, id: 3, head_sha: sha("b"), head_repository: { full_name: "someone/nish" } },
+    { ...good, id: 4, head_sha: sha("c") },
+  ]
+  const picked = await ciVerdict.pickRun({ runs, repo, tree: sha("2"), treeOf })
+  const none = await ciVerdict.pickRun({ runs, repo, tree: sha("3"), treeOf })
+  const notTree = await ciVerdict.pickRun({ runs, repo, tree: "", treeOf: async () => "" })
+  check(
+    "ci-verdict: the run picked is the newest eligible one with the tag's tree, and none matches no tree",
+    picked?.id === 4 && none === null && notTree === null,
+    `picked ${picked?.id ?? "none"}, unmatched ${none?.id ?? "none"}, empty tree ${notTree?.id ?? "none"}`
+  )
+
+  const releaseText = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
+  const job = (name) => ciJob(releaseText, name)
+  const verdictJob = job("verdict")
+  const permsOf = (text) =>
+    (/^ {4}permissions:\n((?: {6}\S.*\n?)+)/m.exec(text)?.[1] ?? "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .sort()
+  const ifOf = (text) =>
+    /^ {4}if: >-\n((?: {6}.*\n?)+)/m
+      .exec(text)?.[1]
+      ?.split("\n")
+      .map((l) => l.trim())
+      .join(" ")
+      .trim() ??
+    /^ {4}if: (.*)$/m.exec(text)?.[1] ??
+    ""
+  const needsOf = (text) => /^ {4}needs: (.*)$/m.exec(text)?.[1] ?? ""
+  const releaseIf =
+    "${{ !cancelled() && needs.targets.result == 'success' && needs.binaries.result == 'success' && " +
+    "(needs.ci.result == 'success' || (needs.ci.result == 'skipped' && needs.verdict.result == 'success' && needs.verdict.outputs.tested != '')) }}"
+  check(
+    "release.yml: `verdict` reads actions only, `ci` runs unless it named a run, and `release` needs a passed `ci` or that run",
+    JSON.stringify(permsOf(verdictJob)) === JSON.stringify(["actions: read", "contents: read"]) &&
+      /^ {8}run: node scripts\/ci-verdict\.mjs$/m.test(verdictJob) &&
+      /^ {6}tested: \$\{\{ steps\.verdict\.outputs\.tested \}\}$/m.test(verdictJob) &&
+      needsOf(job("ci")) === "verdict" &&
+      ifOf(job("ci")) === "${{ !cancelled() && needs.verdict.outputs.tested == '' }}" &&
+      needsOf(job("binaries")) === "[targets]" &&
+      needsOf(job("release")) === "[verdict, ci, targets, binaries]" &&
+      ifOf(job("release")) === releaseIf &&
+      ifOf(job("interop")) === "${{ !cancelled() && needs.release.result == 'success' }}" &&
+      ifOf(job("npm")) === "${{ !cancelled() && needs.targets.result == 'success' && needs.release.result == 'success' }}" &&
+      (releaseText.match(/^ {6}actions: /gm) ?? []).length === 1 &&
+      /^ {6}actions: read$/m.test(verdictJob),
+    `verdict permissions: ${permsOf(verdictJob).join(", ")}\nci if: ${ifOf(job("ci"))}\n` +
+      `binaries needs: ${needsOf(job("binaries"))}\nrelease if: ${ifOf(job("release"))}`
   )
 }
 // #1836: the stored console log of shard 8 has stopped partway through the
@@ -46961,7 +47633,7 @@ if (!only || "std_term".includes(only) || "term-frame-loop".includes(only)) {
 // natively and under Node, which runs each task at its `spawn`.
 if (!only || "histogram-atomic".includes(only)) {
   const exe = path.join(buildDir, "histogram-atomic")
-  const linked = spawnNish(["examples/histogram-atomic.ts", ALLOW_PANICS, "--link", exe], {
+  const linked = spawnNish(["examples/histogram-atomic.ts", "--link", exe], {
     cwd: root,
     encoding: "utf8",
   })

@@ -1529,13 +1529,87 @@ not a slot of `dst`, which `spawn` checks before it takes the task
   check itself stays in `std/threads.ts`; a call no longer reaches it, so the
   site at the call is the only one the caller answers for
 
+**`window`**: a call to a *window guard* whose `[off, off + len)` is not inside
+its `buf`, or to a method that hands its own window to one first. A guard is
+a free function returning `void` whose body is exactly
+`const size: i32 = toI32(buf.length)` and then
+`if (off < 0 || len < 0 || off > size || len > size - off) { panic(m) }`, with
+`buf` an array parameter and `off` and `len` `i32` ones; a forwarding method's
+first statement is the guard's call on its own parameters, each window
+parameter named once and the others string literals or parameters. Any other
+shape, the tests reordered (`tests/link/window_contract_not_a_guard`) or a
+statement before the call, is no contract, and its check is followed as any
+call's is
+
+- *What proves it away:* what proves `buf.slice(off, off + len)` at the call:
+  `off` and `len` literals or the whole `buf.length` behind a length test, or
+  `end - off` behind `off >= 0 && off <= end && end <= buf.length`
+  (`tests/link/window_contract_proven`, `window_contract_unproven`); an
+  assignment between the test and the call undoes it
+  (`window_contract_guard_then_mutate`). A forwarding method's own call is
+  proven, because each of its callers holds the window
+  (`window_contract_late_forward` is a method that writes first and forwards
+  nothing). A guard passed as a value is judged in each instance it is
+  passed into, whose call is to the guard itself
+  (`window_contract_unnamed`). A call is judged in any function, one with
+  nothing else to prove included. A window read from an object's fields is
+  never proven (`window_kept_field`), and neither is one a statement or a
+  later argument between the test and the call shortens or rebinds
+  (`window_kept_pop`, `window_kept_alias_call`, `window_kept_later_argument`,
+  `window_kept_rebound`; `window_kept_control` is each with nothing between). The guard's `panic` stays listed
+  at its own line; a call no longer reaches it, so the site at the call is the
+  only one the caller answers for. `std/net/http1-server.ts` writes through
+  one (`http1ServerCheckWindow`)
+
+**`fault`**: a call to a *fault guard* whose fault function finds a fault in
+what the call passes, or to a constructor or method whose first statement
+hands one a parameter of its own that it never assigns. A guard is a free,
+non-generic function of one parameter `p` returning `void` whose body is
+exactly `const fault: string = F(p)` and then
+`if (fault.length > 0) { panic(fault) }`, with `F` a free function returning
+`string` that reads only its parameters: it names only them, its own locals
+and module `const`s with a literal value, makes no object and calls only
+conversions and other such functions. A forwarding method's or
+constructor's defaults are literals, and a constructor's class starts every
+field at a literal. Any other shape, or an `F` that reads anything else
+(`tests/link/fault_contract_impure`), is no contract, and its check is
+followed as any call's is
+
+- *What proves it away:* the caller runs the same `F` on the same value just
+  before the call and leaves on a fault:
+  `const fault = F(limits); if (fault.length > 0) { return … }`
+  (`tests/link/fault_contract_proven`, `fault_contract_unproven`), in a block
+  around the call with no loop or closure between
+  (`fault_contract_loop`). The value is a parameter or a `const` declared
+  once and assigned nowhere (`fault_contract_reassigned`), the call passes
+  that value (`fault_contract_other_value`), the test runs the guard's own
+  `F` (`fault_contract_other_fault`), the fault branch ends in `return`,
+  `throw` or `panic` (`fault_contract_falls_through`), and nothing from the
+  test to the call assigns a field or element, makes an object, or calls
+  anything but a `nish:` function on primitive names or literals
+  (`fault_contract_field_write`, `fault_contract_call_between`), except an
+  `if` with no `else` whose test is that quiet and whose branch never falls
+  through: only its test runs on the way to the call
+  (`fault_contract_early_exit`; `fault_contract_late_exit`, whose branch
+  falls through, stays unproven). The call's other arguments are names or
+  literals. The guard's `panic` stays listed at its own line;
+  a call no longer reaches it. `std/net/handler.ts` checks its limits through
+  one (`handlerCheckLimits`), so `openHttpHandler`, which tests
+  `handlerLimitsFault` first and leaves on a fault (a failed `pollCreate`
+  returns between), proves the limit check of the handler it makes
+
 **`ffi-nul`**: a `string` argument to a [`declare function`](declarations.md#calling-c) that
 holds a NUL byte, which C would read as the end of the string:
 `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string ``
 
 - *What proves it away:* a literal with no NUL in it, which is not checked and
-  not a site; every other string is checked, and `string | null` checks only
-  the string (`tests/cases/panics_ffi_nul`)
+  not a site; a local searched with `indexOf("\u0000")` against `0` on the
+  branch where it found none, and not assigned since
+  (`tests/link/ffi_nul_guarded`; the search for another string, against
+  another bound, on the other branch or before an assignment proves nothing:
+  `ffi_nul_wrong_needle`, `_wrong_bound`, `_wrong_direction`, `_reassigned`);
+  every other string is checked, and `string | null` checks only the string
+  (`tests/cases/panics_ffi_nul`)
 
 **`ffi-null`**: a `string` result of a [`declare function`](declarations.md#calling-c) that
 is `NULL`:
@@ -1776,7 +1850,8 @@ site: a call from the [no-panic scope](#the-no-panic-scope) that reaches it is
 refused (NL2458), and the same `panic` in a module of the scope is NL2457. A
 caller in the scope calls the checked twin where there is one, or proves the
 contract at the call where the site is the caller's own, as a
-[`spawn-slot`](#panic-sites) or a [`parallel-length`](#panic-sites) is.
+[`spawn-slot`](#panic-sites), a [`parallel-length`](#panic-sites), a
+[`window`](#panic-sites) or a [`fault`](#panic-sites) is.
 
 ## The compatibility dialect
 

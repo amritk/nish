@@ -12,7 +12,8 @@ program runs and stops the program if it fails. Under the default each is a
 compile error: an `i32` sum that may overflow, an index the compiler cannot
 prove in range, a string passed to C that may hold a NUL, a C pointer that may
 be `NULL`. A guard removes most of them: a bound on the sum's inputs, a test of
-the index against `length`, a string literal, a C result declared `| null` and
+the index against `length`, a string literal or a string the code turned
+away when `s.indexOf("\u0000") >= 0`, a C result declared `| null` and
 narrowed.
 
 Each direction starts from an ordinary module that `export`s the functions to

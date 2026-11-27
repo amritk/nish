@@ -141,6 +141,7 @@ import {
 } from "nish/net/http-compress"
 import { netClose, netMss, netRead, netShutdown, netWrite, netWrite2, tcpAccept } from "nish:net"
 import {
+  HTTP1_BAD_WINDOW,
   HTTP1_BODY,
   HTTP1_CHUNKED,
   HTTP1_CLOSED,
@@ -154,7 +155,7 @@ import {
   HTTP1_UPGRADE,
   Http1Parser,
   http1BytesAre,
-  http1WriteChunk,
+  http1TryWriteChunk,
   http1WriteLastChunk,
   http1WriteResponseHead,
 } from "nish/net/http1-codec"
@@ -2090,7 +2091,12 @@ export class Http1Connection {
       return H1_AGAIN
     }
     if (chunked) {
-      this.outputEnd = http1WriteChunk(this.output, this.outputEnd, buf, off, take)
+      // The window was checked on entry, and `take` only shortens it.
+      const end: i32 = http1TryWriteChunk(this.output, this.outputEnd, buf, off, take)
+      if (end === HTTP1_BAD_WINDOW) {
+        return H1_INVALID
+      }
+      this.outputEnd = end
     } else {
       this.outputEnd = http1ServerCopy(this.output, this.outputEnd, buf, off, take)
       if (this.responseFraming >= 0) {
@@ -3343,6 +3349,27 @@ export class Http1Server {
     }
     armed[slot] = interest
     return true
+  }
+
+  /**
+   * Frees `slot` without closing its socket, which is the caller's from now
+   * on: for a program that moves a connection this pool has accepted but
+   * not yet read to another carrier. A slot that has read, and so holds a
+   * connection, is not released.
+   *
+   * @param slot the slot to free, as `accept` answered it
+   * @returns the slot's socket, now the caller's to close; -1 for a free or unknown slot, or one that has read
+   */
+  release(slot: i32): i32 {
+    const fds: i32[] = this.fds
+    const at: i32[] = this.at
+    if (slot < 0 || slot >= toI32(fds.length) || slot >= toI32(at.length) || fds[slot] < 0 || at[slot] >= 0) {
+      return -1
+    }
+    const fd: i32 = fds[slot]
+    fds[slot] = H1_FREE
+    this.free.push(slot)
+    return fd
   }
 
   /**

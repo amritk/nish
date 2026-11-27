@@ -16,6 +16,56 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-11-26
+
+### Added
+
+- Hold HttpArena's connections-1m fleet in bench/httparena (WP71 S2g) ([#2336](https://github.com/amritk/nish/pull/2336))
+- checker: Prove a checked string NUL-free at an ffi call ([#2340](https://github.com/amritk/nish/pull/2340))
+- interop: WP39 G7 — take an h2c peer by its preface on an opted-in HTTP/1.1 listener ([#2337](https://github.com/amritk/nish/pull/2337))
+
+### Performance
+
+- sqlite: A commit after a B-tree split truncates the page cache past the database's end, not its whole hash table ([#2347](https://github.com/amritk/nish/pull/2347))
+
+### Documentation
+
+- Plan WP90, a web-frameworks benchmark entry and the multipart reader it needs ([#2348](https://github.com/amritk/nish/pull/2348))
+- Set visited links further from the link colour and link the Roadmap issue from the README ([#2349](https://github.com/amritk/nish/pull/2349))
+
+### CI
+
+- Reuse the Release PR's green run for the release, and scope and split slow jobs ([#2342](https://github.com/amritk/nish/pull/2342))
+
+
+## [0.48.0] - 2026-11-26
+
+### Added
+
+- runtime: WP89 S3 — the C shim, the link wiring, the fetch script and the CI lane ([#2295](https://github.com/amritk/nish/pull/2295))
+- Add the HttpArena entry in bench/httparena (WP71 S1) ([#2329](https://github.com/amritk/nish/pull/2329))
+- interop: WP39 G7 — HTTP/1.1 over TLS on the nish/net/http-server façade ([#2332](https://github.com/amritk/nish/pull/2332))
+- checker: Record a window contract's check at its callers ([#2321](https://github.com/amritk/nish/pull/2321))
+- net: NET_LISTEN_RING_WIDE rings of up to 65,536 slots, and a busy ring set sleeps in its first ring ([#2338](https://github.com/amritk/nish/pull/2338))
+
+### Fixed
+
+- runtime: WP85 S4 — game-starter without --allow-panics, raster trails draw again, the guide catches up ([#2319](https://github.com/amritk/nish/pull/2319))
+- runtime: Check deflate's sums instead of wrapping them ([#2320](https://github.com/amritk/nish/pull/2320))
+- interop: HttpHandler holds a length-finished stream's pipelined request until its end ([#2327](https://github.com/amritk/nish/pull/2327))
+
+### Documentation
+
+- net: WP39 H1 — repeated Date fields and the HTTP/2 and HTTP/3 cost of the Date header ([#2326](https://github.com/amritk/nish/pull/2326))
+- Refresh WP71 to HttpArena's 21 scored profiles and split RSA server signing out of WP34 ([#2315](https://github.com/amritk/nish/pull/2315))
+
+### Tests
+
+- runtime: WP85 S5 — tests for four rewritten std/term.ts input paths ([#2318](https://github.com/amritk/nish/pull/2318))
+- runtime: Make bench/http1-conn --base build pre-netWrite2 bases and re-measure idle memory and codec cost ([#2325](https://github.com/amritk/nish/pull/2325))
+- runtime: The http-server façade on io_uring slots, held and measured at HttpArena's latency shape ([#2330](https://github.com/amritk/nish/pull/2330))
+
+
 ## [0.47.0] - 2026-11-25
 
 ### Added
@@ -2364,3 +2414,5 @@ file per release, and each release's notes and downloads are on the
 [0.45.1]: https://github.com/amritk/nish/releases/tag/v0.45.1
 [0.46.0]: https://github.com/amritk/nish/releases/tag/v0.46.0
 [0.47.0]: https://github.com/amritk/nish/releases/tag/v0.47.0
+[0.48.0]: https://github.com/amritk/nish/releases/tag/v0.48.0
+[0.49.0]: https://github.com/amritk/nish/releases/tag/v0.49.0

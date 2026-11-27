@@ -3893,7 +3893,7 @@ std/net/prefork.ts:582:7: layout: PreforkSupervisor (std): 1 native: a declare f
 std/sync/ring.ts:222:14: layout: SpscRing (std): 1 native: a declare function, so a C library is in the link, 96 → 96 bytes
 std/sync/ring.ts:698:14: layout: MpscRing (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 std/sync/shm.ts:138:14: layout: ShmError (std): 1 native: a declare function, so a C library is in the link, 16 → 16 bytes
-std/sync/shm.ts:232:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes; SpscRing saves 96 → 88
+std/sync/shm.ts:282:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes; SpscRing saves 96 → 88
 explain-layout: 0 of 7 classes compact
 
 == examples/prefork-server.ts
@@ -40992,7 +40992,7 @@ explain-layout: 0 of 1 classes compact
 std/sync/ring.ts:222:14: layout: SpscRing (std): 1 native: a declare function, so a C library is in the link, 96 → 96 bytes
 std/sync/ring.ts:698:14: layout: MpscRing (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 std/sync/shm.ts:138:14: layout: ShmError (std): 1 native: a declare function, so a C library is in the link, 16 → 16 bytes
-std/sync/shm.ts:232:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes; SpscRing saves 96 → 88
+std/sync/shm.ts:282:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes; SpscRing saves 96 → 88
 std/testing.ts:135:14: layout: Suite (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 explain-layout: 0 of 5 classes compact
 
@@ -41000,7 +41000,7 @@ explain-layout: 0 of 5 classes compact
 std/sync/ring.ts:222:14: layout: SpscRing (std): 1 native: a declare function, so a C library is in the link, 96 → 96 bytes
 std/sync/ring.ts:698:14: layout: MpscRing (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 std/sync/shm.ts:138:14: layout: ShmError (std): 1 native: a declare function, so a C library is in the link, 16 → 16 bytes
-std/sync/shm.ts:232:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes; SpscRing saves 96 → 88
+std/sync/shm.ts:282:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes; SpscRing saves 96 → 88
 std/testing.ts:135:14: layout: Suite (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 explain-layout: 0 of 5 classes compact
 
@@ -41008,7 +41008,7 @@ explain-layout: 0 of 5 classes compact
 std/sync/ring.ts:222:14: layout: SpscRing (std): 1 native: a declare function, so a C library is in the link, 96 → 96 bytes
 std/sync/ring.ts:698:14: layout: MpscRing (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 std/sync/shm.ts:138:14: layout: ShmError (std): 1 native: a declare function, so a C library is in the link, 16 → 16 bytes
-std/sync/shm.ts:232:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes; SpscRing saves 96 → 88
+std/sync/shm.ts:282:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes; SpscRing saves 96 → 88
 std/testing.ts:135:14: layout: Suite (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 explain-layout: 0 of 5 classes compact
 
@@ -41016,19 +41016,19 @@ explain-layout: 0 of 5 classes compact
 std/sync/ring.ts:222:14: layout: SpscRing (std): 1 native: a declare function, so a C library is in the link, 96 → 96 bytes
 std/sync/ring.ts:698:14: layout: MpscRing (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 std/sync/shm.ts:138:14: layout: ShmError (std): 1 native: a declare function, so a C library is in the link, 16 → 16 bytes
-std/sync/shm.ts:232:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes; SpscRing saves 96 → 88
+std/sync/shm.ts:282:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes; SpscRing saves 96 → 88
 std/testing.ts:135:14: layout: Suite (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 explain-layout: 0 of 5 classes compact
 
 == tests/link/sync_shm/main.ts
 std/sync/shm.ts:138:14: layout: ShmError (std): 1 native: a declare function, so a C library is in the link, 16 → 16 bytes
-std/sync/shm.ts:232:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes
+std/sync/shm.ts:282:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes
 std/testing.ts:135:14: layout: Suite (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 explain-layout: 0 of 3 classes compact
 
 == tests/link/sync_shm_window/main.ts
 std/sync/shm.ts:138:14: layout: ShmError (std): 1 native: a declare function, so a C library is in the link, 16 → 16 bytes
-std/sync/shm.ts:232:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes
+std/sync/shm.ts:282:14: layout: SharedRegion (std): 1 native: a declare function, so a C library is in the link, 4 → 4 bytes
 std/testing.ts:135:14: layout: Suite (std): 1 native: a declare function, so a C library is in the link, 32 → 32 bytes
 explain-layout: 0 of 3 classes compact
 
@@ -42396,7 +42396,7 @@ tests/link/reject_term_feed_string/main.ts: exit 1: tests/link/reject_term_feed_
 tests/link/reject_typed_push_alias/main.ts: exit 1: tests/link/reject_typed_push_alias/main.ts:7:11: error: `pop` is not a method of `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop
 tests/link/std_sqlite_deny_ffi/main.ts: exit 1: tests/link/std_sqlite_deny_ffi/main.ts:6:14: error: `main` reaches `ffi`, which the capability policy does not grant (`--deny ffi`); the chain that reaches it: main.ts:6:14 calls openDatabase, std/sqlite.ts:232:18 calls nishsqlite_open
 tests/link/std_term_io_deny/main.ts: exit 1: tests/link/std_term_io_deny/main.ts:7:18: error: `main` reaches `tty`, which the capability policy does not grant (`--deny tty`); the chain that reaches it: main.ts:7:18 calls openTerminal, std/term-io.ts:876:7 calls setRawMode
-tests/link/sync_shm_deny_ffi/main.ts: exit 1: tests/link/sync_shm_deny_ffi/main.ts:7:18: error: `main` reaches `ffi`, which the capability policy does not grant (`--deny ffi`); the chain that reaches it: main.ts:7:18 calls createRegion, std/sync/shm.ts:178:18 calls nishshm_create
+tests/link/sync_shm_deny_ffi/main.ts: exit 1: tests/link/sync_shm_deny_ffi/main.ts:7:18: error: `main` reaches `ffi`, which the capability policy does not grant (`--deny ffi`); the chain that reaches it: main.ts:7:18 calls createRegion, std/sync/shm.ts:220:18 calls nishshm_create
 tests/link/two_packages_struct/main.ts: exit 1: tests/link/two_packages_struct/node_modules/pkg_b/index.ts:4:7: error: Class `Node` is declared in package `pkg_a` and again in package `pkg_b`; a class or interface name is still program-wide, so two packages cannot both declare one
 tests/link/unknown_export/main.ts: exit 1: tests/link/unknown_export/main.ts:1:10: error: Module `./math` has no exported function `cube`
 

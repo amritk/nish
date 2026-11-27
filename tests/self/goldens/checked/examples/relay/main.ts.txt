@@ -23697,15 +23697,22 @@ function websocketUtf8Run(state: WsUtf8, buf: u8[], off: i32, len: i32): boolean
   local -26:9 stop: i64 (const)
   local -25:12 k: i32 (let)
   local -24:11 b: i32 (const)
+function websocketUtf8Whole(buf: u8[], off: i32, len: i32): boolean -> @nish.websocketUtf8Whole
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: len off
+  calls: nish.websocketUtf8Run
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.websocketUtf8Run#1
+  stackSites=1 stackLocals=1
+  local +0:9 state: WsUtf8 (const)
+  callee +1:10 websocketUtf8Run -> @nish.websocketUtf8Run
 function websocketIsUtf8(buf: u8[], off: i32, len: i32): boolean -> @nish.websocketIsUtf8 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
-  calls: nish.websocketUtf8Run nish_panic
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.websocketUtf8Run#1
-  stackSites=1 stackLocals=1
+  calls: nish.websocketUtf8Whole nish_panic
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.websocketUtf8Whole#0
+  stackSites=0 stackLocals=0
   local +0:9 size: i32 (const)
-  local +4:9 state: WsUtf8 (const)
-  callee +5:10 websocketUtf8Run -> @nish.websocketUtf8Run
+  callee +4:10 websocketUtf8Whole -> @nish.websocketUtf8Whole
 function websocketIsSendableCode(code: i32): boolean -> @nish.websocketIsSendableCode
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -23731,7 +23738,7 @@ function WsDecoder.feed(this: WsDecoder, data: u8[], off: i32, len: i32): void -
   callee -3:7 websocketFail -> @nish.websocketFail
   callee +0:16 websocketAdd -> @nish.websocketAdd
 function WsDecoder.next(this: WsDecoder): i32 -> @nish.WsDecoder.next [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.websocketNext
   calls: nish.websocketNext
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.websocketNext#0
@@ -23799,24 +23806,24 @@ function websocketMessageRoom(d: WsDecoder, need: i32): void -> @nish.websocketM
   callee -2:21 websocketAdd -> @nish.websocketAdd
   callee -1:3 tryCopyBytes -> @nish.tryCopyBytes
 function websocketReadClose(d: WsDecoder, len: i32): i32 -> @nish.websocketReadClose
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.websocketFail nish.websocketIsSendableCode nish.websocketIsUtf8 nish_alloc_struct nish_array_grow nish_str_new
+  calls: nish.websocketFail nish.websocketIsSendableCode nish.websocketUtf8Whole nish_alloc_struct nish_array_grow nish_str_new
   pointer d: size=96 writesThrough=true captured=false passedTo=nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0
   stackSites=1 stackLocals=1
   local -2:9 payload: u8[] (const)
   callee +6:12 websocketFail -> @nish.websocketFail
-  callee +10:12 websocketFail -> @nish.websocketFail
-  local +12:9 code: i32 (const)
-  callee +13:8 websocketIsSendableCode -> @nish.websocketIsSendableCode
-  callee +14:12 websocketFail -> @nish.websocketFail
-  local +16:9 reasonStart: i32 (const)
-  callee +17:8 websocketIsUtf8 -> @nish.websocketIsUtf8
-  callee +18:12 websocketFail -> @nish.websocketFail
-  local +20:9 parts: string[] (const)
-  local +21:12 k: i32 (let)
+  callee +12:12 websocketFail -> @nish.websocketFail
+  local +14:9 code: i32 (const)
+  callee +15:8 websocketIsSendableCode -> @nish.websocketIsSendableCode
+  callee +16:12 websocketFail -> @nish.websocketFail
+  local +18:9 reasonStart: i32 (const)
+  callee +19:8 websocketUtf8Whole -> @nish.websocketUtf8Whole
+  callee +20:12 websocketFail -> @nish.websocketFail
+  local +22:9 parts: string[] (const)
+  local +23:12 k: i32 (let)
 function websocketFrameEvent(d: WsDecoder): i32 -> @nish.websocketFrameEvent
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.websocketAdd nish.websocketFail nish.websocketIsKnownOpcode nish.websocketMessageRoom nish.websocketReadClose nish.websocketSub nish.websocketUnmaskInto nish.websocketUtf8Reset nish.websocketUtf8Run
   pointer d: size=96 writesThrough=true captured=false passedTo=nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketMessageRoom#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketReadClose#0 nish.websocketMessageRoom#0 nish.websocketFail#0 nish.websocketFail#0
@@ -23884,7 +23891,7 @@ function websocketFrameEvent(d: WsDecoder): i32 -> @nish.websocketFrameEvent
   callee +33:14 websocketFail -> @nish.websocketFail
   callee +41:12 websocketFail -> @nish.websocketFail
 function websocketNext(d: WsDecoder): i32 -> @nish.websocketNext
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.websocketFrameEvent
   calls: nish.websocketFrameEvent
   pointer d: size=96 writesThrough=true captured=false passedTo=nish.websocketFrameEvent#0
@@ -23943,16 +23950,16 @@ function websocketFrame(fin: boolean, opcode: i32, payload: u8[], off: i32, len:
   local +5:9 at: i32 (const)
   callee +6:10 websocketWriteFrame -> @nish.websocketWriteFrame
 function websocketClosePayload(code: i32, reason: string): u8[] | null -> @nish.websocketClosePayload [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: code
-  calls: nish.websocketIsSendableCode nish.websocketIsUtf8 nish_array_grow
+  calls: nish.websocketIsSendableCode nish.websocketUtf8Whole nish_array_grow
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   callee +1:8 websocketIsSendableCode -> @nish.websocketIsSendableCode
   local +4:9 out: u8[] (const)
   local +5:12 k: i32 (let)
   local +8:9 reasonStart: i32 (const)
-  callee +9:8 websocketIsUtf8 -> @nish.websocketIsUtf8
+  callee +9:8 websocketUtf8Whole -> @nish.websocketUtf8Whole
 function websocketBytesOf(text: string): u8[] -> @nish.websocketBytesOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -30466,6 +30473,7 @@ import netShutdown from "nish:net" -> builtin netShutdown
 import netWrite from "nish:net" -> builtin netWrite
 import netWrite2 from "nish:net" -> builtin netWrite2
 import tcpAccept from "nish:net" -> builtin tcpAccept
+import HTTP1_BAD_WINDOW from "nish/net/http1-codec" -> const HTTP1_BAD_WINDOW
 import HTTP1_BODY from "nish/net/http1-codec" -> const HTTP1_BODY
 import HTTP1_CHUNKED from "nish/net/http1-codec" -> const HTTP1_CHUNKED
 import HTTP1_CLOSED from "nish/net/http1-codec" -> const HTTP1_CLOSED
@@ -30479,7 +30487,7 @@ import HTTP1_REFUSED from "nish/net/http1-codec" -> const HTTP1_REFUSED
 import HTTP1_UPGRADE from "nish/net/http1-codec" -> const HTTP1_UPGRADE
 import Http1Parser from "nish/net/http1-codec" -> struct Http1Parser
 import http1BytesAre from "nish/net/http1-codec" -> function @nish.http1BytesAre
-import http1WriteChunk from "nish/net/http1-codec" -> function @nish.http1WriteChunk
+import http1TryWriteChunk from "nish/net/http1-codec" -> function @nish.http1TryWriteChunk
 import http1WriteLastChunk from "nish/net/http1-codec" -> function @nish.http1WriteLastChunk
 import http1WriteResponseHead from "nish/net/http1-codec" -> function @nish.http1WriteResponseHead
 import WS_CLOSE from "nish/net/websocket" -> const WS_CLOSE
@@ -30749,6 +30757,7 @@ struct Http1Server (class) size=168 align=8 exported
   method settle -> @nish.Http1Server.settle
   method send -> @nish.Http1Server.send
   method rearm -> @nish.Http1Server.rearm
+  method release -> @nish.Http1Server.release
   method close -> @nish.Http1Server.close
   method expire -> @nish.Http1Server.expire
 struct Http1TlsServer (class) size=88 align=8 exported
@@ -31265,7 +31274,7 @@ function Http1Connection.decoder(this: Http1Connection): WsDecoder -> @nish.Http
   local -1:11 made: WsDecoder (const)
   callee -1:29 new WsDecoder -> @nish.WsDecoder.constructor
 function Http1Connection.nextFrame(this: Http1Connection): i32 -> @nish.Http1Connection.nextFrame [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.Http1Connection.decoder nish.Http1Connection.sendClose nish.Http1Connection.sendPong nish.WsDecoder.next
   pointer this: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.sendPong#0 nish.Http1Connection.decoder#0 nish.Http1Connection.sendClose#0 nish.Http1Connection.sendClose#0
@@ -31289,7 +31298,7 @@ function Http1Connection.sendPong(this: Http1Connection): boolean -> @nish.Http1
   local -13:11 end: i32 (const)
   callee -13:22 websocketWriteFrame -> @nish.websocketWriteFrame
 function Http1Connection.sendClose(this: Http1Connection, code: i32): void -> @nish.Http1Connection.sendClose [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: code
   calls: nish.Http1Connection.room nish.websocketClosePayload nish.websocketWriteFrame
@@ -31402,9 +31411,9 @@ function Http1Connection.write(this: Http1Connection, buf: readonly u8[], off: i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: len off
-  calls: nish.Http1Connection.bodyRoom nish.http1ServerCheckWindow nish.http1ServerCopy nish.http1ServerSub nish.http1WriteChunk
+  calls: nish.Http1Connection.bodyRoom nish.http1ServerCheckWindow nish.http1ServerCopy nish.http1ServerSub nish.http1TryWriteChunk
   pointer this: size=312 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.http1WriteChunk#2 nish.http1ServerCopy#2
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.http1TryWriteChunk#2 nish.http1ServerCopy#2
   stackSites=0 stackLocals=0
   callee -22:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
   local -15:11 chunked: boolean (const)
@@ -31413,9 +31422,10 @@ function Http1Connection.write(this: Http1Connection, buf: readonly u8[], off: i
   local -10:9 take: i32 (let)
   local -8:13 fits: i32 (const)
   callee -8:25 http1ServerSub -> @nish.http1ServerSub
-  callee +4:24 http1WriteChunk -> @nish.http1WriteChunk
-  callee +6:24 http1ServerCopy -> @nish.http1ServerCopy
-  callee +8:29 http1ServerSub -> @nish.http1ServerSub
+  local +5:13 end: i32 (const)
+  callee +5:24 http1TryWriteChunk -> @nish.http1TryWriteChunk
+  callee +11:24 http1ServerCopy -> @nish.http1ServerCopy
+  callee +13:29 http1ServerSub -> @nish.http1ServerSub
 function Http1Connection.sendBody(this: Http1Connection, buf: readonly u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.sendBody [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -31583,7 +31593,7 @@ function Http1Connection.sendFrame(this: Http1Connection, fin: boolean, opcode: 
   local +3:11 end: i32 (const)
   callee +3:22 websocketWriteFrame -> @nish.websocketWriteFrame
 function Http1Connection.closeWebSocket(this: Http1Connection, code: i32): i32 -> @nish.Http1Connection.closeWebSocket [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: code
   calls: nish.Http1Connection.sendClose nish.websocketClosePayload
@@ -31952,6 +31962,16 @@ function Http1Server.rearm(this: Http1Server, slot: i32, wants: i32): boolean ->
   local -8:11 interest: i32 (const)
   callee -7:10 Http1Server.holds -> @nish.Http1Server.holds
   local -4:11 armed: i32[] (const)
+function Http1Server.release(this: Http1Server, slot: i32): i32 -> @nish.Http1Server.release [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: slot
+  calls: nish_array_grow
+  pointer this: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -6:11 fds: i32[] (const)
+  local -5:11 at: i32[] (const)
+  local -1:11 fd: i32 (const)
 function Http1Server.close(this: Http1Server, slot: i32): void -> @nish.Http1Server.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

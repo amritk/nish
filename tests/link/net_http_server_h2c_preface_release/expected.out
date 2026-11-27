@@ -1,0 +1,4 @@
+unknown: -1, before any accept: -1
+unread slot 0: a socket true, again -1, held false
+next accept takes slot 0
+read slot 0: -1, held true

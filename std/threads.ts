@@ -783,11 +783,21 @@ export class AtomicI64 {
 }
 
 /**
- * The panic of an atomic array made with a negative length: the message
- * `new Array` of one prints, so the two refuse it alike.
+ * Why an atomic array cannot be made `length` long, or "" when it can: a
+ * negative length is refused with the message `new Array` of one prints, so
+ * the two refuse it alike.
+ *
+ * @param length the length an atomic array would be made with.
+ * @returns the reason the length is refused, or "" when it is not.
  */
-const negativeAtomicLength = (): void => {
-  panic("array length out of range")
+export const atomicArrayLengthFault = (length: i32): string => (length < 0 ? "array length out of range" : "")
+
+/** Panics unless an atomic array can be made `length` long: a negative length is the program's mistake. */
+const atomicArrayCheckLength = (length: i32): void => {
+  const fault: string = atomicArrayLengthFault(length)
+  if (fault.length > 0) {
+    panic(fault)
+  }
 }
 
 /**
@@ -821,12 +831,12 @@ export class AtomicI32Array {
    *   `new Array` of one does.
    */
   constructor(length: i32) {
+    atomicArrayCheckLength(length)
     this.length = length
     if (length >= 0) {
       this.values = new Array<i32>(length)
     } else {
-      negativeAtomicLength()
-      // Never reached: `negativeAtomicLength` stops the program.
+      // Never reached: `atomicArrayCheckLength` stops the program.
       this.values = []
     }
     this.values.fill(0)
@@ -977,12 +987,12 @@ export class AtomicI64Array {
    *   `new Array` of one does.
    */
   constructor(length: i32) {
+    atomicArrayCheckLength(length)
     this.length = length
     if (length >= 0) {
       this.values = new Array<i64>(length)
     } else {
-      negativeAtomicLength()
-      // Never reached: `negativeAtomicLength` stops the program.
+      // Never reached: `atomicArrayCheckLength` stops the program.
       this.values = []
     }
     this.values.fill(0)
@@ -1098,6 +1108,40 @@ export class AtomicI64Array {
     }
     return old
   }
+}
+
+/**
+ * A new `AtomicI32Array` of `length` elements, each `0`, or why one cannot
+ * be made: the twin of its constructor for a length read from input, which
+ * refuses a negative length with the message the constructor would panic
+ * with, rather than panicking.
+ *
+ * @param length how many elements.
+ * @returns the array, or the reason the length is refused.
+ */
+export const atomicI32ArrayChecked = (length: i32): Result<AtomicI32Array, string> => {
+  const fault: string = atomicArrayLengthFault(length)
+  if (fault.length > 0) {
+    return Err(fault)
+  }
+  return Ok(new AtomicI32Array(length))
+}
+
+/**
+ * A new `AtomicI64Array` of `length` elements, each `0`, or why one cannot
+ * be made: the twin of its constructor for a length read from input, which
+ * refuses a negative length with the message the constructor would panic
+ * with, rather than panicking.
+ *
+ * @param length how many elements.
+ * @returns the array, or the reason the length is refused.
+ */
+export const atomicI64ArrayChecked = (length: i32): Result<AtomicI64Array, string> => {
+  const fault: string = atomicArrayLengthFault(length)
+  if (fault.length > 0) {
+    return Err(fault)
+  }
+  return Ok(new AtomicI64Array(length))
 }
 
 /**
