@@ -136,6 +136,8 @@ The counts are read from `scripts/wrap-casts.txt` at the commit that added it. A
 
 ## WP91 S1 — compress, src/ and examples, and one check for every file
 
+**Owns:** `std/compress/**`, `src/constants.ts`, `src/emit-ops.ts`, the eight `examples/` files `scripts/wrap-casts.txt` lists (`examples/{file-server,histogram-atomic,histogram,prefork-jobs,term-probe}.ts`, `examples/game-starter/game.ts`, `examples/http-app/main.ts`, `examples/relay/main.ts`) and their opt-out headers, `scripts/wrap-casts.mjs` (the `--root D` flag only), `docs/security/compress.md`, new `tests/link/std_compress_*/**` and `tests/link/example_*/**` cases. **Sensitive:** `scripts/wrap-casts.mjs` is lint configuration, so S1 is built and reviewed, then escalated as `sensitive paths: awaiting human merge`.
+
 **Files.**
 - [std/compress/deflate.ts](../../std/compress/deflate.ts): eight multiplicative hashes, listed in `COMPRESS_UNSIGNED_OPS` in [tests/run.js](../../tests/run.js).
 - [src/constants.ts](../../src/constants.ts): `wrapAdd`, `wrapSub` and `wrapMul`, the constant folder's model of the `wrapping*` builtins, and the radix fold at line 176.
@@ -152,6 +154,8 @@ The counts are read from `scripts/wrap-casts.txt` at the commit that added it. A
 
 ## WP91 S2 — std/regex.ts
 
+**Owns:** `std/regex.ts`, `docs/security/regex.md`, new `tests/link/std_regex_*/**` cases.
+
 [std/regex.ts](../../std/regex.ts) holds 131 casts, nearly all on its own indexes:
 - capture-slot and table products (`count * slots`, `pc * ns`)
 - cursor advances (`from + i`, `off + 1`)
@@ -161,12 +165,16 @@ The product of a pattern's state count and its slot count is reachable from the 
 
 ## WP91 S3 — json, text, temporal, sqlite and sync
 
+**Owns:** `std/{json,json-value,json-format,json-number,json-typed,json-tokenizer,text,temporal,sqlite}.ts`, `std/sync/{ring,shm}.ts`, `docs/security/{json,sqlite,shm}.md`, new `tests/link/{std_json,std_text,std_temporal,std_sqlite,sync_ring,sync_shm}_*/**` cases. WP86 S1 (#2159, open) also edits json-value, json-number and json-tokenizer: whichever lands second takes in `main`.
+
 - **json** ([json-value.ts](../../std/json-value.ts) 29, [json.ts](../../std/json.ts) 16, json-format 5, json-number 2, json-typed 1, json-tokenizer 1): span arithmetic (`end - base`, `at + n`) over a parsed document. A span inside a buffer the parser holds is provable from the buffer's length. One the input supplies is a parse error.
 - **[temporal.ts](../../std/temporal.ts)** (22): date arithmetic. WP87 S1 already turns overflowing date arithmetic into a `Result`, so take these with it, or after it if WP87 S1 is open.
 - **[sqlite.ts](../../std/sqlite.ts)** (6) and **[text.ts](../../std/text.ts)** (3): length sums.
 - **[sync/ring.ts](../../std/sync/ring.ts)** (9) and **[sync/shm.ts](../../std/sync/shm.ts)** (1): a ring's head and tail sequence counters wrap by design. Those are wrapping calls, and the slot index taken from them stays a mask. Any length or offset sum is proven.
 
 ## WP91 S4 — std/net HTTP, HPACK, URL and the server stack
+
+**Owns:** `std/net/{fetch,handler,hpack,http-compress,http-fields,http-server,http1-client-codec,http1-codec,http1-server,http2-cleartext,http2-frame,http2-tls,http2,outbound,prefork,protobuf,serve,static,upstream,url}.ts`, `docs/security/{fetch,handler,http-server,http1-client-codec,http1-codec,http2-cleartext,http2,outbound,protobuf,serve,static,upstream,url}.md`, new `tests/link/net_*` cases named for those modules. Open PRs #2335 (http-server, http1-server, http2-tls) and #2353 (http-fields) touch the same files: whichever lands second takes in `main`.
 
 Every S4 file parses a peer's bytes, so a cast on a length or an offset there can be reachable from the network. Each one becomes:
 - a sum proven from a length already checked against the buffer, or
@@ -176,9 +184,13 @@ Every S4 file parses a peer's bytes, so a cast on a length or an offset there ca
 
 ## WP91 S5 — std/net TLS, QUIC, PostgreSQL and DNS
 
+**Owns:** `std/net/{tls,tls-tcp,dns,postgres,postgres-async,postgres-carrier}.ts`, `std/net/tls/{record,ticket}.ts`, `std/net/quic*.ts` (the eight listed files), `docs/security/{tls,quic,quic-multicore,http3,postgres,dns}.md`, new `tests/link/net_{tls,quic,postgres,dns}_*/**` cases. **Sensitive:** TLS and QUIC carry key material and packet protection (crypto), so S5 is built and reviewed, then escalated as `sensitive paths: awaiting human merge`. Open PR #2335 touches tls.ts, tls-tcp.ts and quic.ts.
+
 QUIC packet numbers and TLS record sequence numbers are defined modulo 2^62 and 2^64. Arithmetic on them is a wrapping call where the RFC's own arithmetic wraps. Where the RFC instead bounds the value and closes the connection on exhaustion, it is a proven sum plus that close. Lengths and offsets in [tls.ts](../../std/net/tls.ts), [quic.ts](../../std/net/quic.ts), [quic-frame.ts](../../std/net/quic-frame.ts) and [postgres-async.ts](../../std/net/postgres-async.ts) follow S4's rule. A module with a vector contract reruns vector's `check` and `mutate` on it.
 
 ## WP91 S6 — std/crypto
+
+**Owns:** `std/crypto/{base64url,x509,pki,bcrypt,jwt,x25519,sha256,pki-roots,p256,rsa}.ts`, `docs/security/crypto-*.md`, `tests/cases/ct_asm_*.{ts,ll,out}` (regenerated only), new `tests/link/crypto_*/**` cases. **Sensitive:** crypto, so S6 is built and reviewed, then escalated as `sensitive paths: awaiting human merge`. Open PR #2335 touches rsa.ts and x509.ts.
 
 The WP83 approach holds. Inside a function a `ct_asm` check reads, a `Result` or an early return is a branch the check refuses. So a site there goes only by proof or by a wrapping call:
 - **Cipher word arithmetic** (sha256's word adds, x25519's limb arithmetic) is a wrapping call, or moves to `u32`.
@@ -189,7 +201,36 @@ Secret intermediates stay `Secret` and are wiped, as `CLAUDE.md` requires. A cha
 
 ## WP91 S7 — allow none
 
+**Owns:** `scripts/wrap-casts.mjs`, `scripts/wrap-casts.txt`, `CLAUDE.md`, `.claude/linting.md`, the S1 check in `tests/run.js`. **Depends on** S1–S6 merged (development too: it needs every count at zero). **Sensitive:** lint configuration and agent guidance, so S7 ends as a reviewed PR awaiting a human merge.
+
 With every count at zero, delete [scripts/wrap-casts.txt](../../scripts/wrap-casts.txt) and the script's `--update` mode, so any cast fails `npm run lint`. Drop the baseline sentence from [CLAUDE.md](../../CLAUDE.md) and the row's config column in [.claude/linting.md](../../.claude/linting.md). The S1 `tests/run.js` check then plants a cast and asserts that it fails with no baseline involved.
+
+## Run refinement
+
+Added for the `/feature` run on #2359, on `main` at 9533b5d5.
+
+**Shared files**, which any stage may touch for its own entries only: `scripts/wrap-casts.txt` (lowered by `node scripts/wrap-casts.mjs --update`, never raised or added to; on a conflict, take `main`'s and rerun `--update`), `tests/nish-cmp.js` (its own `DECLARED` entries), `tests/run.js` (its own checks, and S1 its replacement check), `bench/instructions.json` (a count may fall, never rise), `docs/security/README.md` (its own rows).
+
+**Generated files**, regenerated and never resolved by hand: `tests/self/goldens/checked/**`, `docs/reference/**`, `scalar.config.json`, `docs/IR_COOKBOOK.md`, `tests/std-panics.json`, `tests/link/*/expected.caps.json`, `tests/wordings/*.err`, `tests/link/*/*.ll`, `tests/cases/*.ll`, the differential register.
+
+**Merge order.** S1 to S6 have disjoint `Owns` and merge in any order. Each one that converges after another merged takes in `main`, regenerates the generated files and re-takes its std-panics and bench counts before it merges. S7 merges last and starts once S1 to S6 have merged.
+
+**Sensitive stages.** S1, S5, S6 and S7 are built and reviewed, then left as PRs for a human to merge (`sensitive paths: awaiting human merge`): lint configuration, TLS and QUIC, crypto, and `CLAUDE.md`. S2, S3 and S4 merge on their gate.
+
+**Spawn order.** S1, S2, S3 and S4 first. S5 and S6 take the next free slots. S7 starts only when S1 to S6 are merged.
+
+### Acceptance criteria
+
+1. On `main`, `scripts/wrap-casts.txt` lists none of the files of the stages that merged, and `node scripts/wrap-casts.mjs` exits 0.
+2. A `tests/run.js` check runs `scripts/wrap-casts.mjs` over `std/`, `src/` and `examples/`, and fails when a cast is planted in a copy of the tree. The compress-only check "std-panics: std/compress has no u32-cast wrapping sum" is gone.
+3. `node tests/run.js std-panics` passes on `main`, and `tests/std-panics.json` lists no more sites in the touched files than it did at 9533b5d5.
+4. No `bench/instructions.json` count on `main` is higher than at 9533b5d5, and CI's instructions check is green after the last merge.
+5. Each `wrappingAdd`, `wrappingSub` or `wrappingMul` call a stage adds has a comment beside it giving the reason the wrap is the answer, and `git grep` finds none whose result is used as a length, index or offset.
+6. Each overflow that input can reach and that now returns an error has a `tests/link` case that feeds the overflowing input and expects the error, and that case passes on `main`.
+7. Each peer-reachable site in `std/net` that answered a wrong value before its stage is a recorded finding in its `docs/security/` record, with a before/after test.
+8. The `ct_asm` cases pass on `main` after S6, and every touched contract's vector `check` and `mutate` pass.
+9. After S7, planting `toI32(toU32(a) + toU32(b))` in any file under `std/`, `src/` or `examples/` makes `npm run lint` exit non-zero, and `CLAUDE.md` and `.claude/linting.md` mention no baseline.
+10. `main`'s CI is green after the last merge.
 
 ## Out of scope
 
