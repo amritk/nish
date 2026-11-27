@@ -30,9 +30,11 @@ which keeps panic sites no proof removes yet, so a call that reaches it is
 refused by default until the standard library is made panic-free.
 `nish/net/websocket` itself answers a malformed frame or handshake with a
 code; it panics only when `WsDecoder.feed` or `websocketIsUtf8` is handed a
-window outside its buffer, a bug in the caller. The client also calls
+window outside its buffer, a bug in the caller, so the client tests each
+count it feeds against the buffer it read into. It also calls
 `crypto.getRandomValues`, which exits the program when the system has no
-random bytes to give, and calls `panic` itself; a proof removes neither.
+random bytes to give, and which nothing proves away; and it reaches the panic
+sites of the TLS client, which no proof removes yet either.
 
 <!-- allow-panics: calls `std/crypto/base64url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
@@ -138,7 +140,7 @@ The client's side is six steps over a connection you opened:
 
 Over TLS, with `tlsConnect`:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls a file or entropy builtin that exits on failure; calls `panic`; calls `std/crypto/base64url.ts`, `std/net/websocket.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; calls `std/net/websocket.ts` and `std/net/tls-tcp.ts` code that keeps panic sites, and reaches those of `std/crypto/base64url.ts`, `std/crypto/pki-roots.ts` and `std/crypto/sha256.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { netAddress } from "nish:net";
@@ -231,8 +233,10 @@ export const main = (): i32 => {
   }
   let got: i32 = decoder.next();
   while (got === WS_NEED_MORE) {
+    // `readWait` answers at most the room it was given; testing that is
+    // what proves the bytes fed lie inside `buf`.
     const n: i32 = client.readWait(buf, 0, toI32(buf.length), 5000);
-    if (n <= 0) {
+    if (n <= 0 || n > toI32(buf.length)) {
       client.close();
       return 1;
     }
