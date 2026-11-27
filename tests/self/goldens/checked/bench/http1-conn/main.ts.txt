@@ -36601,15 +36601,15 @@ function main(): i32 -> @nish_main [exported entry]
   local +3:9 batches: i32 (const)
   local +4:9 evictMib: i32 (const)
   callee +12:12 stages -> @stages
-  callee +15:12 idle -> @idle
-  local +20:9 b: Bench (const)
-  callee +20:20 new Bench -> @Bench.constructor
-  local +23:12 i: i32 (let)
-  callee +24:5 Bench.serve -> @Bench.serve
-  local +29:7 best: i64 (let)
-  local +30:7 at: i32 (let)
-  local +31:12 batch: i32 (let)
-  local +32:11 started: i64 (const)
-  local +33:14 k: i32 (let)
-  callee +34:7 Bench.serve -> @Bench.serve
-  local +40:11 ns: i64 (const)
+  callee +21:12 idle -> @idle
+  local +26:9 b: Bench (const)
+  callee +26:20 new Bench -> @Bench.constructor
+  local +29:12 i: i32 (let)
+  callee +30:5 Bench.serve -> @Bench.serve
+  local +35:7 best: i64 (let)
+  local +36:7 at: i32 (let)
+  local +37:12 batch: i32 (let)
+  local +38:11 started: i64 (const)
+  local +39:14 k: i32 (let)
+  callee +40:7 Bench.serve -> @Bench.serve
+  local +46:11 ns: i64 (const)

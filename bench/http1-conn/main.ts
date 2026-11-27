@@ -768,7 +768,13 @@ export const main = (): i32 => {
   if (shape === "stages" || shape === "stages-loop") {
     return stages(requests, count, batches, shape === "stages")
   }
-  if (shape === "idle" || shape === "direct" || shape === "rss" || shape === "rss-kept" || shape === "rss-serving") {
+  if (
+    shape === "idle" ||
+    shape === "direct" ||
+    shape === "rss" ||
+    shape === "rss-kept" ||
+    shape === "rss-serving"
+  ) {
     return idle(shape, requests, count, batches, evictMib)
   }
   if (shape === "hot") {
