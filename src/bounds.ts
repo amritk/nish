@@ -1607,6 +1607,7 @@ const isMinusOne = (expr: Node): boolean => {
  *     `toU64(0)`, `toU8(255)`, but never `toU8(300)`, which keeps the low
  *     byte;
  *   - a folded module constant of an integer type (`program.nodeConstants`);
+ *   - the `.length` of a constant table or a module storage (`fixedLength`);
  *   - a function-level `const` of an integer type whose initialiser is one of
  *     these (`BoundsWalk.constLocals`). A `const` is never rebound, so its
  *     value holds wherever it is read. A `let` never counts, even one nothing
@@ -1621,6 +1622,10 @@ const constantValue = (walk: BoundsWalk, expr: Node): i32 => {
   const program = walk.ctx.program
   if (e.kind === NodeKind.Call) {
     return convertedConstant(program, e)
+  }
+  if (e.kind === NodeKind.Member && e.text === "length") {
+    const length = fixedLength(program, e.children[0])
+    return length >= toI64(0) && length < I32_MAX ? toI32(length) : -1
   }
   if (e.kind !== NodeKind.Ident) {
     return -1
@@ -1852,8 +1857,8 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   const out: Fact[] = []
   const loVar = indexLocal(ctx, lo)
   const hiVar = indexLocal(ctx, hi)
-  const loConst = literalValue(lo)
-  const hiConst = literalValue(hi)
+  const loConst = constantValue(walk, lo)
+  const hiConst = constantValue(walk, hi)
   const hiLength = lengthOf(walk, hi)
 
   // `i < w.length`: the fact the whole analysis is built around.
@@ -4226,24 +4231,21 @@ const provesByRange = (walk: BoundsWalk, state: State, holder: Local, index: Nod
 }
 
 /**
- * Whether `index` is inside the constant table `receiver` names. A table's
- * length is fixed when it is folded and nothing can change it, so no fact is
- * needed and none is forgotten: the index's declared range (a `u8` into a
- * 256-entry table), a literal or folded constant, or the range the state
- * gives an `i32` or `i64` index, below the length is the proof.
+ * Whether `index` is inside the constant table or the module storage
+ * `receiver` names (`fixedLength`). Either length is fixed when it is folded
+ * and nothing can change it, so no fact is needed and none is forgotten: the
+ * index's declared range (a `u8` into a 256-entry table), a literal or folded
+ * constant, or the range the state gives an `i32` or `i64` index, below the
+ * length is the proof.
  */
 const provesTableIndex = (walk: BoundsWalk, state: State, receiver: Node, index: Node): boolean => {
-  const e = unwrapBoundsParens(receiver)
-  if (e.kind !== NodeKind.Ident) {
-    return false
-  }
-  const table = walk.ctx.program.nodeConstants[e.id]
-  if (table === null || !table.table || !table.folded) {
+  const length = fixedLength(walk.ctx.program, receiver)
+  if (length < toI64(0)) {
     return false
   }
   const declared = declaredValueRange(walk.ctx, index)
   if (declared !== null) {
-    return declared.lo >= toI64(0) && declared.hi < table.intValue
+    return declared.lo >= toI64(0) && declared.hi < length
   }
   const written = walk.ctx.program.nodeTypes[index.id]
   if (written < 0 || writesSomething(index)) {
@@ -4254,7 +4256,28 @@ const provesTableIndex = (walk: BoundsWalk, state: State, receiver: Node, index:
     return false
   }
   const range = valueRange(walk, state, index, type)
-  return range.lo >= toI64(0) && range.hi < table.intValue
+  return range.lo >= toI64(0) && range.hi < length
+}
+
+/**
+ * The length of the constant table or the module storage `expr` names, or -1.
+ * A table's length is its folded literal's; a storage's is the constant its
+ * `new` folds to, and nothing changes it afterwards: no method runs on a
+ * storage, its `length` is never assigned and its name is never a value
+ * but as a typed-array argument, which has no `push`, `pop` or `length =`
+ * (`src/module-storage.ts`). A storage whose length did not fold to a valid
+ * one has been reported, and answers -1 here.
+ */
+const fixedLength = (program: CheckedProgram, expr: Node): i64 => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== NodeKind.Ident) {
+    return toI64(-1)
+  }
+  const constant = program.nodeConstants[e.id]
+  if (constant === null || !(constant.table || constant.storage) || !constant.folded) {
+    return toI64(-1)
+  }
+  return constant.storage && constant.intValue < toI64(1) ? toI64(-1) : constant.intValue
 }
 
 /**

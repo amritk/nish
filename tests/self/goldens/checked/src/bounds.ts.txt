@@ -939,7 +939,7 @@ function isMinusOne(expr: Node): boolean -> @isMinusOne
   callee +1:57 literalValue -> @literalValue
 function constantValue(walk: BoundsWalk, expr: Node): i32 -> @constantValue
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: convertedConstant isInteger literalValue nish_panic_index unwrapBoundsParens
+  calls: convertedConstant fixedLength isInteger literalValue nish_panic_index nish_str_eq unwrapBoundsParens
   pointer walk: size=200 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
@@ -949,11 +949,13 @@ function constantValue(walk: BoundsWalk, expr: Node): i32 -> @constantValue
   callee +1:13 literalValue -> @literalValue
   local +5:9 program: CheckedProgram (const)
   callee +7:12 convertedConstant -> @convertedConstant
-  local +12:9 constant: ConstInfo | null (const)
-  local +14:11 fits: boolean (const)
-  callee +15:31 isInteger -> @isInteger
-  local +17:9 v: Local | null (const)
-  local +18:7 k: i32 (let)
+  local +10:11 length: i64 (const)
+  callee +10:20 fixedLength -> @fixedLength
+  local +16:9 constant: ConstInfo | null (const)
+  local +18:11 fits: boolean (const)
+  callee +19:31 isInteger -> @isInteger
+  local +21:9 v: Local | null (const)
+  local +22:7 k: i32 (let)
 function convertedConstant(program: CheckedProgram, call: Node): i32 -> @convertedConstant
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isBuiltinConversion literalValue nish_panic_index nish_str_eq
@@ -1101,11 +1103,11 @@ function squareRootFloor(n: i32): i32 -> @squareRootFloor
 function orderFacts(walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: boolean): Fact[] -> @orderFacts
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via lengthOf
-  calls: Fact.constructor TypeTable.baseOf TypeTable.isArray exactArrayLengthOf holdersAbove indexLocal knownBelow lengthOf literalValue maxIndexOf minusLiteral nish_alloc_struct nish_array_grow nish_panic_overflow offsetIndex sameBase squareRootFloor squaredLocal unsignedIndexOf unsignedLengthOf
-  pointer walk: size=200 writesThrough=false captured=false passedTo=lengthOf#0 lengthOf#0 unsignedLengthOf#0 exactArrayLengthOf#0
+  calls: Fact.constructor TypeTable.baseOf TypeTable.isArray constantValue exactArrayLengthOf holdersAbove indexLocal knownBelow lengthOf maxIndexOf minusLiteral nish_alloc_struct nish_array_grow nish_panic_overflow offsetIndex sameBase squareRootFloor squaredLocal unsignedIndexOf unsignedLengthOf
+  pointer walk: size=200 writesThrough=false captured=false passedTo=constantValue#0 constantValue#0 lengthOf#0 lengthOf#0 unsignedLengthOf#0 exactArrayLengthOf#0
   pointer state: size=136 writesThrough=false captured=false passedTo=holdersAbove#0 knownBelow#0 holdersAbove#0 knownBelow#0 maxIndexOf#0 maxIndexOf#0 holdersAbove#0
-  pointer lo: size=40 writesThrough=true captured=true passedTo=indexLocal#1 literalValue#0 offsetIndex#1 unsignedIndexOf#1 exactArrayLengthOf#1 squaredLocal#1
-  pointer hi: size=40 writesThrough=true captured=true passedTo=indexLocal#1 literalValue#0 lengthOf#1 minusLiteral#1 unsignedLengthOf#1
+  pointer lo: size=40 writesThrough=true captured=true passedTo=indexLocal#1 constantValue#1 offsetIndex#1 unsignedIndexOf#1 exactArrayLengthOf#1 squaredLocal#1
+  pointer hi: size=40 writesThrough=true captured=true passedTo=indexLocal#1 constantValue#1 lengthOf#1 minusLiteral#1 unsignedLengthOf#1
   stackSites=0 stackLocals=0
   local +0:9 ctx: CheckContext (const)
   local +1:9 out: Fact[] (const)
@@ -1114,9 +1116,9 @@ function orderFacts(walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   local +3:9 hiVar: Local | null (const)
   callee +3:17 indexLocal -> @indexLocal
   local +4:9 loConst: i32 (const)
-  callee +4:19 literalValue -> @literalValue
+  callee +4:19 constantValue -> @constantValue
   local +5:9 hiConst: i32 (const)
-  callee +5:19 literalValue -> @literalValue
+  callee +5:19 constantValue -> @constantValue
   local +6:9 hiLength: Local | null (const)
   callee +6:20 lengthOf -> @lengthOf
   callee +10:14 new Fact -> @Fact.constructor
@@ -2475,23 +2477,31 @@ function provesByRange(walk: BoundsWalk, state: State, holder: Local, index: Nod
 function provesTableIndex(walk: BoundsWalk, state: State, receiver: Node, index: Node): boolean -> @provesTableIndex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via valueRange
-  calls: TypeTable.baseOf declaredValueRange nish_panic_index unwrapBoundsParens valueRange writesSomething
+  calls: TypeTable.baseOf declaredValueRange fixedLength nish_panic_index valueRange writesSomething
   pointer walk: size=200 writesThrough=false captured=false passedTo=valueRange#0
   pointer state: size=136 writesThrough=false captured=false passedTo=valueRange#1
-  pointer receiver: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
+  pointer receiver: size=40 writesThrough=true captured=true passedTo=fixedLength#1
   pointer index: size=40 writesThrough=true captured=true passedTo=declaredValueRange#1 writesSomething#0 valueRange#2
+  stackSites=0 stackLocals=0
+  local +0:9 length: i64 (const)
+  callee +0:18 fixedLength -> @fixedLength
+  local +4:9 declared: DeclaredRange | null (const)
+  callee +4:20 declaredValueRange -> @declaredValueRange
+  local +8:9 written: i32 (const)
+  callee +9:22 writesSomething -> @writesSomething
+  local +12:9 type: i32 (const)
+  callee +12:16 TypeTable.baseOf -> @TypeTable.baseOf
+  local +16:9 range: Interval (const)
+  callee +16:17 valueRange -> @valueRange
+function fixedLength(program: CheckedProgram, expr: Node): i64 -> @fixedLength
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index unwrapBoundsParens
+  pointer program: size=928 writesThrough=false captured=false
+  pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
   callee +0:13 unwrapBoundsParens -> @unwrapBoundsParens
-  local +4:9 table: ConstInfo | null (const)
-  local +8:9 declared: DeclaredRange | null (const)
-  callee +8:20 declaredValueRange -> @declaredValueRange
-  local +12:9 written: i32 (const)
-  callee +13:22 writesSomething -> @writesSomething
-  local +16:9 type: i32 (const)
-  callee +16:16 TypeTable.baseOf -> @TypeTable.baseOf
-  local +20:9 range: Interval (const)
-  callee +20:17 valueRange -> @valueRange
+  local +4:9 constant: ConstInfo | null (const)
 function atomicArgumentsStill(call: Node): boolean -> @atomicArgumentsStill
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: callsSomething nish_panic_index writesSomething
@@ -3480,7 +3490,7 @@ function valueRange(walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via lengthOf
   escaping: type
-  calls: Interval.constructor TypeTable.baseOf TypeTable.declaredRange anyLiteral builtinAnswerTop callRange checkedArithmeticType combinedRange constantValue convertedRange identityConversionOf lengthOf localOf localRange maskedRange nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_eq typeMax typeMin unwrapBoundsParens valueRange widenedRange
+  calls: Interval.constructor TypeTable.baseOf TypeTable.declaredRange anyLiteral builtinAnswerTop callRange checkedArithmeticType combinedRange constantValue convertedRange identityConversionOf lengthOf localOf localRange maskedRange nish_alloc_struct nish_panic_index nish_str_eq typeMax typeMin unwrapBoundsParens valueRange widenedRange
   pointer walk: size=200 writesThrough=false captured=false passedTo=constantValue#0 lengthOf#0 convertedRange#0 valueRange#0 widenedRange#0 maskedRange#0 valueRange#0 valueRange#0 valueRange#0 callRange#0
   pointer state: size=136 writesThrough=false captured=false passedTo=valueRange#1 widenedRange#1 localRange#0 maskedRange#1 valueRange#1 valueRange#1 valueRange#1 callRange#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
@@ -3723,7 +3733,7 @@ function maskedRange(walk: BoundsWalk, state: State, e: Node, type: i32): Interv
   callee +47:12 new Interval -> @Interval.constructor
 function passBound(walk: BoundsWalk, state: State, loop: Node, effects: Effects): i64 -> @passBound
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.baseOf contains indexLocal literalValue maxIndexOf minValueOf nish_panic_index nish_panic_overflow nish_str_eq stepsByOne unwrapBoundsParens writesVariable
+  calls: TypeTable.baseOf contains indexLocal literalValue maxIndexOf minValueOf nish_panic_index nish_str_eq stepsByOne unwrapBoundsParens writesVariable
   pointer walk: size=200 writesThrough=false captured=false
   pointer state: size=136 writesThrough=false captured=false passedTo=maxIndexOf#0 minValueOf#0
   pointer loop: size=40 writesThrough=false captured=false
