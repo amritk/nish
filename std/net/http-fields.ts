@@ -355,8 +355,12 @@ const httpFieldsStatusOf = (value: u8[]): i32 => {
     if (digit < 0 || digit > 9) {
       return -1
     }
-    // Three digits are at most 999, so the unsigned sum cannot leave an `i32`.
-    code = toI32(toU32(code) * 10 + toU32(digit))
+    // The length test above allows three digits, so `code` is at most 99
+    // before the last one; the test is what proves the sum cannot overflow.
+    if (code < 0 || code > 99) {
+      return -1
+    }
+    code = code * 10 + digit
   }
   return code >= 100 && code <= 599 ? code : -1
 }
@@ -367,17 +371,17 @@ const httpFieldsLengthOf = (value: u8[]): i64 => {
   if (n === 0 || n > HTTP_FIELDS_MAX_LENGTH_DIGITS) {
     return toI64(-1)
   }
-  let length: i64 = 0
+  // The value stays `u64` throughout: at most eighteen digits stay below
+  // 10^18, so the sum never wraps and its value fits an `i64` exactly.
+  let length: u64 = 0
   for (const b of value) {
     const digit: i32 = toI32(b) - 48
     if (digit < 0 || digit > 9) {
       return toI64(-1)
     }
-    // At most eighteen digits stay below 10^18, so the unsigned sum cannot
-    // leave an `i64`.
-    length = toI64(toU64(length) * toU64(10) + toU64(digit))
+    length = length * 10 + toU64(digit)
   }
-  return length
+  return toI64(length)
 }
 
 /** Whether `authority` holds an `@`, which only userinfo would put there (RFC 9113 §8.3.1). */
@@ -714,16 +718,20 @@ const HTTP_FIELDS_DATE_NAMES: string = "SunMonTueWedThuFriSatJanFebMarAprMayJunJ
  * Writes `b` at `out[at + k]`. Its one caller, `httpDateWrite`, has checked
  * `0 <= at` and `at + HTTP_DATE_SIZE <= out.length` before the first write,
  * and every `k` it passes is a constant from 0 to 28, under `HTTP_DATE_SIZE`:
- * so `at + k` is inside `out`, the u32 sum does not wrap and the test always
- * holds. The test is what proves the index; nothing is allocated, and a byte
- * it skipped would show in the `httpDateWrite` round trips `tests/run.js`
- * pins byte for byte (`tests/link/net_http_date`). The skip is unreachable by
- * that room check in `httpDateWrite`, which the prover does not carry across
- * the call, so the test stays.
+ * so `at + k` is inside `out` and the tests always hold. The first test,
+ * whose literals are `HTTP_DATE_SIZE - 1` and `2^31 - 1` less that, proves
+ * the sum cannot overflow, and the second proves the index; nothing is
+ * allocated, and a byte it skipped would show in the `httpDateWrite` round
+ * trips `tests/run.js` pins byte for byte (`tests/link/net_http_date`). The
+ * skip is unreachable by that room check in `httpDateWrite`, which the prover
+ * does not carry across the call, so the tests stay.
  */
 const httpFieldsPut = (out: u8[], at: i32, k: i32, b: u32): void => {
-  const pos: i32 = toI32(toU32(at) + toU32(k))
-  if (pos >= 0 && pos < toI32(out.length)) {
+  if (at < 0 || at > 2147483619 || k < 0 || k > 28) {
+    return
+  }
+  const pos: i32 = at + k
+  if (pos < toI32(out.length)) {
     out[pos] = toU8(b)
   }
 }
@@ -733,22 +741,36 @@ const httpFieldsPut = (out: u8[], at: i32, k: i32, b: u32): void => {
  * `out[at + k ..)`. `httpDateWrite` passes a weekday, `(days + 4) % 7`, so 0
  * to 6, or `6 + month` with `month` 1 to 12 by the 153-day rule, so 7 to 18:
  * `3 * index + 2` is at most 56, under the table's 57 letters, and the test
- * always holds. It is what proves the index.
+ * always holds. It is what proves the index. Every `k` it is passed is 0 or
+ * 8, so the test on `k`, whose 26 is `HTTP_DATE_SIZE - 3`, always holds too;
+ * it is what proves `k + d` cannot overflow.
  */
 const httpFieldsPutName = (out: u8[], at: i32, k: i32, index: u32): void => {
+  if (k < 0 || k > 26) {
+    return
+  }
   const names: string = HTTP_FIELDS_DATE_NAMES
-  for (let d: u32 = 0; d < 3; d++) {
-    const pos: i32 = toI32(index * 3 + d)
+  for (let d: i32 = 0; d < 3; d++) {
+    // The letter's place is worked in `u32`, as `index` is: at most 56.
+    const step: u32 = toU32(d)
+    const pos: i32 = toI32(index * 3 + step)
     if (pos >= 0 && pos < toI32(names.length)) {
-      httpFieldsPut(out, at, toI32(toU32(k) + d), toU32(names.charCodeAt(pos)))
+      httpFieldsPut(out, at, k + d, toU32(names.charCodeAt(pos)))
     }
   }
 }
 
-/** Writes `n`, 0 to 99, as two digits at `out[at + k ..)`. */
+/**
+ * Writes `n`, 0 to 99, as two digits at `out[at + k ..)`. Every `k` it is
+ * passed is at most 23, so the test, whose 27 is `HTTP_DATE_SIZE - 2`, always
+ * holds; it is what proves `k + 1` cannot overflow.
+ */
 const httpFieldsPutTwo = (out: u8[], at: i32, k: i32, n: u32): void => {
+  if (k < 0 || k > 27) {
+    return
+  }
   httpFieldsPut(out, at, k, toU32(48) + n / 10)
-  httpFieldsPut(out, at, toI32(toU32(k) + toU32(1)), toU32(48) + (n % 10))
+  httpFieldsPut(out, at, k + 1, toU32(48) + (n % 10))
 }
 
 /**
@@ -774,12 +796,7 @@ const httpFieldsPutTwo = (out: u8[], at: i32, k: i32, n: u32): void => {
  *   or -1 when nothing was written
  */
 export const httpDateWrite = (out: u8[], at: i32, seconds: i64): i32 => {
-  if (
-    seconds < 0 ||
-    seconds > HTTP_DATE_LAST_SECOND ||
-    at < 0 ||
-    toI64(at) + toI64(HTTP_DATE_SIZE) > toI64(out.length)
-  ) {
+  if (seconds < 0 || seconds > HTTP_DATE_LAST_SECOND || at < 0 || at > toI32(out.length) - 29) {
     return -1
   }
   // The test above keeps `seconds` far below 2^63, so every step is `u64`
@@ -819,6 +836,7 @@ export const httpDateWrite = (out: u8[], at: i32, seconds: i64): i32 => {
   httpFieldsPut(out, at, 26, 71)
   httpFieldsPut(out, at, 27, 77)
   httpFieldsPut(out, at, 28, 84)
-  // The date fits in `out` from `at`, so the end is at most its length.
-  return toI32(toU32(at) + toU32(HTTP_DATE_SIZE))
+  // The room test above, whose 29 is `HTTP_DATE_SIZE`, keeps the end at most
+  // `out.length`; it is what proves the sum cannot overflow.
+  return at + 29
 }
