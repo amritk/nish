@@ -29,6 +29,8 @@ import {
   Http1TlsServer,
   HttpDate,
   http1ConfigChecked,
+  http1ConnectionChecked,
+  http1ServerChecked,
 } from "nish/net/http1-server";
 ```
 
@@ -63,6 +65,18 @@ else if (server.rearm(slot, wants)) { pollModify(loop, server.fd(slot), wants & 
 <scalar-card title="http1​Config​Checked" icon="phosphor/regular/function" href="#http1configchecked">
 
 `config` when every cap is one a connection can work with, the twin of the check `Http1Connection`'s constructor panics on: a program reading its caps from a file or flags checks them here, and refuses the bad one with the message the constructor would panic with, rather than panicking.
+
+</scalar-card>
+
+<scalar-card title="http1​Connection​Checked" icon="phosphor/regular/function" href="#http1connectionchecked">
+
+A connection under a copy of `config`, checked once, the twin of `Http1Connection`'s constructor that refuses a cap outside what the connection can work with as an `Err` rather than panicking.
+
+</scalar-card>
+
+<scalar-card title="http1​Server​Checked" icon="phosphor/regular/function" href="#http1serverchecked">
+
+A server pool under a copy of `config`, checked once, the twin of `Http1Server`'s constructor: a cap outside what a connection can work with is an `Err` here, where the constructor's pool would panic building its first connection.
 
 </scalar-card>
 
@@ -271,6 +285,78 @@ the caps to check, returned as they are when they pass
 
 </scalar-field>
 
+### http1ConnectionChecked
+
+A connection under a copy of `config`, checked once, the twin of
+`Http1Connection`'s constructor that refuses a cap outside what the
+connection can work with as an `Err` rather than panicking. The connection
+keeps the copy, so a later change to `config` does not reach it.
+
+```ts
+const http1ConnectionChecked: (
+  config: Http1Config,
+  date: HttpDate | null = null,
+) => Result<Http1Connection, string>
+```
+
+<scalar-field name="config" type="Http1Config" required>
+
+the caps the connection is held to, copied and checked now
+
+</scalar-field>
+
+<scalar-field name="date" type="HttpDate | null">
+
+the `Date` its responses carry, shared with other connections; null makes it one of its own
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;Http1Connection, string&gt;">
+
+the connection, or the first cap outside its range, named with the range it must lie in
+
+</scalar-field>
+
+### http1ServerChecked
+
+A server pool under a copy of `config`, checked once, the twin of
+`Http1Server`'s constructor: a cap outside what a connection can work
+with is an `Err` here, where the constructor's pool would panic building
+its first connection. The pool keeps the copy, so a later change to
+`config` reaches none of its connections.
+
+```ts
+const http1ServerChecked: (
+  config: Http1Config,
+  listener: i32,
+  size: i32,
+) => Result<Http1Server, string>
+```
+
+<scalar-field name="config" type="Http1Config" required>
+
+the caps every slot's connection is held to, copied and checked now
+
+</scalar-field>
+
+<scalar-field name="listener" type="i32" required>
+
+the listening socket from `tcpListen`, which stays the program's to close
+
+</scalar-field>
+
+<scalar-field name="size" type="i32" required>
+
+how many connections the pool serves at once; less than 1 counts as 1
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;Http1Server, string&gt;">
+
+the pool, or the first cap outside its range, named with the range it must lie in
+
+</scalar-field>
+
 ## Classes
 
 ### Http1Config
@@ -438,6 +524,7 @@ class Http1Server
 | `size(): i32` | How many slots the pool has, built or not. |
 | `spares(): i32` | How many connections no slot holds now, of the `connections` built. |
 | `tick(now: i64): void` | Sets the instant, in `monotonicNanos`, that the server stamps activity with until the next `tick`: a loop that calls it once a pass spares every `readable` and `flush` of the pass its own clock read, and a timeout, counted in seconds, moves by the pass's length at most. 0 goes back to reading the clock at each stamp, which is what a server that is never ticked does. |
+| `tryConnection(slot: i32): Http1Connection \| null` | The connection `slot` holds, as `connection` answers it, or null where `connection` would panic: the twin for a pool made by `new Http1Server` whose caps no connection can work with (`http1ServerChecked` makes a pool that never answers null). A free slot, or one out of range, names the first connection built, as `connection`'s does. |
 | `writable(slot: i32): i32` | The socket of `slot` is writable: sends, and begins a serve call as `readable` does. Answers the interest. |
 
 ### Http1TlsServer

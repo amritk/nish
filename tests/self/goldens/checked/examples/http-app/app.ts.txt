@@ -8,6 +8,7 @@ import http1Text from "nish/net/http1-codec" -> function @nish.http1Text
 import ROUTER_METHOD_NOT_ALLOWED from "nish/net/router" -> const ROUTER_METHOD_NOT_ALLOWED
 import Router from "nish/net/router" -> struct Router
 import RouterLimits from "nish/net/router" -> struct RouterLimits
+import routerChecked from "nish/net/router" -> function @nish.routerChecked
 import STATIC_NOT_FOUND from "nish/net/static" -> const STATIC_NOT_FOUND
 import StaticFiles from "nish/net/static" -> struct StaticFiles
 import StaticLimits from "nish/net/static" -> struct StaticLimits
@@ -203,16 +204,31 @@ function serveTurn(app: App, timeoutMs: i32): void -> @serveTurn [exported]
   callee +1:33 HttpHandler.next -> @nish.HttpHandler.next
   callee +3:5 App.answer -> @App.answer
   callee +4:11 HttpHandler.next -> @nish.HttpHandler.next
-function appRoutes(): Router -> @appRoutes [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
+function addRoutes(router: Router): Router -> @addRoutes
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
   sharedWrite: via nish.Router.add
-  calls: nish.Router.add nish.Router.constructor nish_alloc_struct
-  stackSites=1 stackLocals=0
-  local +0:9 router: Router (const)
-  callee +0:18 new Router -> @nish.Router.constructor
+  escaping: router
+  calls: nish.Router.add
+  pointer router: size=288 writesThrough=true captured=true passedTo=nish.Router.add#0 nish.Router.add#0 nish.Router.add#0 nish.Router.add#0 nish.Router.add#0 nish.Router.add#0
+  stackSites=0 stackLocals=0
+  callee +0:3 Router.add -> @nish.Router.add
   callee +1:3 Router.add -> @nish.Router.add
   callee +2:3 Router.add -> @nish.Router.add
   callee +3:3 Router.add -> @nish.Router.add
   callee +4:3 Router.add -> @nish.Router.add
   callee +5:3 Router.add -> @nish.Router.add
-  callee +6:3 Router.add -> @nish.Router.add
+function appRoutes(): Router -> @appRoutes [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
+  sharedWrite: via addRoutes
+  calls: addRoutes nish.Router.constructor nish_alloc_struct
+  stackSites=1 stackLocals=0
+  callee +0:40 addRoutes -> @addRoutes
+  callee +0:50 new Router -> @nish.Router.constructor
+function tryAppRoutes(): Result<Router, string> -> @tryAppRoutes [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
+  sharedWrite: via addRoutes
+  calls: addRoutes nish.routerChecked nish_alloc_struct
+  stackSites=1 stackLocals=0
+  local +0:9 made: Result<Router, string> (const)
+  callee +0:40 routerChecked -> @nish.routerChecked
+  callee +4:13 addRoutes -> @addRoutes

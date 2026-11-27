@@ -26,7 +26,9 @@ import {
   preforkWith,
   preforkWorkerCount,
   preforkWorkers,
+  tryPreforkSupervise,
   tryPreforkWith,
+  tryPreforkWorkers,
 } from "nish/net/prefork";
 ```
 
@@ -120,9 +122,21 @@ How many workers to start: `env` (`NISH_WORKERS`, `null` when unset) when it is 
 
 </scalar-card>
 
+<scalar-card title="try​Prefork​Supervise" icon="phosphor/regular/function" href="#trypreforksupervise">
+
+`preforkSupervise` for a caller built without `--allow-panics`: a config that breaks its contract is an `Err` with the reason, before any worker starts, where `preforkSupervise` panics.
+
+</scalar-card>
+
 <scalar-card title="try​Prefork​With" icon="phosphor/regular/function" href="#trypreforkwith">
 
 `preforkWith` for a caller built without `--allow-panics`: a config that breaks `preforkSupervise`'s contract is answered as `Err`, naming the field and the limit it passed, before any worker starts, rather than a panic.
+
+</scalar-card>
+
+<scalar-card title="try​Prefork​Workers" icon="phosphor/regular/function" href="#trypreforkworkers">
+
+`preforkWorkers` for a caller built without `--allow-panics`: the supervisor's refusal of its config is an `Err` here, where `preforkWorkers` panics.
 
 </scalar-card>
 
@@ -606,6 +620,53 @@ in a worker, its index at once; in the supervisor, once it is done,
 
 </scalar-field>
 
+### tryPreforkSupervise
+
+`preforkSupervise` for a caller built without `--allow-panics`: a config
+that breaks its contract is an `Err` with the reason, before any worker
+starts, where `preforkSupervise` panics.
+
+```ts
+const tryPreforkSupervise: <S>(
+  args: string[],
+  config: PreforkConfig,
+  state: S,
+  onChannel: (state: S, index: i32, fd: i32, events: i32) => void,
+) => Result<i32, string>
+```
+
+<scalar-field name="args" type="string[]" required>
+
+the process's arguments, `process.argv`
+
+</scalar-field>
+
+<scalar-field name="config" type="PreforkConfig" required>
+
+the supervisor's settings, checked in the supervisor and
+  each worker alike
+
+</scalar-field>
+
+<scalar-field name="state" type="S" required>
+
+the program's own value, passed to every `onChannel` call
+
+</scalar-field>
+
+<scalar-field name="onChannel" type="(state: S, index: i32, fd: i32, events: i32) =&gt; void" required>
+
+what the supervisor runs when worker `index`'s channel
+  `fd` wakes it, with `pollWait`'s `events`
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;i32, string&gt;">
+
+`Ok` with what `preforkSupervise` answers, or `Err` with why the config was refused
+
+</scalar-field>
+
 ### tryPreforkWith
 
 `preforkWith` for a caller built without `--allow-panics`: a config that
@@ -637,6 +698,30 @@ the supervisor's settings, checked in the supervisor and
 `Ok` with what `preforkWith` answers (a worker's index, or the
   supervisor's `PREFORK_STOPPED`, `PREFORK_WORKERS_EXITED` or
   `PREFORK_SPAWN_FAILED`), or `Err` with why the config was refused
+
+</scalar-field>
+
+### tryPreforkWorkers
+
+`preforkWorkers` for a caller built without `--allow-panics`: the
+supervisor's refusal of its config is an `Err` here, where
+`preforkWorkers` panics.
+
+```ts
+const tryPreforkWorkers: (
+  args: string[],
+) => Result<i32, string>
+```
+
+<scalar-field name="args" type="string[]" required>
+
+the process's arguments, `process.argv`
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;i32, string&gt;">
+
+`Ok` with what `preforkWorkers` answers, or `Err` with why the config was refused
 
 </scalar-field>
 
