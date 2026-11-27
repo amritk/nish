@@ -11747,6 +11747,8 @@ const JSON_PUT_STRING = "jsonPutString"
 const HTTP1_TICK = "Http1Server.tick"
 /** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
+/** The changelog words of WP90 S1, the multipart/form-data reader. */
+const MULTIPART_BODIES = "multipart/form-data bodies"
 
 const DECLARED = [
   // #2297: the bounds walk proves `end - start` of two index locals with
@@ -23630,6 +23632,30 @@ const DECLARED = [
     file: "exit",
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
+  },
+  // WP90 S1: std/net/http-fields.ts gains `MediaType` and the media-type
+  // readers, and std/net/multipart.ts is new.
+  ...[
+    "tests/link/net_http2_stream/main.ts",
+    "tests/link/net_http_fields/main.ts",
+    "tests/link/net_http_fields_f64/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: MULTIPART_BODIES,
+    why: "std/net/http-fields.ts gains the `MediaType` class, so the header the program writes forward-declares `struct MediaType;`",
+  })),
+  {
+    program: "tests/link/net_media_type/main.ts",
+    file: "exit",
+    changelog: MULTIPART_BODIES,
+    why: "the case is new with this change and imports `mediaTypeParse`, `formDataDispositionParse` and `mediaTypeParam`, which the seed's std/net/http-fields.ts does not export, so the reference refuses it",
+  },
+  {
+    program: "tests/link/net_multipart_read/main.ts",
+    file: "exit",
+    changelog: MULTIPART_BODIES,
+    why: "the case is new with this change and imports nish/net/multipart, which the seed does not ship, so the reference refuses it",
   },
 ]
 

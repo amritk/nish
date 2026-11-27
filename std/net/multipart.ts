@@ -196,17 +196,16 @@ export class MultipartReader {
   filename: string | null = null
   /** The part's `Content-Type` value as given, or `text/plain` when it has none (RFC 7578 §4.4). */
   contentType: string = "text/plain"
+  /** @internal The body the parts are read from. */
+  body: readonly u8[] = []
+  /** @internal CR LF, `--` and the boundary: what each delimiter starts with. */
+  delimiter: u8[] = []
   /** Where the part's data starts in the body. */
   dataStart: i32 = 0
   /** How many octets of data the part holds. */
   dataLength: i32 = 0
-
-  /** @internal The body the parts are read from. */
-  body: readonly u8[] = []
   /** @internal How many octets of `body` are the message's. */
   length: i32 = 0
-  /** @internal CR LF, `--` and the boundary: what each delimiter starts with. */
-  delimiter: u8[] = []
   /** @internal The most header lines one part may hold. */
   maxHeaders: i32 = 0
   /** @internal The most octets of header lines one part may hold. */
@@ -275,8 +274,8 @@ export class MultipartReader {
     if (!this.started) {
       this.started = true
       // The first delimiter may open the body, with no CR LF before it.
-      this.kind = this.delimiterAt(0, 2)
-      if (this.kind === MULTIPART_NONE && this.find(0) < 0) {
+      this.kind = this.delimiterAt(toI32(0), toI32(2))
+      if (this.kind === MULTIPART_NONE && this.find(toI32(0)) < 0) {
         return this.fail(MULTIPART_ERR_UNTERMINATED)
       }
     }
@@ -360,7 +359,7 @@ export class MultipartReader {
     let p: i32 = from
     while (p >= 0 && p < length && p < toI32(body.length)) {
       if (toI32(body[p]) === 13) {
-        const kind: i32 = this.delimiterAt(p, 0)
+        const kind: i32 = this.delimiterAt(p, toI32(0))
         if (kind !== MULTIPART_NONE) {
           this.kind = kind
           return p
