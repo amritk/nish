@@ -7805,28 +7805,25 @@ function Http1Parser.constructor(this: Http1Parser, maxTarget: i32, maxHeaderByt
   callee +3:20 http1Clamp -> @nish.http1Clamp
   callee +21:5 Http1Parser.restart -> @nish.Http1Parser.restart
 function Http1Parser.feed(this: Http1Parser, data: u8[], off: i32, len: i32): void -> @nish.Http1Parser.feed [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Http1Parser.tryFeed
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.http1Append
   escaping: len off
-  calls: nish.Http1Parser.tryFeed nish_panic
-  pointer this: size=232 writesThrough=true captured=false passedTo=nish.Http1Parser.tryFeed#0
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Http1Parser.tryFeed#1
+  calls: nish.http1Append nish_panic
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.http1Append#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.http1Append#1
   stackSites=0 stackLocals=0
-  callee +0:10 Http1Parser.tryFeed -> @nish.Http1Parser.tryFeed
+  local +0:11 size: i32 (const)
+  callee +4:5 http1Append -> @nish.http1Append
 function Http1Parser.tryFeed(this: Http1Parser, data: u8[], off: i32, len: i32): boolean -> @nish.Http1Parser.tryFeed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: via nish.http1Append
   escaping: len off
-  calls: nish.http1Fail nish.http1Reserve nish.tryCopyBytes
-  pointer this: size=232 writesThrough=true captured=false passedTo=nish.http1Reserve#0 nish.http1Fail#0
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
+  calls: nish.http1Append
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.http1Append#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.http1Append#1
   stackSites=0 stackLocals=0
-  local -20:11 size: i32 (const)
-  callee -13:10 http1Reserve -> @nish.http1Reserve
-  local -10:11 buf: u8[] (const)
-  local -9:11 at: i32 (const)
-  callee -5:10 tryCopyBytes -> @nish.tryCopyBytes
-  callee -4:7 http1Fail -> @nish.http1Fail
+  local +0:11 size: i32 (const)
+  callee +4:5 http1Append -> @nish.http1Append
 function Http1Parser.next(this: Http1Parser): i32 -> @nish.Http1Parser.next [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.http1Next
@@ -7921,6 +7918,19 @@ function Http1Parser.declineUpgrade(this: Http1Parser): void -> @nish.Http1Parse
   pointer this: size=232 writesThrough=true captured=false passedTo=nish.http1StartRequest#0
   stackSites=0 stackLocals=0
   callee +0:7 http1StartRequest -> @nish.http1StartRequest
+function http1Append(p: Http1Parser, data: u8[], off: i32, len: i32): void -> @nish.http1Append
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: len off
+  calls: nish.http1Fail nish.http1Reserve nish.tryCopyBytes
+  pointer p: size=232 writesThrough=true captured=false passedTo=nish.http1Reserve#0 nish.http1Fail#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
+  stackSites=0 stackLocals=0
+  callee -13:8 http1Reserve -> @nish.http1Reserve
+  local -10:9 buf: u8[] (const)
+  local -9:9 at: i32 (const)
+  callee -5:8 tryCopyBytes -> @nish.tryCopyBytes
+  callee -4:5 http1Fail -> @nish.http1Fail
 function http1Reserve(p: Http1Parser, len: i32): boolean -> @nish.http1Reserve
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
