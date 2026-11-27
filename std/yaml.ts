@@ -2063,9 +2063,19 @@ class YamlParser {
     return yamlByte(this.text, i)
   }
 
+  /** The byte after `i`, or `-1` outside the text: `at(i + 1)`, with the sum proven. */
+  private after(i: i32): i32 {
+    return i < this.len ? yamlByte(this.text, i + 1) : -1
+  }
+
+  /** The byte before `i`, or `-1` outside the text: `at(i - 1)`, with the difference proven. */
+  private before(i: i32): i32 {
+    return i > 0 ? yamlByte(this.text, i - 1) : -1
+  }
+
   /** Whether `i` holds a `-` that starts a block sequence entry. */
   private isSeqEntryDash(i: i32): boolean {
-    return this.at(i) === YAML_DASH && yamlIsWs(this.at(i + 1))
+    return this.at(i) === YAML_DASH && yamlIsWs(this.after(i))
   }
 
   /** Whether `[from, to)` holds a line break. */
@@ -2082,12 +2092,16 @@ class YamlParser {
   /** Whether `i` starts a `---` or `...` marker. */
   private isDocMarker(i: i32): boolean {
     const c: i32 = this.at(i)
-    return (
-      (c === YAML_DASH || c === YAML_DOT) &&
-      this.at(i + 1) === c &&
-      this.at(i + 2) === c &&
-      yamlIsWs(this.at(i + 3))
-    )
+    if ((c !== YAML_DASH && c !== YAML_DOT) || i >= this.len) {
+      return false
+    }
+    // Each byte matched is inside the text, so each step is below its length.
+    const j: i32 = i + 1
+    if (this.at(j) !== c || j >= this.len) {
+      return false
+    }
+    const k: i32 = j + 1
+    return this.at(k) === c && yamlIsWs(this.after(k))
   }
 
   /** The end of `[from, …)` before any trailing blanks and a comment, on its line. */
@@ -2099,7 +2113,7 @@ class YamlParser {
       if (yamlIsBreak(c)) {
         break
       }
-      if (c === YAML_HASH && i > from && yamlIsBlank(this.at(i - 1))) {
+      if (c === YAML_HASH && i > from && yamlIsBlank(this.before(i))) {
         break
       }
       i += 1
@@ -2125,10 +2139,11 @@ class YamlParser {
    */
   private propTokenEnd(from: i32, flow: boolean): i32 {
     let i: i32 = from
-    if (this.at(from - 1) === YAML_BANG && this.at(from) === YAML_LT) {
+    if (this.before(from) === YAML_BANG && this.at(from) === YAML_LT) {
       while (i < this.len && !yamlIsWs(this.at(i))) {
+        const c: i32 = this.at(i)
         i += 1
-        if (this.at(i - 1) === YAML_GT) {
+        if (c === YAML_GT) {
           return i
         }
       }
@@ -2152,9 +2167,10 @@ class YamlParser {
    */
   private peekLine(minIndent: i32): void {
     let p: i32 = this.pos
-    while (p < this.len) {
+    // A negative `p` reads -1, which ends the scan as the end of the text does.
+    while (p >= 0 && p < this.len) {
       let i: i32 = p
-      while (this.at(i) === YAML_SPACE) {
+      while (i < this.len && this.at(i) === YAML_SPACE) {
         i += 1
       }
       const c: i32 = this.at(i)
@@ -2170,7 +2186,7 @@ class YamlParser {
       }
       if (c === YAML_TAB) {
         let j: i32 = i
-        while (yamlIsBlank(this.at(j))) {
+        while (j < this.len && yamlIsBlank(this.at(j))) {
           j += 1
         }
         const d: i32 = this.at(j)
@@ -2207,17 +2223,21 @@ class YamlParser {
 
   /** Steps past spaces and tabs. */
   private skipInlineSpaces(): void {
-    while (yamlIsBlank(this.at(this.pos))) {
-      this.pos += 1
+    let p: i32 = this.pos
+    while (p < this.len && yamlIsBlank(this.at(p))) {
+      p += 1
     }
+    this.pos = p
   }
 
   /** Steps past the spaces after an indicator, reporting a tab that indents a compact node. */
   private skipIndicatorSeparation(): void {
-    while (this.at(this.pos) === YAML_SPACE) {
-      this.pos += 1
+    let p: i32 = this.pos
+    while (p < this.len && this.at(p) === YAML_SPACE) {
+      p += 1
     }
-    if (this.at(this.pos) !== YAML_TAB) {
+    this.pos = p
+    if (this.at(p) !== YAML_TAB) {
       return
     }
     const tab: i32 = this.pos
@@ -2228,7 +2248,7 @@ class YamlParser {
     }
     if (
       this.isSeqEntryDash(this.pos) ||
-      (c === YAML_QUESTION && yamlIsWs(this.at(this.pos + 1))) ||
+      (c === YAML_QUESTION && yamlIsWs(this.after(this.pos))) ||
       this.findKeyColon(this.pos) >= 0
     ) {
       this.error(YAML_ERR_TAB_INDENT, "Tabs cannot be used for indentation", tab, this.pos)
@@ -2252,13 +2272,13 @@ class YamlParser {
       return
     }
     let i: i32 = this.pos
-    while (yamlIsBlank(this.at(i))) {
+    while (i < this.len && yamlIsBlank(this.at(i))) {
       i += 1
     }
     if (this.at(i) !== YAML_HASH) {
       return
     }
-    if (i === this.pos && !yamlIsWs(this.at(i - 1))) {
+    if (i === this.pos && !yamlIsWs(this.before(i))) {
       return
     }
     this.recordComment(i)
@@ -2275,7 +2295,7 @@ class YamlParser {
       if (yamlIsBreak(c)) {
         return
       }
-      if (c === YAML_HASH && yamlIsWs(this.at(i - 1))) {
+      if (c === YAML_HASH && yamlIsWs(this.before(i))) {
         this.recordComment(i)
         return
       }
@@ -2297,7 +2317,8 @@ class YamlParser {
 
   /** `finishLine`, unless the cursor is already at the start of a line. */
   private finishLineIfMidLine(): void {
-    if (this.pos > 0 && this.pos < this.len && !yamlIsBreak(this.at(this.pos - 1))) {
+    const p: i32 = this.pos
+    if (p > 0 && p < this.len && !yamlIsBreak(this.at(p - 1))) {
       this.finishLine()
     }
   }
@@ -3235,7 +3256,7 @@ class YamlParser {
       if (yamlIsBreak(c)) {
         return -1
       }
-      if (c === YAML_HASH && i > from && yamlIsBlank(this.at(i - 1))) {
+      if (c === YAML_HASH && i > from && yamlIsBlank(this.before(i))) {
         return -1
       }
       if (c === YAML_COLON && yamlIsWs(this.at(i + 1))) {
