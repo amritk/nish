@@ -27,6 +27,25 @@ stages:
       - id: s1-record
         content: Add Wycheproof signing vectors, a ct_asm fixture, and update docs/security/crypto-rsa.md and docs/security/tls.md with their README rows — see TLS RSA S1
         status: pending
+      - id: s1-spec-rerun
+        content: After S2's spec is on main, merge main, run vector's check (--nish-root .) and mutate on S2's contract against std/crypto/rsa-sign.ts, kill what survives, and register every RFC the diff's std/ files cite so node scripts/rfc-specs.mjs passes — see TLS RSA S1, "Spec rerun"
+        status: pending
+  - id: s2-rsa-pss-spec
+    title: TLS RSA S2 — vector spec for RSASSA-PSS with SHA-256 (RFC 8017) as TLS 1.3's rsa_pss_rsae_sha256 (RFC 8446 §4.2.3)
+    goal: The spec, contract and emitted Nish test for nish/crypto/rsa-sign land on main before the module does, as the spec-first rule requires, profiling RSASSA-PSS signing with SHA-256, MGF1-SHA-256 and a hash-length salt (RFC 8017 §8.1.1, §9.1.1, §B.2.1) as TLS 1.3's rsa_pss_rsae_sha256 (RFC 8446 §4.2.3), with vector's check and mutate already run against #2335's module.
+    verification: bash scripts/build-spec.sh --check specs/rfc8017-*.md && node tests/run.js spec && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs (plus vector's extract --check, check --run-sources and stale, by hand, as contracts/README.md lists)
+    status: pending
+    issue: 2354
+    todos:
+      - id: s2-spec
+        content: Write specs/rfc8017-<name>.md and build it to specs/rfc8017-<name>.xml; every BCP 14 sentence it profiles has a test or a stated exclusion — see TLS RSA S2
+        status: pending
+      - id: s2-contract
+        content: Extract contracts/rfc8017-<name>.json, emit test/spec/rfc8017-<name>.ts, and pass vector spec check --run-sources and node tests/run.js spec — see TLS RSA S2
+        status: pending
+      - id: s2-against-2335
+        content: Run vector's check --nish-root . and mutate on the contract against #2335's std/crypto/rsa-sign.ts in a scratch checkout, and record the results (mutants killed, survivors by name) in the PR body without changing std/ — see TLS RSA S2
+        status: pending
 ---
 
 # RSA certificates on the TLS server
@@ -53,13 +72,45 @@ That needs RSA-PSS signing with constant-time big numbers, a new crypto lane wit
 Reads: `docs/security/crypto-rsa.md`, `docs/security/tls.md`, `docs/wp71-httparena.md` §2.
 Likely files: `std/crypto/rsa.ts`, `std/crypto/x509.ts`, `std/net/tls.ts`, `std/net/quic.ts`, `tests/run.js`, `docs/security/crypto-rsa.md`, `docs/security/tls.md`, `docs/security/README.md`.
 
-**Owns:** `std/crypto/rsa.ts`, `std/crypto/rsa-*.ts` (new), `std/crypto/x509.ts`, `std/net/tls.ts`, `std/net/tls/**`, `std/net/tls-tcp.ts`, `std/net/quic.ts`, `std/net/quic-conn-params.ts`, `std/net/http3-server.ts`, `std/net/http1-server.ts`, `std/net/http2-tls.ts`, `std/net/http-server.ts`, `std/net/grpc.ts`, `std/README.md`, `tests/run.js`, `tests/nish-cmp.js`, `tests/ct-asm.js`, `tests/cases/ct_asm_rsa*` (new), `tests/link/*rsa*/**` (existing and new RSA cases on any listener), `tests/link/crypto_x509*/**`, `tests/link/net_tls_*/**`, `docs/security/crypto-rsa.md`, `docs/security/tls.md`, `docs/security/quic.md`, `docs/security/http3.md`, `docs/security/README.md`, `docs/guide/using-nish/tls-certificates.md`, `docs/guide/using-nish/http-server.md`, `THIRD_PARTY_NOTICES.md`
+**Owns:** `std/crypto/rsa.ts`, `std/crypto/rsa-*.ts` (new), `std/crypto/x509.ts`, `std/net/tls.ts`, `std/net/tls/**`, `std/net/tls-tcp.ts`, `std/net/quic.ts`, `std/net/quic-conn-params.ts`, `std/net/http3-server.ts`, `std/net/http1-server.ts`, `std/net/http2-tls.ts`, `std/net/http-server.ts`, `std/net/grpc.ts`, `std/README.md`, `tests/run.js`, `tests/nish-cmp.js`, `tests/ct-asm.js`, `tests/cases/ct_asm_rsa*` (new), `tests/link/*rsa*/**` (existing and new RSA cases on any listener), `tests/link/crypto_x509*/**`, `tests/link/net_tls_*/**`, `docs/security/crypto-rsa.md`, `docs/security/tls.md`, `docs/security/quic.md`, `docs/security/http3.md`, `docs/security/README.md`, `docs/guide/using-nish/tls-certificates.md`, `docs/guide/using-nish/http-server.md`, `THIRD_PARTY_NOTICES.md`, and, from the run's Owns amendments, `src/std-modules.ts`, `tests/speed-link.txt`, `docs/guide/using-nish/standard-library.md` (amendment 1) and `scripts/rfc-unspecified.txt` (amendment 2, for the spec rerun)
 
 **Generated** (regenerated with the repo's tooling, never edited or hand-merged): `tests/self/goldens/checked/**`, `docs/reference/**`, `scalar.config.json`, `tests/differential/goldens/**`, `docs/IR_COOKBOOK.md`, `tests/wordings/*.err`, `tests/link/*/expected.caps.json`, `docs/reference/diagnostics/**`, `examples/break-web/help.ts`, `docs/site/break/**`
 
 No `Model:` line: the stage designs a constant-time signing lane and touches secret handling.
 
-**Merge:** every file this stage owns under `std/crypto/` and `std/net/tls*` is crypto, a sensitive path under the `/feature` merge gate. The PR is built and reviewed to convergence, then left for a human to merge (`sensitive paths: awaiting human merge`).
+**Spec rerun.** #2335 was written before the Roadmap's spec-first rule, and `std/crypto/rsa-sign.ts` cites RFC 8017. The owner decided on #481 (2026-11-26): S2's spec lands first, then `check`/`mutate` are rerun against #2335, then #2335 merges. Once S2 is on main, this stage merges main into #2335 and runs:
+
+- `vector spec check contracts/rfc8017-<name>.json --run-sources --nish-root .`;
+- `vector spec mutate` on that contract against `std/crypto/rsa-sign.ts`. A surviving mutant is killed by a test in the module's own tests (`tests/link/crypto_rsa_sign`), or, if the spec is what misses it, reported to the lead for S2's owner. It is never killed by weakening the module;
+- `node tests/run.js spec`, where the emitted test now builds and runs;
+- `node scripts/rfc-specs.mjs`. Every RFC the diff's `std/` files newly cite is covered by S2's contract or gets a `cites:` line in `scripts/rfc-unspecified.txt` with its reason. `rsa-sign.ts`'s RFC 6979 is a pointer, not an implementation. The pre-rule lines are never edited by hand.
+
+**Merge:** every file this stage owns under `std/crypto/` and `std/net/tls*` is crypto, a sensitive path under the `/feature` merge gate. Round 2 converged at `0a7c4ad8` and was escalated for a human. The owner's decision on #481 is that human call: "Spec PR first, then merge … rerun check/mutate against #2335, then merge #2335." The run therefore merges #2335 on the other eight gate conditions once the rerun is reviewed, provided the rerun changes only tests, lint registrations and what a merge of main regenerates. A rerun that changes the signing arithmetic, the key parsing or the wipes goes back to the owner instead.
+
+## TLS RSA S2 — vector spec for RSASSA-PSS with SHA-256 (RFC 8017) as TLS 1.3's rsa_pss_rsae_sha256 (RFC 8446 §4.2.3)
+
+The spec-first half of the module S1 adds (`contracts/README.md`, `.claude/orientation.md` → spec-first). This stage adds three files, plus what building them needs:
+
+- `specs/rfc8017-<name>.md` (kramdown-rfc), built to `specs/rfc8017-<name>.xml` by `scripts/build-spec.sh`;
+- the contract `contracts/rfc8017-<name>.json`, extracted by vector;
+- the Nish test `test/spec/rfc8017-<name>.ts`, emitted by vector, with its `// vector-contract-sha256:` pin.
+
+The contract's `target.module` is `nish/crypto/rsa-sign`, and its `sources` are RFC 8017 and RFC 8446.
+
+- **What it profiles.** RSASSA-PSS-SIGN with SHA-256, MGF1-SHA-256 and `sLen = hLen = 32` (RFC 8017 §8.1.1, EMSA-PSS-ENCODE §9.1.1, MGF1 §B.2.1, RSASP1 §5.2.1), for moduli of 2048 to 4096 bits. It also profiles RFC 8446 §4.2.3's `rsa_pss_rsae_sha256` requirements: the salt length equals the digest length, and the key is an `rsaEncryption` key.
+- **The signatures.** It uses #2335's exports, read from `std/crypto/rsa-sign.ts` on `feature/tls-rsa-server/s1-rsa-server`, so the emitted test calls the module as it will land. Vectors come from what the cited sections print. Where a section prints none, a property derives the result: a signature verifies under `rsaVerifyPss` (`std/crypto/rsa.ts`, on main), the encoded message has the trailer `0xbc`, and a signature from a salted call is reproducible. An export the spec does not test is declared `Out of scope:` with its reason.
+- **Against #2335.** Before the PR opens, check out #2335's branch in a scratch directory outside the checkout. Run `vector spec check --nish-root .` and `vector spec mutate` there, and record in the PR body the mutants killed and each survivor by name. This stage changes no `std/` file. The survivors are S1's rerun.
+- An RFC the contract pins as a source is kept byte-identical in `rfcs/` and listed in `THIRD_PARTY_NOTICES.md` ("IETF RFCs"). A new reference's cache entries are committed under `.refcache/`.
+
+Reads: `contracts/README.md`, `.claude/orientation.md` (spec-first), vector's `docs/guide/guides/writing-a-spec.md` (in `build/vector/` after `bash scripts/fetch-vector.sh`), and the spec `specs/rfc6979-p256-ecdsa.md` with its contract, the nearest existing signature spec.
+
+**Owns:** `specs/rfc8017-*`, `contracts/rfc8017-*`, `test/spec/rfc8017-*`, `.refcache/**`, `rfcs/rfc8017.txt`, `rfcs/rfc8446.txt`, `THIRD_PARTY_NOTICES.md`
+
+**Generated** (regenerated, never edited by hand): `specs/rfc8017-*.xml`, `contracts/rfc8017-*.json`, `test/spec/rfc8017-*.ts` (from the `.md`), and the same generated globs as S1.
+
+No `Model:` line: the stage decides which of a signature scheme's requirements a test can hold.
+
+**Merge order:** S2 merges before S1. It adds no code, so the gate's crypto condition does not apply to it, and the owner's decision on #481 asks for it first.
 
 ## Out of scope
 
@@ -79,7 +130,7 @@ node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && npm
 
 ## Acceptance criteria
 
-Derived from the plan's goal and #481's acceptance, not given separately.
+Derived from the plan's goal and #481's acceptance, not given separately. Criterion 10 is from the owner's decision on #481.
 
 1. A Nish TLS 1.3 server on TCP, configured with an RSA-2048 certificate (`sha256WithRSAEncryption`) and its PKCS#8 `PRIVATE KEY`, completes a handshake with `openssl s_client -tls1_3`, which reports the configured certificate as the one served, `TLSv1.3`, an AEAD suite, and an RSA-PSS peer signature.
 2. `curl --tlsv1.3`, trusting that certificate, gets a response from the HTTP/1.1 TLS server and from the HTTP/2 TLS listener when both are configured with the RSA pair.
@@ -90,4 +141,4 @@ Derived from the plan's goal and #481's acceptance, not given separately.
 7. `node tests/run.js ct_asm` includes an RSA signing fixture and passes, and a `tests/run.js` check pins that the private key and the signing intermediates are wiped.
 8. `node scripts/security-scope.mjs` passes with the new code in scope, and `docs/security/crypto-rsa.md`, `docs/security/tls.md` and their `docs/security/README.md` rows describe RSA signing on the server.
 9. The TLS certificates guide page shows how to serve an RSA certificate and key.
-
+10. `contracts/rfc8017-*.json`, its spec and its pinned test are on main before `std/crypto/rsa-sign.ts`. On merged main, `node tests/run.js spec` builds and passes that test, `node scripts/rfc-specs.mjs` passes, and the PR that merges the module records vector `mutate`'s result against it.
