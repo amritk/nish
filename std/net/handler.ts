@@ -89,7 +89,7 @@
  * Written from RFC 9110, RFC 9112 and RFC 9457, not ported from another
  * implementation.
  */
-import { copyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
 import { httpFieldBytes } from "nish/net/http-fields"
 import { HTTP1_CHUNKED, HTTP1_NO_BODY, http1HexValue } from "nish/net/http1-codec"
@@ -1357,7 +1357,14 @@ export class HttpHandler {
     if (toI32(r.head.length) < length) {
       r.head = handlerBytes(handlerGrown(toI32(r.head.length), length))
     }
-    copyBytes(r.head, HANDLER_ZERO, p.head, HANDLER_ZERO, length)
+    // `r.head` was grown to `length` above and the parser's head holds it,
+    // so the copy fits; were it refused, the request goes back unread and
+    // the connection closes, since its head cannot be answered.
+    if (!tryCopyBytes(r.head, HANDLER_ZERO, p.head, HANDLER_ZERO, length)) {
+      this.free.push(r.index)
+      this.closeSlot(slot)
+      return
+    }
     // Only the first `4 * headerCount` spans are this head's, and only those
     // are ever read, so only those are copied.
     const spanCount: i32 = handlerSpanSlot(p.headerCount, 0)
@@ -1449,10 +1456,18 @@ export class HttpHandler {
     }
     if (toI32(r.body.length) < need) {
       const grown: u8[] = handlerBytes(handlerGrown(toI32(r.body.length), need))
-      copyBytes(grown, HANDLER_ZERO, r.body, HANDLER_ZERO, r.bodyLength)
+      // `grown` holds `need`, past `bodyLength`, so the copy fits; were it
+      // refused, the body is lost, so the connection closes.
+      if (!tryCopyBytes(grown, HANDLER_ZERO, r.body, HANDLER_ZERO, r.bodyLength)) {
+        this.closeSlot(slot)
+        return
+      }
       r.body = grown
     }
-    copyBytes(r.body, r.bodyLength, conn.data, conn.dataStart, n)
+    if (!tryCopyBytes(r.body, r.bodyLength, conn.data, conn.dataStart, n)) {
+      this.closeSlot(slot)
+      return
+    }
     r.bodyLength = need
   }
 
@@ -2086,14 +2101,21 @@ export class HttpHandler {
         )
       }
     }
-    if (taken < len) {
-      this.keep(r, buf, handlerAdd(off, taken), handlerSub(len, taken))
+    if (taken < len && !this.keep(r, buf, handlerAdd(off, taken), handlerSub(len, taken))) {
+      // `put` checked the window, so `keep` copies inside it; were it
+      // refused, the body cannot follow the head as declared.
+      this.abandon(r)
+      return this.refused(`HttpHandler.write: the ${len} byte(s) could not be kept to send`)
     }
     return HANDLER_SENT
   }
 
-  /** Appends bytes to `r`'s pending buffer, growing it once to the largest response it has held. */
-  private keep(r: HttpRequest, buf: u8[], off: i32, len: i32): void {
+  /**
+   * Appends bytes to `r`'s pending buffer, growing it once to the largest
+   * response it has held. Answers `false`, with the pending bytes as they
+   * were, where a copy is refused.
+   */
+  private keep(r: HttpRequest, buf: u8[], off: i32, len: i32): boolean {
     const live: i32 = handlerSub(r.pendingEnd, r.pendingStart)
     const want: i32 = handlerAdd(live, len)
     if (handlerSub(toI32(r.pending.length), r.pendingEnd) < len) {
@@ -2102,14 +2124,19 @@ export class HttpHandler {
           toI32(r.pending.length) < want
             ? handlerBytes(handlerGrown(toI32(r.pending.length), want))
             : r.pending
-        copyBytes(target, HANDLER_ZERO, r.pending, r.pendingStart, live)
+        if (!tryCopyBytes(target, HANDLER_ZERO, r.pending, r.pendingStart, live)) {
+          return false
+        }
         r.pending = target
         r.pendingStart = 0
         r.pendingEnd = live
       }
     }
-    copyBytes(r.pending, r.pendingEnd, buf, off, len)
+    if (!tryCopyBytes(r.pending, r.pendingEnd, buf, off, len)) {
+      return false
+    }
     r.pendingEnd = handlerAdd(r.pendingEnd, len)
+    return true
   }
 
   /**
