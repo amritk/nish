@@ -6,9 +6,9 @@ import TOKEN_END from "./kinds" -> const TOKEN_END
 import PROMPT from "./kinds" -> const PROMPT
 import describe from "./kinds" -> function @describe
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: describe nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_i32
+  calls: describe nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   local +0:12 t: i32 (let)
   callee +1:34 describe -> @describe

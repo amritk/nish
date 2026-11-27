@@ -16372,8 +16372,8 @@ function jvFoldTo(sum: u32, bytes: u8[], len: i32): u32 -> @jvFoldTo
   callee +4:24 jvStep -> @jvStep
   callee +4:31 jvStep -> @jvStep
 function claimsOf(shape: i32, t: i32): string -> @claimsOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow nish_str_concat nish_str_from_i32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   local +0:9 iat: i32 (const)
 function asciiBytes(text: string): u8[] -> @asciiBytes

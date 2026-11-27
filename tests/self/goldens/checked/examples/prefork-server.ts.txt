@@ -2212,7 +2212,7 @@ function exposeWith<u8[], u8[], u8[], tlsTicketSealExposed>(s: Secret<u8[]>, arg
   stackSites=0 stackLocals=0
   callee +0:93 tlsTicketSealExposed -> @nish.tlsTicketSealExposed
 function exposeWith<u8[], u8[], u8[], tlsTicketOpenExposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.25.nish.tlsTicketOpenExposed [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsTicketOpenExposed
   calls: nish.tlsTicketOpenExposed
   pointer s: size=8 writesThrough=false captured=false
@@ -10029,7 +10029,7 @@ function TlsServer.ticketFits(this: TlsServer): boolean -> @nish.TlsServer.ticke
   callee +3:9 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
   callee +11:7 timingSafeEqualAt -> @nish.timingSafeEqualAt
 function TlsServer.selectTicket(this: TlsServer, current: Secret<u8[]>, currentInfo: TlsTicketKeyInfo, previous: Secret<u8[]>, previousInfo: TlsTicketKeyInfo, strikes: TlsTicketStrikes, now: i64): i32 -> @nish.TlsServer.selectTicket [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: now
   calls: nish.TlsServer.ticketFits nish.TlsTicketState.expiresAt nish.TlsTicketStrikes.take nish.___std_net_tls$.tlsZeros nish.tlsSelectPskIdentity nish.tlsServerStrikeProbe nish.tlsTicketOpen nish_arena_mark nish_arena_release nish_wipe
@@ -20357,7 +20357,7 @@ function tlsTicketSeal(key: Secret<u8[]>, info: TlsTicketKeyInfo, state: TlsTick
   callee -3:5 tlsTicketCopy -> @nish.tlsTicketCopy
   callee +0:19 tlsTicketAdd -> @nish.tlsTicketAdd
 function tlsTicketOpenExposed(key: u8[], ticket: u8[]): u8[] -> @nish.tlsTicketOpenExposed
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20Poly1305Open
   calls: nish.chacha20Poly1305Open nish.tlsTicketRange
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Open#0
@@ -20406,7 +20406,7 @@ function tlsTicketNamesKey(info: TlsTicketKeyInfo, ticket: u8[]): boolean -> @ni
   local +0:9 id: u8[] (const)
   local +4:12 k: i32 (let)
 function tlsTicketOpen(key: Secret<u8[]>, info: TlsTicketKeyInfo, ticket: u8[], now: i64, out: TlsTicketState): boolean -> @nish.tlsTicketOpen [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: now
   calls: nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.25.nish.tlsTicketOpenExposed nish.tlsTicketCopy nish.tlsTicketKeyOpens nish.tlsTicketNamesKey nish.tlsTicketParse nish_arena_mark nish_arena_release nish_wipe
@@ -20836,9 +20836,9 @@ function chacha20Poly1305Seal(key: u8[], nonce: u8[], aad: u8[], plaintext: u8[]
   callee +26:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +27:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function chacha20Poly1305Open(key: u8[], nonce: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.chacha20Poly1305Open [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20Poly1305Setup
-  calls: nish.chacha20CounterFits nish.chacha20Poly1305Setup nish.chacha20Poly1305Tag nish.chacha20Poly1305TagMatch nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32 nish.wipe$arr.u8 nish_panic
+  calls: nish.chacha20CounterFits nish.chacha20Poly1305Setup nish.chacha20Poly1305Tag nish.chacha20Poly1305TagMatch nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Tag#1
@@ -23383,7 +23383,7 @@ function aesGcmSeal(key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | n
 function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.aesGcmOpen [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$arr.u8
-  calls: nish.aesGcmCtr nish.aesGcmJ0 nish.aesGcmLengthFits nish.aesGcmTag nish.aesGcmTagMask nish.aesKeyUsable nish.aesLoad64 nish.wipe$arr.u64 nish.wipe$arr.u8 nish_panic
+  calls: nish.aesGcmCtr nish.aesGcmJ0 nish.aesGcmLengthFits nish.aesGcmTag nish.aesGcmTagMask nish.aesKeyUsable nish.aesLoad64 nish.wipe$arr.u64 nish.wipe$arr.u8
   pointer key: size=24 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesGcmJ0#0 nish.aesGcmTag#1 nish.aesGcmCtr#0
   pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesGcmJ0#3
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#5

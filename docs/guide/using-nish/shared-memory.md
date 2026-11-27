@@ -167,7 +167,9 @@ export const main = (): i32 => {
 - **Size it.** `spscRingBytes(capacity)` and `mpscRingBytes(slots, slotBytes)`
   say how many bytes a ring takes; a capacity or a slot count is a power of
   two. Several rings can share a region at different offsets, each a
-  multiple of 64.
+  multiple of 64. A shape whose size passes the i32 range answers
+  2147483647 rather than wrapping, and `initSpscRing`, `initMpscRing` and
+  `tryInitMpscRing` refuse it.
 - **Keep to the roles.** Two consumers, or two producers on an `SpscRing`,
   lose or repeat records. They never read outside the region, and a ring a
   broken process scribbled on stops the program with `the ring is corrupt`

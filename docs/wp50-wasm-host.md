@@ -795,18 +795,22 @@ wasm` as it is, then the same IR linked with an explicit export list instead of
 
 | | `--export-all` (today) | explicit exports |
 | --- | --- | --- |
-| `examples/add.ts` (one function, no runtime) | 316 / 233 / 211 | **102 / 111 / 87** |
-| `examples/arrays.ts` with `runtime-wasm.c` | 2,827 / 1,479 / 1,302 | **2,091 / 1,092 / 970** |
+| `examples/add.ts` (one function, no runtime) | 316 / 233 / 211 | **102 / 111 / 87**; 122 / 127 / 126 since it answers a `Result` |
+| `examples/arrays.ts` with `runtime-wasm.c` | 2,827 / 1,479 / 1,302 | **2,091 / 1,092 / 970**; 2,249 / 1,182 / 1,077 since it answers its overflows |
 | the generated loader, `add.mjs` | 691 / 399 / 322 | — |
 | the generated loader, `arrays.mjs` | 3,623 / 1,278 / 1,114 | — |
+
+The second figures in the explicit column are examples-strict S3's (#2385), measured
+2026-11-27 with clang 18 and no wasm-opt, and are the `wasm-size` ceilings in
+`tests/runtime-budgets.js`, which says where the bytes went.
 
 So `--export-all` costs 68% of the hello world and 26% of a module with arrays.
 `--profile wasm-host` exports the program's exported functions, its exported
 module storage, and the runtime entry points the loader calls (the arena mark,
 release and allocation), and nothing else. `--gc-sections` is already applied.
 `build.sh` runs `wasm-opt -Oz --strip-target-features` when it is on `PATH` and
-records in the build line whether it ran (binaryen 132: `add.wasm` 74 bytes,
-`arrays.wasm` 1,713). clang 18 also runs a `wasm-opt` it finds itself after an
+records in the build line whether it ran (binaryen 132: `add.wasm` 106 bytes,
+`arrays.wasm` 1,851, since both answer their overflows). clang 18 also runs a `wasm-opt` it finds itself after an
 `-O` link, keeping the `target_features` section, which made `add.wasm` 150
 bytes and broke the guard on a machine with binaryen (#1257).
 `NISH_WASM_OPT=0` links with neither pass; the size test measures that build,

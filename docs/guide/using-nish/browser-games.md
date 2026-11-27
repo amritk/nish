@@ -58,19 +58,18 @@ pixels, rounded to whole ones, once at start and whenever the size or the
 display's pixel ratio changes, for a game that fits its framebuffer to the
 window (with `gameSetSize`, in framebuffer pixels).
 
-The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do) for one thing: they
-index module storage, which no proof reaches yet, so every such index is
-refused by default. Their sums are done in `f64`, which cannot overflow, and
-the calls they make into `nish/host/game`, `nish/raster` and `nish/synth`
-build under the default.
+The examples on this page build under the default, with no
+[`--allow-panics`](cli.md#asking-what-a-program-can-do). Each index into
+module storage is a constant below its length, which the compiler proves in
+range as it would for a local array. Their sums are done in `f64`, which
+cannot overflow, and the calls they make into `nish/host/game`, `nish/raster`
+and `nish/synth` build under the default too.
 
 The game's state lives in module storage: typed arrays declared at the top of
 the module, which keep their values from call to call. This game moves a
 square with the arrow keys and beeps when space is pressed:
 
-<!-- allow-panics: indexes module storage, which no guard the checker reads proves in range yet -->
-<!-- nish:ok --target wasm32 --allow-panics -->
+<!-- nish:ok --target wasm32 -->
 ```ts
 import { GAME_FRAME, gameHeight, gamePlaySound, gameReadInput, gameSetSize, gameWidth, gameWriteSamples } from "nish/host/game"
 import { StepInput } from "nish/input"
@@ -132,8 +131,7 @@ module storage of a class or `null` is
 the world in it, with every array and object it reaches, lasts from `init`
 through every `step` and `draw` while memory stays bounded:
 
-<!-- allow-panics: indexes module storage, which no guard the checker reads proves in range yet -->
-<!-- nish:ok --target wasm32 --allow-panics -->
+<!-- nish:ok --target wasm32 -->
 ```ts
 class Ball {
   x: f64 = 0.0

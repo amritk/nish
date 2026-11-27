@@ -196,8 +196,8 @@ export const JSON_VALUE_ERR_ATTACHED: i32 = -32
 export const JSON_VALUE_ERR_NUMBER: i32 = -33
 /**
  * One value more than `JsonDocument.maxValues`, by a parse (with `errorAt` at
- * its first byte) or a builder; or, from a builder, text that would take the
- * document's stored bytes past 2^31 - 1.
+ * its first byte) or a builder; or text that would take the document's
+ * stored bytes past 2^31 - 1, which a parse never stores.
  */
 export const JSON_VALUE_ERR_VALUES: i32 = -34
 /** `setRange` or `setKeyRange` with a range that is not `0 <= start <= end`. */
@@ -469,6 +469,9 @@ export class JsonDocument {
         keySource = tok.tokStart
         keyAt = this.byteTop
         keyLength = this.storeString(tok)
+        if (keyLength < 0) {
+          return this.parseFailed(JSON_VALUE_ERR_VALUES, tok.tokStart)
+        }
       } else if (k === JSON_TOK_OBJECT_BEGIN || k === JSON_TOK_ARRAY_BEGIN) {
         const c: i32 = this.newNode(
           k === JSON_TOK_OBJECT_BEGIN ? JSON_VALUE_OBJECT : JSON_VALUE_ARRAY,
@@ -499,9 +502,13 @@ export class JsonDocument {
         keySource = jsonValueGet(this.openKeySource, depth)
         v = c
       } else if (k === JSON_TOK_STRING) {
-        v = this.newNode(JSON_VALUE_STRING, this.byteTop, this.storeString(tok))
+        const at: i32 = this.byteTop
+        const n: i32 = this.storeString(tok)
+        v = n < 0 ? JSON_VALUE_ERR_VALUES : this.newNode(JSON_VALUE_STRING, at, n)
       } else if (k === JSON_TOK_NUMBER) {
-        v = this.newNode(JSON_VALUE_NUMBER, this.byteTop, this.storeSource(tok))
+        const at: i32 = this.byteTop
+        const n: i32 = this.storeSource(tok)
+        v = n < 0 ? JSON_VALUE_ERR_VALUES : this.newNode(JSON_VALUE_NUMBER, at, n)
       } else if (k === JSON_TOK_NULL) {
         v = this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
       } else {
@@ -576,6 +583,9 @@ export class JsonDocument {
         keyEnd = tok.tokEnd
         keyAt = this.byteTop
         keyLength = this.storeString(tok)
+        if (keyLength < 0) {
+          return this.parseFailed(JSON_VALUE_ERR_VALUES, tok.tokStart)
+        }
       } else if (k === JSON_TOK_OBJECT_BEGIN || k === JSON_TOK_ARRAY_BEGIN) {
         const c: i32 = this.newNode(
           k === JSON_TOK_OBJECT_BEGIN ? JSON_VALUE_OBJECT : JSON_VALUE_ARRAY,
@@ -612,9 +622,13 @@ export class JsonDocument {
         keyEnd = jsonValueGet(r.openKeyEnd, depth)
         v = c
       } else if (k === JSON_TOK_STRING) {
-        v = this.newNode(JSON_VALUE_STRING, this.byteTop, this.storeString(tok))
+        const at: i32 = this.byteTop
+        const n: i32 = this.storeString(tok)
+        v = n < 0 ? JSON_VALUE_ERR_VALUES : this.newNode(JSON_VALUE_STRING, at, n)
       } else if (k === JSON_TOK_NUMBER) {
-        v = this.newNode(JSON_VALUE_NUMBER, this.byteTop, this.storeSourceRanged(tok))
+        const at: i32 = this.byteTop
+        const n: i32 = this.storeSourceRanged(tok)
+        v = n < 0 ? JSON_VALUE_ERR_VALUES : this.newNode(JSON_VALUE_NUMBER, at, n)
       } else if (k === JSON_TOK_NULL) {
         v = this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
       } else {
@@ -714,8 +728,8 @@ export class JsonDocument {
   private close(c: i32, base: i32): i32 {
     const end: i32 = this.pendingTop
     // `base` is the pending top when the container opened, and members are
-    // only added since, so the count cannot wrap.
-    const n: i32 = toI32(toU32(end) - toU32(base))
+    // only added since, so `base <= end`.
+    const n: i32 = base < 0 || end < base ? 0 : end - base
     const object: boolean = this.kindAt(c) === JSON_VALUE_OBJECT
     if (object && n > 1) {
       const code: i32 = this.duplicateKeys(base, end, n)
@@ -724,22 +738,29 @@ export class JsonDocument {
       }
     }
     const start: i32 = this.slotTop
+    if (start < 0) {
+      return JSON_VALUE_ERR_VALUES
+    }
     // A parse places each value but the root in one slot, and `newNode` holds
-    // the values under the cap, so `s` cannot wrap.
-    let s: u32 = toU32(start)
+    // the values under the cap, so `s` stays under 2^22 and the test inside
+    // never fails: it is what shows the prover that `s + 1` fits.
+    let s: i32 = start
     for (let p: i32 = base; p < end; p += 1) {
       const v: i32 = jsonValueGet(this.pendingValue, p)
       if (v < 0) {
         continue
       }
-      jsonValuePut(this.slotValue, toI32(s), v)
-      jsonValuePut(this.slotKeyAt, toI32(s), jsonValueGet(this.pendingKeyAt, p))
-      jsonValuePut(this.slotKeyLength, toI32(s), jsonValueGet(this.pendingKeyLength, p))
+      if (s >= JSON_VALUE_RESERVE_LIMIT) {
+        return JSON_VALUE_ERR_VALUES
+      }
+      jsonValuePut(this.slotValue, s, v)
+      jsonValuePut(this.slotKeyAt, s, jsonValueGet(this.pendingKeyAt, p))
+      jsonValuePut(this.slotKeyLength, s, jsonValueGet(this.pendingKeyLength, p))
       jsonValuePut(this.parent, v, c)
       s += 1
     }
-    const kept: i32 = toI32(s - toU32(start))
-    this.slotTop = toI32(s)
+    const kept: i32 = s < start ? 0 : s - start
+    this.slotTop = s
     jsonValuePut(this.first, c, start)
     jsonValuePut(this.count, c, kept)
     jsonValuePut(this.room, c, kept)
@@ -751,8 +772,8 @@ export class JsonDocument {
   private closeRanged(c: i32, base: i32): i32 {
     const end: i32 = this.pendingTop
     // `base` is the pending top when the container opened, and members are
-    // only added since, so the count cannot wrap.
-    const n: i32 = toI32(toU32(end) - toU32(base))
+    // only added since, so `base <= end`.
+    const n: i32 = base < 0 || end < base ? 0 : end - base
     const object: boolean = this.kindAt(c) === JSON_VALUE_OBJECT
     if (object && n > 1) {
       const code: i32 = this.duplicateKeysRanged(base, end, n)
@@ -762,24 +783,31 @@ export class JsonDocument {
     }
     const r: JsonValueRanges = this.rangeArrays()
     const start: i32 = this.slotTop
+    if (start < 0) {
+      return JSON_VALUE_ERR_VALUES
+    }
     // A parse places each value but the root in one slot, and `newNode` holds
-    // the values under the cap, so `s` cannot wrap.
-    let s: u32 = toU32(start)
+    // the values under the cap, so `s` stays under 2^22 and the test inside
+    // never fails: it is what shows the prover that `s + 1` fits.
+    let s: i32 = start
     for (let p: i32 = base; p < end; p += 1) {
       const v: i32 = jsonValueGet(this.pendingValue, p)
       if (v < 0) {
         continue
       }
-      jsonValuePut(this.slotValue, toI32(s), v)
-      jsonValuePut(this.slotKeyAt, toI32(s), jsonValueGet(this.pendingKeyAt, p))
-      jsonValuePut(this.slotKeyLength, toI32(s), jsonValueGet(this.pendingKeyLength, p))
-      jsonValuePut(r.slotKeyStart, toI32(s), jsonValueGet(this.pendingSource, p))
-      jsonValuePut(r.slotKeyEnd, toI32(s), jsonValueGet(r.pendingKeyEnd, p))
+      if (s >= JSON_VALUE_RESERVE_LIMIT) {
+        return JSON_VALUE_ERR_VALUES
+      }
+      jsonValuePut(this.slotValue, s, v)
+      jsonValuePut(this.slotKeyAt, s, jsonValueGet(this.pendingKeyAt, p))
+      jsonValuePut(this.slotKeyLength, s, jsonValueGet(this.pendingKeyLength, p))
+      jsonValuePut(r.slotKeyStart, s, jsonValueGet(this.pendingSource, p))
+      jsonValuePut(r.slotKeyEnd, s, jsonValueGet(r.pendingKeyEnd, p))
       jsonValuePut(this.parent, v, c)
       s += 1
     }
-    const kept: i32 = toI32(s - toU32(start))
-    this.slotTop = toI32(s)
+    const kept: i32 = s < start ? 0 : s - start
+    this.slotTop = s
     jsonValuePut(this.first, c, start)
     jsonValuePut(this.count, c, kept)
     jsonValuePut(this.room, c, kept)
@@ -1012,14 +1040,18 @@ export class JsonDocument {
 
   /**
    * The tokenizer's current string or key, decoded onto the end of `bytes`;
-   * answers its length. A parse decodes no more bytes than it reads, so the
-   * store's end stays under the text's `i32` length and the `u32` sum cannot
-   * wrap; `storeSource` leans on the same bound.
+   * answers its length, or `-1`, storing nothing, when the store would pass
+   * 2^31 - 1. A parse empties the store and decodes no more bytes than it
+   * reads, so its end stays under the text's `i32` length and a parse never
+   * sees the `-1`; `storeSource` leans on the same bound.
    */
   private storeString(tok: JsonTokenizer): i32 {
     const n: i32 = tok.stringLength()
     const at: i32 = this.byteTop
-    const end: i32 = toI32(toU32(at) + toU32(n))
+    const end: i32 = jsonValueSum(at, n)
+    if (end < 0) {
+      return -1
+    }
     const buf: u8[] = jsonValueRoom(this.bytes, end)
     this.bytes = buf
     tok.stringInto(buf, at)
@@ -1032,11 +1064,14 @@ export class JsonDocument {
     const src: u8[] = tok.src
     const start: i32 = tok.tokStart
     const stop: i32 = tok.tokEnd
-    // The token lies in the text, `start <= stop`, so neither its length nor
-    // the store's end can wrap (`storeString` has the bound).
-    const n: i32 = toI32(toU32(stop) - toU32(start))
+    // The token lies in the text, `0 <= start <= stop`, and the store's end
+    // stays under 2^31 (`storeString` has the bound).
+    const n: i32 = start < 0 || stop < start ? 0 : stop - start
     const at: i32 = this.byteTop
-    const end: i32 = toI32(toU32(at) + toU32(n))
+    const end: i32 = jsonValueSum(at, n)
+    if (end < 0) {
+      return -1
+    }
     const buf: u8[] = jsonValueRoom(this.bytes, end)
     this.bytes = buf
     let o: i32 = at
@@ -1061,11 +1096,14 @@ export class JsonDocument {
     const src: u8[] = tok.src
     const start: i32 = tok.tokStart
     const stop: i32 = tok.tokEnd
-    // The token lies in the text, `start <= stop`, so neither its length nor
-    // the store's end can wrap (`storeString` has the bound).
-    const n: i32 = toI32(toU32(stop) - toU32(start))
+    // The token lies in the text, `0 <= start <= stop`, and the store's end
+    // stays under 2^31 (`storeString` has the bound).
+    const n: i32 = start < 0 || stop < start ? 0 : stop - start
     const at: i32 = this.byteTop
-    const end: i32 = toI32(toU32(at) + toU32(n))
+    const end: i32 = jsonValueSum(at, n)
+    if (end < 0) {
+      return -1
+    }
     const buf: u8[] = jsonValueRoom(this.bytes, end)
     this.bytes = buf
     let o: i32 = at
@@ -1185,8 +1223,8 @@ export class JsonDocument {
       return -1
     }
     // A container's run of slots lies inside the slot arrays, whose length is
-    // an `i32`, so the slot of a member it has cannot wrap.
-    return toI32(toU32(jsonValueGet(this.first, x)) + toU32(i))
+    // an `i32`, so the sum is `-1` only in a corrupt document.
+    return jsonValueSum(jsonValueGet(this.first, x), i)
   }
 
   /**
@@ -1243,7 +1281,7 @@ export class JsonDocument {
   private findKey(x: i32, key: string): i32 {
     const start: i32 = jsonValueGet(this.first, x)
     // The object's run of slots lies inside the slot arrays, as `slotAt` says.
-    const end: i32 = toI32(toU32(start) + toU32(jsonValueGet(this.count, x)))
+    const end: i32 = jsonValueSum(start, jsonValueGet(this.count, x))
     for (let s: i32 = start; s < end; s += 1) {
       if (this.bytesEqual(jsonValueGet(this.slotKeyAt, s), jsonValueGet(this.slotKeyLength, s), key)) {
         return s
@@ -1361,8 +1399,8 @@ export class JsonDocument {
     }
     const bytes: u8[] = this.bytes
     const start: i32 = jsonValueGet(this.first, x)
-    // A number's text lies inside `bytes`, whose length is an `i32`, so its end cannot wrap.
-    const end: i32 = toI32(toU32(start) + toU32(jsonValueGet(this.count, x)))
+    // A number's text lies inside `bytes`, whose length is an `i32`, so its end is not `-1`.
+    const end: i32 = jsonValueSum(start, jsonValueGet(this.count, x))
     if (start < 0 || start >= toI32(bytes.length) || toI32(bytes[start]) === JSON_VALUE_MINUS) {
       return toU64(0)
     }
@@ -1426,9 +1464,8 @@ export class JsonDocument {
   /** `bytes[at, at + n)` as a string, in one allocation. */
   private textOf(at: i32, n: i32): string {
     const bytes: u8[] = this.bytes
-    // With both below 2^31 the `u32` sum is exact; one past 2^31 - 1 turns
-    // negative, below `at`, and like any end past `bytes` names no text.
-    const end: i32 = toI32(toU32(at) + toU32(n))
+    // A sum past 2^31 - 1 is `-1`, and like any end past `bytes` names no text.
+    const end: i32 = jsonValueSum(at, n)
     if (at < 0 || n <= 0 || end < at || end > toI32(bytes.length)) {
       return ""
     }
@@ -1853,14 +1890,15 @@ export class JsonDocument {
    * first. A container whose slots are full moves them to the end of the slot
    * arrays with twice the room, unless they are at the end already, where they
    * grow in place; the slots it leaves are not reused until `clear`.
-   * Answers the new member's slot.
+   * Answers the new member's slot, or `-1`, the member not added, when a sum would
+   * pass 2^31 - 1, which the bound below rules out.
    *
    * @internal Read by std/yaml-json.ts, which builds a document from YAML
    *   through it.
    */
   append(c: i32, v: i32, keyAt: i32, keyLength: i32): i32 {
-    // The sums here are `u32`, and none reaches 2^31, because the slots stay
-    // under 2^30 + 5 * 2^22: `reserve` holds its rooms under 2^30, a parse
+    // No sum here passes 2^31 - 1, so none answers `-1`, because the slots
+    // stay under 2^30 + 5 * 2^22: `reserve` holds its rooms under 2^30, a parse
     // puts each value in at most one slot, and growth by doubling takes at
     // most 4 slots per member appended. Each append takes a value in no
     // container, and `set` frees one only by taking another, so appends are
@@ -1870,22 +1908,35 @@ export class JsonDocument {
     const capacity: i32 = jsonValueGet(this.room, c)
     if (n === capacity) {
       const grown: i32 =
-        capacity < JSON_VALUE_FIRST_SLOTS ? JSON_VALUE_FIRST_SLOTS : toI32(toU32(capacity) * 2)
-      if (toI32(toU32(start) + toU32(capacity)) !== this.slotTop) {
+        capacity < JSON_VALUE_FIRST_SLOTS ? JSON_VALUE_FIRST_SLOTS : jsonValueSum(capacity, capacity)
+      if (grown < 0) {
+        return -1
+      }
+      if (jsonValueSum(start, capacity) !== this.slotTop) {
         start = this.moveSlots(start, n)
         jsonValuePut(this.first, c, start)
       }
-      this.slotTop = toI32(toU32(start) + toU32(grown))
+      const top: i32 = jsonValueSum(start, grown)
+      if (top < 0) {
+        // Not reached under the slot bound above. `moveSlots` has already run,
+        // and `push`, `set` and std/yaml-json.ts ignore this answer.
+        return -1
+      }
+      this.slotTop = top
       this.slotValue = jsonValueRoomI32(this.slotValue, this.slotTop)
       this.slotKeyAt = jsonValueRoomI32(this.slotKeyAt, this.slotTop)
       this.slotKeyLength = jsonValueRoomI32(this.slotKeyLength, this.slotTop)
       jsonValuePut(this.room, c, grown)
     }
-    const s: i32 = toI32(toU32(start) + toU32(n))
+    const s: i32 = jsonValueSum(start, n)
+    const count: i32 = jsonValueSum(n, 1)
+    if (s < 0 || count < 0) {
+      return -1
+    }
     jsonValuePut(this.slotValue, s, v)
     jsonValuePut(this.slotKeyAt, s, keyAt)
     jsonValuePut(this.slotKeyLength, s, keyLength)
-    jsonValuePut(this.count, c, toI32(toU32(n) + 1))
+    jsonValuePut(this.count, c, count)
     jsonValuePut(this.parent, v, c)
     return s
   }
@@ -1904,9 +1955,9 @@ export class JsonDocument {
     if (n <= 0 || top < 0 || jsonValueGet(this.first, c) !== top || jsonValueGet(this.room, c) !== 0) {
       return
     }
-    // Both below 2^31, so the `u32` sum is exact.
-    const reserved: u32 = toU32(top) + toU32(n)
-    if (reserved > toU32(JSON_VALUE_RESERVE_LIMIT)) {
+    // Both below 2^31, so the `i64` sum is exact.
+    const reserved: i64 = toI64(top) + toI64(n)
+    if (reserved > toI64(JSON_VALUE_RESERVE_LIMIT)) {
       return
     }
     this.slotTop = toI32(reserved)
@@ -1935,12 +1986,11 @@ export class JsonDocument {
     if (from < 0 || to < from || to > toI32(text.length) || at < 0) {
       return -1
     }
-    // `from <= to`, so the `u32` difference is exact.
-    const n: i32 = toI32(toU32(to) - toU32(from))
-    // Both below 2^31, so the `u32` sum is exact; past 2^31 - 1 it turns
-    // negative, below `at`, and the store is full.
-    const end: i32 = toI32(toU32(at) + toU32(n))
-    if (end < at) {
+    // `0 <= from <= to`, so the difference fits; a sum past 2^31 - 1 is `-1`,
+    // and the store is full.
+    const n: i32 = to - from
+    const end: i32 = jsonValueSum(at, n)
+    if (end < 0) {
       return -1
     }
     const buf: u8[] = jsonValueRoom(this.bytes, end)
@@ -1982,11 +2032,11 @@ export class JsonDocument {
     if (from < 0 || to < from || to > toI32(text.length) || at < 0) {
       return -1
     }
-    // As in `storeSpan`: `from <= to` keeps the difference exact, and an
-    // end below `at` is past 2^31 - 1.
-    const n: i32 = toI32(toU32(to) - toU32(from))
-    const end: i32 = toI32(toU32(at) + toU32(n))
-    if (end < at) {
+    // As in `storeSpan`: `0 <= from <= to` keeps the difference in range, and
+    // an end of `-1` is past 2^31 - 1.
+    const n: i32 = to - from
+    const end: i32 = jsonValueSum(at, n)
+    if (end < 0) {
       return -1
     }
     const buf: u8[] = jsonValueRoom(this.bytes, end)
@@ -2043,9 +2093,9 @@ export class JsonDocument {
   private moveSlots(start: i32, n: i32): i32 {
     const moved: i32 = this.slotTop
     for (let i: i32 = 0; i < n; i += 1) {
-      // The slots stay under 2^31, as `append` says, so neither sum wraps.
-      const from: i32 = toI32(toU32(start) + toU32(i))
-      const to: i32 = toI32(toU32(moved) + toU32(i))
+      // The slots stay under 2^31, as `append` says, so neither sum is `-1`.
+      const from: i32 = jsonValueSum(start, i)
+      const to: i32 = jsonValueSum(moved, i)
       jsonValuePut(this.slotValue, to, jsonValueGet(this.slotValue, from))
       jsonValuePut(this.slotKeyAt, to, jsonValueGet(this.slotKeyAt, from))
       jsonValuePut(this.slotKeyLength, to, jsonValueGet(this.slotKeyLength, from))
@@ -2071,15 +2121,15 @@ export class JsonDocument {
         jsonValuePut(r.slotKeyStart, t, -1)
         jsonValuePut(r.slotKeyEnd, t, -1)
       }
-      // The slots stay under 2^31, as `append` says, so no sum here wraps.
+      // The slots stay under 2^31, as `append` says, so no sum here is `-1`.
       for (let i: i32 = 0; i < n; i += 1) {
-        const a: i32 = toI32(toU32(from) + toU32(i))
-        const b: i32 = toI32(toU32(to) + toU32(i))
+        const a: i32 = jsonValueSum(from, i)
+        const b: i32 = jsonValueSum(to, i)
         const has: boolean = a < top
         jsonValuePut(r.slotKeyStart, b, has ? jsonValueGet(r.slotKeyStart, a) : -1)
         jsonValuePut(r.slotKeyEnd, b, has ? jsonValueGet(r.slotKeyEnd, a) : -1)
       }
-      this.slotRangeTop = toI32(toU32(to) + toU32(n))
+      this.slotRangeTop = jsonValueSum(to, n)
     }
   }
 
@@ -2096,10 +2146,9 @@ export class JsonDocument {
   storeText(s: string): i32 {
     const n: i32 = toI32(s.length)
     const at: i32 = this.byteTop
-    // Both below 2^31, so the `u32` sum is exact; past 2^31 - 1 it turns
-    // negative, below `at`, and the store is full.
-    const end: i32 = toI32(toU32(at) + toU32(n))
-    if (end < at) {
+    // A sum past 2^31 - 1 is `-1`, and the store is full.
+    const end: i32 = jsonValueSum(at, n)
+    if (end < 0) {
       return -1
     }
     const buf: u8[] = jsonValueRoom(this.bytes, end)
@@ -2149,7 +2198,7 @@ export class JsonDocument {
       const object: boolean = k === JSON_VALUE_OBJECT
       const start: i32 = jsonValueGet(this.first, x)
       // The run lies inside the slot arrays, as `slotAt` says.
-      const end: i32 = toI32(toU32(start) + toU32(jsonValueGet(this.count, x)))
+      const end: i32 = jsonValueSum(start, jsonValueGet(this.count, x))
       if (object) {
         w.beginObject()
       } else {
@@ -2197,6 +2246,21 @@ export class JsonDocument {
       size = size * 2
     }
   }
+}
+
+/**
+ * `a + b` for `a` and `b` from 0 to 2^31 - 1, or `-1` when either is
+ * negative or the sum passes 2^31 - 1. Written as differences from the
+ * largest `i32`, which the prover follows where it cannot bound a sum. Slot
+ * sums never reach `-1` under the bound `append` states, so there the check
+ * proves the sum; a byte sum that does is a full store, answered as `-1`.
+ */
+const jsonValueSum = (a: i32, b: i32): i32 => {
+  if (a < 0 || b < 0) {
+    return -1
+  }
+  const gap: i32 = JSON_VALUE_I32_MAX - a - b
+  return gap < 0 ? -1 : JSON_VALUE_I32_MAX - gap
 }
 
 /** `a[i]`, or `-1` when `i` is outside `a`. */
