@@ -372,6 +372,48 @@ const quicFrameReset = (frame: QuicFrame, at: i32): void => {
 }
 
 /**
+ * The Gap field of an ACK frame (§19.3.1) between a range whose smallest
+ * packet number is `above` and the next range down, whose largest is
+ * `largest`: the packets missing between them, less one. -1 when either is
+ * below 0 or the ranges touch or are out of order, so no range is below zero.
+ */
+const quicAckGap = (above: i64, largest: i64): i64 => {
+  if (above < 2 || largest < 0) {
+    return -1
+  }
+  const room: i64 = above - 2
+  return largest > room ? -1 : room - largest
+}
+
+/**
+ * The ACK Range Length of `[smallest, largest]` (§19.3.1): how many packet
+ * numbers below `largest` the range holds. -1 when `smallest` is below 0 or
+ * above `largest`.
+ */
+const quicAckSpan = (smallest: i64, largest: i64): i64 => {
+  if (smallest < 0 || largest < 0 || largest < smallest) {
+    return -1
+  }
+  return largest - smallest
+}
+
+/**
+ * The next count up from the varint `n`, or -1 when `n` is below 0 or already
+ * `QUIC_MAX_VARINT`. Counted down from `QUIC_MAX_VARINT`, so the sum is one
+ * `src/bounds.ts` proves, never a wrap.
+ */
+const quicFrameNext = (n: i64): i64 => {
+  if (n < 0) {
+    return -1
+  }
+  const left: i64 = QUIC_MAX_VARINT - n
+  if (left < 1) {
+    return -1
+  }
+  return QUIC_MAX_VARINT - (left - 1)
+}
+
+/**
  * The ranges of an ACK frame (§19.3.1): the first range down from `largest`,
  * then each Gap and ACK Range Length pair below it. A range that reaches
  * below packet number zero is `QUIC_ERROR_FRAME_ENCODING`. Answers 0 or that.
@@ -384,9 +426,8 @@ const quicFrameReadAck = (r: QuicFrameReader, d: u8[], frame: QuicFrame, ecn: bo
   if (r.failed) {
     return QUIC_ERROR_FRAME_ENCODING
   }
-  // Varints are below 2^62, so the difference is exact in wrapping u64 and a
-  // negative answer means the range reached below zero.
-  let smallest: i64 = toI64(toU64(frame.largest) - toU64(first))
+  // `largest - first`, or -1 for a First ACK Range reaching below zero.
+  let smallest: i64 = quicAckSpan(first, frame.largest)
   if (smallest < 0) {
     return QUIC_ERROR_FRAME_ENCODING
   }
@@ -400,15 +441,13 @@ const quicFrameReadAck = (r: QuicFrameReader, d: u8[], frame: QuicFrame, ecn: bo
     if (r.failed) {
       return QUIC_ERROR_FRAME_ENCODING
     }
-    // The next range's largest is two below this one's smallest, less the gap.
-    // `smallest` is 0 or more and the varints below 2^62, so wrapping u64
-    // is exact and a negative answer is a range below zero.
-    const top: i64 = toI64(toU64(smallest) - toU64(gap) - 2)
-    if (top < 0) {
-      return QUIC_ERROR_FRAME_ENCODING
-    }
-    const bottom: i64 = toI64(toU64(top) - toU64(length))
-    if (bottom < 0) {
+    // The next range's largest is two below this one's smallest, less the
+    // gap (`smallest - 2 - gap`), and its smallest `length` below that
+    // (`top - length`): the subtractions the writer's helpers do, read back.
+    // Either is -1 for a range below zero.
+    const top: i64 = quicAckGap(smallest, gap)
+    const bottom: i64 = quicAckSpan(length, top)
+    if (top < 0 || bottom < 0) {
       return QUIC_ERROR_FRAME_ENCODING
     }
     if (stored < QUIC_FRAME_MAX_ACK_RANGES) {
@@ -419,8 +458,13 @@ const quicFrameReadAck = (r: QuicFrameReader, d: u8[], frame: QuicFrame, ecn: bo
     smallest = bottom
   }
   frame.ackRangeCount = stored
-  // `count` is a varint, below 2^62.
-  frame.ackRangeTotal = toI64(toU64(count) + 1)
+  // `count` is a varint, at most `QUIC_MAX_VARINT`; one past that is more
+  // ranges than any frame could list, refused like a short read.
+  const total: i64 = quicFrameNext(count)
+  if (total < 0) {
+    return QUIC_ERROR_FRAME_ENCODING
+  }
+  frame.ackRangeTotal = total
   if (ecn) {
     frame.ect0 = quicFrameVarint(r, d)
     frame.ect1 = quicFrameVarint(r, d)
@@ -863,8 +907,7 @@ export const quicAckSize = (ranges: i64[], rangeCount: i32, ackDelay: i64): i32 
     if (size > 2147483615) {
       return 0
     }
-    // `smallest` is 0 or more and at most `largest`, so the difference is exact.
-    const span: i64 = toI64(toU64(largest) - toU64(smallest))
+    const span: i64 = quicAckSpan(smallest, largest)
     if (k === 0) {
       size =
         size +
@@ -873,9 +916,8 @@ export const quicAckSize = (ranges: i64[], rangeCount: i32, ackDelay: i64): i32 
         quicVarintSize(toI64(rangeCount - 1)) +
         quicVarintSize(span)
     } else {
-      // Gap: the packets missing between this range and the one above, less one (§19.3.1). Both
-      // are 0 to 2^62 − 1, so wrapping u64 is exact and a negative gap is ranges out of order.
-      const gap: i64 = toI64(toU64(previousSmallest) - toU64(largest) - 2)
+      // A negative gap is ranges that touch or are out of order.
+      const gap: i64 = quicAckGap(previousSmallest, largest)
       if (gap < 0) {
         return 0
       }
@@ -918,8 +960,8 @@ export const quicPutAck = (
   let previousSmallest: i64 = 0
   for (let k: i32 = 0; k < rangeCount; k += 1) {
     // `quicAckSize` held `rangeCount` to half the array and checked every
-    // pair, so the slots fit, the guard below never skips a pair, and the
-    // differences are exact in wrapping u64.
+    // pair, so the slots fit, the guard below never skips a pair, and no
+    // gap or span is the -1 that would refuse the varint.
     const pair: i32 = toI32(toI64(k) * 2)
     const next: i32 = toI32(toI64(pair) + 1)
     if (pair >= 0 && pair < toI32(ranges.length) && next >= 0 && next < toI32(ranges.length)) {
@@ -930,9 +972,9 @@ export const quicPutAck = (
         cursor = quicFramePutVarint(buf, cursor, ackDelay)
         cursor = quicFramePutVarint(buf, cursor, toI64(rangeCount) - 1)
       } else {
-        cursor = quicFramePutVarint(buf, cursor, toI64(toU64(previousSmallest) - toU64(largest) - 2))
+        cursor = quicFramePutVarint(buf, cursor, quicAckGap(previousSmallest, largest))
       }
-      cursor = quicFramePutVarint(buf, cursor, toI64(toU64(largest) - toU64(smallest)))
+      cursor = quicFramePutVarint(buf, cursor, quicAckSpan(smallest, largest))
       previousSmallest = smallest
     }
   }

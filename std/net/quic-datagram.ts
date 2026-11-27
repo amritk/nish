@@ -100,15 +100,16 @@ export class QuicDatagramQueue {
   }
 
   /**
-   * The entry `j` places after `head`, wrapped around the ring; 0 for a ring of no entries.
-   * Unsigned, because `head` and `j` are each below 2^31, so the sum cannot wrap.
+   * The entry `j` places after `head`, wrapped around the ring; 0 for a ring of no entries or a
+   * negative head or `j`. Summed in i64, where two i32 values cannot overflow.
    */
   private slot(j: i32): i32 {
-    const entries: u32 = toU32(this.lengths.length)
-    if (entries === 0) {
+    const entries: i64 = toI64(this.lengths.length)
+    const head: i32 = this.head
+    if (entries <= 0 || head < 0 || j < 0) {
       return 0
     }
-    return toI32((toU32(this.head) + toU32(j)) % entries)
+    return toI32((toI64(head) + toI64(j)) % entries)
   }
 
   /** Empties the ring, for a connection slot reused for another peer. */

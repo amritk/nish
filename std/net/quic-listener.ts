@@ -167,6 +167,7 @@ import {
   quicWorkerByte,
   quicWorkerCheck,
 } from "nish/net/quic"
+import { wrappingAdd } from "nish:unsafe"
 
 // ---- What `handle` answers ----------------------------------------------------
 
@@ -961,7 +962,8 @@ export class QuicListener {
   /** Takes one stateless reset from the rate limit's budget, topping it up first. Answers whether one was there. */
   private takeReset(): boolean {
     // `now` never falls below 0, where it starts, and `refilled` is never
-    // after it, so the u64 sums below are the i64 ones.
+    // after it, so the gap between them is a difference of two values at or
+    // above 0, which cannot overflow.
     const now: i64 = this.now
     let refilled: i64 = this.resetRefilled
     let budget: i32 = this.resetBudget
@@ -969,15 +971,18 @@ export class QuicListener {
       refilled = now
       budget = QUIC_LISTENER_RESET_BURST
     }
-    if (now > refilled) {
+    if (now >= 0 && refilled >= 0 && now > refilled) {
+      const gap: i64 = now - refilled
       // 100 is `QUIC_LISTENER_RESET_INTERVAL`, as a literal the prover reads.
-      const earned: u64 = (toU64(now) - toU64(refilled)) / toU64(100)
-      let k: u64 = 0
-      while (k < earned && budget >= 0 && budget < QUIC_LISTENER_RESET_BURST) {
+      let earned: i64 = gap / 100
+      while (earned > 0 && budget >= 0 && budget < QUIC_LISTENER_RESET_BURST) {
         budget += 1
-        k += toU64(1)
+        earned -= 1
       }
-      refilled = toI64(toU64(refilled) + earned * toU64(QUIC_LISTENER_RESET_INTERVAL))
+      // Advanced by every whole interval in the gap: `now` less what is left
+      // over, which is at or above 0 because the gap is.
+      const rest: i64 = gap % 100
+      refilled = rest >= 0 ? now - rest : now
     }
     this.resetRefilled = refilled
     if (budget <= 0) {
@@ -1070,16 +1075,18 @@ export const quicListenerTakePaced = (conn: QuicConnection, now: i64): u8[] | nu
 }
 
 /**
- * `now + delay` for a pacer's delay, which is never below 0: summed in `u64`,
- * where it cannot overflow, and held at the largest `i64` when a `now` near it
- * would carry past; no caller's clock comes near.
+ * `now + delay` for a pacer's delay, which is never below 0, held at the
+ * largest `i64` when a `now` near it would carry past; no caller's clock comes
+ * near. The sum is a `wrappingAdd` because the wrap is how that carry is seen:
+ * a `now` at or above 0 plus a positive delay wraps below 0 only on overflow,
+ * and then the answer is the cap, never the wrapped value.
  */
 const quicListenerLater = (now: i64, delay: i64): i64 => {
   if (delay <= 0) {
     return now
   }
-  const sum: i64 = toI64(toU64(now) + toU64(delay))
-  return now >= 0 && sum < 0 ? toI64((toU64(0) - toU64(1)) >> toU64(1)) : sum
+  const sum: i64 = wrappingAdd(now, delay)
+  return now >= 0 && sum < 0 ? toI64(-1) >>> toI64(1) : sum
 }
 
 /**
