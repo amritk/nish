@@ -1,7 +1,9 @@
 // `nish/term-pixels`: `tryFramebuffer` and `Framebuffer.tryResize` answer an
 // `Err` for each size the constructor and `resize` panic on (a negative side,
 // more than 2^31 - 1 pixels) and size the buffer as they do otherwise. A
-// refused `tryResize` leaves the framebuffer as it was.
+// refused `tryResize` leaves the framebuffer as it was. `--allow-panics`:
+// `tryFramebuffer` builds through the constructor, whose size checks a call
+// still reaches.
 import { Framebuffer, tryFramebuffer } from "nish/term-pixels"
 
 /** The size and length of `fb`, as `w×h/len`. */
@@ -11,9 +13,9 @@ const shape = (fb: Framebuffer): string => `${fb.pixelWidth()}×${fb.pixelHeight
 const made = (w: i32, h: i32): string => {
   const r: Result<Framebuffer, string> = tryFramebuffer(w, h)
   if (r.isErr()) {
-    return `err ${r.unwrapErr()}`
+    return `err ${r.error}`
   }
-  return `ok ${shape(r.unwrap())}`
+  return `ok ${shape(r.value)}`
 }
 
 export const main = (): i32 => {
@@ -30,8 +32,8 @@ export const main = (): i32 => {
   console.log(`grown ${grown.isOk()} ${shape(fb)}`)
   fb.set(3, 2, 0x00ff00)
   const negative: Result<void, string> = fb.tryResize(-3, 1)
-  console.log(`negative ${negative.isErr() ? negative.unwrapErr() : "ok"} ${shape(fb)} ${fb.get(3, 2)}`)
+  console.log(`negative ${negative.isErr() ? negative.error : "ok"} ${shape(fb)} ${fb.get(3, 2)}`)
   const huge: Result<void, string> = fb.tryResize(46341, 46341)
-  console.log(`huge ${huge.isErr() ? huge.unwrapErr() : "ok"} ${shape(fb)} ${fb.get(3, 2)}`)
+  console.log(`huge ${huge.isErr() ? huge.error : "ok"} ${shape(fb)} ${fb.get(3, 2)}`)
   return 0
 }

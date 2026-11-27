@@ -345,7 +345,9 @@ export class Framebuffer {
 
 /**
  * The `Framebuffer` constructor for a caller with an answer to a size it cannot have: a black
- * framebuffer of `width × height`, or `Err`.
+ * framebuffer of `width × height`, or `Err`. It builds an empty framebuffer and sizes it with
+ * `tryResize`, so a call still reaches the size checks of the constructor, which panic only on a
+ * size an empty one never has; `--deny-panics` reports them at the call.
  *
  * @param width Pixels across, 0 or more.
  * @param height Pixels down, 0 or more.

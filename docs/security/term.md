@@ -190,9 +190,44 @@ and `node tests/run.js std_term` (every behavioural check passes; only the
 "link/std_term_decoder_bounds: exits with 0 and stdout matches expected.out"
 pins the counts it is handed: 0 bytes, and whole buffers.
 
+## examples-strict S4b: `Framebuffer`'s Result API, and the sites term-probe reaches
+
+examples-strict S4b (#2385) adds a way to make and resize a framebuffer that
+answers a bad size instead of panicking, and clears the `std/term-io.ts`,
+`std/term-rate.ts` and `std/base64.ts` sites `examples/term-probe.ts` reaches.
+`Framebuffer`'s public fields, its constructor and its `resize` are as they
+were: `src/break*` uses them, and the 0.44.0 seed that builds `src/` must
+still compile it. `std/term-pixels.ts`, `std/term-io.ts`, `std/term-rate.ts`
+and `std/base64.ts` are not in this record's scope; this section records what
+the stage changed in them, not an audit.
+
+| Change | What a caller sees | Evidence |
+| --- | --- | --- |
+| `tryFramebuffer(width, height)` and `Framebuffer.tryResize(width, height)` | an `Err` naming the problem for a negative side or more than 2^31 - 1 pixels, where the constructor and `resize` panic; a refused `tryResize` leaves the framebuffer's size and pixels as they were | "link/std_term_pixels_try: exits with 0 and stdout matches expected.out": -1 × 2, 2 × -1 and 65536 × 65536 through `tryFramebuffer`, -3 × 1 and 46341 × 46341 through `tryResize` |
+| `base64EncodeIfFits(src, off, len, dst, at)` | -1, with nothing written, for each range `base64EncodeInto` panics on; `kittyFrame` encodes through it and marks its `PixelBytes` `full` on -1 | "link/std_base64_if_fits: exits with 0 and stdout matches expected.out": a negative `off`, `len` and `at`, a source range past the array, and an encoding one byte too long |
+| `PixelBytes.full` | a frame that would grow the buffer past 2^31 - 1 bytes is cut short and marked `full`, and `Terminal` does not send it, where `reserve` panicked | untested: see **Open** |
+
+**Open: untested bounds.** Read from the code, and pinned by no check that
+fails without them:
+- `PixelBytes.reserve` marks the buffer `full` rather than grow it past
+  2^31 - 1 bytes, and `sixelFrame` does the same for a frame whose working
+  arrays would pass that; no test builds a frame that large.
+- `RateController`'s `dropped`, `lost` and `stale` counters stop at 2^31 - 1
+  rather than overflow: at 240 frames a second a count reaches it after about
+  103 days.
+
+**Left for step 2.** term-probe still reaches the `std/term-pixels.ts` sites
+its header lists: `set`'s and `get`'s out-of-step store, the size checks the
+constructor and `resize` keep, `scaleFramebuffer`'s, `kittyFrame`'s and
+`drawHalfBlocks`' out-of-step checks, the divisor and image-id checks and
+`PixelBytes.text`'s slice. They go when `Framebuffer`'s fields are private,
+after the next release ships `tryFramebuffer` and `tryResize` to the seed.
+
 Tests:
 - `link/std_term_buffers_disagree: exits with 0 and stdout matches expected.out` (WP85 S3)
 - `link/std_term_decoder_bounds: exits with 0 and stdout matches expected.out` (WP85 S5)
+- `link/std_term_pixels_try: exits with 0 and stdout matches expected.out` (examples-strict S4b)
+- `link/std_base64_if_fits: exits with 0 and stdout matches expected.out` (examples-strict S4b)
 - `std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows (…)` (WP85 S5: fails without `KeyDecoder.keep`'s, `termDecodeKeys`'s or `termDecodeEvents`'s guard)
 - `std-panics: no std/ module gains its first panic site` (examples-strict S4: fails without the bound `termBytesText` restates at its slice)
 - `term_calls: over a pipe readStdin reads the four bytes waiting, waitStdin sees the end, and the terminal questions answer false and -25`
