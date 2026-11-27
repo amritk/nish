@@ -986,11 +986,6 @@ class Importer {
   usedOut: StringSet
   /** The out classes the function being declared needs, kept only if it is bound. */
   pendingOut: string[]
-  /**
-   * Whether the function being declared names a class with fields, whose
-   * layout stays in this module (NL2756), so the function is not exported.
-   */
-  pendingLayout: boolean
   /** The class names `decideNames` gave out, which an opaque class may not take. */
   classNames: StringSet
   /** The functions that may claim their name in the module. */
@@ -998,6 +993,11 @@ class Importer {
   /** The status `failure` exits with. */
   failureStatus: i32 = 1
   curLine: i32 = 0
+  /**
+   * Whether the function being declared names a class with fields, whose
+   * layout stays in this module (NL2756), so the function is not exported.
+   */
+  pendingLayout: boolean
   lp64: boolean
   charUnsigned: boolean
   hasAllow: boolean = false
@@ -3462,7 +3462,10 @@ class Importer {
           // own to pass: an out class or a class with fields stays here.
           const exported = this.pendingOut.length === 0 && !this.pendingLayout
           const at = decl.indexOf("declare function ")
-          const shown = exported && at >= 0 ? `${decl.substring(0, at)}export ${decl.slice(at)}` : decl
+          const shown =
+            exported && at >= 0 && at <= decl.length
+              ? `${decl.substring(0, at)}export ${decl.slice(at)}`
+              : decl
           functions.add(`${this.docComment(f.doc)}${shown}\n`)
           names.set(f.name, owners.length)
           owners.push(`the function \`${f.name}\``)
