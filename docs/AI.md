@@ -1778,10 +1778,11 @@ export const main = (): i32 => {
   another handle class, written once at the top of the constructor (a native
   field from a foreign call, a handle field from a parameter of its type or a
   `new` right there), read only as `this.f` in its own methods; the
-  `[Symbol.dispose]` closes the native fields, the last declared first, and
-  the child handles close after it. A handle is never copied, stored in a
-  local, or captured: it is called, lent to a parameter of its type (an
-  exported function's too, across modules), moved into an owning field, or
+  `[Symbol.dispose]` closes the native fields; every owned field, child
+  handles included, closes in reverse declaration order. A handle is never
+  copied, stored in a local, or captured: it is called, lent to a parameter
+  of its type (an exported function's too, across modules, but never one the
+  entry module exports), moved into an owning field, or
   returned by a top-level factory as `H`, `H | null` or `Result<H, E>`
   (`using g = openGpu().expect("gpu")`). `new` of one appears only as a
   `using` initialiser, a factory's result or an owning argument. A panic or `process.exit` does not close it, so

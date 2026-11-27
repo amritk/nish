@@ -1325,8 +1325,11 @@ A handle is never copied into a local or captured: you call its methods,
 lend it to a parameter of its own type, or hand it on to something that owns
 it. A class may own several native objects — `CPtr` fields, opaque
 `declare class` pointers, `HostHandle`s — and other handle classes, and a
-library can export it with a top-level factory that returns it as the
-class, `| null`, or a `Result`:
+library module can export it, with a top-level factory that returns it as
+the class, `| null`, or a `Result`, and functions that borrow it. Mark the
+class and those functions `export` in that module, not in your program's
+entry: the entry's exports are C symbols, and a C caller handed a handle
+would never close it, so the compiler refuses a handle there:
 
 <!-- nish:ok -->
 ```ts
@@ -1334,7 +1337,7 @@ declare function slot_open(): CPtr;
 declare function slot_close(p: CPtr): i32;
 declare function slot_read(p: CPtr): i32;
 
-export class Pair {
+class Pair {
   readonly first: CPtr;
   readonly second: CPtr;
   constructor() {
@@ -1350,7 +1353,7 @@ export class Pair {
   }
 }
 
-export class Stack {
+class Stack {
   readonly pair: Pair;
   readonly top: CPtr;
   constructor(pair: Pair) {
@@ -1362,17 +1365,18 @@ export class Stack {
   }
 }
 
-export function openStack(): Stack {
+function openStack(): Stack {
   return new Stack(new Pair());
 }
 
-export const depth = (s: Stack): i32 => s.pair.read();
+const depth = (s: Stack): i32 => s.pair.read();
 ```
 
 A caller in another module writes `using s = openStack()`. At every exit
-`Stack`'s dispose closes `top`, then the `Pair` it owns closes `second` and
-`first`: each owner closes its own fields, the last declared first, and then
-the handles it owns. `s.pair.read()` is one load of the field and the C
+`Stack` closes its fields in reverse declaration order: its dispose closes
+`top`, and then the `Pair` it owns closes `second` and `first`. A handle a
+class owns is closed in its field's place in that order, so a `Stack` that
+declared `top` before `pair` would close the `Pair` first. `s.pair.read()` is one load of the field and the C
 call. Several declarators in one `using` open
 one at a time, so an `orReturn()` in a later initialiser closes the ones
 before it. Falling off the end, `break` and `continue` close them in reverse

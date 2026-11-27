@@ -7538,19 +7538,29 @@ before code that may panic when those bytes matter.
   through another owner (`_owner_cycle`). No type parameters and no
   `implements` (`_generic_class`, `_implements`), and no `static readonly
   json` (`_json`). A handle class may be `export`ed, and an importing module
-  opens, lends and closes it as its own module does: the close is the
-  exporting module's dispose, inlined (`tests/link/ffi_handle_owned`).
+  opens, lends, closes and owns it as its own module does: the close is the
+  exporting module's dispose, inlined (`tests/link/ffi_handle_owned`). The
+  entry module is the exception: its exports are C symbols, and a C caller
+  given or lent a handle runs no close, so it exports no handle class and no
+  function whose parameters or result name one: `` Handle
+  class `File` cannot cross an export of the entry module ``
+  (`tests/link/reject_handle_entry_export`).
 - **The write.** The constructor writes a native field once, as
   `this.file = g(...)` at its top level, with `g` a `declare function` and no
   exit before it (`_field_copy`, `_field_copy_twice`, `_field_copy_branch`,
   `_field_copy_non_foreign`). It writes a field that owns another handle class
   once, as `this.child = c` at its top level, where `c` is a constructor
   parameter of that type or a handle opened right there (`new Child()` or a
-  factory call): `` The field `child` of handle class `Owner` owns a handle and
-  is written only once `` (`tests/link/reject_handle_child_write`,
-  `_walk_ctor_param`). A caller moves a handle into that parameter only by
-  opening it in the argument, `new Owner(new Child())`; a handle it was lent
-  stays the lender's (`_walk_ctor_param`).
+  factory call), or `null` for a `Child | null` field: `` The field `child` of
+  handle class `Owner` owns a handle and is written only once ``
+  (`tests/link/reject_handle_child_write`, `_walk_ctor_param`). A caller moves
+  a handle into that parameter only by opening it in the argument,
+  `new Owner(new Child())`; a handle it was lent stays the lender's
+  (`_walk_ctor_param`). No later argument of that `new` may leave the
+  function, as `.orReturn()` does, since the handle is open by then and the
+  owner that would close it is never built: `` A `Child` opened as an argument
+  of a `new` that takes ownership of it cannot be followed by an argument that
+  may leave the function `` (`tests/link/reject_handle_sink_leave`).
 - **The read.** The pointer is read only as `this.file` inside a method of the
   class, passed straight to a `declare function` or bound once to a `const`
   (`_field_read_outside`, `_field_other_instance`, `_field_alias_copy`,
@@ -7560,9 +7570,10 @@ before code that may panic when those bytes matter.
   `const p = this.file; if (p !== null) { close(p); }` for a `declare
   function` `close` of one parameter, once for each native field, the last
   declared closed first (`_two_fields`). A field that is a handle class is not
-  closed by the dispose: its own dispose runs after the owner's, the last
-  declared first, so `Stack` owning a `Pair` closes its own pointer and then
-  the `Pair`'s two (`ffi_handle_owned`); a class that owns only handle-class
+  closed by the dispose: the close walks the owned fields in the reverse of
+  their declaration, and closes a handle-class field in its place there by
+  its own class's closes, so `Stack`, declaring `pair` before `top`, closes
+  its pointer and then the `Pair`'s two (`ffi_handle_owned`); a class that owns only handle-class
   fields has an empty dispose (`_no_dispose`, `_dispose_body`,
   `_dispose_arity`, `_dispose_arg_type`, `_dispose_unknown`, `_dispose_forms`,
   `_dispose_shapes`). A class declares one, with no modifier

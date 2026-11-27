@@ -1084,11 +1084,14 @@ design, decided on a program that needs them.
   ([wp30-bytes-interop.md](wp30-bytes-interop.md)): it is written, so it
   renders without `const` and is copied back. That comes from `writesThrough`
   (src/escape.ts and the arena scopes, above), and no generator changes.
-- *Handles.* A handle class may not be exported (`reject_ffi_handle_export`,
-  removed when WP89 S5a admitted the export; the generators still refuse a
-  handle class, by the type rule), and a program function that takes one may not be exported either (§4d). So
-  none of the three generators is ever asked to render one, and each of them
-  is left unchanged. If they were asked:
+- *Handles.* WP89 S5a exports a handle class between Nish modules, never
+  across the entry module's exports, which are the C symbols the generators
+  render: the entry may not export a handle class, nor a function whose
+  parameters or return name one (as `H`, `H | null` or
+  `Result<H, E>`), and a foreign caller that is given or lent a handle would
+  run no close (`tests/link/reject_handle_entry_export`). So none of the
+  three generators is ever asked to render one, and each of them is left
+  unchanged. If they were asked:
   - the header would flatten the class into a C `struct` (src/interop-abi.ts:360-364)
     whose `CPtr` field has no case in `cType` (:322), and that is the default,
     `""` (:375-376);
