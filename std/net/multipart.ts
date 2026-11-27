@@ -518,7 +518,12 @@ export class MultipartReader {
  *   with
  */
 export const multipartPartCount = (body: u8[], boundary: string): i32 => {
-  const parts: MultipartReader = new MultipartReader(body, toI32(body.length), boundary, new MultipartLimits())
+  const parts: MultipartReader = new MultipartReader(
+    body,
+    toI32(body.length),
+    boundary,
+    new MultipartLimits()
+  )
   let count: i32 = 0
   let code: i32 = parts.next()
   while (code === MULTIPART_PART && count < 2147483647) {
@@ -542,7 +547,12 @@ export const multipartPartCount = (body: u8[], boundary: string): i32 => {
  *   before one does
  */
 export const multipartFieldData = (body: u8[], boundary: string, name: string): u8[] | null => {
-  const parts: MultipartReader = new MultipartReader(body, toI32(body.length), boundary, new MultipartLimits())
+  const parts: MultipartReader = new MultipartReader(
+    body,
+    toI32(body.length),
+    boundary,
+    new MultipartLimits()
+  )
   while (parts.next() === MULTIPART_PART) {
     const start: i32 = parts.dataStart
     const length: i32 = parts.dataLength
@@ -567,7 +577,12 @@ export const multipartFieldData = (body: u8[], boundary: string, name: string): 
  *   `MultipartReader.next` refuses the body before one does
  */
 export const multipartFieldFilename = (body: u8[], boundary: string, name: string): string | null => {
-  const parts: MultipartReader = new MultipartReader(body, toI32(body.length), boundary, new MultipartLimits())
+  const parts: MultipartReader = new MultipartReader(
+    body,
+    toI32(body.length),
+    boundary,
+    new MultipartLimits()
+  )
   while (parts.next() === MULTIPART_PART) {
     if (parts.name === name) {
       return parts.filename
