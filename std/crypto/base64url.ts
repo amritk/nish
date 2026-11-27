@@ -59,8 +59,8 @@ const base64urlRangeMask = (c: i32, lo: integer<0, 255>, hi: integer<0, 255>): i
 }
 
 /**
- * The URL-alphabet character for the sextet `v` (`0 <= v <= 63`).
- *
+ * The URL-alphabet character for the sextet `v`. Every caller passes `0 <= v
+ * <= 63`; `v` is masked to its low six bits, so a wider value aliases.
  * It starts from `'A' + v` and adds, for each range `v` has passed, the step
  * from the previous range's first character to this one's: 26 lands on `a`, 52
  * on `0`, 62 on `-` and 63 on `_`.
@@ -78,9 +78,9 @@ const base64urlCharOf = (v: i32): i32 => {
 }
 
 /**
- * The sextet the byte `c` stands for, or `-1` when `c` is not in the alphabet.
- * Each range contributes its value under its own mask, and a byte in none of
- * them has every bit set by the final OR.
+ * The sextet the character code `code` (a `charCodeAt` or a byte, below 2^16:
+ * it is masked to 16 bits, so a wider value aliases) stands for, or `-1`. Each
+ * range adds its value under its own mask; none of them sets every bit.
  */
 const base64urlSextetOf = (code: i32): i32 => {
   // A character code is 16 bits: the mask proves each sum below in range.
@@ -245,8 +245,8 @@ export const base64urlDecode = (text: string): u8[] | null => {
 // ---------------------------------------------------------------------------
 
 /**
- * The standard-alphabet character for the sextet `v`: the same steps as
- * `base64urlCharOf` until 62, which lands on `+` and 63 on `/`.
+ * The standard-alphabet character for the sextet `v` (`0 <= v <= 63`, masked as
+ * `base64urlCharOf` masks it): its steps until 62, which lands on `+`, 63 `/`.
  */
 const base64StdPadCharOf = (v: i32): i32 => {
   const s: i32 = v & 63
@@ -260,7 +260,7 @@ const base64StdPadCharOf = (v: i32): i32 => {
   )
 }
 
-/** The sextet the byte `c` stands for in standard base64, or `-1` when it is not in the alphabet. */
+/** The sextet the character code `code` (below 2^16, masked as `base64urlSextetOf` masks it) stands for in standard base64, or `-1`. */
 const base64StdPadSextetOf = (code: i32): i32 => {
   // A character code is 16 bits: the mask proves each sum below in range.
   const c: i32 = code & 0xffff

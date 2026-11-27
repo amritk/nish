@@ -200,9 +200,9 @@ const bcryptRangeMask = (c: i32, lo: integer<0, 255>, hi: integer<0, 255>): i32 
 }
 
 /**
- * The bcrypt alphabet's character for the sextet `v`, `./A-Za-z0-9`: `.` + `v`,
- * plus the step to each range `v` has reached (2 lands on `A`, 28 on `a`, 54
- * on `0`).
+ * The bcrypt alphabet's character for the sextet `v` (every caller passes `0 <=
+ * v <= 63`; it is masked to six bits, so a wider value aliases): `.` + `v`, plus
+ * the step to each range `v` has reached (2 lands on `A`, 28 on `a`, 54 `0`).
  */
 const bcryptCharOf = (v: i32): u8 => {
   // Narrowed to the sextet it is, so the compiler proves the sum fits.
