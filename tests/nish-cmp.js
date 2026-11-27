@@ -23786,6 +23786,14 @@ const DECLARED = [
     changelog: WP91_S3,
     why: "std/temporal.ts's sums, differences and products go through temporalAdd, temporalSub and temporalMul, which raise a RangeError where the result leaves the i64 range instead of wrapping, so temporal.ll moves",
   },
+  // Compared only under `--no-sidecars`: a default run reports this program
+  // refused by both, as WP80 S2's other ring programs.
+  ...["ring.ll", "shm.ll"].map((file) => ({
+    program: "tests/link/sync_ring_bytes_saturate/main.ts",
+    file,
+    changelog: WP91_S3,
+    why: "std/sync/ring.ts holds a byte size or offset past the i32 range at its end instead of wrapping it, and spells its counter arithmetic with wrappingAdd and wrappingSub, so ring.ll and the shm.ll it inlines move",
+  })),
 ]
 
 /**
