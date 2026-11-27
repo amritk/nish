@@ -2106,6 +2106,14 @@ class YamlParser {
     return this.at(k) === c && yamlIsWs(this.after(k))
   }
 
+  /** The end of the `---` or `...` marker `isDocMarker` found at `i`: `i + 3`, each step proven. */
+  private markerEnd(i: i32): i32 {
+    // The marker's three bytes are inside the text, so no step stops short.
+    const j: i32 = i < this.len ? i + 1 : i
+    const k: i32 = j < this.len ? j + 1 : j
+    return k < this.len ? k + 1 : k
+  }
+
   /** The end of `[from, …)` before any trailing blanks and a comment, on its line. */
   private plainLineEnd(from: i32): i32 {
     let i: i32 = from
@@ -3166,17 +3174,22 @@ class YamlParser {
 
   /** Reads the `%` directive at `at` into the document's handles and version. */
   private readDirective(at: i32): void {
-    const nameEnd: i32 = this.tokenEnd(at + 1)
-    const isTag: boolean = yamlIsWord(this.text, at + 1, nameEnd, "TAG")
-    if (isTag || yamlIsWord(this.text, at + 1, nameEnd, "YAML")) {
+    // The one caller found the `%` at `at`, so this never returns.
+    if (at < 0 || at >= this.len) {
+      return
+    }
+    const open: i32 = at + 1
+    const nameEnd: i32 = this.tokenEnd(open)
+    const isTag: boolean = yamlIsWord(this.text, open, nameEnd, "TAG")
+    if (isTag || yamlIsWord(this.text, open, nameEnd, "YAML")) {
       let i: i32 = nameEnd
-      while (yamlIsBlank(this.at(i))) {
+      while (i < this.len && yamlIsBlank(this.at(i))) {
         i += 1
       }
       const firstEnd: i32 = this.tokenEnd(i)
       if (isTag) {
         let j: i32 = firstEnd
-        while (yamlIsBlank(this.at(j))) {
+        while (j < this.len && yamlIsBlank(this.at(j))) {
           j += 1
         }
         const prefixEnd: i32 = this.tokenEnd(j)
@@ -3185,9 +3198,10 @@ class YamlParser {
           return
         }
         const handle: string = this.text.substring(i, firstEnd)
-        let k: i32 = toI32(this.handleNames.length) - 1
-        while (k >= 0) {
-          if (this.handleNames[k] === handle) {
+        const names: string[] = this.handleNames
+        let k: i32 = 0
+        while (k < toI32(names.length)) {
+          if (names[k] === handle) {
             this.warn(
               YAML_ERR_DUPLICATE_DIRECTIVE,
               `Tag handle "${handle}" is declared more than once`,
@@ -3196,7 +3210,7 @@ class YamlParser {
             )
             break
           }
-          k -= 1
+          k += 1
         }
         this.handleNames.push(handle)
         this.handlePrefixes.push(this.text.substring(j, prefixEnd))
@@ -3207,7 +3221,7 @@ class YamlParser {
     }
     this.warn(
       YAML_ERR_UNKNOWN_DIRECTIVE,
-      `Unknown directive "%${this.text.substring(at + 1, nameEnd)}"`,
+      `Unknown directive "%${this.text.substring(open, nameEnd)}"`,
       at,
       nameEnd
     )
@@ -3225,8 +3239,8 @@ class YamlParser {
       i += 1
     }
     const major: i32 = i
-    let valid: boolean = i > from && this.at(i) === YAML_DOT
-    if (valid) {
+    let valid: boolean = false
+    if (i > from && i < this.len && this.at(i) === YAML_DOT) {
       i += 1
       const minor: i32 = i
       while (i < to && yamlIsDigit(this.at(i))) {
@@ -3240,7 +3254,7 @@ class YamlParser {
     }
     if (!this.lineRestIsBlank(to)) {
       let after: i32 = to
-      while (yamlIsBlank(this.at(after))) {
+      while (after < this.len && yamlIsBlank(this.at(after))) {
         after += 1
       }
       this.error(
@@ -3252,33 +3266,38 @@ class YamlParser {
     }
     if (version !== "1.2") {
       const message: string =
-        major === from + 1 && this.at(from) === YAML_ONE
+        major > from && major === from + 1 && this.at(from) === YAML_ONE
           ? `Document declares YAML ${version}; it is parsed with the 1.2 core schema`
           : `Unsupported YAML version "${version}"`
       this.warn(YAML_ERR_UNSUPPORTED_YAML_VERSION, message, at, to)
     }
   }
 
-  /** The end of the quoted scalar opening at `from`, past its closing quote, or `-1` at a break. */
+  /**
+   * The end of the quoted scalar opening at `from`, past its closing quote; `-1` at a break;
+   * the text's end when it never closes.
+   */
   private quotedKeyEnd(from: i32, stopAtBreak: boolean): i32 {
     const quote: i32 = this.at(from)
-    let i: i32 = from + 1
+    // The callers found the quote at `from`, so `open` is always `from + 1`.
+    let i: i32 = from < this.len ? from + 1 : from
     while (i < this.len) {
       const q: i32 = this.at(i)
       if (stopAtBreak && yamlIsBreak(q)) {
         return -1
       }
+      const next: i32 = i + 1
       if (q === quote) {
-        if (quote === YAML_SQUOTE && this.at(i + 1) === YAML_SQUOTE) {
-          i += 2
+        if (quote === YAML_SQUOTE && next < this.len && this.at(next) === YAML_SQUOTE) {
+          i = next + 1
         } else {
-          return i + 1
+          return next
         }
       } else {
-        i += quote === YAML_DQUOTE && q === YAML_BACKSLASH ? 2 : 1
+        i = quote === YAML_DQUOTE && q === YAML_BACKSLASH && next < this.len ? next + 1 : next
       }
     }
-    return i + 1
+    return this.len
   }
 
   /** The end of the flow collection opening at `from`, when it closes on its line; else `-1`. */
@@ -3298,12 +3317,17 @@ class YamlParser {
         continue
       }
       if (c === YAML_LBRACKET || c === YAML_LBRACE) {
+        // `depth` counts the opens in `[from, i)`, so it is below `i` and this never returns.
+        if (depth >= this.len) {
+          return -1
+        }
         depth += 1
       } else if (c === YAML_RBRACKET || c === YAML_RBRACE) {
-        depth -= 1
-        if (depth === 0) {
+        // `from` opens the collection and a close back to 0 returns, so `depth` is at least 1 here.
+        if (depth <= 1) {
           return i + 1
         }
+        depth -= 1
       }
       i += 1
     }
@@ -3341,7 +3365,7 @@ class YamlParser {
   /** Whether the rest of the line from `from` is blank or a comment. */
   private lineRestIsBlank(from: i32): boolean {
     let i: i32 = from
-    while (yamlIsBlank(this.at(i))) {
+    while (i < this.len && yamlIsBlank(this.at(i))) {
       i += 1
     }
     const c: i32 = this.at(i)
@@ -3351,7 +3375,7 @@ class YamlParser {
   /** `to` moved back over the blanks that end `[from, to)`. */
   private trimEnd(from: i32, to: i32): i32 {
     let e: i32 = to
-    while (e > from && yamlIsBlank(this.at(e - 1))) {
+    while (e > from && e > 0 && yamlIsBlank(this.at(e - 1))) {
       e -= 1
     }
     return e
@@ -3359,7 +3383,7 @@ class YamlParser {
 
   /** Whether `at` holds a `?` explicit-key indicator. */
   private isExplicitKey(at: i32): boolean {
-    return this.at(at) === YAML_QUESTION && yamlIsWs(this.at(at + 1))
+    return this.at(at) === YAML_QUESTION && yamlIsWs(this.after(at))
   }
 
   // ---- Flow collections ----------------------------------------------------------
@@ -3372,14 +3396,18 @@ class YamlParser {
 
   /** Checks that the flow line starting at `lineStart` is indented deeper than its block parent. */
   private checkFlowIndent(lineStart: i32): void {
+    // Both callers pass the start of a line inside the text, so this never returns.
+    if (lineStart < 0) {
+      return
+    }
     let i: i32 = lineStart
-    while (this.at(i) === YAML_SPACE) {
+    while (i < this.len && this.at(i) === YAML_SPACE) {
       i += 1
     }
     let c: i32 = this.at(i)
     if (c === YAML_TAB) {
       let j: i32 = i
-      while (yamlIsBlank(this.at(j))) {
+      while (j < this.len && yamlIsBlank(this.at(j))) {
         j += 1
       }
       if (j >= this.len) {
@@ -3421,7 +3449,7 @@ class YamlParser {
             YAML_ERR_UNEXPECTED_CONTENT,
             "A document marker cannot appear inside a flow collection",
             p,
-            p + 3
+            this.markerEnd(p)
           )
         } else if (!this.flowIndentReported) {
           this.checkFlowIndent(p)
@@ -3456,7 +3484,8 @@ class YamlParser {
     let i: i32 = from
     while (i < this.len) {
       const hit: i32 = toI32(indexOfAny(this.text, YAML_PLAIN_FLOW_STOPS, i))
-      if (hit < 0) {
+      // `indexOfAny` answers a byte inside the text or -1, so `hit >= this.len` never holds.
+      if (hit < 0 || hit >= this.len) {
         return this.len
       }
       const c: i32 = this.at(hit)
@@ -3490,7 +3519,7 @@ class YamlParser {
     let scan: i32 = yamlAfterBreak(this.text, i)
     while (true) {
       let j: i32 = scan
-      while (yamlIsBlank(this.at(j))) {
+      while (j < this.len && yamlIsBlank(this.at(j))) {
         j += 1
       }
       const c: i32 = this.at(j)
@@ -3507,7 +3536,7 @@ class YamlParser {
       if (j === scan && this.isDocMarker(j)) {
         break
       }
-      if (c === YAML_COLON && this.flowColonEnds(j + 1)) {
+      if (c === YAML_COLON && j < this.len && this.flowColonEnds(j + 1)) {
         break
       }
       if (!this.flowIndentReported) {
@@ -3569,22 +3598,25 @@ class YamlParser {
 
   /** Steps over a `?` explicit-key indicator in flow; whether there was one. */
   private skipFlowExplicitKey(): boolean {
-    if (!this.isExplicitKey(this.pos)) {
+    const at: i32 = this.pos
+    if (at >= this.len || !this.isExplicitKey(at)) {
       return false
     }
-    this.pos += 1
+    this.pos = at + 1
     this.skipFlowWs()
     return true
   }
 
   /** Reports an implicit key whose `:` is not on the key's line. */
   private checkImplicitKeyLine(afterKey: i32): void {
-    if (this.crossesLine(afterKey, this.pos)) {
+    const colon: i32 = this.pos
+    if (this.crossesLine(afterKey, colon)) {
+      // The caller found the `:` at the cursor, so the span always ends at `colon + 1`.
       this.error(
         YAML_ERR_BAD_IMPLICIT_KEY,
         'An implicit key must be followed by its ":" on the same line',
         afterKey,
-        this.pos + 1
+        colon < this.len ? colon + 1 : colon
       )
     }
   }
@@ -3595,14 +3627,15 @@ class YamlParser {
       YAML_ERR_BAD_IMPLICIT_KEY,
       `An implicit key may not run more than ${YAML_MAX_KEY_LENGTH} characters before its ":"`,
       keyStart,
-      colon + 1
+      // The caller found the `:` at `colon`, so the span always ends at `colon + 1`.
+      colon < this.len ? colon + 1 : colon
     )
   }
 
   /** Reports content between a key node and its `:`. */
   private checkKeyGap(colon: i32): void {
     let from: i32 = this.pos
-    while (yamlIsBlank(this.at(from))) {
+    while (from < this.len && yamlIsBlank(this.at(from))) {
       from += 1
     }
     if (from >= colon) {
@@ -3623,23 +3656,28 @@ class YamlParser {
       YAML_ERR_BAD_PROPERTY,
       'Node properties cannot come before a "?" explicit key indicator on its line; write them after the "?", or on a line of their own above',
       at,
-      at + 1
+      // The callers found the `?` at `at`, so the span always ends at `at + 1`.
+      at >= 0 && at < this.len ? at + 1 : at
     )
   }
 
   /** Steps over a `,` with no entry before it, reporting it; whether there was one. */
   private skipEmptyFlowEntry(): boolean {
-    if (this.at(this.pos) !== YAML_COMMA) {
+    const at: i32 = this.pos
+    if (at >= this.len || this.at(at) !== YAML_COMMA) {
       return false
     }
-    this.error(YAML_ERR_UNEXPECTED_COMMA, 'Missing value before ","', this.pos, this.pos + 1)
-    this.pos += 1
+    const next: i32 = at + 1
+    this.error(YAML_ERR_UNEXPECTED_COMMA, 'Missing value before ","', at, next)
+    this.pos = next
     return true
   }
 
   /** Reads the flow value after a `:` in flow, or `-1` when the entry ends first. */
   private parseFlowValue(close: i32): i32 {
-    this.pos += 1
+    // Both callers found the `:` at the cursor, so this always steps one byte.
+    const at: i32 = this.pos
+    this.pos = at < this.len ? at + 1 : at
     this.skipFlowWs()
     const c: i32 = this.at(this.pos)
     if (c < 0 || c === YAML_COMMA || c === close) {
@@ -3650,13 +3688,14 @@ class YamlParser {
 
   /** Reads the separator after a flow entry; whether the collection goes on. */
   private flowSeparator(close: i32, start: i32): boolean {
-    const c: i32 = this.at(this.pos)
-    if (c === YAML_COMMA) {
-      this.pos += 1
+    const at: i32 = this.pos
+    const c: i32 = this.at(at)
+    if (c === YAML_COMMA && at < this.len) {
+      this.pos = at + 1
       return true
     }
-    if (c === close) {
-      this.pos += 1
+    if (c === close && at < this.len) {
+      this.pos = at + 1
       return false
     }
     this.reportUnterminatedFlow(close, start)
@@ -3680,12 +3719,13 @@ class YamlParser {
 
   /** Reads the flow sequence opening at the cursor. */
   private parseFlowSeq(): i32 {
-    if (this.depth >= this.maxDepth) {
+    const depth: i32 = this.depth
+    if (depth >= this.maxDepth) {
       return this.depthLimitNode()
     }
-    this.depth += 1
+    this.depth = depth + 1
     const node: i32 = this.parseFlowSeqBody()
-    this.depth -= 1
+    this.depth = depth
     return node
   }
 
@@ -3693,12 +3733,14 @@ class YamlParser {
   private parseFlowSeqBody(): i32 {
     const start: i32 = this.pos
     const base: i32 = this.scratchTop
-    this.pos += 1
+    // The caller found the `[` at the cursor, so this always steps one byte.
+    this.pos = start < this.len ? start + 1 : start
     while (true) {
       this.skipFlowWs()
-      const c: i32 = this.at(this.pos)
-      if (c === YAML_RBRACKET) {
-        this.pos += 1
+      const at: i32 = this.pos
+      const c: i32 = this.at(at)
+      if (c === YAML_RBRACKET && at < this.len) {
+        this.pos = at + 1
         break
       }
       if (c < 0) {
@@ -3743,12 +3785,13 @@ class YamlParser {
 
   /** Reads the flow mapping opening at the cursor. */
   private parseFlowMap(): i32 {
-    if (this.depth >= this.maxDepth) {
+    const depth: i32 = this.depth
+    if (depth >= this.maxDepth) {
       return this.depthLimitNode()
     }
-    this.depth += 1
+    this.depth = depth + 1
     const node: i32 = this.parseFlowMapBody()
-    this.depth -= 1
+    this.depth = depth
     return node
   }
 
@@ -3757,12 +3800,14 @@ class YamlParser {
     const start: i32 = this.pos
     const base: i32 = this.scratchTop
     let keySet: i32 = -1
-    this.pos += 1
+    // The caller found the `{` at the cursor, so this always steps one byte.
+    this.pos = start < this.len ? start + 1 : start
     while (true) {
       this.skipFlowWs()
-      const c: i32 = this.at(this.pos)
-      if (c === YAML_RBRACE) {
-        this.pos += 1
+      const at: i32 = this.pos
+      const c: i32 = this.at(at)
+      if (c === YAML_RBRACE && at < this.len) {
+        this.pos = at + 1
         break
       }
       if (c < 0) {
@@ -3796,6 +3841,10 @@ class YamlParser {
 
   /** Moves the scratch slots from `base` up into `node`'s children. */
   private finishCollection(node: i32, base: i32): void {
+    // `base` is a `scratchTop` mark, never negative, so this never returns.
+    if (base < 0) {
+      return
+    }
     const stream: YamlStream = this.stream
     let first: i32 = stream.kidTop
     let i: i32 = base
@@ -3807,7 +3856,8 @@ class YamlParser {
       i += 1
     }
     yamlPut(stream.firsts, node, first)
-    yamlPut(stream.counts, node, this.scratchTop - base)
+    // `base` is a mark below `scratchTop`, so `i` stopped at `scratchTop`.
+    yamlPut(stream.counts, node, i - base)
     this.scratchTop = base
   }
 
