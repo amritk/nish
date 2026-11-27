@@ -568,7 +568,7 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
   if (info.layout && info.exported && !opaque) {
     ctx.error(
       decl.children[0],
-      `\`declare class ${name}\` cannot be exported: a C struct layout is used in the module that declares it`
+      `\`declare class ${name}\` cannot be exported: it has fields, and a C struct layout is built and read only in the module that declares it`
     )
   } else if (info.layout && ctx.pageModule) {
     // A layout exists to be lent to a `declare function`, which a module a
