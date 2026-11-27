@@ -624,10 +624,28 @@ function preforkNowMs(): i64 -> @nish.preforkNowMs
   stackSites=0 stackLocals=0
 function preforkAfter(now: i64, ms: i32): i64 -> @nish.preforkAfter
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.preforkBelow2p63
   stackSites=0 stackLocals=0
+  local +0:9 n: i64 (const)
+  local +5:11 sum: u64 (const)
+  callee +6:18 preforkBelow2p63 -> @nish.preforkBelow2p63
+  local +12:9 past: u64 (const)
+  local +13:9 k: i64 (const)
+  callee +13:24 preforkBelow2p63 -> @nish.preforkBelow2p63
 function preforkSince(now: i64, then: i64): i64 -> @nish.preforkSince
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.preforkBelow2p63
   stackSites=0 stackLocals=0
+  local +0:11 sum: u64 (const)
+  callee +1:18 preforkBelow2p63 -> @nish.preforkBelow2p63
+  local +7:9 past: u64 (const)
+  local +8:9 k: i64 (const)
+  callee +8:24 preforkBelow2p63 -> @nish.preforkBelow2p63
+function preforkBelow2p63(x: u64): u64 -> @nish.preforkBelow2p63
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  stackSites=0 stackLocals=0
+  local +0:9 most: u64 (const)
 function PreforkSupervisor.constructor(this: PreforkSupervisor, config: PreforkConfig, args: string[], count: i32, loop: i32, udp: i32[]): void -> @nish.PreforkSupervisor.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish_realpath
