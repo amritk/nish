@@ -716,16 +716,16 @@ const termStepOn = (i: i32, step: i32, n: i32): i32 => {
  * sends the same bytes back out.
  */
 const termBytesText = (bytes: u8[], n: i32): string => {
-  // Every caller passes at most `bytes.length`: a whole buffer, or a screen's `outLen`, which `put` keeps within `out`.
+  // Every caller passes at most `bytes.length` (a whole buffer, or a screen's `outLen`, which `put` keeps within `out`);
+  // the clamp holds it anyway, and the slice restates it where the prover reads it.
   const held: i32 = toI32(bytes.length)
   let end: i32 = n
   if (end > held) {
     end = held
-  }
-  if (end < 0) {
+  } else if (end < 0) {
     end = 0
   }
-  if (termNativeStrings()) {
+  if (termNativeStrings() && end >= 0 && end <= toI32(bytes.length)) {
     return String.fromBytes(bytes, 0, end)
   }
   const pieces: string[] = []
