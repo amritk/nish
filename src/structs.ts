@@ -642,7 +642,8 @@ const rejectEmptyHandle = (ctx: CheckContext, info: StructInfo, decl: Node): voi
 /**
  * WP89 S5a: whether a field of a handle class typed `type` is one it owns: a
  * `CPtr`, an opaque `declare class`, a `HostHandle<K>` or another handle
- * class, each perhaps `| null`.
+ * class, each but a `HostHandle` perhaps `| null`: a `HostHandle` is a scalar,
+ * refused as nullable before this runs, whose none is `0`.
  */
 const ownedFieldType = (ctx: CheckContext, type: i32): boolean => {
   const bare = ctx.table.stripNull(type)

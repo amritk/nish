@@ -7532,7 +7532,9 @@ before code that may panic when those bytes matter.
 
 - **The class.** Each field it owns is a `CPtr`, an opaque `declare class`
   (declared in its module or imported), a `HostHandle<K>` or another handle
-  class, each perhaps `| null`, `readonly` and with no initialiser
+  class, each but a `HostHandle` perhaps `| null` (a `HostHandle` is a
+  scalar, whose none is `0`, so `Canvas | null` is refused like `i32 | null`:
+  `reject_ffi_handle_host_nullable`), `readonly` and with no initialiser
   (`reject_ffi_handle_field_mutable`, `_field_initialiser`). A field that is
   another handle class may not be one that holds this class, directly or
   through another owner (`_owner_cycle`). No type parameters and no
@@ -7544,7 +7546,10 @@ before code that may panic when those bytes matter.
   given or lent a handle runs no close, so it exports no handle class and no
   function whose parameters or result name one: `` Handle
   class `File` cannot cross an export of the entry module ``
-  (`tests/link/reject_handle_entry_export`).
+  (`tests/link/reject_handle_entry_export`). A library module's handle
+  class and the functions that name one link to its importers but stay out
+  of `--emit-header`, `--emit-dts` and `--emit-napi`
+  (`tests/link/ffi_handle_sidecar`).
 - **The write.** The constructor writes a native field once, as
   `this.file = g(...)` at its top level, with `g` a `declare function` and no
   exit before it (`_field_copy`, `_field_copy_twice`, `_field_copy_branch`,

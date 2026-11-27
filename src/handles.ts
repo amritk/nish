@@ -73,7 +73,7 @@ const childWriteMessage = (cls: string, field: string): string =>
   `The field \`${field}\` of handle class \`${cls}\` owns a handle and is written only once, by \`this.${field} = p\` as a statement at the top of the constructor, where \`p\` is a parameter of its type or a handle opened right there: any other write would drop a handle the object owns or own one twice`
 
 export const handleFieldMessage = (cls: string): string =>
-  `Handle class \`${cls}\`: each field a handle class owns is a \`CPtr\`, an opaque \`declare class\`, a \`HostHandle\` or another handle class that does not hold this one, each perhaps \`| null\`, \`readonly\` and with no initialiser, so it is written once by the constructor and closed once by the dispose`
+  `Handle class \`${cls}\`: each field a handle class owns is a \`CPtr\`, an opaque \`declare class\`, a \`HostHandle\` or another handle class that does not hold this one, each but a \`HostHandle\` perhaps \`| null\` (a \`HostHandle\` is a scalar, whose none is \`0\`), \`readonly\` and with no initialiser, so it is written once by the constructor and closed once by the dispose`
 
 export const handleHeaderMessage = (cls: string, what: string): string =>
   `Handle class \`${cls}\` cannot ${what}: a handle class has no type parameters and no \`implements\`, so no other type can stand for it and outlive its close`
@@ -476,7 +476,13 @@ const checkDispose = (
   }
 }
 
-/** Whether `info` is reached again through the handle-class fields of `at`. */
+/**
+ * Whether `info` is reached again through the handle-class fields of `at`.
+ * Past 32 levels it answers yes: an acyclic chain of owners is one class per
+ * level, so 33 nested classes is a program no reader would write, and the
+ * owner-cycle refusal (`reject_ffi_handle_owner_cycle`) is the safe answer that bounds
+ * the walk. `collectCloses` stops at the same depth.
+ */
 const ownerReaches = (info: StructInfo, at: StructInfo, depth: i32): boolean => {
   if (depth > 32) {
     return true
@@ -1300,6 +1306,29 @@ const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
 const signatureHandle = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null => {
   const info = handleOf(program, table, type)
   return info !== null ? info : resultHandleOf(program, table, type)
+}
+
+/**
+ * Whether `sig` takes or gives a handle, or is a method of a handle class: a
+ * function no C host may be offered, from whichever module of the program it
+ * comes, since a foreign caller holding the pointer runs no close. The entry
+ * module refuses such an export (NL2827); a library module's export links to
+ * its importers and is left out of the C ABI's sidecars (`externalFunctions`).
+ */
+export const signatureNamesHandle = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): boolean => {
+  const owner = sig.owner
+  if (owner !== null && owner.handle) {
+    return true
+  }
+  if (signatureHandle(program, table, sig.returnType) !== null) {
+    return true
+  }
+  for (const type of sig.paramTypes) {
+    if (signatureHandle(program, table, type) !== null) {
+      return true
+    }
+  }
+  return false
 }
 
 /**

@@ -1329,7 +1329,10 @@ library module can export it, with a top-level factory that returns it as
 the class, `| null`, or a `Result`, and functions that borrow it. Mark the
 class and those functions `export` in that module, not in your program's
 entry: the entry's exports are C symbols, and a C caller handed a handle
-would never close it, so the compiler refuses a handle there:
+would never close it, so the compiler refuses a handle there. The library
+module's handle class and the functions that take or give one still link to
+the modules that import them, but `--emit-header`, `--emit-dts` and
+`--emit-napi` leave them out:
 
 <!-- nish:ok -->
 ```ts

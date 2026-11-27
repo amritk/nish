@@ -89,7 +89,7 @@ const diagnosticRules = (): string[] => [
   "NL2585",
   ": its bytes are zero-filled where a page can read them, so an element is a number, a `boolean`, an enum or range whose zero is a member, a `HostHandle`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a `Map` or a `| null`",
   "NL2686",
-  "`: each field a handle class owns is a `CPtr`, an opaque `declare class`, a `HostHandle` or another handle class that does not hold this one, each perhaps `| null`, `readonly` and with no initialiser, so it is written once by the constructor and closed once by the dispose",
+  "`: each field a handle class owns is a `CPtr`, an opaque `declare class`, a `HostHandle` or another handle class that does not hold this one, each but a `HostHandle` perhaps `| null` (a `HostHandle` is a scalar, whose none is `0`), `readonly` and with no initialiser, so it is written once by the constructor and closed once by the dispose",
   "NL2564",
   "An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`)",
   "NL1067",
