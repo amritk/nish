@@ -256,6 +256,19 @@ export class FunctionSig {
   /** #2296: the forwarding call into the fault guard. */
   faultForward: Node | null
   /**
+   * #2296: a caller contract's held tests (`src/caller-contract.ts`): the
+   * leading `if (test) { panic(m) }` statements whose every comparison names
+   * only parameters, so that a caller that proves each test false at its call
+   * has proved the panic away; else empty.
+   */
+  precondition: Node[]
+  /**
+   * #2296: the comparisons of `precondition`, four entries each (shape, then
+   * the parameter positions `p`, `q` and `b`, -1 where the shape has none;
+   * `ATOM_*` in `src/caller-contract.ts`); else empty.
+   */
+  preconditionAtoms: i32[]
+  /**
    * WP28 `overloads`: the bodiless signatures written before this
    * implementation under `--compat`, each collected as a signature of its
    * own (`src/overloads.ts`). Empty for every other function. A call is
@@ -412,6 +425,8 @@ export class FunctionSig {
     this.faultCheck = null
     this.faultGuard = null
     this.faultForward = null
+    this.precondition = []
+    this.preconditionAtoms = []
     this.overloads = []
   }
 }

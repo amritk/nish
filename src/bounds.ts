@@ -139,6 +139,7 @@ import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
 import { builtinAnswerTop } from "./members"
 import { parseIntegerLiteral } from "./constants"
+import { ATOM_AT_END, ATOM_NEGATIVE, ATOM_PAST_END, ATOM_PAST_REST, ATOM_WIDTH, isCallerContract } from "./caller-contract"
 import { CheckContext } from "./context"
 import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
@@ -3408,6 +3409,56 @@ const quietFrom = (program: CheckedProgram, call: Node, first: i32): boolean => 
   return true
 }
 
+/**
+ * Whether every comparison of `target`'s caller contract is false for `args`,
+ * the call's arguments (a method's leave `this` out): each one's opposite, or
+ * a stronger fact, holds once they have run. A bound in a shape the section
+ * does not read (`isQuietBound`) proves nothing.
+ */
+const provesPrecondition = (walk: BoundsWalk, state: State, target: FunctionSig, args: Node[]): boolean => {
+  const shift = target.paramNames.length > 0 && target.paramNames[0] === "this" ? 1 : 0
+  const atoms = target.preconditionAtoms
+  let k = 0
+  while (k + ATOM_WIDTH <= atoms.length) {
+    const p = contractArg(args, atoms[k + 1], shift)
+    const q = contractArg(args, atoms[k + 2], shift)
+    const b = contractArg(args, atoms[k + 3], shift)
+    const shape = atoms[k]
+    if (p === null || !isQuietBound(walk, p) || (q !== null && !isQuietBound(walk, q))) {
+      return false
+    }
+    const w: Local | null = b === null ? null : holderOf(walk, b)
+    if (shape === ATOM_NEGATIVE) {
+      if (!impliesNonNegative(walk, state, p)) {
+        return false
+      }
+    } else if (w === null) {
+      return false
+    } else if (shape === ATOM_PAST_END) {
+      if (!provesWithin(walk, state, p, w)) {
+        return false
+      }
+    } else if (shape === ATOM_AT_END) {
+      if (!proves(walk.ctx, state, w, p)) {
+        return false
+      }
+    } else if (shape === ATOM_PAST_REST) {
+      if (q === null || !provesWindow(walk, state, w, q, p)) {
+        return false
+      }
+    } else if (q === null || !provesOrdered(walk, state, q, p, w)) {
+      // `p < q`: `p` is the range's end, within `w` by the contract's own `p > toI32(w.length)`.
+      return false
+    }
+    k = k + ATOM_WIDTH
+  }
+  return true
+}
+
+/** The argument for parameter `k` (`shift` is 1 past a method's `this`), or null. */
+const contractArg = (args: Node[], k: i32, shift: i32): Node | null =>
+  k - shift >= 0 && k - shift < args.length ? args[k - shift] : null
+
 /** `String.fromBytes(bytes, start, end)`, the builtin (`emitFromBytes`). */
 const isFromBytes = (ctx: CheckContext, call: Node): boolean => {
   const callee = unwrapBoundsParens(call.children[0])
@@ -3522,6 +3573,13 @@ const judgeRangeCheck = (walk: BoundsWalk, state: State, call: Node): void => {
       quietFrom(ctx.program, call, first + 1) &&
       provesWindow(walk, state, w, args[at[1]], args[at[2]])
     ) {
+      noteProof(walk, call)
+    }
+    return
+  }
+  // A caller contract's leading tests (#2296, `src/caller-contract.ts`).
+  if (target !== null && isCallerContract(target)) {
+    if (quietFrom(ctx.program, call, 0) && provesPrecondition(walk, state, target, args)) {
       noteProof(walk, call)
     }
     return
