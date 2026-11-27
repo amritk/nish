@@ -15,12 +15,13 @@ library module ([`export` and `import`](../../reference/language/declarations.md
 The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): the range checks
 of the `netRead` and `netWrite` builtins a body read and a request write
-reach, and the URL parser `fetch` calls, keep panic sites no proof removes
-yet, so those calls are refused by default for now. The
-sums and the `panic` call in your own code build under the default once a
-guard bounds each sum and the `panic` becomes an error answer.
+reach, the URL parser `fetch` calls, and the codec's `feed`, which panics on
+a window outside its buffer, keep panic sites no proof removes yet, so those
+calls are refused by default for now. The code around the
+calls builds under the default: it narrows each `null` answer to a plain
+array before slicing it, and tests a window and its sum before it reads one.
 
-<!-- allow-panics: slices with bounds it does not test; calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
@@ -37,11 +38,12 @@ export const main = (): i32 => {
   }
   const type = res.header("content-type");
   console.log(`${res.status} ${res.reason}, ${type === null ? "no type" : type}`);
-  const body: u8[] | null = res.body.readAll(1048576);
-  if (body === null) {
+  const read: u8[] | null = res.body.readAll(1048576);
+  if (read === null) {
     console.error("the body failed or was larger than 1 MiB");
     return 1;
   }
+  const body: u8[] = read;
   console.log(String.fromBytes(body, 0, toI32(body.length)));
   return 0;
 };
@@ -285,7 +287,7 @@ credentials in it; `http://127.0.0.1:6379/` reaches a database that trusts
 local callers; a name that resolves to either does the same. Give such a
 client an `OutboundPolicy`, from `nish/net/outbound`:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/fetch.ts` code that reaches the `netRead` and `netWrite` range checks and `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HTTP_E_BLOCKED, FetchSyncClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/fetch";
@@ -365,7 +367,7 @@ constants are shared with the server side and come from `nish/net/http1-codec`.
 
 ### A first request
 
-<!-- allow-panics: does integer arithmetic nothing bounds; slices with bounds it does not test; calls `panic` -->
+<!-- allow-panics: calls `std/net/http1-client-codec.ts` code that keeps its contract's panic (a `feed` window outside its buffer), which no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HTTP1_BODY, HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, HTTP1_NO_BODY } from "nish/net/http1-codec";
@@ -388,7 +390,17 @@ const drain = (p: Http1ResponseParser): boolean => {
       const type = p.header("content-type");
       console.log(`status ${p.status}, ${type === null ? "no type" : type}`);
     } else if (event === HTTP1_BODY) {
-      console.log(`body: ${String.fromBytes(p.body, p.bodyOff, p.bodyOff + p.bodyLen)}`);
+      // The event's bytes are `p.body[p.bodyOff .. p.bodyOff + p.bodyLen)`:
+      // the tests bound the sum and keep the window inside the array.
+      const body: u8[] = p.body;
+      const start: i32 = p.bodyOff;
+      const len: i32 = p.bodyLen;
+      if (start >= 0 && start <= 1000000000 && len >= 0 && len <= 1000000000) {
+        const end: i32 = start + len;
+        if (start <= end && end <= body.length) {
+          console.log(`body: ${String.fromBytes(body, start, end)}`);
+        }
+      }
     } else if (event === HTTP1_END) {
       console.log(`end, keep-alive ${p.keepAlive()}`);
       return true;
@@ -402,10 +414,11 @@ const drain = (p: Http1ResponseParser): boolean => {
 };
 
 export const main = (): i32 => {
-  const head = http1RequestHead("GET", "/hello", ["Host", "Accept"], ["example.com", "text/plain"], toI64(HTTP1_NO_BODY));
-  if (head === null) {
+  const written = http1RequestHead("GET", "/hello", ["Host", "Accept"], ["example.com", "text/plain"], toI64(HTTP1_NO_BODY));
+  if (written === null) {
     return 1;
   }
+  const head: u8[] = written;
   console.log(String.fromBytes(head, 0, toI32(head.length)));
 
   // What a server might answer, arriving in two pieces.

@@ -9,13 +9,7 @@ sections.
 
 ## Classes
 
-Several examples on this page do `i32` arithmetic nothing bounds, so the
-compiler cannot prove it fits and they build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
-as the compile error suggests, builds them under the default.
-
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Counter {
   name: string;
@@ -25,8 +19,13 @@ class Counter {
     this.name = name;
   }
 
-  bump(by: i32): void {
-    this.count = this.count + by;
+  bump(by: i32): boolean {
+    const count = this.count;
+    if (by < 0 || by > 1000 || count > 1000000) {
+      return false;
+    }
+    this.count = count + by;
+    return true;
   }
 
   describe(): string {
@@ -42,6 +41,9 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+`bump` tests a local copy of the field, not `this.count` itself: the compiler
+reads a test of a local, and that test is what proves the sum fits an `i32`.
 
 - **Every field has a type annotation.** A field initializer, like
   `count: i32 = 0`, is a literal, an empty array (`items: i32[] = []`) or a
@@ -122,26 +124,25 @@ with an object literal, which takes its type from where it is written (an
 annotation, a parameter, a return type) and must set every field exactly
 once:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 interface Point {
   x: i32;
   y: i32;
 }
 
-const add = (a: Point, b: Point): Point => ({ x: a.x + b.x, y: a.y + b.y });
+const corner = (a: Point, b: Point): Point => ({ x: a.x, y: b.y });
 
 export const main = (): i32 => {
   const p: Point = { x: 1, y: 2 };
-  const q = add(p, { x: 10, y: 20 });
-  console.log(`${q.x} ${q.y}`);   // 11 22
+  const q = corner(p, { x: 10, y: 20 });
+  console.log(`${q.x} ${q.y}`);   // 1 20
   return 0;
 };
 ```
 
 Behaviour that belongs to an interface is a top-level function that takes
-it, as `add` does here. An object literal has fields only: no methods and
+it, as `corner` does here. An object literal has fields only: no methods and
 no computed keys. It may spread another record into itself, as the next
 section shows.
 
@@ -260,8 +261,7 @@ them. A `C` is then accepted anywhere an `I` is expected. This is the only
 widening between class and interface types, and it goes one way: nothing
 turns an `I` back into a `C`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 interface Shape {
   width: i32;
@@ -288,7 +288,7 @@ class Frame implements Shape {
   }
 }
 
-const area = (s: Shape): i32 => s.width * s.height;
+const area = (s: Shape): i64 => toI64(s.width) * toI64(s.height);
 
 export const main = (): i32 => {
   console.log(`${area(new Rect(3, 4))}`);        // 12

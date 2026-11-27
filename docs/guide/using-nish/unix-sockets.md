@@ -34,10 +34,10 @@ the connection once the loop says it is readable.
 
 The range of a `u8[]` that `netRead` and `netWrite` take is checked, and the
 compiler proves the check away for a window it can see is inside the buffer,
-such as `buf, 0, buf.length`. The later examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): they index arrays
-without a guard, and a test such as `i < xs.length` before each index proves
-those.
+such as `buf, 0, buf.length`. An array a call fills, such as the pair of
+descriptors below, is a different case: the compiler does not know its length
+after the call, so the examples test it once (`fds.length < 2`) and read the
+slots into locals.
 
 <!-- nish:ok -->
 ```ts
@@ -143,25 +143,26 @@ hand one end to a thread and keep the other. `fds` is an
 arrive as one read. `NET_UNIX_SEQPACKET` keeps each write one message, so each
 read answers exactly one; it is Linux only and answers `-95` on macOS.
 
-<!-- allow-panics: slices with bounds it does not test; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { NET_UNIX_SEQPACKET, netClose, netRead, netWrite, unixSocketPair } from "nish:net";
 
 export const main = (): i32 => {
   const fds: i32[] = [0, 0];
-  if (unixSocketPair(NET_UNIX_SEQPACKET, fds) !== 0) {
+  if (unixSocketPair(NET_UNIX_SEQPACKET, fds) !== 0 || fds.length < 2) {
     return 1;
   }
+  const left = fds[0];
+  const right = fds[1];
   const one: u8[] = [1, 2];
   const two: u8[] = [3];
-  netWrite(fds[0], one, 0, one.length);
-  netWrite(fds[0], two, 0, two.length);
+  netWrite(left, one, 0, one.length);
+  netWrite(left, two, 0, two.length);
   const buf = new Array<u8>(16);
-  console.log(netRead(fds[1], buf, 0, buf.length));
-  console.log(netRead(fds[1], buf, 0, buf.length));
-  netClose(fds[0]);
-  netClose(fds[1]);
+  console.log(netRead(right, buf, 0, buf.length));
+  console.log(netRead(right, buf, 0, buf.length));
+  netClose(left);
+  netClose(right);
   return 0;
 };
 ```
@@ -176,25 +177,29 @@ carried none. The two descriptors, the sender's and the receiver's, are one
 open file: they share its offset and its flags, as a `dup` would. The sender's
 stays open until it closes it.
 
-<!-- allow-panics: slices with bounds it does not test; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { NET_UNIX_STREAM, netClose, recvFd, sendFd, unixSocketPair } from "nish:net";
 
 export const main = (): i32 => {
   const ends: i32[] = [0, 0];
-  if (unixSocketPair(NET_UNIX_STREAM, ends) !== 0) {
+  if (unixSocketPair(NET_UNIX_STREAM, ends) !== 0 || ends.length < 2) {
     return 1;
   }
+  const left = ends[0];
+  const right = ends[1];
   const note: u8[] = [42];
-  console.log(sendFd(ends[0], 1, note, 0, note.length));
+  console.log(sendFd(left, 1, note, 0, note.length));
   const buf = new Array<u8>(4);
   const got: i32[] = [-1];
-  console.log(recvFd(ends[1], buf, 0, buf.length, got));
-  console.log(got[0] > 2 ? "a new descriptor for stdout" : "none");
-  netClose(got[0]);
-  netClose(ends[0]);
-  netClose(ends[1]);
+  console.log(recvFd(right, buf, 0, buf.length, got));
+  const fd = got.length > 0 ? got[0] : -1;
+  console.log(fd > 2 ? "a new descriptor for stdout" : "none");
+  if (fd >= 0) {
+    netClose(fd);
+  }
+  netClose(left);
+  netClose(right);
   return 0;
 };
 ```
@@ -232,21 +237,22 @@ answers `0`. `out` is an `i32[]` of at least three; a shorter one answers
 `-22`. A server uses it to decide what a client may do before it reads a byte
 of what the client sent.
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { NET_UNIX_STREAM, netClose, peerCredentials, unixSocketPair } from "nish:net";
 
 export const main = (): i32 => {
   const ends: i32[] = [0, 0];
-  if (unixSocketPair(NET_UNIX_STREAM, ends) !== 0) {
+  if (unixSocketPair(NET_UNIX_STREAM, ends) !== 0 || ends.length < 2) {
     return 1;
   }
+  const left = ends[0];
+  const right = ends[1];
   const who: i32[] = [0, 0, 0];
-  console.log(peerCredentials(ends[1], who));
-  console.log(who[0] > 0 ? "a pid" : "no pid");
-  netClose(ends[0]);
-  netClose(ends[1]);
+  console.log(peerCredentials(right, who));
+  console.log(who.length > 0 && who[0] > 0 ? "a pid" : "no pid");
+  netClose(left);
+  netClose(right);
   return 0;
 };
 ```

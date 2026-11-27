@@ -48,20 +48,18 @@ To wait, make a loop with `pollCreate()`, watch each socket with
 `pollWait(loop, ready, timeoutMs)`. It fills `ready` with pairs, a token and
 its events, and answers how many, `0` when the timeout passed.
 
-The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do). The range of a
-`u8[]` that `netRead` and `netWrite` take is checked while the program runs
-unless the compiler can see the window is inside the buffer (`buf, 0,
-buf.length`, or an offset of 0 and a count tested with
+The range of a `u8[]` that `netRead` and `netWrite` take is checked while
+the program runs unless the compiler can see the window is inside the buffer
+(`buf, 0, buf.length`, or an offset of 0 and a count tested with
 `n >= 0 && n <= buf.length`, or a window `buf, start, end - start` under
-`start >= 0 && start <= end && end <= buf.length`); the
-HTTP handlers and `nish/net/dns` call standard-library code that keeps
-panic sites until the standard library is made panic-free;
-and some examples index arrays or add numbers without a guard, which a test
-such as `i < xs.length` before an index, or a bound on a sum, proves.
+`start >= 0 && start <= end && end <= buf.length`), so the examples test a
+count before they pass it on, as the echo below does. The HTTP handler,
+`nish/net/prefork` and `nish/net/dns` call standard-library code that keeps
+panic sites until the standard library is made panic-free, so the examples
+that use them build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do) for now.
 
-<!-- allow-panics: slices with bounds it does not test -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollWait, tcpAccept, tcpListen } from "nish:net";
 
@@ -83,7 +81,7 @@ export const main = (): i32 => {
       pollAdd(loop, conn, 1, 1);
       if (pollWait(loop, ready, 1000) > 0) {
         const n = netRead(conn, buf, 0, buf.length);
-        if (n > 0) {
+        if (n > 0 && n <= buf.length) {
           netWrite(conn, buf, 0, n);
         }
       }
@@ -371,19 +369,19 @@ connections to another process with `sendFd` keeps descriptors.
 `nish/net/handler` takes the flag through its limits. Set
 `HandlerLimits.ring` and open the listener with `limits.listen(host, port,
 backlog, flags)`, which is `tcpListenFlags` with `NET_LISTEN_RING` added when
-`ring` is set, then hand it to `new HttpHandler(limits, listener, router)` as
-any listener. `HandlerLimits.slots` is then the cap on connections, not the
+`ring` is set, then hand it to `openHttpHandler(limits, listener, router)`,
+which answers an `Err` where `new HttpHandler` would panic, as any listener. `HandlerLimits.slots` is then the cap on connections, not the
 descriptor limit: set it to what the server should hold. When every ring slot
 is taken, the handler rests its listener on the `-23`, as it does on `-24`
 for descriptors, until a connection closes or 100 ms pass, so a full server
 waits rather than spin. `h.resting()` is true while it does, for a server
 that wants to log or count the times it is full:
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/net/handler.ts` code that reaches `std/net/http-compress.ts` panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/handler.ts` code that reaches `std/net/http-compress.ts` panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { HandlerLimits, HttpHandler } from "nish/net/handler";
-import { Router, RouterLimits } from "nish/net/router";
+import { HandlerLimits, openHttpHandler } from "nish/net/handler";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { netClose, netRingState } from "nish:net";
 
 export const main = (): i32 => {
@@ -394,7 +392,18 @@ export const main = (): i32 => {
   if (listener < 0) {
     return 1;
   }
-  const h = new HttpHandler(limits, listener, new Router(new RouterLimits()));
+  const router = routerChecked(new RouterLimits());
+  if (router.isErr()) {
+    netClose(listener);
+    return 1;
+  }
+  const opened = openHttpHandler(limits, listener, router.value);
+  if (opened.isErr()) {
+    console.error(opened.error);
+    netClose(listener);
+    return 1;
+  }
+  const h = opened.value;
   console.log(netRingState() === 1 ? "connections go into rings" : "descriptors");
   h.drain();
   netClose(listener);
@@ -549,16 +558,15 @@ and a `NET_LISTEN_RING` slot handle.
 `-1` is not an error code, so check for a positive answer and fall back to a
 size of your own:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { netMss } from "nish:net";
 
 // Bytes to gather before one write: four full segments, or 4096 when the
-// socket has no MSS to tell.
+// socket has no MSS to tell. An MSS is a 16-bit field, so four fit an `i32`.
 export const batchSize = (conn: i32): i32 => {
   const mss = netMss(conn);
-  return mss > 0 ? mss * 4 : 4096;
+  return mss > 0 && mss <= 65535 ? mss * 4 : 4096;
 };
 ```
 
@@ -871,7 +879,7 @@ never block, so wait for one in the readiness loop alongside the listener.
 Where they are rides in one more argument, `--nish-prefork-channels=`, just
 before the worker's index; `preforkArgs` drops it with the index.
 
-<!-- allow-panics: slices with bounds it does not test; does integer arithmetic nothing bounds; calls `std/net/prefork.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/prefork.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { NET_UNIX_STREAM, netRead } from "nish:net";
@@ -891,7 +899,8 @@ class Log {
 const heard = (log: Log, index: i32, fd: i32, events: i32): void => {
   const buf = new Array<u8>(256);
   while (netRead(fd, buf, 0, buf.length) > 0) {
-    log.lines = log.lines + 1;
+    const lines = log.lines;
+    log.lines = lines < 2147483647 ? lines + 1 : lines;
   }
 };
 
@@ -1011,7 +1020,7 @@ it opens, and answers each lookup with the 18-byte addresses `tcpConnect` and
 tokens it owns and the time; it never waits and never reads the clock itself,
 so a slow lookup costs your other sockets nothing.
 
-<!-- allow-panics: builds an array whose length it does not bound; calls `panic`; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/net/dns-config.ts`, `std/net/dns-resolver.ts`, `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/bytes.ts`, `std/net/dns-config.ts`, `std/net/dns-resolver.ts`, `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DnsClient } from "nish/net/dns";
@@ -1032,16 +1041,23 @@ export const main = (): i32 => {
     console.log(`not started: ${lookup}`);
     return 1;
   }
-  const out: u8[] = new Array<u8>(16 * DNS_ADDRESS_BYTES);
+  // A length must be proven non-negative; a product with a constant is not.
+  const size = 16 * DNS_ADDRESS_BYTES;
+  if (size < 0) {
+    return 1;
+  }
+  const out: u8[] = new Array<u8>(size);
   const ttls: i32[] = new Array<i32>(16);
   const ready: i32[] = new Array<i32>(16);
   let found: i32 = dns.result(lookup, out, ttls);
   while (found === DNS_RESOLVE_PENDING) {
     const count: i32 = pollWait(loop, ready, dns.timeoutMs(monotonicNanos(), -1));
     const now: i64 = monotonicNanos();
-    for (let k: i32 = 0; k < count; k++) {
-      if (dns.owns(ready[2 * k])) {
-        dns.ready(ready[2 * k], ready[2 * k + 1], now);
+    // `ready` holds 8 pairs; the test on `at` proves both reads are inside it.
+    for (let k: i32 = 0; k < count && k < 8; k++) {
+      const at: i32 = 2 * k;
+      if (at + 1 < ready.length && dns.owns(ready[at])) {
+        dns.ready(ready[at], ready[at + 1], now);
       }
     }
     dns.tick(now);
@@ -1053,7 +1069,7 @@ export const main = (): i32 => {
   }
   // The first address, port 443 already in it, is what tcpConnect takes.
   const addr: u8[] = new Array<u8>(DNS_ADDRESS_BYTES);
-  for (let i: i32 = 0; i < DNS_ADDRESS_BYTES; i++) {
+  for (let i: i32 = 0; i < addr.length && i < out.length; i++) {
     addr[i] = out[i];
   }
   const fd: i32 = tcpConnect(addr);

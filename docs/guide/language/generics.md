@@ -12,21 +12,15 @@ and [Generic methods](../../reference/language/declarations.md#generic-methods).
 
 ## Generic functions
 
-Several examples on this page index and add with nothing bounding them, so the
-compiler cannot prove them safe and they build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); testing `i < xs.length`
-before an index and bounding the operands, as the compile error suggests,
-builds them under the default.
-
 Both ways of writing a function take type parameters:
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const identity = <T>(x: T): T => x;
 
 const lastOf = <T>(items: T[], fallback: T): T => {
-  return items.length === 0 ? fallback : items[items.length - 1];
+  const last = items.length - 1;
+  return last >= 0 ? items[last] : fallback;
 };
 
 export const main = (): i32 => {
@@ -64,8 +58,7 @@ A class or interface takes type parameters too. Here the type arguments are
 always written out, after `new` or in a type annotation, because there is
 nothing to infer them from:
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Stack<T> {
   items: T[];
@@ -79,7 +72,8 @@ class Stack<T> {
   }
 
   peek(fallback: T): T {
-    return this.items.length === 0 ? fallback : this.items[this.items.length - 1];
+    const last = this.items.length - 1;
+    return last >= 0 ? this.items[last] : fallback;
   }
 }
 
@@ -159,26 +153,25 @@ export const main = (): i32 => areaOf(new Square(4));
 type argument then has to *be* `Shape`, or a class that declares
 `implements Shape`; having fields with the same names is not enough.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 interface Shape {
-  area: i32;
+  area: i64;
 }
 
 class Square implements Shape {
-  area: i32;
+  area: i64;
 
   constructor(side: i32) {
-    this.area = side * side;
+    this.area = toI64(side) * toI64(side);
   }
 }
 
 class Rect implements Shape {
-  area: i32;
+  area: i64;
 
   constructor(w: i32, h: i32) {
-    this.area = w * h;
+    this.area = toI64(w) * toI64(h);
   }
 }
 

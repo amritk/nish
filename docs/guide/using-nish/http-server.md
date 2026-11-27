@@ -18,18 +18,18 @@ native only.
 ## A first server
 
 The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/router` and
-the JSON reads keep panic sites no proof removes yet, so a call to them is
-refused by default until the standard library is made panic-free. The indexes
-and the `panic` call in your own code build under the default once a guard such
-as `i < xs.length` proves each index and the `panic` becomes an error answer.
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/http-server`
+keeps panic sites no proof removes yet, so a call to it is refused by default
+until the standard library is made panic-free. The code around the calls
+builds under the default: it makes the router with `routerChecked`, which gives
+`Err` for a limit outside its range where `new Router` panics.
 
-<!-- allow-panics: calls `panic`; indexes an array without a guard the checker reads; calls `std/net/http-server.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/http-server.ts` code that keeps panic sites, and reaches those of `std/net/http3-server.ts` and `std/net/router.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HttpServer, HttpServerLimits } from "nish/net/http-server";
 import { Http1Config } from "nish/net/http1-server";
-import { Router, RouterLimits } from "nish/net/router";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { tcpListen } from "nish:net";
 
 // The routes, in the order they are added: `add` answers 0, 1.
@@ -45,7 +45,12 @@ const bytesOf = (text: string): u8[] => {
 };
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    console.error(table.error);
+    return 1;
+  }
+  const router = table.value;
   router.add("GET", "/");
   router.add("GET", "/users/:id");
   const listener: i32 = tcpListen("127.0.0.1", 8080, 1024);
@@ -207,6 +212,56 @@ QUIC: false on cleartext HTTP/1.1 and h2c.
 A field name is matched without regard to case on every version. A decoded
 parameter or query value can hold any byte, `/`, `..` and NUL among them;
 check it before you use it as a file name.
+
+### Reading a file upload
+
+An HTML form with a file input sends a `multipart/form-data` body.
+`nish/net/multipart` reads it part by part from `r.body`, without copying any
+part's data. Take the boundary from the request's `Content-Type` with
+`mediaTypeParse` and `mediaTypeParam` from `nish/net/http-fields`:
+
+```ts
+const i = r.header("content-type");
+const type = i === HANDLER_ABSENT ? null : mediaTypeParse(r.head, r.valueStart(i), r.valueEnd(i));
+const boundary = type === null ? null : mediaTypeParam(type, "boundary");
+if (boundary === null) {
+  server.problem(r, 400, "Bad Request", "the body is not a form");
+} else {
+  const parts = new MultipartReader(r.body, r.bodyLength, boundary, new MultipartLimits());
+  let code: i32 = parts.next();
+  while (code === MULTIPART_PART) {
+    // parts.name, parts.filename, parts.contentType, and the data at
+    // r.body[parts.dataStart] for parts.dataLength bytes
+    code = parts.next();
+  }
+  // MULTIPART_END once the body closes; a negative MULTIPART_ERR_* code if
+  // it is malformed, cut short or past a limit
+}
+```
+
+The reader answers a negative code for a body it refuses, and every later
+`next()` answers the same code. It refuses:
+
+- a header line split by a CR or LF alone;
+- a part with two `Content-Disposition` or two `Content-Type` fields;
+- a parameter given twice;
+- a body cut short anywhere before its close delimiter.
+
+`MultipartLimits` caps the parts (64), the header lines in one part (16) and
+their bytes (8,192). The body's own size is `maxBody`'s.
+
+For a small form held as an array of its own, three calls stand in for the
+loop, each with the default limits. `multipartPartCount(body, boundary)` is the
+number of parts, or the negative code the reader refuses the body with.
+`multipartFieldData(body, boundary, name)` is a copy of the first part named
+`name`, and `multipartFieldFilename(body, boundary, name)` is that part's
+`filename`. Both answer `null` when no part has that name. They stop at the
+part they find, so check `multipartPartCount` first when a body cut short after
+that part must be refused too.
+
+`parts.filename` is what the sender wrote, not a safe path: `../../etc/passwd`
+and `C:\x.txt` arrive as written. Name the file you store yourself, and keep
+the sender's name only as text.
 
 ## Answering
 

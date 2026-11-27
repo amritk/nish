@@ -9,20 +9,19 @@ program can call a C function you declare.
 The examples on this page that keep a check build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do), which tests it as the
 program runs and stops the program if it fails. Under the default each is a
-compile error: an `i32` sum that may overflow, an index the compiler cannot
-prove in range, a string passed to C that may hold a NUL, a C pointer that may
-be `NULL`. A guard removes most of them: a bound on the sum's inputs, a test of
-the index against `length`, a string literal or a string the code turned
-away when `s.indexOf("\u0000") >= 0`, a C result declared `| null` and
-narrowed.
+compile error: an index into module storage, which no proof reaches yet, a
+string a handle class passes to C before a guard can test it for a NUL, and a
+`readCString` or `readStruct` call, whose `NULL` test no proof removes. The
+rest are written the way the default asks: a string passed to C is a literal
+or one the code searched with `s.indexOf("\u0000")`, and a C result is
+declared `| null` and narrowed.
 
 Each direction starts from an ordinary module that `export`s the functions to
 call. This one is used throughout the page:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-export const add = (a: i32, b: i32): i32 => a + b;
+export const add = (a: f64, b: f64): f64 => a + b;
 
 export const mean = (xs: Float64Array): f64 => {
   let total: f64 = 0.0;
@@ -96,7 +95,7 @@ returns an array:
 ```console
 $ nish stats.ts -o stats.ll --emit-dts stats.d.ts
 $ $NISH/scripts/build.sh stats.ll $NISH/runtime/runtime-wasm.c -o stats.wasm --profile wasm
-stats.wasm: 1607 bytes (wasm)
+stats.wasm: 1667 bytes (wasm)
 ```
 
 ```js
@@ -149,7 +148,7 @@ the page needs no `fetch` and no `await`:
 ```console
 $ $NISH/scripts/build.sh stats.ll $NISH/runtime/runtime-wasm.c -o stats.wasm \
     --profile wasm-host --inline stats.bytes.mjs
-stats.wasm: 807 bytes (wasm-host, no wasm-opt)
+stats.wasm: 769 bytes (wasm-host, no wasm-opt)
 ```
 
 ```js
@@ -181,7 +180,7 @@ clang's own `wasm-opt` call after the link:
 ```console
 $ NISH_WASM_OPT=0 $NISH/scripts/build.sh stats.ll $NISH/runtime/runtime-wasm.c \
     -o stats.wasm --profile wasm-host
-stats.wasm: 807 bytes (wasm-host, no wasm-opt, NISH_WASM_OPT=0)
+stats.wasm: 769 bytes (wasm-host, no wasm-opt, NISH_WASM_OPT=0)
 ```
 
 With Vite, `nish/vite` does all of this in `vite build`:
@@ -482,7 +481,7 @@ world, a document, a list — declare module storage whose element is a class
 or `null`. Each slot is a *root*: the object in it, and everything that
 object reaches, outlives the call that built it.
 
-<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
+<!-- allow-panics: indexes module storage, which no guard the checker reads proves in range yet -->
 <!-- nish:ok --target wasm32 --allow-panics -->
 ```ts
 class Node {
@@ -502,11 +501,11 @@ export const push = (value: i32): void => {
   head[0] = n
 }
 
-export const total = (): i32 => {
-  let sum: i32 = 0
+export const total = (): f64 => {
+  let sum: f64 = 0
   let n = head[0]
   while (n !== null) {
-    sum = sum + n.value
+    sum = sum + toF64(n.value)
     n = n.next
   }
   return sum
@@ -855,7 +854,7 @@ client's input, replay it on the server's build, and compare one hash.
 $ nish stats.ts -o stats.ll --emit-header stats.h
 $ grep -A1 '^/\* add' stats.h
 /* add(a: number, b: number): number */
-int32_t add(int32_t a, int32_t b);
+double add(double a, double b);
 ```
 
 ```c
@@ -863,7 +862,7 @@ int32_t add(int32_t a, int32_t b);
 #include "stats.h"
 
 int main(void) {
-  printf("add(2, 3) = %d\n", add(2, 3));
+  printf("add(2, 3) = %g\n", add(2, 3));
   return 0;
 }
 ```
@@ -1017,8 +1016,7 @@ the rest), `boolean` and `void`. A `u8`, `u16` and `boolean` are C's
 as the C ABI expects, so `toU8(511)` reaches C as 255. So does a `string` *parameter*, which C reads
 as a NUL-terminated `const char *`:
 
-<!-- allow-panics: passes C a string that may hold a NUL -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 declare function puts(s: string): i32;
 declare function strlen(s: string): u64;
@@ -1026,7 +1024,9 @@ declare function strlen(s: string): u64;
 export const main = (): i32 => {
   puts("hello");
   const word = "nish" + "!";
-  console.log(`${strlen(word)}`); // 5
+  if (word.indexOf("\u0000") < 0) {
+    console.log(`${strlen(word)}`); // 5
+  }
   return 0;
 };
 ```
@@ -1038,34 +1038,36 @@ take a `CPtr` instead, and handed memory C allocated. A `string | null`
 parameter passes `NULL` for `null`.
 
 A Nish string can hold a NUL byte, and C would stop reading at it, so a string
-that is not a literal is a compile error under the default, and under
-`--allow-panics` one that holds a NUL stops the program before the call
-instead:
+that is neither a literal nor a local the code searched for a NUL, as `word`
+is above, is a compile error under the default, and under `--allow-panics`
+one that holds a NUL stops the program before the call instead:
 
 ```console
 `strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of the string
 ```
 
 A literal with no NUL in it is checked at compile time and costs nothing at run
-time; any other string is checked with one scan of its bytes. `--emit-panics`
+time, and so does a local on the branch where `indexOf("\u0000")` found none
+and that nothing assigned since; any other string is checked with one scan of
+its bytes. `--emit-panics`
 lists each checked call as an `ffi-nul` site.
 
 A `string` *result* crosses the other way, as a copy. C answers a
 `const char *` into a buffer it keeps, and the program copies the bytes into a
 string of its own at the call, so a later call that overwrites C's buffer
 changes nothing the program holds. Each call makes a new copy, which lives
-like any other string the function makes, in a loop as anywhere else. A C
-function that may answer `NULL` is declared `string | null`, and `NULL` arrives
-as `null`:
+like any other string the function makes, in a loop as anywhere else. Declare
+the result `string | null`, even for a function such as `strerror` that should
+never answer `NULL`: nothing proves C keeps that promise, so the default
+refuses a plain `string` result. `NULL` arrives as `null`:
 
-<!-- allow-panics: reads a C pointer that may be `NULL` -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-declare function strerror(errnum: i32): string;
+declare function strerror(errnum: i32): string | null;
 declare function getenv(name: string): string | null;
 
 export const main = (): i32 => {
-  console.log(strerror(2)); // No such file or directory
+  console.log(strerror(2) ?? "unknown error"); // No such file or directory
   const home = getenv("HOME");
   console.log(home === null ? "no HOME" : "HOME is set");
   return 0;
@@ -1222,7 +1224,7 @@ it, copy it with `readCString` from `nish:unsafe`, and free C's buffer
 yourself. A parameter declared `CPtr | null` takes the literal `null`, which is
 how `realpath` is asked to allocate:
 
-<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- allow-panics: copies C's string with `readCString`, whose `NULL` test the checker keeps after `p === null` narrows the pointer yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { readCString } from "nish:unsafe";
@@ -1279,7 +1281,7 @@ its `[Symbol.dispose]` is exactly the call that closes it. Open one with
 block — falling off its end, an early `return`, `break`, `continue`, or an
 `orReturn()` that propagates:
 
-<!-- allow-panics: passes C a string that may hold a NUL -->
+<!-- allow-panics: passes C a string from a handle class's constructor, which opens its resource before any statement, so no guard the checker reads proves the string free of NUL yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 declare function fopen(path: string, mode: string): CPtr | null;
@@ -1447,7 +1449,7 @@ program owns, so a later call that overwrites C's buffer leaves the copy
 alone. The type to copy into comes from the context, an annotation or a
 return type, and the copy is the class's size in bytes:
 
-<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- allow-panics: copies the struct with `readStruct`, whose `NULL` test the checker keeps after `p === null` narrows the pointer yet; follows a `CPtr` field C may leave `NULL` with `readCString`, a test which nothing proves away -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { readCString, readStruct } from "nish:unsafe";
@@ -1456,10 +1458,14 @@ declare class Lconv {
   decimalPoint: CPtr;
   thousandsSep: CPtr;
 }
-declare function localeconv(): CPtr;
+declare function localeconv(): CPtr | null;
 
 export const main = (): i32 => {
-  const lc: Lconv = readStruct(localeconv());
+  const p = localeconv();
+  if (p === null) {
+    return 1;
+  }
+  const lc: Lconv = readStruct(p);
   console.log(readCString(lc.decimalPoint)); // .
   return 0;
 };

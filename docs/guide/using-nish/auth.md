@@ -35,11 +35,11 @@ The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/crypto/jwt`
 keeps panic sites no proof removes yet, so a call to it is refused by default
 until the standard library is made panic-free, and `crypto.getRandomValues`
-exits the program when the system has no random bytes to give, a check no proof
-removes. The division by `toI64(1000)` and the sum after it build under the
-default once a guard bounds them, such as `if (d > 0)` on a local divisor.
+exits the program when the system has no random bytes to give and has no form
+that answers instead. The rest of the code is checked as usual: the expiry below is summed in `f64`,
+which cannot overflow, rather than as an `i64` nothing bounds.
 
-<!-- allow-panics: calls a file or entropy builtin that exits on failure; divides by a value it does not test; calls `std/crypto/hmac.ts`, `std/crypto/jwt.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; calls `std/crypto/jwt.ts` code that keeps or reaches panic sites (in `std/crypto/hmac.ts` and `std/crypto/base64url.ts`) no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import {
@@ -173,7 +173,7 @@ object. Claims outside ASCII are refused too: escape such text in the JSON
 `jwtSignKid(key, kid, bytes)` adds a `kid`. The claims are signed as given,
 so put the `exp` in yourself.
 
-<!-- allow-panics: calls a file or entropy builtin that exits on failure; divides by a value it does not test; does integer arithmetic nothing bounds; calls `std/crypto/jwt.ts`, `std/crypto/sha512.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; calls `std/crypto/jwt.ts` code that keeps or reaches panic sites (in `std/crypto/sha512.ts`, `std/crypto/hmac.ts` and `std/crypto/base64url.ts`) no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JWT_OK, JWT_MAX_TOKEN, JwtKey, JwtVerifier, jwtEd25519SigningKey, jwtSignKid } from "nish/crypto/jwt";
@@ -197,8 +197,11 @@ export const main = (): i32 => {
   if (key === null) {
     return 1;
   }
-  const now: i64 = toI64(Date.now()) / toI64(1000);
-  const claims: string = `{"sub":"ana","iat":${now},"exp":${now + toI64(900)}}`;
+  // Seconds since the epoch, summed in f64, which cannot overflow, and
+  // converted once: `toI64` of an `f64` clamps instead of panicking.
+  const seconds: f64 = Math.floor(Date.now() / 1000);
+  const now: i64 = toI64(seconds);
+  const claims: string = `{"sub":"ana","iat":${now},"exp":${toI64(seconds + 900)}}`;
   const token: string | null = jwtSignKid(key, "2026-10", bytesOf(claims));
   if (token === null) {
     return 1;

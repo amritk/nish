@@ -3116,9 +3116,9 @@ bash bench/techempower/run.sh --browser-head
 <!-- syscall-cost:begin -->
 ## Syscall cost
 
-Not measured by `bench/run.mjs`, which carries this section over unchanged. `bash bench/syscall-cost/run.sh` times a syscall's entry and exit (`syscall(SYS_getppid)`) against the TCP work of a loopback request/response, pinned to one CPU; [bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#syscall-cost) describes it and splits a keep-alive request's system time. 2026-10-30, `ce8f92ce`, Intel Xeon @ 2.10 GHz, KVM VM, Linux 6.18.44 (eIBRS, no KPTI), 7 interleaved rounds of 10^6 calls: entry and exit 106.0 ns (101.9–113.2), `recv` with nothing queued 173.7 ns, `setsockopt(TCP_QUICKACK, 0)` 179.7 ns, `getsockopt(TCP_INFO)` 283.0 ns, and 653 to 673 ns of TCP work per send or recv in a round.
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `bash bench/syscall-cost/run.sh` times a syscall's entry and exit (`syscall(SYS_getppid)`) against the TCP work of a loopback request/response, pinned to one CPU, then splits `bench/http1-server.ts`'s system CPU a request in the same run; [bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#syscall-cost) describes it. 2026-11-27, on a cloud VM: Intel Xeon @ 2.10 GHz, KVM VM, Linux 6.18.44 (eIBRS, no KPTI). The bench code is that of this section's commit, the squash commit of the pull request that added the in-run split; the server was built from `src/` at `9533b5d5`. Seven rounds of 10^6 calls: entry and exit 80.5 ns (73.1–83.2), `recv` with nothing queued 136.6 ns, `setsockopt(TCP_QUICKACK, 0)` 138.6 ns, `getsockopt(TCP_INFO)` 256.7 ns, and 511 to 524 ns of TCP work per send or recv in a round.
 
-For `bench/http1-server.ts` at 2.07 syscalls a request that is 0.22 µs of about 5 µs of system time, about 4%: under the 0.5 µs line, so io_uring is not worth building on this evidence. The reported workload ran on a Xeon Platinum 8260 VM on Linux 6.8, which this run did not measure.
+The split, five interleaved rounds of 5 s against a byte-identical copy: at 2.11 to 2.12 syscalls a request, entry and exit are 0.17 µs of 4.25 to 5.60 µs of system time a request on the plaintext, json and post-json keep-alive scenarios at c=256, 3.0% to 4.0% (the copy: 3.3% to 4.1%). The copy's distance from the build, 0.05 to 0.47 µs of system time, reaches past that 0.17 µs on post-json. Under the 0.5 µs line, so io_uring is not worth building on this evidence. The reported workload ran on a Xeon Platinum 8260 VM on Linux 6.8, which this run did not measure.
 <!-- syscall-cost:end -->
 
 <!-- tls-handshake:begin -->
@@ -3474,7 +3474,7 @@ Median (min–max) of 5 runs. Every run answered every request and closed none.
 <!-- http-lean-get:begin -->
 ## A minimal GET on Http1Server
 
-Not measured by `bench/run.mjs`, which carries this section over unchanged. This section breaks down one keep-alive `GET` answered with a 200 and a small JSON body: where its instructions go, its wall-clock time, the bytes a connection holds, and the server CPU and memory at 18,000 keep-alive connections. It then bounds what a lean request path could save (#1760). `std/`, `src/` and `runtime/` are `main` at 4d0faa4b throughout. Each table names the bench code that produced it: either `main` at 4d0faa4b with a path, or "this PR's bench code", the files this section's PR adds or changes under `bench/`.
+Not measured by `bench/run.mjs`, which carries this section over unchanged. This section breaks down one keep-alive `GET` answered with a 200 and a small JSON body: where its instructions go, its wall-clock time, the bytes a connection holds, and the server CPU and memory at 18,000 keep-alive connections. It then bounds what a lean request path could save (#1760). `std/`, `src/` and `runtime/` are `main` at 4d0faa4b throughout, except under "Components, Date and serving bytes", which are `main` at 9533b5d5 on a shared 4-core cloud VM. Each table names the bench code that produced it: either `main` at 4d0faa4b with a path, or "this PR's bench code", the files this section's PR adds or changes under `bench/`.
 
 | | |
 | --- | --- |
@@ -3518,7 +3518,7 @@ Instructions a request (Ir), callgrind; this PR's bench code (`bench/http1-reque
 - **Unread fields.** From `fields0` to `fields10`, each unread field costs 449.5 Ir. That is 268 Ir of field lines (`http1FieldLine` 133, `http1LowerName` 44, `http1NonTokenLanes` 39, `headerIndex` 17, `http1SpanSet` 10, `http1HeadIsVector` 10, `http1FramingField` 8, `http1HeadIs` 7), 110 of line scan, 13 of head copy, 5.5 of `memcpy` and 52 in the rest of the codec. Cachegrind's slope is 458.2.
 - **Response head, kept path.** Its 451 Ir are `http1ServerKept` 99, `sameHead` 70, `http1ServerSame8` 64, `respond` 110, `copyBytes` 49, `bodyRoom` 28, `http1ServerCopy` 20 and `begin` 11. `sameHead` compares the kept head, its Date included, and on a match `copyBytes` copies the kept head whole. `http1WriteResponseHead` is not in the steady-state profile: it runs only when the status, the fields or the Date change.
 - **Connection, the rest.** This is `inputRoom` 64, `nextRequest` 53, `next` 27, `room` 26, `acquire` 28, `OutputPool.take` 27, `release` 16, and 82 Ir of smaller rows. The per-request state reset is `http1StartRequest` 22 plus `Http1Connection.nextRequest` 53, 75 Ir.
-- **Date.** A lean path keeps Date: RFC 9110 §6.6.1 says an origin server with a clock MUST send Date in its 2xx, 3xx and 4xx responses. It costs 15 Ir a request here. `HttpDate.current` returns the pinned time, or else the time held by `hold()`, or else reads the clock. `Http1Server` holds once per readable event (`std/net/http1-server.ts`, lines 2574 and 2621). `bench/http1-request` and `bench/http1-conn` both pin the date, so neither times a clock read inside `HttpDate`. At 30,000 requests a second over 18,000 connections a readable event mostly carries one request, so the read can be once a request: at the 28.2 ns of the `clock read` row below, which is the bench's own `monotonicNanos` read, that is up to about 28 ns a request, and a lean path pays it too. The 29-byte Date copy happens only in `http1WriteResponseHead`, so the kept-head path does not make it.
+- **Date.** A lean path keeps Date: RFC 9110 §6.6.1 says an origin server with a clock MUST send Date in its 2xx, 3xx and 4xx responses. It costs 15 Ir a request here. `HttpDate.current` returns the pinned time, or else the time held by `hold()`, or else reads the clock. `Http1Server` holds once per readable event (`std/net/http1-server.ts`, lines 2574 and 2621). `bench/http1-request` and `bench/http1-conn`'s request shapes pin the date, so they time no clock read inside `HttpDate`; `bench/http1-conn`'s `parts` shape times it. At 30,000 requests a second over 18,000 connections a readable event mostly carries one request, so the read can be once a request. Timed with its clock read under "Components, Date and serving bytes" below (a different box), `hold`, `current` and `unhold` on the wall clock take 29.1 ns a request against 1.2 ns on a pinned date, so the clock read inside `HttpDate` is 28.0 ns; a whole served GET between `hold` and `unhold` is 22.2 ns slower on the wall clock than pinned. A lean path pays it too. The 29-byte Date copy happens only in `http1WriteResponseHead`, so the kept-head path does not make it.
 
 ### Wall clock
 
@@ -3629,6 +3629,66 @@ An earlier run on the same box compared the handler-ring designs:
 
 The `epoll` against `epoll-copy` band is 1.7%. Against `epoll`'s five processes, the ring costs 12.6% more server CPU; against `epoll1`, the one-process design it replaces, it costs about 53% more (16.93 against 11.07 µs). The script's advisory verdict is no-go. `epoll1` measured 11.07 µs in this run and 12.83 µs in the one above, so the box moves by more than either run's band between runs; compare rows within one table. `epoll1`'s median PSS was 23.8 MB in both runs: 23.8 MB over 18,000 connections is under 1.4 KB a connection, with the process base and epoll tables included. These connections were held while the server answered 30,000 requests a second, so they were not strictly idle.
 
+### Components, Date and serving bytes
+
+A later run, on a different box, times the head parse apart from the header spans and `Date` with its clock read, and checks a serving connection's bytes, summed by object, against its RSS while it serves.
+
+| | |
+| --- | --- |
+| Date | 2026-11-27 |
+| nish | `main` at 9533b5d5 (`std/`, `src/`, `runtime/`), the seed compiler 0.44.0, `--profile speed` |
+| CPU | a shared 4-core cloud VM (KVM): Intel(R) Xeon(R) Processor @ 2.30GHz, 4 cores (L1d 48 KiB and L2 2 MiB a core, L3 504 MiB), 15 GiB; other tenants' load is not controlled |
+| Runs | `bench/http1-conn` in 15 interleaved rounds against `old` and `old′`, each the fastest of 5 batches of 200,000 requests, pinned to core 1; RSS as the median of 5 runs at 10,000 connections less 0 |
+| Command | `node bench/http1-conn/run.mjs --shape parts --connections 1 --rounds 15 --base origin/main`; `node bench/http1-conn/run.mjs --shape rss --connections 10000 --base origin/main` (origin/main at 9533b5d5 in both); `build/seed/bin/nish bench/http1-conn/bytes.ts -o <dir>/ --profile speed --link <dir>/bytes --allow-panics && <dir>/bytes` |
+
+`old` is `main`'s `std/`, `old′` a byte-identical copy of its build and `new` the working tree, whose `std/` is the same 9533b5d5, so all three columns are one code: `old′` against `old` is the base-against-base band, and `new` is a third sample of it.
+
+The `parts` shape (this PR's bench code, `bench/http1-conn/parts.ts` and `run.mjs`) runs one `Http1Connection` with every line in cache. The parser's line scan and its field-line work are one inlined loop in `http1Section`, so the header spans are told apart by what `next` is fed, not by a clock read inside it: the GET of `main.ts` (request line, Host and four more field lines, about 330 bytes) and the same GET with only its request line and Host, less a chunked POST whose trailer section is those four field lines byte for byte and the same POST with none. The trailer section runs the same scan with no head copy and gives each line a name token check and a count, with no lowering, OWS trim, framing kind or span. Each span is the one `next` call between two `monotonicNanos` reads; the clock row is as many bare reads, taken out of the first row only, since the other rows are differences of two spans. The `Date` loops and the held-serve loop are the bench's own, and the held-serve loop times its whole batch with no clock read around its `next` calls; `hold`, `current`, `unhold`, `feed`, `next`, `respond`, `write` and `end` are the shipped calls.
+
+| component | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| the GET's `next`: head parse and header spans | 199.9 (194.0–215.1) | 199.4 (191.7–201.6) 0.997 | 200.4 (193.9–205.5) 1.003 |
+| head parse (the row above less header spans) | 166.0 (161.3–169.1) | 166.5 (160.8–172.3) 1.003 | 167.2 (160.0–169.0) 1.007 |
+| header spans: the four field lines kept, less the same four scanned and counted | 34.1 (29.9–49.8) | 32.8 (29.0–40.0) 0.961 | 33.8 (30.6–39.3) 0.990 |
+| the four field lines scanned and counted, as trailers | 79.6 (77.2–82.4) | 79.6 (76.8–84.6) 1.000 | 80.3 (77.0–81.8) 1.008 |
+| the four field lines kept (`get` less `get-min`) | 113.8 (108.3–128.4) | 112.4 (107.3–118.0) 0.987 | 113.5 (111.0–118.9) 0.997 |
+| clock read (`monotonicNanos`) | 20.9 (20.4–21.4) | 20.9 (19.9–21.3) 0.998 | 20.9 (20.6–21.1) 0.999 |
+| Date: `hold`, `current`, `unhold`, wall clock | 29.1 (28.6–29.4) | 29.1 (27.9–29.3) 0.999 | 29.2 (28.4–29.3) 1.002 |
+| Date: the same, pinned (no clock read) | 1.2 (1.1–1.2) | 1.2 (1.1–1.2) 1.000 | 1.2 (1.1–1.2) 1.000 |
+| Date's clock read (wall less pinned) | 28.0 (27.5–28.3) | 27.9 (26.8–28.1) 0.999 | 28.0 (27.3–28.2) 1.002 |
+| served GET, Date pinned | 264.4 (261.3–273.3) | 261.9 (254.9–270.0) 0.990 | 263.6 (258.5–267.5) 0.997 |
+| served GET, Date on the wall clock | 286.7 (278.8–290.9) | 283.8 (273.1–290.3) 0.990 | 286.4 (282.1–306.6) 0.999 |
+| Date in a served GET (wall less pinned) | 22.2 (10.9–26.4) | 21.6 (17.3–32.2) 0.973 | 23.3 (17.8–42.6) 1.050 |
+
+15 rounds, one connection; ns per request, median (min–max) and ratio of medians to `old`; this PR's bench code (`bench/http1-conn/parts.ts`, `run.mjs`).
+
+- **Head parse and header spans.** Of the GET's 199.9 ns `next`, the head parse is 166.0 ns and keeping the four field lines after Host as header fields is 34.1 ns. That row's band is the widest of the parsing rows, 3.9% at the medians (`old′` 0.961), and its min–max (29.0–49.8 over the columns) is wide, since it is the difference of four timed shapes. Scanning the same four lines costs 79.6 ns of the 113.8 that they cost in all.
+- **Date.** With its clock read, `Date` is 29.1 ns a request, of which the clock read is 28.0; pinned it is 1.2. That read is `Date.now()`, the wall clock, a different clock from the 20.9 ns `monotonicNanos` row, and these runs do not say why it costs more. In a whole served GET the wall clock costs 22.2 ns over a pinned date at `old`'s median, but this row is the noisiest here: `new` is 23.3 (1.050) and `old`'s minimum 10.9, so it is within the min–max spreads of its two served rows, whose difference it is. These runs do not say why it sits under the bare loop's 28.0.
+
+The serving connection's bytes, by object, from `bench/http1-conn/bytes.ts` (this PR's bench code) at 9533b5d5. `bytes.ts` reads `Arena.used()` as in the table under "Bytes per connection" above; its counts at 9533b5d5 are 8 bytes over 4d0faa4b's (`Http1Connection` built 736, after request 1 1,016, after requests 2 to 4 1,200), which these runs do not split. A serving connection is one that has served four requests and holds its next one read and answered, with its response not yet flushed:
+
+| object | bytes |
+| --- | ---: |
+| the connection between requests, after four (`pooled-after-4`) | 1,200 |
+| input buffer, 1,024 + 24 | 1,048 |
+| head buffer, 256 + 24 | 280 |
+| output buffer, 65,536 + 24 | 65,560 |
+| a serving connection | 68,088 |
+
+The pools hold one spare buffer of each kind, and `bytes.ts` gives them to another connection, which holds a response too, before it counts, so the counted connection's three buffers are made fresh in the arena, as on a server whose every connection holds a response at once. `bytes.ts` prints the input and head buffers together as `pooled-holding-read`, 1,328. The output buffer is larger than an arena chunk, so it gets a chunk of its own and the count after the answer prints `chunk`: its row is the length `bytes.ts` prints under `holding.output` plus the 24-byte array header, not an arena count.
+
+The peak RSS per connection, from `node bench/http1-conn/run.mjs --shape rss --connections 10000 --base origin/main` (this PR's bench code, `bench/http1-conn/main.ts` and `run.mjs`), median (min–max) of 5 runs at 10,000 connections less 0, in bytes. The last row is `main.ts`'s `rss-serving` mode: the four passes of the row above it, then every connection fed one more request and answered without a flush, so all 10,000 hold their input, head and output buffers at once.
+
+| | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| `idleInput`, 1 request | 1058 (1057–1058) | 1058 (1057–1058) | 1060 (1058–1062) |
+| `idleInput`, 4 requests | 1241 (1241–1244) | 1241 (1241–1242) | 1242 (1241–1243) |
+| `idleInput` off, 1 request | 2927 (2927–2930) | 2926 (2926–2927) | 2927 (2927–2930) |
+| `idleInput` off, 4 requests | 3114 (3111–3115) | 3112 (3111–3113) | 3113 (3111–3115) |
+| `idleInput`, 4 requests, then each holding one answered | 72869 (72869–72872) | 72869 (72868–72869) | 72871 (72869–72872) |
+
+Checked against RSS while serving, the object sum is 68,088 bytes against 72,869: RSS is 4,781 bytes (7.0%) over the objects, so the output buffer's pages are resident, not left untouched. Idle, after four requests, the gap is 41 bytes (1,200 against 1,241); the three pooled buffers bring it to 4,781, which these runs do not split. A server that answers every connection at once holds about 71 KiB a connection, about 59 times an idle one's 1,241 bytes.
+
 ### What a lean path could save
 
 The bound adds three things a lean path might remove, each a median widened to the edge of its noise band. A band here is a median's gap to its byte-identical copy's; the min–max spreads in the same tables are 25–50%, so this is not a maximum:
@@ -3637,7 +3697,7 @@ The bound adds three things a lean path might remove, each a median widened to t
 - **The per-request state reset: 7.6 ns.** That is 75 Ir at 0.1017 ns an Ir, the highest ns per Ir of either column (`fields4`'s copy, 530.8 ns over 5,219 Ir).
 - **Cache misses: 218.3 ns.** This is the highest `idle-dram` median of the three columns, 735.4, less the lowest `idle` median at one connection, 534.2, scaled down by 0.968 for the drift between the two runs (the lowest `hot` median of the first, 375.8, over the highest of the second, 388.2): 735.4 − 517.1. Within one column the difference is 192.5 in `old`, 191.6 in `old′` and 201.2 in `new`. It is measured from `idle` and not `hot` because `idle-dram` alternates the GET with a POST of about 550 bytes and reads through the scratch buffer: `idle` less `hot` at one connection is about 150 ns of that extra work and no miss, so `idle-dram` less `hot`, 735.4 − 375.8 = 359.6 ns, would count it as misses and give a sum of 587.5 ns. The term holds every miss of the request, those on state needed between requests included, and the clock reads around each timed request, so it bounds the misses of state a lean path could drop from above. `cold` less `hot`, 448.5 − 375.8 = 72.7 ns at the edges, is the GET's L3 cost on 18,000 connections; `idle-dram` evicts every line, so its misses are within this term and not added to it. `misses.sh` was not run, so the term is not split by object.
 
-Date is not counted: a lean path keeps it (RFC 9110 §6.6.1). It is 15 Ir a request, plus up to about 28 ns where a readable event carries one request, and its 29-byte copy happens only when the head is rewritten.
+Date is not counted: a lean path keeps it (RFC 9110 §6.6.1). It is 15 Ir a request, plus its clock read where a readable event carries one request, measured on the cloud VM below at 28.0 ns in the bare `hold`, `current`, `unhold` loop and 22.2 ns in a served GET (medians; the served GET's min–max over the three columns is 10.9–42.6), and its 29-byte copy happens only when the head is rewritten.
 
 The sum is 220.2 + 7.6 + 218.3 = 446.1 ns, under 0.5 µs by 53.9 ns. At the medians, unscaled (the miss term taken within `old`'s column, without the 0.968 drift factor), it is 180.3 + 7.5 + 192.5 = 380.3 ns. 446.1 ns is 8.7% of the 5.1 µs a no-database 404 costs in the nish-std-amritk challenge entry, about 3 µs of which is in the kernel; those two figures are the entry owner's measurement, not measured here. Against the real server above, it is 3.7% of `h1`'s 12.07 µs of server CPU a request and about 24% of its 1.83 µs of user time.
 
