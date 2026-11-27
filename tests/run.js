@@ -41768,7 +41768,7 @@ if (!only || "wasm-arena".includes(only)) {
           `want ${want}${shown(native)}`
         )
         const emitted = path.join(out, "ts")
-        const ts = spawnNish(["examples/wasm-arena/replay.ts", "--deterministic", ALLOW_PANICS, "--emit-ts", emitted], {
+        const ts = spawnNish(["examples/wasm-arena/replay.ts", "--deterministic", "--emit-ts", emitted], {
           cwd: root,
           encoding: "utf8",
         })
