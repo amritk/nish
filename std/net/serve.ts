@@ -799,67 +799,10 @@ const serveParamSlots = (maxParams: i32): i32 => {
   return 2 * maxParams + 2
 }
 
-/**
- * `a + b` on a clock reading or a count, held at the `i64` range's ends where
- * the sum would leave it, which a clock centuries short of 2^63 never makes
- * it do. Two values of opposite signs add in `i64`, as they cannot leave the
- * range. Two of one sign add as magnitudes in `u64`, where they are below
- * 2^64 and so exact: a sum of values at least 0 is the `u64` sum, and a sum
- * of values below 0 is `-1 - ((-1 - a) + (-1 - b) + 1)`. Each magnitude is
- * held below 2^63 before it is read back as an `i64`, so the read is exact
- * too, and the bounds prover sees no sum that can overflow.
- */
-const serveLater = (a: i64, b: i64): i64 => {
-  if (a >= 0) {
-    if (b < 0) {
-      return a + b
-    }
-    const sum: u64 = toU64(a) + toU64(b)
-    return toI64(serveBelow2p63(sum))
-  }
-  if (b >= 0) {
-    return a + b
-  }
-  const past: u64 = toU64(-1 - a) + toU64(-1 - b) + toU64(1)
-  const k: i64 = toI64(serveBelow2p63(past))
-  if (k < 0) {
-    // Not taken: `k` is below 2^63. The test is what proves `-1 - k` fits.
-    return -1
-  }
-  return -1 - k
-}
-
-/**
- * How long from `from` to `to` on a clock reading: 0 when `to` is not after
- * it. Where the two have one sign the difference fits an `i64`; where `from`
- * is below 0 and `to` is not, it is the magnitudes' sum, taken in `u64` and
- * held below 2^63 as `serveLater` holds one.
- */
-const serveSince = (from: i64, to: i64): i64 => {
-  if (to <= from) {
-    return 0
-  }
-  if (from >= 0) {
-    if (to >= 0) {
-      return to - from
-    }
-    // Not taken: `to` is after `from`, which is at least 0.
-    return 0
-  }
-  if (to < 0) {
-    return to - from
-  }
-  const sum: u64 = toU64(to) + toU64(-1 - from) + toU64(1)
-  return toI64(serveBelow2p63(sum))
-}
-
 /** `x`, or 2^63 - 1 where `x` is larger: the most an `i64` holds. */
 const serveBelow2p63 = (x: u64): u64 => {
   const most: u64 = (toU64(1) << toU64(63)) - toU64(1)
-  if (x > most) {
-    return most
-  }
-  return x
+  return x > most ? most : x
 }
 
 /** A zeroed array of `n` bytes, empty when `n` is not positive. */
@@ -2150,4 +2093,58 @@ export const serve = async (
   const done: i32 = await serveOn(listener, router, limits, handle, new ServeStats())
   netClose(listener)
   return done
+}
+
+/**
+ * `a + b` on a clock reading or a count, held at the `i64` range's ends where
+ * the sum would leave it, which a clock centuries short of 2^63 never makes
+ * it do. Two values of opposite signs add in `i64`, as they cannot leave the
+ * range. Two of one sign add as magnitudes in `u64`, where they are below
+ * 2^64 and so exact: a sum of values at least 0 is the `u64` sum, and a sum
+ * of values below 0 is `-1 - ((-1 - a) + (-1 - b) + 1)`. Each magnitude is
+ * held below 2^63 before it is read back as an `i64`, so the read is exact
+ * too, and the bounds prover sees no sum that can overflow.
+ */
+const serveLater = (a: i64, b: i64): i64 => {
+  if (a >= 0) {
+    if (b < 0) {
+      return a + b
+    }
+    const sum: u64 = toU64(a) + toU64(b)
+    return toI64(serveBelow2p63(sum))
+  }
+  if (b >= 0) {
+    return a + b
+  }
+  const past: u64 = toU64(-1 - a) + toU64(-1 - b) + toU64(1)
+  const k: i64 = toI64(serveBelow2p63(past))
+  if (k < 0) {
+    // Not taken: `k` is below 2^63. The test is what proves `-1 - k` fits.
+    return -1
+  }
+  return -1 - k
+}
+
+/**
+ * How long from `from` to `to` on a clock reading: 0 when `to` is not after
+ * it. Where the two have one sign the difference fits an `i64`; where `from`
+ * is below 0 and `to` is not, it is the magnitudes' sum, taken in `u64` and
+ * held below 2^63 as `serveLater` holds one.
+ */
+const serveSince = (from: i64, to: i64): i64 => {
+  if (to <= from) {
+    return 0
+  }
+  if (from >= 0) {
+    if (to >= 0) {
+      return to - from
+    }
+    // Not taken: `to` is after `from`, which is at least 0.
+    return 0
+  }
+  if (to < 0) {
+    return to - from
+  }
+  const sum: u64 = toU64(to) + toU64(-1 - from) + toU64(1)
+  return toI64(serveBelow2p63(sum))
 }
