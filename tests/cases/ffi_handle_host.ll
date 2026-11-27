@@ -6,7 +6,7 @@ target triple = "wasm32-unknown-unknown"
 declare i32 @hCanvas(i32) #2
 declare i32 @hSame(i32) #3
 
-define void @View.constructor(%struct.View* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %name) #0 {
+define internal void @View.constructor(%struct.View* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %name) #0 {
 entry:
   %0 = call i32 @hCanvas(i32 %name)
   %1 = getelementptr inbounds %struct.View, %struct.View* %this, i32 0, i32 0
@@ -14,7 +14,7 @@ entry:
   ret void
 }
 
-define noundef zeroext i1 @View.open(%struct.View* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
+define internal noundef zeroext i1 @View.open(%struct.View* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
 entry:
   %c.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.View, %struct.View* %this, i32 0, i32 0
