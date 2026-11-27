@@ -795,7 +795,7 @@ function HttpHandler.begin(this: HttpHandler, slot: i32, conn: Http1Connection):
   local +15:14 k: i32 (let)
   callee +35:5 HttpHandler.route -> @nish.HttpHandler.route
 function HttpHandler.route(this: HttpHandler, r: HttpRequest): void -> @nish.HttpHandler.route [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.HttpRequest.methodIs nish.Router.methodIndex nish.Router.tryMatch nish.Router.tryParamCount
   pointer this: size=304 writesThrough=false captured=false
@@ -1552,7 +1552,7 @@ function HttpHandler.abandon(this: HttpHandler, r: HttpRequest): void -> @nish.H
   callee +1:7 HttpHandler.closeSlot -> @nish.HttpHandler.closeSlot
   callee +3:5 HttpHandler.release -> @nish.HttpHandler.release
 function HttpHandler.allowFor(this: HttpHandler, r: HttpRequest): u8[] -> @nish.HttpHandler.allowFor [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Router.tryMatch nish.handlerAllowAppend nish.handlerSpanIs nish.httpFieldBytes nish_array_grow
   pointer this: size=304 writesThrough=false captured=false
@@ -38727,16 +38727,16 @@ import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 unsafe import 76:10 uncheckedGet from "nish:unsafe"
 unsafe import 76:24 wrappingAdd from "nish:unsafe"
-unsafe call 1091:20 wrappingAdd (node 4570)
-unsafe call 1152:22 wrappingAdd (node 4910)
-unsafe call 1284:21 wrappingAdd (node 5577)
-unsafe call 1286:24 uncheckedGet (node 5616)
-unsafe call 1285:39 wrappingAdd (node 5596)
-unsafe call 1497:21 wrappingAdd (node 6726)
-unsafe call 1501:9 uncheckedGet (node 6752)
-unsafe call 1501:32 uncheckedGet (node 6758)
-unsafe call 1504:9 wrappingAdd (node 6772)
-unsafe call 1505:9 wrappingAdd (node 6785)
+unsafe call 1122:20 wrappingAdd (node 4658)
+unsafe call 1183:22 wrappingAdd (node 4998)
+unsafe call 1315:21 wrappingAdd (node 5665)
+unsafe call 1317:24 uncheckedGet (node 5704)
+unsafe call 1316:39 wrappingAdd (node 5684)
+unsafe call 1515:21 wrappingAdd (node 6749)
+unsafe call 1519:9 uncheckedGet (node 6775)
+unsafe call 1519:32 uncheckedGet (node 6781)
+unsafe call 1522:9 wrappingAdd (node 6795)
+unsafe call 1523:9 wrappingAdd (node 6808)
 const ROUTER_BAD_PATTERN: i32 = -1 [exported]
 const ROUTER_BAD_METHOD: i32 = -2 [exported]
 const ROUTER_TOO_LONG: i32 = -3 [exported]
@@ -38826,6 +38826,7 @@ struct Router (class) size=288 align=8 exported
   method methodIndex -> @nish.Router.methodIndex
   method match -> @nish.Router.match
   method tryMatch -> @nish.Router.tryMatch
+  method lookup -> @nish.Router.lookup
   method matchTree -> @nish.Router.matchTree
   method enter -> @nish.Router.enter
   method descend -> @nish.Router.descend
@@ -38855,15 +38856,14 @@ function Router.nodeCount(this: Router): i32 -> @nish.Router.nodeCount [exported
   pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Router.paramCount(this: Router, route: i32): i32 -> @nish.Router.paramCount [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: route
-  calls: nish.Router.routes nish.Router.tryParamCount nish.routerNoRoute
-  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Router.tryParamCount#0 nish.Router.routes#0
+  calls: nish.Router.routes nish.routerNoRoute
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Router.routes#0 nish.Router.routes#0
   stackSites=0 stackLocals=0
-  local +0:11 count: i32 (const)
-  callee +0:24 Router.tryParamCount -> @nish.Router.tryParamCount
-  callee +2:7 routerNoRoute -> @nish.routerNoRoute
-  callee +2:28 Router.routes -> @nish.Router.routes
+  callee +0:31 Router.routes -> @nish.Router.routes
+  callee +3:5 routerNoRoute -> @nish.routerNoRoute
+  callee +3:26 Router.routes -> @nish.Router.routes
 function Router.tryParamCount(this: Router, route: i32): i32 -> @nish.Router.tryParamCount [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: route
@@ -39027,20 +39027,30 @@ function Router.methodIndex(this: Router, method: string): i32 -> @nish.Router.m
   callee +8:9 routerLabelIsText -> @nish.routerLabelIsText
 function Router.match(this: Router, method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 -> @nish.Router.match [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Router.tryMatch
+  sharedWrite: via nish.Router.lookup
   escaping: mEnd mStart tEnd tStart
-  calls: nish.Router.tryMatch nish.routerCheckRanges
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.tryMatch#0
-  pointer method: size=0 writesThrough=false captured=false passedTo=nish.routerCheckRanges#0 nish.Router.tryMatch#1
-  pointer target: size=0 writesThrough=false captured=false passedTo=nish.routerCheckRanges#3 nish.Router.tryMatch#4
-  pointer params: size=0 writesThrough=true captured=false passedTo=nish.Router.tryMatch#7
+  calls: nish.Router.lookup
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.lookup#0
+  pointer method: size=0 writesThrough=false captured=false passedTo=nish.Router.lookup#1
+  pointer target: size=0 writesThrough=false captured=false passedTo=nish.Router.lookup#4
+  pointer params: size=0 writesThrough=true captured=false passedTo=nish.Router.lookup#7
   stackSites=0 stackLocals=0
-  callee +0:5 routerCheckRanges -> @nish.routerCheckRanges
-  callee +1:12 Router.tryMatch -> @nish.Router.tryMatch
+  callee +0:12 Router.lookup -> @nish.Router.lookup
 function Router.tryMatch(this: Router, method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 -> @nish.Router.tryMatch [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Router.enter
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Router.lookup
   escaping: mEnd mStart tEnd tStart
+  calls: nish.Router.lookup
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.lookup#0
+  pointer method: size=0 writesThrough=false captured=false passedTo=nish.Router.lookup#1
+  pointer target: size=0 writesThrough=false captured=false passedTo=nish.Router.lookup#4
+  pointer params: size=0 writesThrough=true captured=false passedTo=nish.Router.lookup#7
+  stackSites=0 stackLocals=0
+  callee +0:12 Router.lookup -> @nish.Router.lookup
+function Router.lookup(this: Router, method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[], strict: boolean): i32 -> @nish.Router.lookup [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Router.enter
+  escaping: mEnd mStart strict tEnd tStart
   calls: nish.Router.answer nish.Router.descend nish.Router.enter nish.Router.staticRoute
   pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.enter#0 nish.Router.staticRoute#0 nish.Router.answer#0 nish.Router.descend#0
   pointer method: size=0 writesThrough=false captured=false passedTo=nish.Router.enter#1
@@ -39056,24 +39066,25 @@ function Router.matchTree(this: Router, method: u8[], mStart: i32, mEnd: i32, ta
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Router.enter
   escaping: mEnd mStart tEnd tStart
-  calls: nish.Router.descend nish.Router.enter nish.routerCheckRanges
+  calls: nish.Router.descend nish.Router.enter
   pointer this: size=288 writesThrough=true captured=false passedTo=nish.Router.enter#0 nish.Router.descend#0
-  pointer method: size=0 writesThrough=false captured=false passedTo=nish.routerCheckRanges#0 nish.Router.enter#1
-  pointer target: size=0 writesThrough=false captured=false passedTo=nish.routerCheckRanges#3 nish.Router.enter#4 nish.Router.descend#1
+  pointer method: size=0 writesThrough=false captured=false passedTo=nish.Router.enter#1
+  pointer target: size=0 writesThrough=false captured=false passedTo=nish.Router.enter#4 nish.Router.descend#1
   pointer params: size=0 writesThrough=true captured=false passedTo=nish.Router.descend#4
   stackSites=0 stackLocals=0
-  callee +0:5 routerCheckRanges -> @nish.routerCheckRanges
-  callee +1:10 Router.enter -> @nish.Router.enter
-  callee +4:12 Router.descend -> @nish.Router.descend
-function Router.enter(this: Router, method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32): boolean -> @nish.Router.enter [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee +0:10 Router.enter -> @nish.Router.enter
+  callee +3:12 Router.descend -> @nish.Router.descend
+function Router.enter(this: Router, method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, strict: boolean): boolean -> @nish.Router.enter [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: mStart tStart
-  calls: nish.routerMethodKey nish.routerSameBytes
+  escaping: mEnd mStart tEnd tStart
+  calls: nish.routerMethodKey nish.routerOutside nish.routerSameBytes
   pointer this: size=288 writesThrough=true captured=false
   pointer method: size=0 writesThrough=false captured=false passedTo=nish.routerMethodKey#0 nish.routerSameBytes#2
   pointer target: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  callee -10:9 routerOutside -> @nish.routerOutside
+  callee -4:9 routerOutside -> @nish.routerOutside
   local +2:11 end: i32 (let)
   local +9:11 methodLength: i32 (const)
   local +10:11 key: u64 (const)
@@ -39230,11 +39241,9 @@ function routerSlot(hash: u32, mask: i32): i32 -> @nish.routerSlot
   stackSites=0 stackLocals=0
   local +0:9 spread: u32 (const)
   local +1:9 mixed: u32 (const)
-function routerCheckRanges(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32): void -> @nish.routerCheckRanges
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+function routerOutside(what: string, start: i32, end: i32, length: i32): void -> @nish.routerOutside
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer method: size=0 writesThrough=false captured=false
-  pointer target: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function routerNoRoute(route: i32, routes: i32): void -> @nish.routerNoRoute
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
