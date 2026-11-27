@@ -11765,6 +11765,113 @@ const MULTIPART_BODIES = "multipart/form-data bodies"
 /** WP91 S4: the cast wraps in std/net's HTTP, HPACK, URL and server modules, spelled. */
 const WP91_S4_NET_HTTP = "std/net HTTP, HPACK, URL and the server stack"
 
+/** The changelog words of examples-strict S1, indexes into module storage. */
+const STORAGE_INDEX = "prove index sites into module storage"
+/** Why each module examples-strict S1 moves writes different IR. */
+const STORAGE_INDEX_WHY = {
+  "manifest.ll":
+    "src/manifest.ts compares its nesting depth with a constant before it adds one, which now orders the two, so the manifest.ll module drops those overflow checks and renumbers its values",
+  "proto-parse.ll":
+    "src/proto-parse.ts compares its nesting depth with a constant before it adds one, which now orders the two, so the proto-parse.ll module drops those overflow checks and renumbers its values",
+  "bounds.ll":
+    "src/bounds.ts is the prover this change edits, so the bounds.ll module a program that compiles it writes moves with its source",
+  "lexer.ll":
+    "src/lexer.ts compares a character code with a folded module constant before it subtracts, which now orders the two, so the lexer.ll module drops those overflow checks and renumbers its values",
+}
+const storageIndex = () => [
+  ...Object.entries({
+    "src/build-cache.ts": ["manifest.ll"],
+    "src/capability-report.ts": ["manifest.ll"],
+    "src/compilation.ts": ["manifest.ll"],
+    "src/compile.ts": ["manifest.ll", "proto-parse.ll"],
+    "src/dump-checked.ts": ["manifest.ll"],
+    "src/dump.ts": ["manifest.ll"],
+    "src/emit-ts-control.ts": ["manifest.ll"],
+    "src/emit-ts-edits.ts": ["manifest.ll"],
+    "src/emit-ts-numbers.ts": ["manifest.ll"],
+    "src/emit-ts-records.ts": ["manifest.ll"],
+    "src/emit-ts-storage.ts": ["manifest.ll"],
+    "src/emit-ts-strings.ts": ["manifest.ll"],
+    "src/emit-ts.ts": ["manifest.ll"],
+    "src/fault-contract.ts": ["bounds.ll", "lexer.ll"],
+    "src/fix.ts": ["manifest.ll"],
+    "src/interop-abi.ts": ["manifest.ll"],
+    "src/interop-dts.ts": ["manifest.ll"],
+    "src/interop-header.ts": ["manifest.ll"],
+    "src/interop-napi.ts": ["manifest.ll"],
+    "src/interop-wasm.ts": ["manifest.ll"],
+    "src/manifest.ts": ["manifest.ll"],
+    "src/module-twins.ts": ["lexer.ll"],
+    "src/proto-cli.ts": ["lexer.ll", "manifest.ll", "proto-parse.ll"],
+    "src/proto-emit.ts": ["lexer.ll", "proto-parse.ll"],
+    "src/proto-lex.ts": ["lexer.ll"],
+    "src/proto-parse.ts": ["lexer.ll", "proto-parse.ll"],
+    "src/run-cache.ts": ["manifest.ll"],
+    "src/upgrade.ts": ["manifest.ll"],
+    "src/watch.ts": ["manifest.ll"],
+    "src/window-contract.ts": ["bounds.ll", "lexer.ll"],
+    "tests/cases/const_array_numeric.ts": ["const_array_numeric.ll"],
+    "tests/cases/storage_attributes.ts": ["storage_attributes.ll"],
+    "tests/cases/storage_lend.ts": ["storage_lend.ll"],
+    "tests/cases/storage_module.ts": ["storage_module.ll"],
+    "tests/differential/corpus/const_module.ts": ["const_module.ll"],
+    "tests/differential/corpus/const_modules/main.ts": ["main.ll"],
+    "tests/link/httparena_entry/main.ts": ["pg.ll"],
+    "tests/link/net_http2_stream/main.ts": ["main.ll"],
+    "tests/link/net_http_server_h1_tls/main.ts": ["peer.ll"],
+    "tests/link/net_protobuf/main.ts": ["checks.ll"],
+    "tests/link/net_protobuf_bad_depth/main.ts": ["main.ll"],
+    "tests/link/net_protobuf_f64/main.ts": ["checks.ll"],
+    "tests/link/module_target_std_twin/main.ts": ["lexer.ll", "manifest.ll"],
+    "tests/link/module_target_twin/main.ts": ["lexer.ll"],
+    "tests/link/storage_import_record/main.ts": ["cells.ll", "main.ll"],
+    "tests/link/storage_lend_import/main.ts": ["main.ll"],
+    "tests/link/storage_parallel_read/main.ts": ["main.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: STORAGE_INDEX,
+      why:
+        STORAGE_INDEX_WHY[file] ??
+        `the program indexes module storage or compares with a constant, which src/bounds.ts now proves, so ${file} drops those index or overflow checks and renumbers its values`,
+    }))
+  ),
+  {
+    file: "net_quic_conn_replay_server.ll",
+    changelog: STORAGE_INDEX,
+    why: "the QUIC replay server's helpers compare against folded module constants, which the prover now orders, so a dropped overflow check renumbers the module's attribute groups in every program that builds it",
+  },
+  {
+    file: "net_http3_peer.ll",
+    changelog: STORAGE_INDEX,
+    why: "a callee the HTTP/3 peer declares now proves its constant-guarded arithmetic, so its attribute group number moves in every program that builds the peer",
+  },
+  {
+    file: "chacha20poly1305.ll",
+    changelog: STORAGE_INDEX,
+    why: "chacha20Poly1305Open returns when the sealed length is below POLY1305_TAG_SIZE, a folded module constant the guard now orders, so `new Array<u8>(total - POLY1305_TAG_SIZE)` is proven non-negative and the module every importer writes drops that array-length check and its string",
+  },
+  {
+    program: "tests/cases/deny_panics_storage_index.ts",
+    file: "exit",
+    changelog: STORAGE_INDEX,
+    why: "the program indexes module storage under --deny-panics with every index bounded, which the candidate proves and the reference refuses as a site that may panic",
+  },
+  {
+    program: "tests/cases/deny_panics_storage_const_guard.ts",
+    file: "exit",
+    changelog: STORAGE_INDEX,
+    why: "the program adds 1 past a guard against a folded module constant under --deny-panics, which the candidate reads as an order and the reference refuses as an overflow that may panic",
+  },
+  {
+    program: "tests/cases/deny_panics_storage_local_const.ts",
+    file: "exit",
+    changelog: STORAGE_INDEX,
+    why: "the program indexes module storage past a guard against a function const under --deny-panics, which the candidate proves and the reference refuses as a site that may panic",
+  },
+]
+
 /** The release-note words of TLS RSA S1, RSA-PSS CertificateVerify on the TLS and QUIC servers. */
 const RSA_PSS_SERVER = "RSA-PSS CertificateVerify under an RSA certificate"
 
@@ -12336,6 +12443,14 @@ const DECLARED = [
     file: "exit",
     changelog: CHECKED_CONFIG,
     why: "the program calls routerChecked, which the seed's nish/net/router does not export, so only the candidate compiles it",
+  },
+  // #2385 S3: arrays.ts's `squares` refuses an out-of-range count before
+  // `new Array`, which the candidate's strict default accepts.
+  {
+    program: "examples/arrays.ts",
+    file: "exit",
+    changelog: "add, multi and arrays build without --allow-panics",
+    why: "squares checks its count before `new Array`, which the candidate's strict default proves and the seed refuses as an array-length panic site",
   },
   // #2297: the bounds walk proves `end - start` of two index locals with
   // `0 <= start <= end` cannot overflow, so `hasTwinWord`'s `i - from` and
@@ -14463,6 +14578,7 @@ const DECLARED = [
   ...typedBuffers(),
   ...targetFiles(),
   ...exportedBindings(),
+  ...storageIndex(),
   {
     program: "tests/link/net_grpc/main.ts",
     file: "exit",
