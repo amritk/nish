@@ -157,7 +157,7 @@
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
-import { SHA256_SIZE, sha256, sha256Wiped } from "nish/crypto/sha256"
+import { SHA256_SIZE, Sha256, sha256, sha256Absorbed } from "nish/crypto/sha256"
 import { timingSafeEqual } from "nish/crypto/ct"
 
 /** The length in bytes of a private key: one scalar, big-endian. */
@@ -3983,25 +3983,11 @@ const p256PadBlock = (k: u8[], pad: u8): u8[] => {
   return out
 }
 
-/** `a || b || c || d || e` in a fresh array, which the caller wipes. */
-const p256Join = (a: u8[], b: u8[], c: u8[], d: u8[], e: u8[]): u8[] => {
-  const out: u8[] = []
-  for (const x of a) {
-    out.push(x)
-  }
-  for (const x of b) {
-    out.push(x)
-  }
-  for (const x of c) {
-    out.push(x)
-  }
-  for (const x of d) {
-    out.push(x)
-  }
-  for (const x of e) {
-    out.push(x)
-  }
-  return out
+/** Zero what a SHA-256 in progress holds: its chaining value, its pending block and its schedule. */
+const p256WipeHash = (h: Sha256): void => {
+  wipe(h.state)
+  wipe(h.block)
+  wipe(h.schedule)
 }
 
 /**
@@ -4009,23 +3995,22 @@ const p256Join = (a: u8[], b: u8[], c: u8[], d: u8[], e: u8[]): u8[] => {
  * RFC 6979 runs. It is written out over `Sha256` here rather than taken from
  * `nish/crypto/hmac` so that every buffer the key reaches — the two key
  * blocks, both hashers' state, block and schedule, and the inner digest — is
- * wiped before it returns (ECC-2): the key blocks, the two joined messages
- * and the inner digest here, each hasher's state by `sha256Wiped`. `k` is always 32 bytes,
+ * this function's to wipe before it returns (ECC-2). `k` is always 32 bytes,
  * under SHA-256's 64-byte block, so it is never hashed first.
  */
 const p256Mac = (k: u8[], a: u8[], b: u8[], c: u8[], d: u8[]): u8[] => {
   const ipad: u8[] = p256PadBlock(k, 0x36)
   const opad: u8[] = p256PadBlock(k, 0x5c)
-  const innerMessage: u8[] = p256Join(ipad, a, b, c, d)
-  const innerDigest: u8[] = sha256Wiped(innerMessage)
+  const inner: Sha256 = sha256Absorbed(ipad, a, b, c, d)
+  const innerDigest: u8[] = inner.digest()
   const empty: u8[] = new Array<u8>(0)
-  const outerMessage: u8[] = p256Join(opad, innerDigest, empty, empty, empty)
-  const tag: u8[] = sha256Wiped(outerMessage)
+  const outer: Sha256 = sha256Absorbed(opad, innerDigest, empty, empty, empty)
+  const tag: u8[] = outer.digest()
   wipe(ipad)
   wipe(opad)
-  wipe(innerMessage)
   wipe(innerDigest)
-  wipe(outerMessage)
+  p256WipeHash(inner)
+  p256WipeHash(outer)
   return tag
 }
 

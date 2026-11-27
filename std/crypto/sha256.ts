@@ -741,6 +741,16 @@ const sha256AbsorbLong = (h: Sha256, data: u8[]): void => {
   }
 }
 
+/** Absorbs all of `data` into `h`, past the finished check (`sha256`). */
+const sha256AbsorbWhole = (h: Sha256, data: u8[]): void => {
+  const n: number = data.length
+  if (n <= 2147483647) {
+    sha256Absorb(h, data, 0, toI32(n))
+  } else {
+    sha256AbsorbLong(h, data)
+  }
+}
+
 /**
  * The SHA-256 digest of all of `data`, as a fresh 32-byte array.
  *
@@ -754,37 +764,34 @@ export const sha256 = (data: u8[]): u8[] => {
   // A fresh hasher is not finished, so the message goes straight to the
   // absorbing bodies, past `update`'s and `updateAll`'s finished checks.
   const hasher: Sha256 = new Sha256()
-  const n: number = data.length
-  if (n <= 2147483647) {
-    sha256Absorb(hasher, data, 0, toI32(n))
-  } else {
-    sha256AbsorbLong(hasher, data)
-  }
+  sha256AbsorbWhole(hasher, data)
   return hasher.digest()
 }
 
 /**
- * The SHA-256 digest of all of `data`, as a fresh 32-byte array, with the
- * hasher's chaining value, pending block and schedule wiped before it returns.
- * This is `sha256` for a caller whose message is keyed material, such as an
- * HMAC's padded key block: nothing the message reached is left behind but the
- * digest, which the caller owns and wipes, and `data` itself, which is the
- * caller's to wipe.
+ * A fresh `Sha256` that has absorbed `a || b || c || d || e` and is not yet
+ * finished. This is the start of a hash whose message is keyed material,
+ * such as an HMAC's padded key block followed by its message: the parts are
+ * absorbed in place, never joined into an array that a `push` could outgrow
+ * and leave behind, and the caller, which owns the hasher, calls `digest`
+ * and then wipes its `state`, `block` and `schedule`. Pass an empty array for
+ * a part the message lacks.
  *
- * @param data The whole message; it is read, not changed.
- * @returns A fresh 32-byte digest.
+ * @param a The first part of the message; it is read, not changed.
+ * @param b The second part, read after `a`.
+ * @param c The third part, read after `b`.
+ * @param d The fourth part, read after `c`.
+ * @param e The fifth part, read after `d`.
+ * @returns A hasher holding the five parts, ready for `digest`.
  */
-export const sha256Wiped = (data: u8[]): u8[] => {
+export const sha256Absorbed = (a: u8[], b: u8[], c: u8[], d: u8[], e: u8[]): Sha256 => {
+  // A fresh hasher is not finished, so the parts go straight to the
+  // absorbing bodies, past `update`'s finished check.
   const hasher: Sha256 = new Sha256()
-  const n: number = data.length
-  if (n <= 2147483647) {
-    sha256Absorb(hasher, data, 0, toI32(n))
-  } else {
-    sha256AbsorbLong(hasher, data)
-  }
-  const out: u8[] = hasher.digest()
-  wipe(hasher.state)
-  wipe(hasher.block)
-  wipe(hasher.schedule)
-  return out
+  sha256AbsorbWhole(hasher, a)
+  sha256AbsorbWhole(hasher, b)
+  sha256AbsorbWhole(hasher, c)
+  sha256AbsorbWhole(hasher, d)
+  sha256AbsorbWhole(hasher, e)
+  return hasher
 }

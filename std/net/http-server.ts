@@ -3602,11 +3602,13 @@ export class HttpServer {
    * `carry` cannot say this, since the frame is taken as 0 bytes either way.
    */
   private carryEnd(r: HttpServerRequest): i32 {
+    // A local zero: the window prover reads locals, not module constants.
+    const zero: i32 = 0
     let done: i32 = -1
     if (r.kind === HTTP_SERVER_H2) {
       const conn: Http2Connection | null = this.h2Conn(r.slot)
       if (conn !== null) {
-        done = conn.writeData(toI32(r.stream), r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
+        done = conn.writeData(toI32(r.stream), r.pending, zero, zero, true)
       }
       if (done === H2_AGAIN) {
         return 0
@@ -3614,7 +3616,7 @@ export class HttpServer {
     } else {
       const h3: Http3Server | null = this.h3
       if (h3 !== null) {
-        done = h3.connection(r.slot).writeData(r.stream, r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
+        done = h3.connection(r.slot).writeData(r.stream, r.pending, zero, zero, true)
       }
       if (done === H3_AGAIN) {
         return 0
