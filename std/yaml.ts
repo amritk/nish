@@ -3918,6 +3918,10 @@ class YamlParser {
    */
   private aliasedSeqMerges(seq: i32): boolean {
     const stream: YamlStream = this.stream
+    // `seq` is a node the parser made, so this never returns.
+    if (seq < 0 || seq >= stream.top) {
+      return false
+    }
     this.mergeVerdicts = yamlRoomU8(this.mergeVerdicts, seq + 1)
     const verdicts: u8[] = this.mergeVerdicts
     if (seq < 0 || seq >= toI32(verdicts.length)) {
@@ -3993,7 +3997,12 @@ class YamlParser {
       return set
     }
     const stream: YamlStream = this.stream
-    if (set < 0 && this.scratchTop - base < YAML_PAIRWISE_KEYS) {
+    const top: i32 = this.scratchTop
+    // `base` is a `scratchTop` mark at or below the top, so this never returns.
+    if (base < 0 || base > top) {
+      return set
+    }
+    if (set < 0 && top - base < YAML_PAIRWISE_KEYS) {
       let text: string = ""
       let decoded: boolean = false
       let i: i32 = base
@@ -4021,17 +4030,25 @@ class YamlParser {
       if (held >= toI32(this.keySets.length)) {
         this.keySets.push(new YamlKeySet())
       }
+    }
+    const sets: YamlKeySet[] = this.keySets
+    // `keySetTop` never passes the pool's length and a held set came from the pool, so this never returns.
+    if (held < 0 || held >= toI32(sets.length)) {
+      return set
+    }
+    const keys: YamlKeySet = sets[held]
+    if (set < 0) {
       this.keySetTop = held + 1
       let i: i32 = base
       while (i < this.scratchTop) {
         const other: i32 = stream.key(yamlAt(this.scratch, i))
         if (!this.isMergeKey(other)) {
-          this.keySets[held].add(yamlKeyText(stream, other))
+          keys.add(yamlKeyText(stream, other))
         }
         i += 1
       }
     }
-    if (!this.keySets[held].add(yamlKeyText(stream, key))) {
+    if (!keys.add(yamlKeyText(stream, key))) {
       this.reportDuplicateKey(key)
     }
     return held
@@ -4039,8 +4056,10 @@ class YamlParser {
 
   /** Hands the key set a finished map held back to the pool. */
   private releaseKeySet(set: i32): void {
-    if (set >= 0) {
-      this.keySets[set].clear()
+    const sets: YamlKeySet[] = this.keySets
+    // `trackKey` hands out only sets inside the pool, so `set` is below its length.
+    if (set >= 0 && set < toI32(sets.length)) {
+      sets[set].clear()
       this.keySetTop = set
     }
   }
@@ -4060,8 +4079,8 @@ class YamlParser {
 
   /** The start of a node written on the `---` line at `marker`, or `-1` when the line ends first. */
   private docMarkerInlineNode(marker: i32): i32 {
-    let i: i32 = marker + 3
-    while (yamlIsBlank(this.at(i))) {
+    let i: i32 = this.markerEnd(marker)
+    while (i < this.len && yamlIsBlank(this.at(i))) {
       i += 1
     }
     const c: i32 = this.at(i)
@@ -4084,11 +4103,11 @@ class YamlParser {
 
   /** Reports content after the `...` marker at `marker` on its line. */
   private checkDocEndTail(marker: i32): void {
-    if (this.lineRestIsBlank(marker + 3)) {
+    let after: i32 = this.markerEnd(marker)
+    if (this.lineRestIsBlank(after)) {
       return
     }
-    let after: i32 = marker + 3
-    while (yamlIsBlank(this.at(after))) {
+    while (after < this.len && yamlIsBlank(this.at(after))) {
       after += 1
     }
     this.error(
@@ -4104,7 +4123,7 @@ class YamlParser {
     let i: i32 = from
     while (i < this.len) {
       if (!this.lineRestIsBlank(i)) {
-        if (!this.isDocMarker(i) || !this.lineRestIsBlank(i + 3)) {
+        if (!this.isDocMarker(i) || !this.lineRestIsBlank(this.markerEnd(i))) {
           return false
         }
       }
@@ -4235,16 +4254,17 @@ class YamlParser {
    * marker, which is the first document's footer, or `-1`.
    */
   private warnIfMoreDocuments(marker: i32): i32 {
-    this.recordLineComment(marker + 3)
+    const end: i32 = this.markerEnd(marker)
+    this.recordLineComment(end)
     const footer: boolean = this.at(marker) === YAML_DOT
     let hidden: boolean = false
     if (footer) {
       this.checkDocEndTail(marker)
     } else {
-      hidden = !this.lineRestIsBlank(marker + 3)
+      hidden = !this.lineRestIsBlank(end)
     }
-    this.pos = this.nextLineStart(marker + 3)
-    const footerEnd: i32 = footer ? marker + 3 : -1
+    this.pos = this.nextLineStart(end)
+    const footerEnd: i32 = footer ? end : -1
     if (!hidden) {
       this.peekLine(toI32(0))
       if (this.lineEof || this.onlyEmptyDocumentsFollow(this.pos)) {
@@ -4255,7 +4275,7 @@ class YamlParser {
       YAML_ERR_MULTIPLE_DOCUMENTS,
       "Only the first document of this stream was parsed — turn off firstDocumentOnly to read the rest",
       marker,
-      marker + 3
+      end
     )
     return footerEnd
   }
@@ -4295,8 +4315,9 @@ class YamlParser {
       }
       if (c === YAML_DOT) {
         this.checkDocEndTail(p)
-        this.recordLineComment(p + 3)
-        this.pos = this.nextLineStart(p + 3)
+        const end: i32 = this.markerEnd(p)
+        this.recordLineComment(end)
+        this.pos = this.nextLineStart(end)
         seen = seen | YAML_SAW_DOC_END
         continue
       }
@@ -4389,9 +4410,9 @@ class YamlParser {
       if (this.atMarkerLine() && this.at(this.lineContent) === YAML_DOT) {
         const p: i32 = this.lineContent
         this.checkDocEndTail(p)
-        this.recordLineComment(p + 3)
-        this.pos = this.nextLineStart(p + 3)
-        footerEnd = p + 3
+        footerEnd = this.markerEnd(p)
+        this.recordLineComment(footerEnd)
+        this.pos = this.nextLineStart(footerEnd)
       }
       this.pushDocument(root, footerEnd)
       closed = footerEnd >= 0
@@ -4400,7 +4421,8 @@ class YamlParser {
       this.handleNames = []
       this.handlePrefixes = []
       this.yamlDirective = false
-      this.doc += 1
+      // Each pass pushes one document, so this is always `this.doc + 1`.
+      this.doc = toI32(this.stream.docRoots.length)
     }
     const stream: YamlStream = this.stream
     const count: i32 = toI32(stream.docRoots.length)
@@ -4423,14 +4445,16 @@ class YamlParser {
   private pushDocument(root: i32, footerEnd: i32): void {
     const stream: YamlStream = this.stream
     let start: i32 = root >= 0 ? stream.start(root) : this.pos
-    if (this.markerAt >= 0) {
-      start = this.markerAt
+    const marker: i32 = this.markerAt
+    if (marker >= 0) {
+      start = marker
     }
     let end: i32 = footerEnd
     if (end < 0) {
       end = root >= 0 ? stream.end(root) : start
-      if (this.markerAt + 3 > end) {
-        end = this.markerAt + 3
+      const markerEnd: i32 = marker >= 0 ? this.markerEnd(marker) : marker + 3
+      if (markerEnd > end) {
+        end = markerEnd
       }
       if (start > end) {
         end = start
@@ -4453,7 +4477,8 @@ class YamlParser {
   private parsePropsOnlyValue(props: i32, parentIndent: i32, seqAtParentIndent: boolean): i32 {
     const propsEnd: i32 = this.pos
     this.finishLine()
-    this.peekLine(parentIndent + 1)
+    // An indent is a column inside the text, so this is always `parentIndent + 1`.
+    this.peekLine(parentIndent < this.len ? parentIndent + 1 : parentIndent)
     if (!this.lineEof && this.lineIndent > parentIndent) {
       this.pos = this.lineContent
       return this.attachProps(this.parseNode(this.lineIndent, parentIndent, seqAtParentIndent), props)
@@ -4502,11 +4527,15 @@ class YamlParser {
 
   /** The column of `at`: its distance from the start of its line. */
   private columnOf(at: i32): i32 {
+    if (at <= 0) {
+      return 0
+    }
     let i: i32 = at
     while (i > 0 && !yamlIsBreak(this.at(i - 1))) {
       i -= 1
     }
-    return at - i
+    // The loop only walks `i` down from `at` to `0`, so the guard always holds.
+    return i >= 0 && i <= at ? at - i : 0
   }
 
   /**
@@ -4557,7 +4586,8 @@ class YamlParser {
     }
     if (this.atLineEnd()) {
       this.finishLine()
-      this.peekLine(indent + 1)
+      // An indent is a column inside the text, so this is always `indent + 1`.
+      this.peekLine(indent < this.len ? indent + 1 : indent)
       if (!this.lineEof && this.lineIndent > indent) {
         this.pos = this.lineContent
         return this.parseNode(this.lineIndent, indent, true)
@@ -4586,12 +4616,13 @@ class YamlParser {
    * `-1`, an explicit `?` key at the cursor.
    */
   private parseBlockMap(indent: i32, firstColon: i32, firstKey: i32, firstProps: i32): i32 {
-    if (this.depth >= this.maxDepth) {
+    const depth: i32 = this.depth
+    if (depth >= this.maxDepth) {
       return this.depthLimitNode()
     }
-    this.depth += 1
+    this.depth = depth + 1
     const node: i32 = this.parseBlockMapBody(indent, firstColon, firstKey, firstProps)
-    this.depth -= 1
+    this.depth = depth
     return node
   }
 
@@ -4647,26 +4678,31 @@ class YamlParser {
       let key: i32 = -1
       let value: i32 = -1
       if (explicit) {
-        this.pos = contentPos + 1
+        // `isExplicitKey` found the `?` at `contentPos`, so this is always `contentPos + 1`.
+        const keyAt: i32 = contentPos < this.len ? contentPos + 1 : contentPos
+        this.pos = keyAt
         key = this.parseValueOrChild(indent, true)
         if (key < 0) {
-          key = this.emptyScalar(contentPos + 1)
+          key = this.emptyScalar(keyAt)
         }
         key = this.attachProps(key, keyProps)
         this.peekLine(indent)
+        const lineContent: i32 = this.lineContent
         if (
           !this.lineEof &&
           this.lineIndent === indent &&
-          this.at(this.lineContent) === YAML_COLON &&
-          yamlIsWs(this.at(this.lineContent + 1))
+          lineContent < this.len &&
+          this.at(lineContent) === YAML_COLON &&
+          yamlIsWs(this.after(lineContent))
         ) {
-          this.pos = this.lineContent + 1
+          this.pos = lineContent + 1
           value = this.parseValueOrChild(indent, true)
         }
       } else {
         key = this.parseImplicitKey(indent, contentPos, colon)
         key = this.attachProps(key, keyProps)
-        this.pos = colon + 1
+        // `findKeyColon` found the `:` at `colon`, so this is always `colon + 1`.
+        this.pos = colon < this.len ? colon + 1 : colon
         value = this.parseValueOrChild(indent, false)
       }
       keySet = this.trackKey(base, key, keySet)
@@ -4675,9 +4711,11 @@ class YamlParser {
     this.releaseKeySet(keySet)
     let start: i32 = this.pos
     let end: i32 = this.pos
-    if (this.scratchTop > base) {
+    const top: i32 = this.scratchTop
+    // `base` is a `scratchTop` mark, never negative, so `top > 0` adds nothing.
+    if (top > base && top > 0) {
       start = stream.start(yamlAt(this.scratch, base))
-      end = stream.end(yamlAt(this.scratch, this.scratchTop - 1))
+      end = stream.end(yamlAt(this.scratch, top - 1))
     }
     const node: i32 = stream.newNode(YAML_MAP, YAML_BLOCK, start, end)
     this.finishCollection(node, base)
@@ -4686,7 +4724,8 @@ class YamlParser {
 
   /** Reads the implicit key at `from` of a block mapping at `indent`, whose `:` is at `colon`. */
   private parseImplicitKey(indent: i32, from: i32, colon: i32): i32 {
-    if (colon - from > YAML_MAX_KEY_LENGTH) {
+    // `findKeyColon` found `colon` at or after `from`, inside the text.
+    if (from >= 0 && colon > from && colon - from > YAML_MAX_KEY_LENGTH) {
       this.reportLongImplicitKey(from, colon)
     }
     this.pos = from
@@ -4722,12 +4761,13 @@ class YamlParser {
 
   /** Reads a block sequence at `indent`, whose first `-` is at the cursor. */
   private parseBlockSeq(indent: i32): i32 {
-    if (this.depth >= this.maxDepth) {
+    const depth: i32 = this.depth
+    if (depth >= this.maxDepth) {
       return this.depthLimitNode()
     }
-    this.depth += 1
+    this.depth = depth + 1
     const node: i32 = this.parseBlockSeqBody(indent)
-    this.depth -= 1
+    this.depth = depth
     return node
   }
 
@@ -4747,7 +4787,7 @@ class YamlParser {
         contentPos = this.lineContent
       }
       firstEntry = false
-      if (!this.isSeqEntryDash(contentPos)) {
+      if (contentPos >= this.len || !this.isSeqEntryDash(contentPos)) {
         break
       }
       if (start < 0) {
@@ -4759,7 +4799,8 @@ class YamlParser {
       let item: i32 = -1
       if (this.atLineEnd()) {
         this.finishLine()
-        this.peekLine(indent + 1)
+        // An indent is a column inside the text, so this is always `indent + 1`.
+        this.peekLine(indent < this.len ? indent + 1 : indent)
         if (!this.lineEof && this.lineIndent > indent) {
           this.pos = this.lineContent
           item = this.parseNode(this.lineIndent, indent, false)
@@ -4780,7 +4821,9 @@ class YamlParser {
     if (start < 0) {
       start = this.pos
     }
-    const end: i32 = this.scratchTop > base ? stream.end(yamlAt(this.scratch, this.scratchTop - 1)) : this.pos
+    const top: i32 = this.scratchTop
+    // `base` is a `scratchTop` mark, never negative, so `top > 0` adds nothing.
+    const end: i32 = top > base && top > 0 ? stream.end(yamlAt(this.scratch, top - 1)) : this.pos
     const node: i32 = stream.newNode(YAML_SEQ, YAML_BLOCK, start, end)
     this.finishCollection(node, base)
     return node
@@ -4798,12 +4841,13 @@ class YamlParser {
     const props: i32 = this.scanProps(false)
     if (props >= 0) {
       this.skipInlineSpaces()
-      if (this.isSeqEntryDash(this.pos)) {
+      const at: i32 = this.pos
+      if (at < this.len && this.isSeqEntryDash(at)) {
         this.error(
           YAML_ERR_UNEXPECTED_CONTENT,
           "A block sequence cannot start on the line its node properties are written on",
-          this.pos,
-          this.pos + 1
+          at,
+          at + 1
         )
       }
       if (this.atLineEnd()) {
@@ -4821,7 +4865,8 @@ class YamlParser {
       }
       node = this.attachProps(node, props)
       this.skipInlineSpaces()
-      if (this.at(this.pos) === YAML_COLON && yamlIsWs(this.at(this.pos + 1))) {
+      const at: i32 = this.pos
+      if (at < this.len && this.at(at) === YAML_COLON && yamlIsWs(this.after(at))) {
         const stream: YamlStream = this.stream
         if (this.crossesLine(stream.start(node), stream.end(node))) {
           this.error(
@@ -4831,7 +4876,7 @@ class YamlParser {
             stream.end(node)
           )
         }
-        this.pos += 1
+        this.pos = at + 1
         return this.parseBlockMap(indent, YAML_NONE, node, YAML_NONE)
       }
       this.checkTrailingContent()
