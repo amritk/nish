@@ -858,8 +858,7 @@ function yamlIsDigit(code: i32): boolean -> @nish.yamlIsDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function yamlHexValue(code: i32): i32 -> @nish.yamlHexValue
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function yamlAfterBreak(text: string, i: i32): i32 -> @nish.yamlAfterBreak
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -3184,7 +3183,7 @@ function YamlFlowWriter.write(this: YamlFlowWriter, n: i32, depth: i32): void ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: n
-  calls: nish.YamlFlowWriter.append nish.YamlFlowWriter.write nish.YamlStream.child nish.YamlStream.count nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.text nish.YamlStream.type nish.YamlStream.value nish.yamlKeyText nish_panic_overflow
+  calls: nish.YamlFlowWriter.append nish.YamlFlowWriter.write nish.YamlStream.child nish.YamlStream.count nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.text nish.YamlStream.type nish.YamlStream.value nish.yamlKeyText
   pointer this: size=24 writesThrough=true captured=false passedTo=nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.write#0 nish.YamlFlowWriter.append#0 nish.YamlFlowWriter.write#0 nish.YamlFlowWriter.write#0 nish.YamlFlowWriter.append#0
   stackSites=0 stackLocals=0
   local -3:11 stream: YamlStream (const)
@@ -3520,7 +3519,7 @@ function contains(haystack: string, needle: string): boolean -> @nish.contains [
 function split(text: string, sep: string): string[] -> @nish.split [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: nish.splitCodePoints nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish.splitCodePoints nish.textSpanEnd nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 sepLength: i32 (const)
   callee +2:12 splitCodePoints -> @nish.splitCodePoints
@@ -3528,10 +3527,11 @@ function split(text: string, sep: string): string[] -> @nish.split [exported]
   local +5:9 parts: string[] (const)
   local +6:7 start: i32 (let)
   local +10:11 at: i32 (const)
+  callee +25:13 textSpanEnd -> @nish.textSpanEnd
 function splitLimit(text: string, sep: string, limit: i32): string[] -> @nish.splitLimit [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: limit text
-  calls: nish.splitCodePoints nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish.splitCodePoints nish.textSpanEnd nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 sepLength: i32 (const)
   callee +2:12 splitCodePoints -> @nish.splitCodePoints
@@ -3539,6 +3539,7 @@ function splitLimit(text: string, sep: string, limit: i32): string[] -> @nish.sp
   local +5:9 parts: string[] (const)
   local +6:7 start: i32 (let)
   local +10:11 at: i32 (const)
+  callee +28:13 textSpanEnd -> @nish.textSpanEnd
 function fixedDigitsHalve(digits: u8[], count: i32): i32 -> @nish.fixedDigitsHalve
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -3580,15 +3581,22 @@ function toFixed(x: f64, digits: i32): string -> @nish.toFixed [exported]
   local +60:7 at: i32 (let)
   local +64:9 bytes: u8[] (const)
   local +70:11 digit: i32 (const)
+function textSpanEnd(length: i32, at: i32, count: i32): i32 -> @nish.textSpanEnd
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 room: i32 (const)
+  local +4:9 gap: i32 (const)
 function replaceAll(text: string, needle: string, replacement: string): string -> @nish.replaceAll [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: nish_alloc_struct nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish.textSpanEnd nish_alloc_struct nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=1 stackLocals=1
   local +0:9 needleLength: i32 (const)
   local +4:9 parts: string[] (const)
   local +5:7 rest: string (let)
   local +7:11 at: i32 (const)
+  local +18:11 after: i32 (const)
+  callee +18:24 textSpanEnd -> @nish.textSpanEnd
 function firstDifference(left: string[], right: string[]): i32 -> @nish.firstDifference [exported]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq

@@ -10,7 +10,6 @@ declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
-declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
@@ -112,42 +111,22 @@ define void @nish_main() #0 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   call void @fill(%struct.nish_array* @nish_storage_0_SCORES, i32 10)
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %2 = icmp ult i64 3, %1
-  br i1 %2, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 3, i64 %1)
-  unreachable
-
-bounds.ok:
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 2
-  %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %5 = bitcast i8* %4 to i32*
-  %6 = getelementptr inbounds i32, i32* %5, i64 3
-  store i32 1, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %7 = call i32 @sum(%struct.nish_array* @nish_storage_0_SCORES)
-  %8 = call i8* @nish_str_from_i32(i32 %7)
-  %9 = call i8* @nish_str_concat(i8* %8, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 0
-  %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %12 = icmp ult i64 0, %11
-  br i1 %12, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 0, i64 %11)
-  unreachable
-
-bounds.ok.1:
-  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 2
-  %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %15 = bitcast i8* %14 to i32*
-  %16 = getelementptr inbounds i32, i32* %15, i64 0
-  %17 = load i32, i32* %16, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %18 = call i8* @nish_str_from_i32(i32 %17)
-  %19 = call i8* @nish_str_concat(i8* %9, i8* %18)
-  call void @nish_print(i8* %19)
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 2
+  %1 = load i8*, i8** %0, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %2 = bitcast i8* %1 to i32*
+  %3 = getelementptr inbounds i32, i32* %2, i64 3
+  store i32 1, i32* %3, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %4 = call i32 @sum(%struct.nish_array* @nish_storage_0_SCORES)
+  %5 = call i8* @nish_str_from_i32(i32 %4)
+  %6 = call i8* @nish_str_concat(i8* %5, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_SCORES, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %9 = bitcast i8* %8 to i32*
+  %10 = getelementptr inbounds i32, i32* %9, i64 0
+  %11 = load i32, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %12 = call i8* @nish_str_from_i32(i32 %11)
+  %13 = call i8* @nish_str_concat(i8* %6, i8* %12)
+  call void @nish_print(i8* %13)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 }

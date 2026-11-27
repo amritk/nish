@@ -1844,8 +1844,7 @@ emitted and no initialiser runs** — every use lowers to the value itself.
 
 ### Module storage
 
-<!-- allow-panics: indexes module storage, which no guard the checker reads proves in range yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const SCORES = new Int32Array(4);
 
