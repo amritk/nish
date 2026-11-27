@@ -63,7 +63,6 @@
 2 std/net/tls/record.ts
 3 std/net/tls/ticket.ts
 8 std/net/upstream.ts
-17 std/net/url.ts
 131 std/regex.ts
 6 std/sqlite.ts
 9 std/sync/ring.ts
