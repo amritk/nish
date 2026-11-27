@@ -23772,6 +23772,23 @@ const DECLARED = [
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
   },
+  // WP91 S2: std/regex.ts drops its cast wraps for plain sums under guards
+  // the prover reads, which moves regex.ll in every program importing nish/regex.
+  ...[
+    "bench/regex/main.ts",
+    "tests/link/caps_dep_std_not_refused/main.ts",
+    "tests/link/std_json_format/main.ts",
+    "tests/link/std_regex/main.ts",
+    "tests/link/std_regex_f64/main.ts",
+    "tests/link/std_regex_node/main.ts",
+    "tests/link/std_regex_unicode/main.ts",
+    "tests/link/std_text_camel_case/main.ts",
+  ].map((program) => ({
+    program,
+    file: "regex.ll",
+    changelog: "WP91 S2 — std/regex.ts",
+    why: "std/regex.ts computes its sums in i32 under guards the prover reads instead of casting them through u32, and caps the text it matches below 2^31 - 2^20, so the program's nish/regex module has new compares and fewer conversions; its own module does not move",
+  })),
   // WP90 S1: std/net/http-fields.ts gains `MediaType` and the media-type
   // readers, and std/net/multipart.ts is new.
   ...[

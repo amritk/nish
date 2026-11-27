@@ -53,7 +53,7 @@ the record that found it. The notes below the table name each such finding.
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
 | Static files | [static.md](static.md) | `std/net/static.ts` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 4 ³² |
-| Regular expressions | [regex.md](regex.md) | `std/regex.ts`; the `nish_regex_scan` kernel in `runtime/runtime-simd.c`, its contract in `runtime/nish.h` and its lowering in `src/kernels.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 ¹⁴ |
+| Regular expressions | [regex.md](regex.md) | `std/regex.ts`; the `nish_regex_scan` kernel in `runtime/runtime-simd.c`, its contract in `runtime/nish.h` and its lowering in `src/kernels.ts` | 0 / 0 / 1 / 5 | 0 / 0 / 0 / 0 ¹⁴ |
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |

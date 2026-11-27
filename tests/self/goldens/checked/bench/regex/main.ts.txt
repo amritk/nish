@@ -75,7 +75,6 @@ const DFA_REVERSE: i32 = 2
 const DFA_INNER: i32 = 3
 const DFA_NONE: i32 = -1
 const DFA_GAVE_UP: i32 = -2
-const DFA_MAX_UNITS: i32 = 1048576
 const DFA_MAX_WORK: i32 = 4194304
 const DFA_MAX_SHIFT: i32 = 12
 const DFA_MAX_STATES: i32 = 2048
@@ -86,7 +85,6 @@ const DFA_MIN_POOL: i32 = 16384
 const DFA_HASH_MASK: i32 = 1048575
 const DFA_FREE_FLUSHES: i32 = 3
 const DFA_BYTES_PER_STATE: i32 = 10
-const DFA_EPOCH_MASK: i32 = 1073741823
 const DFA_INNER_SLACK: f64 = 65536
 const CTX_START: i32 = 0
 const CTX_WORD: i32 = 1
@@ -393,6 +391,7 @@ function regexPropertyEntry(key: string): i32 -> @nish.regexPropertyEntry
   calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (const)
+  local +1:9 n: i32 (const)
 function isRegexAscii(s: string): boolean -> @nish.isRegexAscii
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -444,6 +443,7 @@ function RegexParser.ahead(this: RegexParser, k: i32): i32 -> @nish.RegexParser.
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +0:11 p: i32 (const)
 function RegexParser.byteAt(this: RegexParser, i: i32): i32 -> @nish.RegexParser.byteAt [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=200 writesThrough=false captured=false
@@ -544,18 +544,19 @@ function RegexParser.charNode(this: RegexParser, cp: i32): i32 -> @nish.RegexPar
   sharedWrite: +0:5
   escaping: cp
   calls: nish.RegexParser.addRange nish.RegexParser.finishClass nish.RegexParser.foldStepOf nish.RegexParser.node nish.regexFoldTarget nish.regexFoldsIn nish.regexOtherCase
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.node#0 nish.RegexParser.node#0 nish.RegexParser.node#0 nish.RegexParser.foldStepOf#0 nish.RegexParser.node#0 nish.RegexParser.node#0 nish.RegexParser.addRange#0 nish.RegexParser.addRange#0 nish.RegexParser.foldStepOf#0 nish.RegexParser.finishClass#0
+  pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.node#0 nish.RegexParser.node#0 nish.RegexParser.node#0 nish.RegexParser.foldStepOf#0 nish.RegexParser.node#0 nish.RegexParser.node#0 nish.RegexParser.node#0 nish.RegexParser.addRange#0 nish.RegexParser.addRange#0 nish.RegexParser.foldStepOf#0 nish.RegexParser.finishClass#0
   stackSites=0 stackLocals=0
+  callee -19:14 RegexParser.node -> @nish.RegexParser.node
   callee -16:14 RegexParser.node -> @nish.RegexParser.node
+  callee -16:39 regexOtherCase -> @nish.regexOtherCase
+  callee -14:10 regexFoldsIn -> @nish.regexFoldsIn
   callee -13:14 RegexParser.node -> @nish.RegexParser.node
-  callee -13:39 regexOtherCase -> @nish.regexOtherCase
-  callee -11:10 regexFoldsIn -> @nish.regexFoldsIn
-  callee -10:14 RegexParser.node -> @nish.RegexParser.node
-  local -8:11 step: i32 (const)
-  callee -8:23 RegexParser.foldStepOf -> @nish.RegexParser.foldStepOf
-  callee -6:14 RegexParser.node -> @nish.RegexParser.node
-  local -4:11 next: i32 (const)
-  callee -4:23 regexFoldTarget -> @nish.regexFoldTarget
+  local -11:11 step: i32 (const)
+  callee -11:23 RegexParser.foldStepOf -> @nish.RegexParser.foldStepOf
+  callee -9:14 RegexParser.node -> @nish.RegexParser.node
+  local -7:11 next: i32 (const)
+  callee -7:23 regexFoldTarget -> @nish.regexFoldTarget
+  callee -5:14 RegexParser.node -> @nish.RegexParser.node
   callee -2:14 RegexParser.node -> @nish.RegexParser.node
   callee +1:5 RegexParser.addRange -> @nish.RegexParser.addRange
   local +2:9 c: i32 (let)
@@ -568,9 +569,9 @@ function RegexParser.tableNumber(this: RegexParser, table: string): i32 -> @nish
   sharedWrite: +0:9
   pointer this: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -11:11 n: i32 (const)
-  local -10:9 p: i32 (let)
-  local -8:9 v: u32 (let)
+  local -10:11 n: i32 (const)
+  local -9:9 p: i32 (let)
+  local -8:9 v: i32 (let)
   local -3:13 d: i32 (const)
 function RegexParser.foldSeek(this: RegexParser, cp: i32): i32 -> @nish.RegexParser.foldSeek [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -594,29 +595,29 @@ function RegexParser.foldStepOf(this: RegexParser, cp: i32): i32 -> @nish.RegexP
   local +0:9 c: i32 (let)
   callee +0:18 RegexParser.foldSeek -> @nish.RegexParser.foldSeek
   local +1:11 end: i32 (const)
-  callee +3:7 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
-  callee +6:36 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
-  callee +9:46 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
+  callee +4:7 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
+  local +6:15 gap: i32 (const)
+  callee +6:26 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
+  callee +13:46 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
 function RegexParser.parseAlt(this: RegexParser, depth: i32): i32 -> @nish.RegexParser.parseAlt [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.RegexParser.fail
+  sharedWrite: via nish.RegexParser.parseSeq
   escaping: depth
-  calls: nish.RegexParser.byteAt nish.RegexParser.fail nish.RegexParser.node nish.RegexParser.parseSeq nish.RegexParser.setKid nish.RegexParser.setNext nish.RegexParser.skip
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.fail#0 nish.RegexParser.parseSeq#0 nish.RegexParser.byteAt#0 nish.RegexParser.node#0 nish.RegexParser.setKid#0 nish.RegexParser.byteAt#0 nish.RegexParser.skip#0 nish.RegexParser.parseSeq#0 nish.RegexParser.setNext#0
+  calls: nish.RegexParser.byteAt nish.RegexParser.node nish.RegexParser.parseSeq nish.RegexParser.setKid nish.RegexParser.setNext nish.RegexParser.skip
+  pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.parseSeq#0 nish.RegexParser.byteAt#0 nish.RegexParser.node#0 nish.RegexParser.setKid#0 nish.RegexParser.byteAt#0 nish.RegexParser.skip#0 nish.RegexParser.parseSeq#0 nish.RegexParser.setNext#0
   stackSites=0 stackLocals=0
-  callee +0:14 RegexParser.fail -> @nish.RegexParser.fail
-  local +2:11 first: i32 (const)
-  callee +2:24 RegexParser.parseSeq -> @nish.RegexParser.parseSeq
-  callee +6:34 RegexParser.byteAt -> @nish.RegexParser.byteAt
-  local +9:11 alt: i32 (const)
-  callee +9:22 RegexParser.node -> @nish.RegexParser.node
-  callee +10:5 RegexParser.setKid -> @nish.RegexParser.setKid
-  local +11:9 last: i32 (let)
-  callee +12:35 RegexParser.byteAt -> @nish.RegexParser.byteAt
-  callee +13:7 RegexParser.skip -> @nish.RegexParser.skip
-  local +14:13 n: i32 (const)
-  callee +14:22 RegexParser.parseSeq -> @nish.RegexParser.parseSeq
-  callee +18:7 RegexParser.setNext -> @nish.RegexParser.setNext
+  local +0:11 first: i32 (const)
+  callee +0:24 RegexParser.parseSeq -> @nish.RegexParser.parseSeq
+  callee +4:34 RegexParser.byteAt -> @nish.RegexParser.byteAt
+  local +7:11 alt: i32 (const)
+  callee +7:22 RegexParser.node -> @nish.RegexParser.node
+  callee +8:5 RegexParser.setKid -> @nish.RegexParser.setKid
+  local +9:9 last: i32 (let)
+  callee +10:35 RegexParser.byteAt -> @nish.RegexParser.byteAt
+  callee +11:7 RegexParser.skip -> @nish.RegexParser.skip
+  local +12:13 n: i32 (const)
+  callee +12:22 RegexParser.parseSeq -> @nish.RegexParser.parseSeq
+  callee +16:7 RegexParser.setNext -> @nish.RegexParser.setNext
 function RegexParser.parseSeq(this: RegexParser, depth: i32): i32 -> @nish.RegexParser.parseSeq [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.RegexParser.parseTerm
@@ -735,7 +736,7 @@ function RegexParser.parseGroup(this: RegexParser, depth: i32): i32 -> @nish.Reg
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.RegexParser.ahead nish.RegexParser.byteAt nish.RegexParser.fail nish.RegexParser.node nish.RegexParser.parseAlt nish.RegexParser.setKid nish.RegexParser.skip nish.regexSpan nish_array_grow nish_str_eq
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.skip#0 nish.RegexParser.byteAt#0 nish.RegexParser.byteAt#0 nish.RegexParser.ahead#0 nish.RegexParser.skip#0 nish.RegexParser.fail#0 nish.RegexParser.byteAt#0 nish.RegexParser.ahead#0 nish.RegexParser.fail#0 nish.RegexParser.ahead#0 nish.RegexParser.byteAt#0 nish.RegexParser.byteAt#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.parseAlt#0 nish.RegexParser.byteAt#0 nish.RegexParser.fail#0 nish.RegexParser.skip#0 nish.RegexParser.node#0 nish.RegexParser.setKid#0
+  pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.skip#0 nish.RegexParser.byteAt#0 nish.RegexParser.byteAt#0 nish.RegexParser.ahead#0 nish.RegexParser.skip#0 nish.RegexParser.fail#0 nish.RegexParser.byteAt#0 nish.RegexParser.ahead#0 nish.RegexParser.fail#0 nish.RegexParser.ahead#0 nish.RegexParser.byteAt#0 nish.RegexParser.byteAt#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.parseAlt#0 nish.RegexParser.byteAt#0 nish.RegexParser.fail#0 nish.RegexParser.skip#0 nish.RegexParser.node#0 nish.RegexParser.setKid#0
   stackSites=0 stackLocals=0
   local -33:11 open: i32 (const)
   callee -32:5 RegexParser.skip -> @nish.RegexParser.skip
@@ -764,15 +765,16 @@ function RegexParser.parseGroup(this: RegexParser, depth: i32): i32 -> @nish.Reg
   callee -2:18 RegexParser.fail -> @nish.RegexParser.fail
   callee +2:16 RegexParser.fail -> @nish.RegexParser.fail
   local +5:9 index: i32 (let)
-  callee +8:16 RegexParser.fail -> @nish.RegexParser.fail
-  local +19:11 inner: i32 (const)
-  callee +19:24 RegexParser.parseAlt -> @nish.RegexParser.parseAlt
-  callee +23:33 RegexParser.byteAt -> @nish.RegexParser.byteAt
-  callee +24:14 RegexParser.fail -> @nish.RegexParser.fail
-  callee +26:5 RegexParser.skip -> @nish.RegexParser.skip
-  local +30:11 g: i32 (const)
-  callee +30:20 RegexParser.node -> @nish.RegexParser.node
-  callee +31:5 RegexParser.setKid -> @nish.RegexParser.setKid
+  callee +9:16 RegexParser.fail -> @nish.RegexParser.fail
+  callee +19:14 RegexParser.fail -> @nish.RegexParser.fail
+  local +21:11 inner: i32 (const)
+  callee +21:24 RegexParser.parseAlt -> @nish.RegexParser.parseAlt
+  callee +25:33 RegexParser.byteAt -> @nish.RegexParser.byteAt
+  callee +26:14 RegexParser.fail -> @nish.RegexParser.fail
+  callee +28:5 RegexParser.skip -> @nish.RegexParser.skip
+  local +32:11 g: i32 (const)
+  callee +32:20 RegexParser.node -> @nish.RegexParser.node
+  callee +33:5 RegexParser.setKid -> @nish.RegexParser.setKid
 function RegexParser.parseEscape(this: RegexParser): i32 -> @nish.RegexParser.parseEscape [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -805,22 +807,23 @@ function RegexParser.parseCharEscape(this: RegexParser, inClass: boolean): i32 -
   calls: nish.RegexParser.byteAt nish.RegexParser.fail nish.RegexParser.parseHex nish.RegexParser.parseUnicodeEscape nish.RegexParser.skip
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.byteAt#0 nish.RegexParser.skip#0 nish.RegexParser.byteAt#0 nish.RegexParser.byteAt#0 nish.RegexParser.fail#0 nish.RegexParser.byteAt#0 nish.RegexParser.skip#0 nish.RegexParser.fail#0 nish.RegexParser.parseHex#0 nish.RegexParser.fail#0 nish.RegexParser.parseUnicodeEscape#0 nish.RegexParser.fail#0
   stackSites=0 stackLocals=0
-  local +0:11 at: i32 (const)
-  local +1:11 c: i32 (const)
-  callee +1:20 RegexParser.byteAt -> @nish.RegexParser.byteAt
-  callee +2:5 RegexParser.skip -> @nish.RegexParser.skip
-  callee +19:34 RegexParser.byteAt -> @nish.RegexParser.byteAt
-  callee +19:65 RegexParser.byteAt -> @nish.RegexParser.byteAt
-  callee +20:16 RegexParser.fail -> @nish.RegexParser.fail
-  local +26:15 l: i32 (const)
-  callee +26:24 RegexParser.byteAt -> @nish.RegexParser.byteAt
-  callee +28:11 RegexParser.skip -> @nish.RegexParser.skip
-  callee +32:14 RegexParser.fail -> @nish.RegexParser.fail
-  local +35:13 v: i32 (const)
-  callee +35:22 RegexParser.parseHex -> @nish.RegexParser.parseHex
-  callee +37:16 RegexParser.fail -> @nish.RegexParser.fail
-  callee +42:14 RegexParser.parseUnicodeEscape -> @nish.RegexParser.parseUnicodeEscape
-  callee +70:12 RegexParser.fail -> @nish.RegexParser.fail
+  local +0:11 here: i32 (const)
+  local +1:11 at: i32 (const)
+  local +2:11 c: i32 (const)
+  callee +2:20 RegexParser.byteAt -> @nish.RegexParser.byteAt
+  callee +3:5 RegexParser.skip -> @nish.RegexParser.skip
+  callee +20:34 RegexParser.byteAt -> @nish.RegexParser.byteAt
+  callee +20:65 RegexParser.byteAt -> @nish.RegexParser.byteAt
+  callee +21:16 RegexParser.fail -> @nish.RegexParser.fail
+  local +27:15 l: i32 (const)
+  callee +27:24 RegexParser.byteAt -> @nish.RegexParser.byteAt
+  callee +29:11 RegexParser.skip -> @nish.RegexParser.skip
+  callee +33:14 RegexParser.fail -> @nish.RegexParser.fail
+  local +36:13 v: i32 (const)
+  callee +36:22 RegexParser.parseHex -> @nish.RegexParser.parseHex
+  callee +38:16 RegexParser.fail -> @nish.RegexParser.fail
+  callee +43:14 RegexParser.parseUnicodeEscape -> @nish.RegexParser.parseUnicodeEscape
+  callee +71:12 RegexParser.fail -> @nish.RegexParser.fail
 function RegexParser.parseHex(this: RegexParser, n: i32): i32 -> @nish.RegexParser.parseHex [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.RegexParser.skip
@@ -857,14 +860,14 @@ function RegexParser.parseUnicodeEscape(this: RegexParser, at: i32): i32 -> @nis
   local +3:11 v: i32 (const)
   callee +3:20 RegexParser.parseHex -> @nish.RegexParser.parseHex
   callee +5:14 RegexParser.fail -> @nish.RegexParser.fail
-  callee +10:7 RegexParser.ahead -> @nish.RegexParser.ahead
-  callee +11:7 RegexParser.byteAt -> @nish.RegexParser.byteAt
-  callee +12:7 RegexParser.byteAt -> @nish.RegexParser.byteAt
-  callee +12:19 RegexParser.ahead -> @nish.RegexParser.ahead
-  local +14:13 save: i32 (const)
-  callee +15:7 RegexParser.skip -> @nish.RegexParser.skip
-  local +16:13 lo: i32 (const)
-  callee +16:23 RegexParser.parseHex -> @nish.RegexParser.parseHex
+  callee +12:7 RegexParser.ahead -> @nish.RegexParser.ahead
+  callee +13:7 RegexParser.byteAt -> @nish.RegexParser.byteAt
+  callee +14:7 RegexParser.byteAt -> @nish.RegexParser.byteAt
+  callee +14:19 RegexParser.ahead -> @nish.RegexParser.ahead
+  local +16:13 save: i32 (const)
+  callee +17:7 RegexParser.skip -> @nish.RegexParser.skip
+  local +18:13 lo: i32 (const)
+  callee +18:23 RegexParser.parseHex -> @nish.RegexParser.parseHex
 function RegexParser.addRange(this: RegexParser, lo: i32, hi: i32): void -> @nish.RegexParser.addRange [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -878,7 +881,6 @@ function RegexParser.addRange(this: RegexParser, lo: i32, hi: i32): void -> @nis
 function RegexParser.addSet(this: RegexParser, letter: i32): void -> @nish.RegexParser.addSet [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.RegexParser.addRange
-  escaping: letter
   calls: nish.RegexParser.addRange nish_array_grow
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.addRange#0 nish.RegexParser.addRange#0 nish.RegexParser.addRange#0
   stackSites=1 stackLocals=1
@@ -891,15 +893,15 @@ function RegexParser.addSet(this: RegexParser, letter: i32): void -> @nish.Regex
   local +58:13 lo: i32 (const)
   local +59:13 at: i32 (const)
   local +63:13 hi: i32 (const)
-  callee +65:9 RegexParser.addRange -> @nish.RegexParser.addRange
-  callee +67:9 RegexParser.addRange -> @nish.RegexParser.addRange
-  callee +76:7 RegexParser.addRange -> @nish.RegexParser.addRange
+  callee +68:9 RegexParser.addRange -> @nish.RegexParser.addRange
+  callee +70:9 RegexParser.addRange -> @nish.RegexParser.addRange
+  callee +79:7 RegexParser.addRange -> @nish.RegexParser.addRange
 function RegexParser.addProperty(this: RegexParser, at: i32, negate: boolean): void -> @nish.RegexParser.addProperty [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at negate
   calls: nish.RegexParser.addRange nish.RegexParser.ahead nish.RegexParser.byteAt nish.RegexParser.countPropertyRanges nish.RegexParser.fail nish.RegexParser.skip nish.RegexParser.tableNumber nish.isRegexWordByte nish.regexByteAt nish.regexPropertyEntry nish.regexSpan nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.skip#0 nish.RegexParser.byteAt#0 nish.RegexParser.fail#0 nish.RegexParser.ahead#0 nish.RegexParser.byteAt#0 nish.RegexParser.byteAt#0 nish.RegexParser.byteAt#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.tableNumber#0 nish.RegexParser.tableNumber#0 nish.RegexParser.tableNumber#0 nish.RegexParser.addRange#0 nish.RegexParser.addRange#0 nish.RegexParser.addRange#0 nish.RegexParser.countPropertyRanges#0
+  pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.skip#0 nish.RegexParser.byteAt#0 nish.RegexParser.fail#0 nish.RegexParser.ahead#0 nish.RegexParser.byteAt#0 nish.RegexParser.byteAt#0 nish.RegexParser.byteAt#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.fail#0 nish.RegexParser.tableNumber#0 nish.RegexParser.tableNumber#0 nish.RegexParser.tableNumber#0 nish.RegexParser.addRange#0 nish.RegexParser.addRange#0 nish.RegexParser.addRange#0 nish.RegexParser.countPropertyRanges#0
   stackSites=0 stackLocals=0
   callee -21:5 RegexParser.skip -> @nish.RegexParser.skip
   callee -20:33 RegexParser.byteAt -> @nish.RegexParser.byteAt
@@ -930,33 +932,39 @@ function RegexParser.addProperty(this: RegexParser, at: i32, negate: boolean): v
   callee +20:17 regexPropertyEntry -> @nish.regexPropertyEntry
   callee +22:9 RegexParser.fail -> @nish.RegexParser.fail
   callee +26:9 RegexParser.fail -> @nish.RegexParser.fail
-  local +37:9 gaps: boolean (let)
-  local +38:9 u: u32 (let)
-  callee +39:9 regexByteAt -> @nish.regexByteAt
-  local +43:9 offset: u32 (let)
-  local +44:9 d: i32 (let)
-  callee +44:18 regexByteAt -> @nish.regexByteAt
-  callee +48:11 regexByteAt -> @nish.regexByteAt
-  local +51:11 n: i32 (const)
-  callee +51:20 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
-  local +52:11 before: i32 (const)
-  local +53:9 from: u32 (let)
-  local +54:9 hi: u32 (let)
-  local +55:9 k: i32 (let)
-  local +58:13 lo: u32 (const)
-  callee +58:61 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
-  callee +59:23 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
-  callee +61:9 RegexParser.addRange -> @nish.RegexParser.addRange
-  callee +63:9 RegexParser.addRange -> @nish.RegexParser.addRange
-  callee +69:7 RegexParser.addRange -> @nish.RegexParser.addRange
-  callee +71:5 RegexParser.countPropertyRanges -> @nish.RegexParser.countPropertyRanges
+  local +31:15 comma: i32 (const)
+  callee +33:11 RegexParser.fail -> @nish.RegexParser.fail
+  local +42:9 gaps: boolean (let)
+  local +43:9 u: u32 (let)
+  callee +44:9 regexByteAt -> @nish.regexByteAt
+  local +48:9 offset: u32 (let)
+  local +49:9 d: i32 (let)
+  callee +49:18 regexByteAt -> @nish.regexByteAt
+  callee +53:11 regexByteAt -> @nish.regexByteAt
+  local +56:11 n: i32 (const)
+  callee +56:20 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
+  local +57:11 before: i32 (const)
+  local +58:9 from: u32 (let)
+  local +59:9 hi: u32 (let)
+  local +60:9 k: i32 (let)
+  local +63:13 lo: u32 (const)
+  callee +63:61 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
+  callee +64:23 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
+  callee +66:9 RegexParser.addRange -> @nish.RegexParser.addRange
+  callee +68:9 RegexParser.addRange -> @nish.RegexParser.addRange
+  callee +74:7 RegexParser.addRange -> @nish.RegexParser.addRange
+  local +76:11 now: i32 (const)
+  local +77:11 added: i32 (const)
+  callee +78:5 RegexParser.countPropertyRanges -> @nish.RegexParser.countPropertyRanges
 function RegexParser.countPropertyRanges(this: RegexParser, n: i32, at: i32): void -> @nish.RegexParser.countPropertyRanges [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at
   calls: nish.RegexParser.fail
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.fail#0
+  pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.fail#0 nish.RegexParser.fail#0
   stackSites=0 stackLocals=0
+  local -6:11 total: i32 (const)
+  callee -3:7 RegexParser.fail -> @nish.RegexParser.fail
   callee +2:7 RegexParser.fail -> @nish.RegexParser.fail
 function RegexParser.parseClassAtom(this: RegexParser): i32 -> @nish.RegexParser.parseClassAtom [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -1054,16 +1062,17 @@ function RegexParser.storeRanges(this: RegexParser): i32 -> @nish.RegexParser.st
   local -3:13 hi: i32 (const)
   local -1:15 lo: i32 (const)
   local +5:11 end: i32 (const)
-  local +12:15 lo: i32 (const)
-  local +13:15 hi: i32 (const)
-  local +15:13 q: i32 (let)
-  local +17:17 m: i32 (const)
-  local +24:15 m: i32 (const)
-  callee +32:7 RegexParser.mergeSort -> @nish.RegexParser.mergeSort
-  local +36:9 out: i32 (let)
-  local +39:13 lo: i32 (const)
-  local +40:13 hi: i32 (const)
-  local +41:13 last: i32 (const)
+  local +11:15 lo: i32 (const)
+  local +12:15 hi: i32 (const)
+  local +14:13 q: i32 (let)
+  local +16:17 m: i32 (const)
+  local +23:15 m: i32 (const)
+  callee +31:7 RegexParser.mergeSort -> @nish.RegexParser.mergeSort
+  local +34:9 out: i32 (let)
+  local +37:13 lo: i32 (const)
+  local +38:13 hi: i32 (const)
+  local +39:13 last: i32 (const)
+  local +40:13 top: i32 (const)
 function RegexParser.mergeSort(this: RegexParser, from: i32, end: i32): void -> @nish.RegexParser.mergeSort [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -1095,7 +1104,7 @@ function RegexParser.mergeSort(this: RegexParser, from: i32, end: i32): void -> 
   local +40:17 pick: i32 (const)
   local +54:13 lo: i32[] (const)
   local +55:13 hi: i32[] (const)
-  local +64:13 at: i32 (const)
+  local +63:9 at: i32 (let)
 function RegexParser.foldRanges(this: RegexParser, from: i32, out: i32): boolean -> @nish.RegexParser.foldRanges [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:15
@@ -1103,15 +1112,16 @@ function RegexParser.foldRanges(this: RegexParser, from: i32, out: i32): boolean
   calls: nish.RegexParser.addRange nish.RegexParser.countPropertyRanges nish.RegexParser.foldSeek nish.RegexParser.foldStepOf nish.RegexParser.rangesHave nish.RegexParser.tableNumber nish.regexFoldTarget nish.regexFoldsIn
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.RegexParser.foldSeek#0 nish.RegexParser.tableNumber#0 nish.RegexParser.rangesHave#0 nish.RegexParser.addRange#0 nish.RegexParser.foldStepOf#0 nish.RegexParser.tableNumber#0 nish.RegexParser.addRange#0 nish.RegexParser.countPropertyRanges#0
   stackSites=0 stackLocals=0
-  local -42:11 lows: i32[] (const)
-  local -41:11 highs: i32[] (const)
-  local -36:9 touches: boolean (let)
-  local -35:9 covers: boolean (let)
-  local -34:9 gap: i32 (let)
-  local -33:9 r0: i32 (let)
-  local -31:13 lo: i32 (const)
-  callee -30:23 regexFoldsIn -> @nish.regexFoldsIn
-  callee -27:33 regexFoldsIn -> @nish.regexFoldsIn
+  local -43:11 lows: i32[] (const)
+  local -42:11 highs: i32[] (const)
+  local -37:9 touches: boolean (let)
+  local -36:9 covers: boolean (let)
+  local -35:9 gap: i32 (let)
+  local -34:9 r0: i32 (let)
+  local -32:13 lo: i32 (const)
+  callee -31:23 regexFoldsIn -> @nish.regexFoldsIn
+  callee -28:43 regexFoldsIn -> @nish.regexFoldsIn
+  local -25:13 hi: i32 (const)
   callee -21:42 regexFoldsIn -> @nish.regexFoldsIn
   local -15:11 end: i32 (const)
   local -14:9 added: u32 (let)
@@ -1129,9 +1139,10 @@ function RegexParser.foldRanges(this: RegexParser, from: i32, out: i32): boolean
   callee +2:13 RegexParser.addRange -> @nish.RegexParser.addRange
   callee +5:38 regexFoldTarget -> @nish.regexFoldTarget
   callee +5:57 RegexParser.foldStepOf -> @nish.RegexParser.foldStepOf
-  callee +10:38 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
-  callee +20:7 RegexParser.addRange -> @nish.RegexParser.addRange
-  callee +23:5 RegexParser.countPropertyRanges -> @nish.RegexParser.countPropertyRanges
+  local +8:15 gapTo: i32 (const)
+  callee +8:39 RegexParser.tableNumber -> @nish.RegexParser.tableNumber
+  callee +19:7 RegexParser.addRange -> @nish.RegexParser.addRange
+  callee +22:5 RegexParser.countPropertyRanges -> @nish.RegexParser.countPropertyRanges
 function RegexParser.rangesHave(this: RegexParser, from: i32, out: i32, c: i32): boolean -> @nish.RegexParser.rangesHave [method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from out
@@ -1174,7 +1185,7 @@ function regexBytesText(bytes: u8[]): string -> @nish.regexBytesText
 function regexSlot(g: i32): i32 -> @nish.regexSlot
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function regexNegated(e: i32): i32 -> @nish.regexNegated
+function regexSlotEnd(g: i32): i32 -> @nish.regexSlotEnd
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function regexItem(a: i32[], i: i32, missing: i32): i32 -> @nish.regexItem
@@ -1204,22 +1215,28 @@ function regexPrefixAt(text: string, s: i32, prefix: string): boolean -> @nish.r
   local +1:9 len: i32 (const)
   local +2:7 q: i32 (let)
   local +3:7 k: i32 (let)
-function regexStoreSlots(dst: i32[], base: i32, src: i32[], ns: i32): void -> @nish.regexStoreSlots
+function regexStoreSlots(dst: i32[], pc: i32, src: i32[], ns: i32): void -> @nish.regexStoreSlots
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   pointer dst: size=0 writesThrough=true captured=false
   pointer src: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -7:7 k: i32 (let)
-  local -4:11 at: i32 (const)
-function regexLoadSlots(dst: i32[], src: i32[], base: i32, ns: i32): void -> @nish.regexLoadSlots
+  local -7:9 base: i64 (const)
+  local -3:7 k: i32 (let)
+  local -2:7 at: i32 (let)
+function regexLoadSlots(dst: i32[], src: i32[], pc: i32, ns: i32): void -> @nish.regexLoadSlots
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   pointer dst: size=0 writesThrough=true captured=false
   pointer src: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -6:7 k: i32 (let)
-  local -4:11 at: i32 (const)
+  local -7:9 base: i64 (const)
+  local -3:7 k: i32 (let)
+  local -2:7 at: i32 (let)
+function regexTableSize(a: i32, b: i32): i32 -> @nish.regexTableSize
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 wide: i64 (const)
 function regexZeros(n: i32): i32[] -> @nish.regexZeros
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
@@ -1249,22 +1266,20 @@ function regexSortPoints(a: i32[]): void -> @nish.regexSortPoints
   calls: nish.sliceAll$i32 nish_arena_mark nish_arena_release
   pointer a: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -22:9 tmp: i32[] (const)
-  callee -22:22 sliceAll<i32> -> @nish.sliceAll$i32
-  local -21:9 n: i32 (const)
-  local -18:9 un: u32 (const)
-  local -17:7 width: u32 (let)
-  local -15:9 lo: u32 (let)
-  local -13:13 umid: u32 (const)
-  local -12:13 uhi: u32 (const)
-  local -11:13 mid: i32 (const)
-  local -10:13 hi: i32 (const)
-  local -9:11 i: i32 (let)
-  local -8:11 j: i32 (let)
-  local -7:11 k: i32 (let)
-  local -3:15 right: boolean (const)
-  local -2:15 from: i32 (const)
-  local +11:9 k: i32 (let)
+  local -20:9 tmp: i32[] (const)
+  callee -20:22 sliceAll<i32> -> @nish.sliceAll$i32
+  local -19:9 n: i32 (const)
+  local -16:9 un: u32 (const)
+  local -15:7 width: u32 (let)
+  local -13:9 lo: u32 (let)
+  local -11:13 umid: u32 (const)
+  local -10:13 uhi: u32 (const)
+  local -9:13 mid: i32 (const)
+  local -8:13 hi: i32 (const)
+  local -7:11 i: i32 (let)
+  local -6:11 j: i32 (let)
+  local -5:11 k: i32 (let)
+  local +13:9 k: i32 (let)
 function regexByteScore(b: i32): i32 -> @nish.regexByteScore
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -1274,7 +1289,7 @@ function regexLetterPerMille(i: i32): i32 -> @nish.regexLetterPerMille
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 table: string (const)
-  local +3:9 at: i32 (const)
+  local +5:9 at: i32 (const)
 function regexBytePerMille(b: i32): i32 -> @nish.regexBytePerMille
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.regexLetterPerMille
@@ -1288,12 +1303,13 @@ function regexScanFrom(text: string, masks: u8[], depth: i32, off: i32, width: i
   pointer masks: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 length: i32 (const)
-  local +1:7 i: i32 (let)
-  local +3:9 k: i32 (let)
-  local +7:11 j: u32 (let)
-  local +14:13 at: i32 (const)
-  local +18:11 b: i32 (let)
-  local +22:13 slot: i32 (const)
+  local +5:7 i: i32 (let)
+  local +7:9 k: i32 (let)
+  local +10:11 j: i32 (let)
+  local +18:13 wide: i64 (const)
+  local +22:13 at: i32 (const)
+  local +26:11 b: i32 (let)
+  local +34:13 slot: i32 (const)
 function RegexMatch.constructor(this: RegexMatch): void -> @nish.RegexMatch.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=24 writesThrough=true captured=false
@@ -1332,7 +1348,7 @@ function RegexMatch.slotOf(this: RegexMatch, k: i32, end: boolean): i32 -> @nish
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 s: i32[] (const)
-  local +1:11 at: i32 (const)
+  local +4:11 at: i32 (const)
 function RegexMatch.groupStart(this: RegexMatch, k: i32): i32 -> @nish.RegexMatch.groupStart [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
@@ -1395,12 +1411,14 @@ function Regex.branch(this: Regex, s: i32, first: boolean, other: i32): void -> 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.regexPut
   escaping: other s
-  calls: nish.regexPut
-  pointer this: size=520 writesThrough=false captured=false
+  calls: nish.Regex.pc nish.regexPut
+  pointer this: size=520 writesThrough=false captured=false passedTo=nish.Regex.pc#0
   stackSites=0 stackLocals=0
-  local +0:11 next: i32 (const)
-  callee +1:5 regexPut -> @nish.regexPut
-  callee +2:5 regexPut -> @nish.regexPut
+  local +0:11 count: i32 (const)
+  callee +0:24 Regex.pc -> @nish.Regex.pc
+  local +4:11 next: i32 (const)
+  callee +5:5 regexPut -> @nish.regexPut
+  callee +6:5 regexPut -> @nish.regexPut
 function Regex.compileIteration(this: Regex, p: RegexParser, r: i32, rev: boolean): void -> @nish.Regex.compileIteration [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Regex.emit
@@ -1422,7 +1440,7 @@ function Regex.compileNode(this: Regex, p: RegexParser, n: i32, rev: boolean): v
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Regex.emit
   escaping: n rev
-  calls: nish.Regex.branch nish.Regex.compileEmptyCheckedRepeat nish.Regex.compileIteration nish.Regex.compileNode nish.Regex.emit nish.Regex.pc nish.RegexParser.aOf nish.RegexParser.bOf nish.RegexParser.cOf nish.RegexParser.kidOf nish.RegexParser.kindOf nish.RegexParser.nextOf nish.regexNullable nish.regexPut nish.regexSlot nish_array_grow
+  calls: nish.Regex.branch nish.Regex.compileEmptyCheckedRepeat nish.Regex.compileIteration nish.Regex.compileNode nish.Regex.emit nish.Regex.pc nish.RegexParser.aOf nish.RegexParser.bOf nish.RegexParser.cOf nish.RegexParser.kidOf nish.RegexParser.kindOf nish.RegexParser.nextOf nish.regexNullable nish.regexPut nish.regexSlot nish.regexSlotEnd nish_array_grow
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.emit#0 nish.Regex.emit#0 nish.Regex.emit#0 nish.Regex.emit#0 nish.Regex.compileNode#0 nish.Regex.emit#0 nish.Regex.compileNode#0 nish.Regex.emit#0 nish.Regex.emit#0 nish.Regex.pc#0 nish.Regex.compileNode#0 nish.Regex.emit#0 nish.Regex.pc#0 nish.Regex.compileNode#0 nish.Regex.pc#0 nish.Regex.compileEmptyCheckedRepeat#0 nish.Regex.emit#0 nish.Regex.compileIteration#0 nish.Regex.emit#0 nish.Regex.pc#0 nish.Regex.branch#0 nish.Regex.compileIteration#0 nish.Regex.pc#0 nish.Regex.compileIteration#0 nish.Regex.emit#0 nish.Regex.branch#0 nish.Regex.pc#0 nish.Regex.compileIteration#0 nish.Regex.pc#0 nish.Regex.emit#0 nish.Regex.compileIteration#0 nish.Regex.pc#0 nish.Regex.branch#0
   pointer p: size=200 writesThrough=false captured=false passedTo=nish.RegexParser.kindOf#0 nish.RegexParser.aOf#0 nish.RegexParser.bOf#0 nish.RegexParser.aOf#0 nish.RegexParser.aOf#0 nish.RegexParser.kidOf#0 nish.RegexParser.nextOf#0 nish.Regex.compileNode#1 nish.RegexParser.aOf#0 nish.Regex.compileNode#1 nish.RegexParser.kidOf#0 nish.RegexParser.aOf#0 nish.RegexParser.kidOf#0 nish.RegexParser.nextOf#0 nish.Regex.compileNode#1 nish.Regex.compileNode#1 nish.RegexParser.nextOf#0 nish.RegexParser.aOf#0 nish.RegexParser.bOf#0 nish.RegexParser.cOf#0 nish.regexNullable#0 nish.RegexParser.kidOf#0 nish.Regex.compileEmptyCheckedRepeat#1 nish.Regex.compileIteration#1 nish.Regex.compileIteration#1 nish.Regex.compileIteration#1 nish.Regex.compileIteration#1 nish.Regex.compileIteration#1
   stackSites=3 stackLocals=3
@@ -1451,8 +1469,8 @@ function Regex.compileNode(this: Regex, p: RegexParser, n: i32, rev: boolean): v
   callee +47:7 Regex.compileNode -> @nish.Regex.compileNode
   callee +47:27 RegexParser.kidOf -> @nish.RegexParser.kidOf
   callee +48:7 Regex.emit -> @nish.Regex.emit
-  callee +48:38 regexSlot -> @nish.regexSlot
-  callee +48:48 RegexParser.aOf -> @nish.RegexParser.aOf
+  callee +48:26 regexSlotEnd -> @nish.regexSlotEnd
+  callee +48:39 RegexParser.aOf -> @nish.RegexParser.aOf
   local +52:13 jumps: i32[] (const)
   local +53:11 c: i32 (let)
   callee +53:20 RegexParser.kidOf -> @nish.RegexParser.kidOf
@@ -1516,23 +1534,24 @@ function Regex.compileEmptyCheckedRepeat(this: Regex, p: RegexParser, n: i32, mi
   pointer p: size=200 writesThrough=false captured=false passedTo=nish.Regex.compileIteration#1 nish.Regex.compileMarked#1 nish.Regex.compileMarked#1
   stackSites=1 stackLocals=1
   local -2:11 marks: i32[] (const)
-  local +11:11 k: i32 (const)
-  local +12:9 i: i32 (let)
-  local +16:13 before: i32 (const)
-  callee +16:27 Regex.pc -> @nish.Regex.pc
-  callee +17:7 Regex.compileIteration -> @nish.Regex.compileIteration
-  callee +19:11 Regex.pc -> @nish.Regex.pc
-  local +23:11 splits: i32[] (const)
-  local +25:13 split: i32 (const)
-  callee +25:26 Regex.emit -> @nish.Regex.emit
-  callee +27:7 Regex.compileMarked -> @nish.Regex.compileMarked
-  callee +28:7 Regex.emit -> @nish.Regex.emit
-  callee +31:21 Regex.emit -> @nish.Regex.emit
-  callee +32:9 Regex.compileMarked -> @nish.Regex.compileMarked
-  local +36:11 exit: i32 (const)
-  callee +36:23 Regex.pc -> @nish.Regex.pc
-  local +37:16 s: i32 (const)
-  callee +38:7 Regex.branch -> @nish.Regex.branch
+  local +7:13 w: i32 (const)
+  local +13:11 k: i32 (const)
+  local +14:9 i: i32 (let)
+  local +18:13 before: i32 (const)
+  callee +18:27 Regex.pc -> @nish.Regex.pc
+  callee +19:7 Regex.compileIteration -> @nish.Regex.compileIteration
+  callee +21:11 Regex.pc -> @nish.Regex.pc
+  local +25:11 splits: i32[] (const)
+  local +27:13 split: i32 (const)
+  callee +27:26 Regex.emit -> @nish.Regex.emit
+  callee +29:7 Regex.compileMarked -> @nish.Regex.compileMarked
+  callee +30:7 Regex.emit -> @nish.Regex.emit
+  callee +33:21 Regex.emit -> @nish.Regex.emit
+  callee +34:9 Regex.compileMarked -> @nish.Regex.compileMarked
+  local +38:11 exit: i32 (const)
+  callee +38:23 Regex.pc -> @nish.Regex.pc
+  local +39:16 s: i32 (const)
+  callee +40:7 Regex.branch -> @nish.Regex.branch
 function Regex.compileMarked(this: Regex, p: RegexParser, n: i32, k: i32, rev: boolean): void -> @nish.Regex.compileMarked [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -1542,14 +1561,14 @@ function Regex.compileMarked(this: Regex, p: RegexParser, n: i32, k: i32, rev: b
   pointer p: size=200 writesThrough=false captured=false passedTo=nish.Regex.compileIteration#1
   stackSites=0 stackLocals=0
   local -4:11 level: i32 (const)
-  callee +2:5 Regex.emit -> @nish.Regex.emit
-  callee +4:5 Regex.compileIteration -> @nish.Regex.compileIteration
   callee +6:5 Regex.emit -> @nish.Regex.emit
+  callee +8:5 Regex.compileIteration -> @nish.Regex.compileIteration
+  callee +10:5 Regex.emit -> @nish.Regex.emit
 function Regex.build(this: Regex, p: RegexParser, root: i32): string -> @nish.Regex.build [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: root
-  calls: nish.Regex.compileNode nish.Regex.emit nish.Regex.findInner nish.Regex.findPrefilters nish.Regex.pc nish.regexItem nish.regexNullable nish.regexSlot nish.regexZeros nish_str_eq
+  calls: nish.Regex.compileNode nish.Regex.emit nish.Regex.findInner nish.Regex.findPrefilters nish.Regex.pc nish.regexItem nish.regexNullable nish.regexSlot nish.regexSlotEnd nish.regexTableSize nish.regexZeros nish_str_eq
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.emit#0 nish.Regex.compileNode#0 nish.Regex.emit#0 nish.Regex.emit#0 nish.Regex.pc#0 nish.Regex.compileNode#0 nish.Regex.emit#0 nish.Regex.findPrefilters#0 nish.Regex.findInner#0
   pointer p: size=200 writesThrough=false captured=false passedTo=nish.Regex.compileNode#1 nish.regexNullable#0 nish.Regex.compileNode#1 nish.Regex.findInner#1
   stackSites=0 stackLocals=0
@@ -1559,6 +1578,7 @@ function Regex.build(this: Regex, p: RegexParser, root: i32): string -> @nish.Re
   callee +11:5 Regex.emit -> @nish.Regex.emit
   callee +12:5 Regex.compileNode -> @nish.Regex.compileNode
   callee +13:5 Regex.emit -> @nish.Regex.emit
+  callee +13:24 regexSlotEnd -> @nish.regexSlotEnd
   callee +14:5 Regex.emit -> @nish.Regex.emit
   local +18:11 count: i32 (const)
   callee +18:24 Regex.pc -> @nish.Regex.pc
@@ -1567,26 +1587,31 @@ function Regex.build(this: Regex, p: RegexParser, root: i32): string -> @nish.Re
   callee +27:7 Regex.compileNode -> @nish.Regex.compileNode
   callee +28:7 Regex.emit -> @nish.Regex.emit
   local +32:11 slots: i32 (const)
-  local +40:11 table: i32 (const)
-  callee +41:19 regexZeros -> @nish.regexZeros
-  callee +42:19 regexZeros -> @nish.regexZeros
-  callee +43:19 regexZeros -> @nish.regexZeros
-  callee +44:19 regexZeros -> @nish.regexZeros
-  local +45:11 states: i32 (const)
-  callee +46:18 regexZeros -> @nish.regexZeros
-  callee +47:17 regexZeros -> @nish.regexZeros
-  callee +48:19 regexZeros -> @nish.regexZeros
-  local +53:11 op: i32[] (const)
-  local +54:11 ia: i32[] (const)
-  local +55:11 ib: i32[] (const)
-  local +56:9 frames: u32 (let)
-  local +57:9 pc: i32 (let)
-  local +59:13 o: i32 (const)
-  callee +63:25 regexItem -> @nish.regexItem
-  callee +63:55 regexItem -> @nish.regexItem
-  callee +72:16 regexZeros -> @nish.regexZeros
-  callee +73:5 Regex.findPrefilters -> @nish.Regex.findPrefilters
-  callee +75:7 Regex.findInner -> @nish.Regex.findInner
+  local +33:11 table: i32 (const)
+  callee +33:24 regexTableSize -> @nish.regexTableSize
+  callee +37:19 regexZeros -> @nish.regexZeros
+  callee +38:19 regexZeros -> @nish.regexZeros
+  callee +39:19 regexZeros -> @nish.regexZeros
+  callee +40:19 regexZeros -> @nish.regexZeros
+  local +41:11 states: i32 (const)
+  local +44:11 visits: i32 (const)
+  callee +44:25 regexTableSize -> @nish.regexTableSize
+  callee +48:18 regexZeros -> @nish.regexZeros
+  callee +49:17 regexZeros -> @nish.regexZeros
+  callee +50:19 regexZeros -> @nish.regexZeros
+  local +55:11 op: i32[] (const)
+  local +56:11 ia: i32[] (const)
+  local +57:11 ib: i32[] (const)
+  local +58:9 frames: u32 (let)
+  local +59:9 pc: i32 (let)
+  local +61:13 o: i32 (const)
+  callee +65:25 regexItem -> @nish.regexItem
+  callee +65:55 regexItem -> @nish.regexItem
+  local +70:11 frameStates: i32 (const)
+  callee +70:30 regexTableSize -> @nish.regexTableSize
+  callee +74:16 regexZeros -> @nish.regexZeros
+  callee +75:5 Regex.findPrefilters -> @nish.Regex.findPrefilters
+  callee +77:7 Regex.findInner -> @nish.Regex.findInner
 function Regex.findInner(this: Regex, p: RegexParser, root: i32): void -> @nish.Regex.findInner [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -1595,35 +1620,35 @@ function Regex.findInner(this: Regex, p: RegexParser, root: i32): void -> @nish.
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.isAsciiChar#0 nish.Regex.canConsume#0 nish.Regex.pc#0 nish.Regex.compileNode#0 nish.Regex.emit#0
   pointer p: size=200 writesThrough=false captured=false passedTo=nish.RegexParser.kindOf#0 nish.RegexParser.kidOf#0 nish.RegexParser.nextOf#0 nish.Regex.isAsciiChar#1 nish.RegexParser.aOf#0 nish.Regex.canConsume#1 nish.RegexParser.aOf#0 nish.Regex.compileNode#1
   stackSites=1 stackLocals=1
-  callee -49:9 RegexParser.kindOf -> @nish.RegexParser.kindOf
-  local -46:11 kids: i32[] (const)
-  local -45:9 c: i32 (let)
-  callee -45:18 RegexParser.kidOf -> @nish.RegexParser.kidOf
-  callee -42:11 RegexParser.nextOf -> @nish.RegexParser.nextOf
-  local -40:11 count: i32 (const)
-  local -39:9 best: i32 (let)
-  local -38:9 bestLen: i32 (let)
-  local -37:9 bestScore: i32 (let)
-  local -36:9 i: i32 (let)
-  local -33:13 first: i32 (const)
-  local -31:11 end: i32 (let)
-  callee -30:29 Regex.isAsciiChar -> @nish.Regex.isAsciiChar
-  callee -30:49 regexItem -> @nish.regexItem
-  local -27:13 n: i32 (const)
-  local -25:15 b: i32 (const)
-  callee -25:24 RegexParser.aOf -> @nish.RegexParser.aOf
-  local -24:15 score: i32 (const)
-  callee -24:28 regexByteScore -> @nish.regexByteScore
-  local -22:15 j: i32 (let)
-  callee -21:28 Regex.canConsume -> @nish.Regex.canConsume
-  local -4:11 bytes: u8[] (const)
-  callee -4:25 regexZeroBytes -> @nish.regexZeroBytes
+  callee -50:9 RegexParser.kindOf -> @nish.RegexParser.kindOf
+  local -47:11 kids: i32[] (const)
+  local -46:9 c: i32 (let)
+  callee -46:18 RegexParser.kidOf -> @nish.RegexParser.kidOf
+  callee -43:11 RegexParser.nextOf -> @nish.RegexParser.nextOf
+  local -41:11 count: i32 (const)
+  local -40:9 best: i32 (let)
+  local -39:9 bestLen: i32 (let)
+  local -38:9 bestScore: i32 (let)
+  local -37:9 i: i32 (let)
+  local -34:13 first: i32 (const)
+  local -32:11 end: i32 (let)
+  callee -31:29 Regex.isAsciiChar -> @nish.Regex.isAsciiChar
+  callee -31:49 regexItem -> @nish.regexItem
+  local -28:13 n: i32 (const)
+  local -26:15 b: i32 (const)
+  callee -26:24 RegexParser.aOf -> @nish.RegexParser.aOf
+  local -25:15 score: i32 (const)
+  callee -25:28 regexByteScore -> @nish.regexByteScore
+  local -23:15 j: i32 (let)
+  callee -22:28 Regex.canConsume -> @nish.Regex.canConsume
+  local -5:11 bytes: u8[] (const)
+  callee -5:25 regexZeroBytes -> @nish.regexZeroBytes
+  local -2:9 at: i32 (let)
   callee +0:23 RegexParser.aOf -> @nish.RegexParser.aOf
-  callee +0:29 regexItem -> @nish.regexItem
-  callee +3:23 Regex.pc -> @nish.Regex.pc
-  callee +7:7 Regex.compileNode -> @nish.Regex.compileNode
-  callee +10:5 Regex.emit -> @nish.Regex.emit
-  callee +15:21 regexBytesText -> @nish.regexBytesText
+  callee +4:23 Regex.pc -> @nish.Regex.pc
+  callee +8:7 Regex.compileNode -> @nish.Regex.compileNode
+  callee +11:5 Regex.emit -> @nish.Regex.emit
+  callee +16:21 regexBytesText -> @nish.regexBytesText
 function Regex.isAsciiChar(this: Regex, p: RegexParser, n: i32): boolean -> @nish.Regex.isAsciiChar [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
@@ -1722,48 +1747,47 @@ function Regex.findScan(this: Regex): void -> @nish.Regex.findScan [exported met
   local +30:17 neg: u8[] (const)
   callee +35:13 regexItem -> @nish.regexItem
   callee +35:43 regexItem -> @nish.regexItem
-  local +40:17 ascii: u8[] (const)
-  local +41:17 base: u32 (const)
-  local +42:15 c: i32 (let)
-  local +44:19 idx: i32 (const)
-  local +52:15 c: i32 (let)
-  local +68:11 odd: u32 (let)
-  local +69:11 c: i32 (let)
-  local +71:15 row: i32 (const)
-  local +74:17 bit: i32 (const)
-  callee +76:24 regexBytePerMille -> @nish.regexBytePerMille
-  local +81:13 k: i32 (let)
-  local +83:17 row: i32 (const)
-  local +97:13 m: u32 (let)
-  local +122:11 udepth: u32 (const)
-  local +123:11 vec: i32 (const)
-  local +124:11 both: u8[] (const)
-  callee +124:24 regexZeroBytes -> @nish.regexZeroBytes
-  local +125:9 at: i32 (let)
-  local +132:13 b: i32 (const)
-  local +133:13 row: i32 (const)
-  local +134:13 slot: i32 (const)
-  local +144:11 most: i32 (const)
-  local +145:9 width: i32 (let)
-  local +146:9 best: i32 (let)
-  local +147:9 all: i32 (let)
-  local +154:11 off: u32 (let)
-  local +156:13 odd: u32 (let)
-  local +157:13 j: u32 (let)
-  callee +159:24 regexItem -> @nish.regexItem
-  local +168:11 j: i32 (let)
-  callee +181:24 Regex.prefixIsScan -> @nish.Regex.prefixIsScan
+  local +41:17 ascii: u8[] (const)
+  local +43:19 base: i32 (const)
+  local +44:17 c: i32 (let)
+  local +46:21 idx: i32 (const)
+  local +55:15 c: i32 (let)
+  local +71:11 odd: u32 (let)
+  local +72:11 c: i32 (let)
+  local +74:15 row: i32 (const)
+  local +77:17 bit: i32 (const)
+  callee +79:24 regexBytePerMille -> @nish.regexBytePerMille
+  local +84:13 k: i32 (let)
+  local +86:17 row: i32 (const)
+  local +100:13 m: u32 (let)
+  local +126:11 vec: i32 (const)
+  local +127:11 both: u8[] (const)
+  callee +127:24 regexZeroBytes -> @nish.regexZeroBytes
+  local +128:9 at: i32 (let)
+  local +135:13 b: i32 (const)
+  local +136:13 row: i32 (const)
+  local +137:13 slot: i32 (const)
+  local +147:11 most: i32 (const)
+  local +148:9 width: i32 (let)
+  local +149:9 best: i32 (let)
+  local +150:9 all: i32 (let)
+  local +157:11 off: u32 (let)
+  local +159:13 odd: u32 (let)
+  local +160:13 j: u32 (let)
+  callee +162:24 regexItem -> @nish.regexItem
+  local +171:11 j: i32 (let)
+  callee +185:24 Regex.prefixIsScan -> @nish.Regex.prefixIsScan
 function Regex.prefixIsScan(this: Regex): boolean -> @nish.Regex.prefixIsScan [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.regexByteItem
   pointer this: size=520 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 n: i32 (const)
-  local +4:9 j: i32 (let)
-  local +6:13 c: i32 (const)
-  local +10:11 k: i32 (let)
-  local +12:15 bit: i32 (const)
-  local +13:15 want: i32 (const)
+  local +5:9 j: i32 (let)
+  local +7:13 c: i32 (const)
+  local +11:11 k: i32 (let)
+  local +13:15 bit: i32 (const)
+  local +14:15 want: i32 (const)
   callee +15:13 regexByteItem -> @nish.regexByteItem
 function Regex.classHas(this: Regex, k: i32, cp: i32): boolean -> @nish.Regex.classHas [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -1818,23 +1842,24 @@ function Regex.addThread(this: Regex, dense: i32[], slots: i32[], count0: i32, p
   pointer dense: size=0 writesThrough=true captured=false
   pointer slots: size=0 writesThrough=true captured=false passedTo=nish.regexStoreSlots#0
   stackSites=0 stackLocals=0
-  local -15:9 count: i32 (let)
-  local -14:11 levels: i32 (const)
-  local -13:11 states: i32 (const)
-  local -12:11 op: i32[] (const)
-  local -11:11 ia: i32[] (const)
-  local -10:11 ib: i32[] (const)
-  local -9:11 visit: i32[] (const)
-  local -8:11 caps: i32[] (const)
-  local -7:11 stk: i32[] (const)
-  local -6:11 gen: i32 (const)
+  local -21:9 count: i32 (let)
+  local -20:11 levels: i32 (const)
+  local -19:11 states: i32 (const)
+  local -18:11 op: i32[] (const)
+  local -17:11 nOp: i32 (const)
+  local -16:11 ia: i32[] (const)
+  local -15:11 ib: i32[] (const)
+  local -14:11 visit: i32[] (const)
+  local -13:11 caps: i32[] (const)
+  local -12:11 stk: i32[] (const)
+  local -11:11 gen: i32 (const)
   local +4:9 top: u32 (let)
   local +7:13 f: i32 (const)
   local +12:15 k: i32 (const)
   local +18:11 pc: i32 (let)
   local +19:11 marked: i32 (let)
   local +26:15 o: i32 (const)
-  local +29:15 row: u32 (const)
+  local +29:15 row: i32 (const)
   local +30:15 at: i32 (const)
   local +39:15 push: i32 (const)
   local +52:17 k: i32 (const)
@@ -1855,10 +1880,10 @@ function Regex.findPrefix(this: Regex, text: string, from: i32): i32 -> @nish.Re
   local +3:11 rareAt: i32 (const)
   local +7:11 len: i32 (const)
   local +8:11 n: i32 (const)
-  local +10:9 p: i32 (let)
-  local +12:13 at: i32 (const)
+  local +11:9 p: i32 (let)
+  local +13:13 at: i32 (const)
   local +17:13 s: i32 (const)
-  callee +21:11 regexPrefixAt -> @nish.regexPrefixAt
+  callee +21:24 regexPrefixAt -> @nish.regexPrefixAt
 function Regex.findPrefixScan(this: Regex, text: string, from: i32): i32 -> @nish.Regex.findPrefixScan [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from text
@@ -1894,126 +1919,127 @@ function Regex.dfaInit(this: Regex): void -> @nish.Regex.dfaInit [exported metho
   stackSites=2 stackLocals=2
   local +1:11 total: i32 (const)
   callee +1:24 Regex.pc -> @nish.Regex.pc
-  local +2:11 count: i32 (const)
-  local +3:11 op: i32[] (const)
-  local +4:11 ia: i32[] (const)
-  local +5:11 ib: i32[] (const)
-  local +6:9 bitsF: i32 (let)
-  local +7:9 bitsR: i32 (let)
-  local +8:9 anyNl: boolean (let)
-  local +9:9 pc: i32 (let)
-  local +11:13 o: i32 (const)
-  callee +14:25 regexItem -> @nish.regexItem
-  callee +16:25 regexItem -> @nish.regexItem
-  local +23:11 bits: i32 (const)
-  local +24:11 lines: boolean (const)
-  local +25:11 words: boolean (const)
-  local +26:11 wordFold: boolean (const)
-  local +34:11 classes: i32 (const)
-  local +35:11 seenCls: u8[] (const)
-  callee +35:27 regexZeroBytes -> @nish.regexZeroBytes
-  local +36:11 points: i32[] (const)
-  local +37:11 clsLo: i32[] (const)
-  local +38:11 clsHi: i32[] (const)
-  local +42:13 o: i32 (const)
-  local +43:13 a: i32 (const)
-  callee +43:22 regexItem -> @nish.regexItem
-  local +44:13 b: i32 (const)
-  callee +44:22 regexItem -> @nish.regexItem
-  local +55:15 k: i32 (const)
-  local +59:15 r: i32 (let)
-  callee +59:24 regexItem -> @nish.regexItem
-  local +60:17 to: i32 (const)
-  callee +60:27 regexItem -> @nish.regexItem
-  local +62:19 hi: i32 (const)
-  local +63:19 lo: i32 (const)
-  callee +84:5 regexSortPoints -> @nish.regexSortPoints
-  local +85:11 lows: i32[] (const)
-  local +86:9 last: i32 (let)
-  local +87:9 i: i32 (let)
-  local +89:13 v: i32 (const)
-  local +96:11 wide: i32 (const)
-  local +99:11 units: i32 (const)
-  local +105:11 rep: i32[] (const)
-  local +106:9 u: i32 (let)
-  local +112:16 low: i32 (const)
-  local +117:11 cls: i32[] (const)
-  callee +117:24 regexZeros -> @nish.regexZeros
-  local +118:11 hit: u8[] (const)
-  callee +118:23 regexZeroBytes -> @nish.regexZeroBytes
-  local +119:11 remap: i32[] (const)
-  callee +119:26 regexZeros -> @nish.regexZeros
-  local +120:9 n: i32 (let)
-  local +121:9 work: i32 (let)
-  callee +127:9 Regex.dRefine -> @nish.Regex.dRefine
-  local +128:11 pairs: u8[] (const)
-  callee +128:25 regexZeroBytes -> @nish.regexZeroBytes
-  local +136:13 o: i32 (const)
-  local +137:13 a: i32 (const)
-  callee +137:22 regexItem -> @nish.regexItem
-  local +138:13 b: i32 (const)
-  callee +138:22 regexItem -> @nish.regexItem
-  local +139:11 use: boolean (let)
-  local +143:17 key: i32 (const)
-  local +169:19 r: i32 (const)
-  local +170:19 has: boolean (const)
-  callee +170:47 Regex.classHas -> @nish.Regex.classHas
-  callee +184:13 Regex.dRefine -> @nish.Regex.dRefine
-  local +191:15 r: i32 (const)
-  callee +195:11 Regex.dRefine -> @nish.Regex.dRefine
+  local +7:11 count: i32 (const)
+  local +8:11 op: i32[] (const)
+  local +9:11 ia: i32[] (const)
+  local +10:11 ib: i32[] (const)
+  local +11:9 bitsF: i32 (let)
+  local +12:9 bitsR: i32 (let)
+  local +13:9 anyNl: boolean (let)
+  local +14:9 pc: i32 (let)
+  local +16:13 o: i32 (const)
+  callee +19:25 regexItem -> @nish.regexItem
+  callee +21:25 regexItem -> @nish.regexItem
+  local +28:11 bits: i32 (const)
+  local +29:11 lines: boolean (const)
+  local +30:11 words: boolean (const)
+  local +31:11 wordFold: boolean (const)
+  local +39:11 classes: i32 (const)
+  local +40:11 seenCls: u8[] (const)
+  callee +40:27 regexZeroBytes -> @nish.regexZeroBytes
+  local +41:11 points: i32[] (const)
+  local +42:11 clsLo: i32[] (const)
+  local +43:11 clsHi: i32[] (const)
+  local +48:13 o: i32 (const)
+  local +49:13 a: i32 (const)
+  callee +49:22 regexItem -> @nish.regexItem
+  local +50:13 b: i32 (const)
+  callee +50:22 regexItem -> @nish.regexItem
+  local +61:15 k: i32 (const)
+  local +65:15 r: i32 (let)
+  callee +65:24 regexItem -> @nish.regexItem
+  local +66:17 to: i32 (const)
+  callee +66:27 regexItem -> @nish.regexItem
+  local +68:19 hi: i32 (const)
+  local +69:19 lo: i32 (const)
+  callee +90:5 regexSortPoints -> @nish.regexSortPoints
+  local +91:11 lows: i32[] (const)
+  local +92:9 last: i32 (let)
+  local +93:9 i: i32 (let)
+  local +95:13 v: i32 (const)
+  local +102:11 wide: i32 (const)
+  local +108:11 units: i32 (const)
+  local +111:11 rep: i32[] (const)
+  local +112:9 u: i32 (let)
+  local +118:16 low: i32 (const)
+  local +123:11 cls: i32[] (const)
+  callee +123:24 regexZeros -> @nish.regexZeros
+  local +124:11 hit: u8[] (const)
+  callee +124:23 regexZeroBytes -> @nish.regexZeroBytes
+  local +125:11 remap: i32[] (const)
+  callee +125:26 regexZeros -> @nish.regexZeros
+  local +126:9 n: i32 (let)
+  local +127:9 work: i32 (let)
+  callee +133:9 Regex.dRefine -> @nish.Regex.dRefine
+  local +134:11 pairs: u8[] (const)
+  callee +134:25 regexZeroBytes -> @nish.regexZeroBytes
+  local +142:13 o: i32 (const)
+  local +143:13 a: i32 (const)
+  callee +143:22 regexItem -> @nish.regexItem
+  local +144:13 b: i32 (const)
+  callee +144:22 regexItem -> @nish.regexItem
+  local +145:11 use: boolean (let)
+  local +149:17 key: i32 (const)
+  local +174:19 r: i32 (const)
+  local +175:19 has: boolean (const)
+  callee +175:47 Regex.classHas -> @nish.Regex.classHas
+  callee +193:13 Regex.dRefine -> @nish.Regex.dRefine
   local +200:15 r: i32 (const)
-  local +201:15 word: boolean (const)
-  callee +202:33 isRegexWordByte -> @nish.isRegexWordByte
-  callee +208:11 Regex.dRefine -> @nish.Regex.dRefine
-  local +214:9 shift: i32 (let)
-  local +222:11 dcls: i32[] (const)
-  callee +222:25 regexZeros -> @nish.regexZeros
-  callee +230:17 regexItem -> @nish.regexItem
-  local +233:11 wcls: i32[] (const)
-  callee +233:25 regexZeros -> @nish.regexZeros
-  callee +236:17 regexItem -> @nish.regexItem
-  callee +241:19 regexContextMask -> @nish.regexContextMask
-  callee +242:19 regexContextMask -> @nish.regexContextMask
-  callee +244:7 regexMaskOf -> @nish.regexMaskOf
-  callee +245:7 regexMaskOf -> @nish.regexMaskOf
-  callee +246:7 regexMaskOf -> @nish.regexMaskOf
-  local +247:11 dRep: i32[] (const)
-  callee +247:25 regexZeros -> @nish.regexZeros
-  local +248:11 dNextK: i32[] (const)
-  callee +248:27 regexZeros -> @nish.regexZeros
-  local +249:11 dCtxF: i32[] (const)
-  callee +249:26 regexZeros -> @nish.regexZeros
-  local +250:11 dCtxR: i32[] (const)
-  callee +250:26 regexZeros -> @nish.regexZeros
-  local +255:11 done: u8[] (const)
-  callee +255:24 regexZeroBytes -> @nish.regexZeroBytes
-  local +258:13 c: i32 (const)
-  local +259:13 r: i32 (const)
-  callee +263:9 regexPut -> @nish.regexPut
-  local +264:13 kind: i32 (let)
-  callee +269:32 isRegexWordByte -> @nish.isRegexWordByte
+  callee +204:11 Regex.dRefine -> @nish.Regex.dRefine
+  local +209:15 r: i32 (const)
+  local +210:15 word: boolean (const)
+  callee +211:33 isRegexWordByte -> @nish.isRegexWordByte
+  callee +217:11 Regex.dRefine -> @nish.Regex.dRefine
+  local +223:9 shift: i32 (let)
+  local +231:11 dcls: i32[] (const)
+  callee +231:25 regexZeros -> @nish.regexZeros
+  callee +239:17 regexItem -> @nish.regexItem
+  local +242:11 wcls: i32[] (const)
+  callee +242:25 regexZeros -> @nish.regexZeros
+  callee +245:17 regexItem -> @nish.regexItem
+  callee +250:19 regexContextMask -> @nish.regexContextMask
+  callee +251:19 regexContextMask -> @nish.regexContextMask
+  callee +253:7 regexMaskOf -> @nish.regexMaskOf
+  callee +254:7 regexMaskOf -> @nish.regexMaskOf
+  callee +255:7 regexMaskOf -> @nish.regexMaskOf
+  local +256:11 dRep: i32[] (const)
+  callee +256:25 regexZeros -> @nish.regexZeros
+  local +257:11 dNextK: i32[] (const)
+  callee +257:27 regexZeros -> @nish.regexZeros
+  local +258:11 dCtxF: i32[] (const)
+  callee +258:26 regexZeros -> @nish.regexZeros
+  local +259:11 dCtxR: i32[] (const)
+  callee +259:26 regexZeros -> @nish.regexZeros
+  local +264:11 done: u8[] (const)
+  callee +264:24 regexZeroBytes -> @nish.regexZeroBytes
+  local +267:13 c: i32 (const)
+  local +268:13 r: i32 (const)
   callee +272:9 regexPut -> @nish.regexPut
-  callee +273:9 regexPut -> @nish.regexPut
-  callee +273:28 regexMaskOf -> @nish.regexMaskOf
-  callee +274:9 regexPut -> @nish.regexPut
-  callee +274:28 regexMaskOf -> @nish.regexMaskOf
-  callee +278:19 regexZeros -> @nish.regexZeros
-  callee +279:18 regexZeros -> @nish.regexZeros
-  callee +280:17 regexZeros -> @nish.regexZeros
-  callee +282:17 regexZeros -> @nish.regexZeros
-  callee +285:19 regexZeros -> @nish.regexZeros
-  callee +286:19 regexZeros -> @nish.regexZeros
-  callee +287:17 regexZeros -> @nish.regexZeros
-  callee +288:19 regexZeros -> @nish.regexZeros
-  callee +289:18 regexZeros -> @nish.regexZeros
-  callee +289:29 Regex.dHashSize -> @nish.Regex.dHashSize
-  local +290:11 pool: i32 (const)
-  callee +292:18 regexZeros -> @nish.regexZeros
-  callee +297:22 regexZeros -> @nish.regexZeros
-  callee +299:75 isRegexAscii -> @nish.isRegexAscii
+  local +273:13 kind: i32 (let)
+  callee +278:32 isRegexWordByte -> @nish.isRegexWordByte
+  callee +281:9 regexPut -> @nish.regexPut
+  callee +282:9 regexPut -> @nish.regexPut
+  callee +282:28 regexMaskOf -> @nish.regexMaskOf
+  callee +283:9 regexPut -> @nish.regexPut
+  callee +283:28 regexMaskOf -> @nish.regexMaskOf
+  callee +287:19 regexZeros -> @nish.regexZeros
+  callee +288:18 regexZeros -> @nish.regexZeros
+  callee +289:17 regexZeros -> @nish.regexZeros
+  callee +290:17 regexZeros -> @nish.regexZeros
+  callee +293:19 regexZeros -> @nish.regexZeros
+  callee +294:19 regexZeros -> @nish.regexZeros
+  callee +295:17 regexZeros -> @nish.regexZeros
+  callee +296:19 regexZeros -> @nish.regexZeros
+  callee +297:18 regexZeros -> @nish.regexZeros
+  callee +297:29 Regex.dHashSize -> @nish.Regex.dHashSize
+  local +298:11 pool: i32 (const)
+  callee +300:18 regexZeros -> @nish.regexZeros
+  callee +305:22 regexZeros -> @nish.regexZeros
+  callee +307:75 isRegexAscii -> @nish.isRegexAscii
 function Regex.dRefine(this: Regex, cls: i32[], hit: u8[], units: i32, n: i32, remap: i32[]): i32 -> @nish.Regex.dRefine [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
+  escaping: n
   pointer this: size=520 writesThrough=false captured=false
   pointer cls: size=0 writesThrough=true captured=false
   pointer hit: size=0 writesThrough=false captured=false
@@ -2022,7 +2048,8 @@ function Regex.dRefine(this: Regex, cls: i32[], hit: u8[], units: i32, n: i32, r
   local -2:9 k: i32 (let)
   local +3:9 next: i32 (let)
   local +4:9 u: i32 (let)
-  local +6:13 key: i32 (const)
+  local +6:13 c: i32 (const)
+  local +9:15 key: i32 (const)
 function Regex.dHashSize(this: Regex, cap: i32): i32 -> @nish.Regex.dHashSize [exported method]
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=520 writesThrough=false captured=false
@@ -2034,9 +2061,10 @@ function Regex.dWideClass(this: Regex, cp: i32): i32 -> @nish.Regex.dWideClass [
   stackSites=0 stackLocals=0
   local +0:11 wlo: i32[] (const)
   local +1:11 wcls: i32[] (const)
-  local +5:9 lo: i32 (let)
-  local +6:9 hi: i32 (let)
-  local +10:13 mid: i32 (const)
+  local +5:11 wide: i32 (const)
+  local +13:9 lo: u32 (let)
+  local +14:9 hi: u32 (let)
+  local +16:13 mid: u32 (const)
 function Regex.dAssert(this: Regex, kind: i32, ctx: i32, nk: i32): boolean -> @nish.Regex.dAssert [exported method]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=520 writesThrough=false captured=false
@@ -2068,19 +2096,20 @@ function Regex.dStep(this: Regex, off: i32, c: i32, p: i32): i32 -> @nish.Regex.
   calls: nish.Regex.classHas nish.Regex.dClose nish.Regex.dIntern
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.dClose#0 nish.Regex.dClose#0 nish.Regex.classHas#0 nish.Regex.dIntern#0
   stackSites=0 stackLocals=0
-  local -24:11 id: i32 (const)
-  local -23:11 starts: i32[] (const)
-  local -22:11 lens: i32[] (const)
-  local -21:11 flagsOf: i32[] (const)
-  local -20:11 nextK: i32[] (const)
-  local -9:11 start: i32 (const)
-  local -8:11 len: i32 (const)
-  local -7:11 flags: i32 (const)
-  local -6:11 restart: boolean (const)
-  local -5:11 rev: boolean (const)
-  local -4:11 ctx: i32 (const)
-  local -3:11 nk: i32 (const)
-  local -2:11 epoch: i32 (const)
+  local -34:11 id: i32 (const)
+  local -33:11 starts: i32[] (const)
+  local -32:11 lens: i32[] (const)
+  local -31:11 flagsOf: i32[] (const)
+  local -30:11 nextK: i32[] (const)
+  local -16:11 start: i32 (const)
+  local -15:11 len: i32 (const)
+  local -9:11 flags: i32 (const)
+  local -8:11 restart: boolean (const)
+  local -7:11 rev: boolean (const)
+  local -6:11 ctx: i32 (const)
+  local -5:11 nk: i32 (const)
+  local -4:11 epoch: i32 (const)
+  local -2:11 gen: i32 (const)
   local +5:11 pool: i32[] (const)
   local +6:9 n: i32 (let)
   local +7:9 i: i32 (let)
@@ -2109,16 +2138,16 @@ function Regex.dStep(this: Regex, off: i32, c: i32, p: i32): i32 -> @nish.Regex.
   local +90:13 flags2: i32 (let)
   local +97:15 next: i32 (const)
   callee +97:27 Regex.dIntern -> @nish.Regex.dIntern
-  local +119:11 trans: i32[] (const)
-  local +120:11 at: i32 (const)
+  local +120:11 trans: i32[] (const)
+  local +121:11 at: i32 (const)
 function Regex.dHashOf(this: Regex, src: i32[], at: i32, n: i32, flags: i32): i32 -> @nish.Regex.dHashOf [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=520 writesThrough=false captured=false
   pointer src: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 h: u32 (let)
-  local +1:9 i: i32 (let)
-  local +4:13 k: i32 (const)
+  local +6:9 i: i32 (let)
+  local +8:13 k: i32 (const)
 function Regex.dIntern(this: Regex, n: i32, flags: i32, p: i32): i32 -> @nish.Regex.dIntern [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -2126,14 +2155,15 @@ function Regex.dIntern(this: Regex, n: i32, flags: i32, p: i32): i32 -> @nish.Re
   calls: nish.Regex.dFlush nish.Regex.dGrow nish.Regex.dHashOf nish.Regex.dIntern nish.regexZeros
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.dHashOf#0 nish.Regex.dGrow#0 nish.Regex.dFlush#0 nish.Regex.dIntern#0 nish.Regex.dFlush#0 nish.Regex.dIntern#0
   stackSites=0 stackLocals=0
-  local -71:11 hash: i32[] (const)
-  local -70:11 buf: i32[] (const)
-  local -69:11 flagsOf: i32[] (const)
-  local -68:11 lens: i32[] (const)
-  local -67:11 starts: i32[] (const)
-  local -63:11 mask: i32 (const)
-  local -62:9 slot: i32 (let)
-  callee -62:21 Regex.dHashOf -> @nish.Regex.dHashOf
+  local -72:11 hash: i32[] (const)
+  local -71:11 buf: i32[] (const)
+  local -70:11 flagsOf: i32[] (const)
+  local -69:11 lens: i32[] (const)
+  local -68:11 starts: i32[] (const)
+  local -64:11 mask: i32 (const)
+  local -63:9 slot: i32 (let)
+  callee -63:21 Regex.dHashOf -> @nish.Regex.dHashOf
+  local -60:13 stored: i32 (const)
   local -59:13 id: i32 (const)
   local -50:15 start: i32 (const)
   local -49:15 pool: i32[] (const)
@@ -2154,16 +2184,17 @@ function Regex.dIntern(this: Regex, n: i32, flags: i32, p: i32): i32 -> @nish.Re
   local +5:11 id: i32 (const)
   local +6:11 base: i32 (const)
   local +7:11 pool: i32[] (const)
-  local +22:9 k: i32 (let)
-  local +25:13 q: i32 (const)
-  local +33:11 off: i32 (const)
-  local +34:11 row: i32 (const)
+  local +23:9 k: i32 (let)
+  local +26:13 q: i32 (const)
+  local +34:11 off: i32 (const)
+  local +35:11 row: i32 (const)
 function Regex.dGrow(this: Regex): void -> @nish.Regex.dGrow [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Regex.dHashOf nish.Regex.dHashSize nish.regexZeros
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.dHashSize#0 nish.Regex.dHashOf#0
   stackSites=0 stackLocals=0
+  local -10:11 have: i32 (const)
   local -9:9 cap: i32 (let)
   local -5:11 used: i32 (const)
   local -4:11 trans: i32[] (const)
@@ -2190,13 +2221,14 @@ function Regex.dGrow(this: Regex): void -> @nish.Regex.dGrow [exported method]
   callee +29:23 Regex.dHashOf -> @nish.Regex.dHashOf
 function Regex.dFlush(this: Regex, p: i32): boolean -> @nish.Regex.dFlush [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   escaping: p
   calls: llvm.fabs.f64
   pointer this: size=520 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -1:11 flushes: i32 (const)
-  local +1:11 moved: f64 (const)
+  local -2:11 flushes: i32 (const)
+  local +2:11 moved: f64 (const)
+  local +13:11 epoch: i32 (const)
 function Regex.dStartAt(this: Regex, mode: i32, ctx: i32, p: i32): i32 -> @nish.Regex.dStartAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -2204,7 +2236,9 @@ function Regex.dStartAt(this: Regex, mode: i32, ctx: i32, p: i32): i32 -> @nish.
   calls: nish.Regex.dIntern
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.dIntern#0
   stackSites=0 stackLocals=0
-  local -15:11 k: i32 (const)
+  local -20:11 m: u32 (const)
+  local -19:11 x: u32 (const)
+  local -15:11 k: u32 (const)
   local -14:11 startOff: i32[] (const)
   local -13:11 buf: i32[] (const)
   local -9:11 cached: i32 (const)
@@ -2220,18 +2254,18 @@ function Regex.dAfterPrefix(this: Regex, p: i32): i32 -> @nish.Regex.dAfterPrefi
   calls: nish.Regex.dStartAt nish.Regex.dStep nish.regexMaskOf
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.dStartAt#0 nish.Regex.dStep#0
   stackSites=0 stackLocals=0
-  local -30:9 off: i32 (let)
-  callee -30:20 Regex.dStartAt -> @nish.Regex.dStartAt
-  callee -30:50 regexMaskOf -> @nish.regexMaskOf
-  local -29:11 prefix: string (const)
-  local -28:11 cls: i32[] (const)
-  local -27:11 n: i32 (const)
-  local -26:9 k: i32 (let)
-  local -21:13 b: i32 (const)
-  local -16:13 c: i32 (const)
-  local -15:13 trans: i32[] (const)
-  local -14:13 at: i32 (const)
-  local -9:11 e: i32 (let)
+  local -35:9 off: i32 (let)
+  callee -35:20 Regex.dStartAt -> @nish.Regex.dStartAt
+  callee -35:50 regexMaskOf -> @nish.regexMaskOf
+  local -34:11 prefix: string (const)
+  local -33:11 cls: i32[] (const)
+  local -32:11 n: i32 (const)
+  local -31:9 k: i32 (let)
+  local -26:13 b: i32 (const)
+  local -21:13 c: i32 (const)
+  local -20:13 trans: i32[] (const)
+  local -15:13 at: i32 (const)
+  local -10:11 e: i32 (let)
   callee -6:13 Regex.dStep -> @nish.Regex.dStep
 function Regex.ctxBefore(this: Regex, text: string, p: i32): i32 -> @nish.Regex.ctxBefore [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -2259,57 +2293,56 @@ function Regex.ctxAt(this: Regex, text: string, p: i32): i32 -> @nish.Regex.ctxA
   local +5:13 b: i32 (const)
   callee +5:22 regexByteAt -> @nish.regexByteAt
   callee +8:18 isRegexWordByte -> @nish.isRegexWordByte
-  callee +10:32 regexByteAt -> @nish.regexByteAt
-  local +12:15 b2: i32 (const)
-  callee +12:25 regexByteAt -> @nish.regexByteAt
-  callee +20:9 regexMaskOf -> @nish.regexMaskOf
-  callee +21:9 regexFoldWordAt -> @nish.regexFoldWordAt
-  callee +26:12 regexMaskOf -> @nish.regexMaskOf
+  callee +10:50 regexByteAt -> @nish.regexByteAt
+  local +13:15 b2: i32 (const)
+  callee +13:25 regexByteAt -> @nish.regexByteAt
+  callee +21:9 regexMaskOf -> @nish.regexMaskOf
+  callee +22:9 regexFoldWordAt -> @nish.regexFoldWordAt
+  callee +27:12 regexMaskOf -> @nish.regexMaskOf
 function Regex.dfaForward(this: Regex, text: string, from: i32, first: boolean, pinned: boolean): i32 -> @nish.Regex.dfaForward [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: from text
-  calls: nish.Regex.ctxBefore nish.Regex.dAfterPrefix nish.Regex.dSkipTo nish.Regex.dStartAt nish.Regex.dStep nish.Regex.dWideClass nish.regexDecodeAt nish.regexMaskOf nish.regexNegated
+  calls: nish.Regex.ctxBefore nish.Regex.dAfterPrefix nish.Regex.dSkipTo nish.Regex.dStartAt nish.Regex.dStep nish.Regex.dWideClass nish.regexDecodeAt nish.regexMaskOf
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.dSkipTo#0 nish.Regex.dAfterPrefix#0 nish.Regex.dStartAt#0 nish.Regex.ctxBefore#0 nish.Regex.dWideClass#0 nish.Regex.dStep#0 nish.Regex.dSkipTo#0 nish.Regex.dStartAt#0 nish.Regex.ctxBefore#0
   stackSites=0 stackLocals=0
-  local -3:11 len: i32 (const)
+  local -9:11 len: i32 (const)
+  local -6:11 n: i32 (const)
   local -2:11 mode: i32 (const)
   local -1:9 p: i32 (let)
   local +1:9 off: i32 (let)
   callee +3:11 Regex.dSkipTo -> @nish.Regex.dSkipTo
-  local +10:15 prefOff: i32 (const)
-  callee +11:43 Regex.dAfterPrefix -> @nish.Regex.dAfterPrefix
-  callee +18:13 Regex.dStartAt -> @nish.Regex.dStartAt
-  callee +20:25 regexMaskOf -> @nish.regexMaskOf
-  callee +20:63 Regex.ctxBefore -> @nish.Regex.ctxBefore
-  local +27:9 end: i32 (let)
-  local +28:9 trans: i32[] (let)
-  local +29:11 cls: i32[] (const)
-  local +36:15 b: i32 (const)
-  local +40:15 slot: i32 (const)
-  local +44:15 e: i32 (const)
-  local +50:17 neg: i32 (const)
-  callee +50:28 regexNegated -> @nish.regexNegated
-  local +64:11 c: i32 (let)
-  local +65:11 w: i32 (let)
-  local +67:15 b: i32 (const)
-  local +69:17 packed: i32 (const)
-  callee +69:31 regexDecodeAt -> @nish.regexDecodeAt
-  callee +70:15 Regex.dWideClass -> @nish.Regex.dWideClass
-  local +81:13 at: i32 (const)
-  local +85:11 e: i32 (let)
-  callee +87:13 Regex.dStep -> @nish.Regex.dStep
-  callee +104:11 regexNegated -> @nish.regexNegated
-  local +122:15 q: i32 (const)
-  callee +122:24 Regex.dSkipTo -> @nish.Regex.dSkipTo
-  callee +127:17 Regex.dStartAt -> @nish.Regex.dStartAt
-  callee +127:47 Regex.ctxBefore -> @nish.Regex.ctxBefore
-  local +134:15 prefOff: i32 (const)
+  local +9:15 prefOff: i32 (const)
+  callee +10:43 Regex.dAfterPrefix -> @nish.Regex.dAfterPrefix
+  callee +17:13 Regex.dStartAt -> @nish.Regex.dStartAt
+  callee +19:25 regexMaskOf -> @nish.regexMaskOf
+  callee +19:63 Regex.ctxBefore -> @nish.Regex.ctxBefore
+  local +26:9 end: i32 (let)
+  local +27:9 trans: i32[] (let)
+  local +28:11 cls: i32[] (const)
+  local +35:15 b: i32 (const)
+  local +39:15 slot: i32 (const)
+  local +43:15 e: i32 (const)
+  local +49:17 neg: i32 (const)
+  local +63:11 c: i32 (let)
+  local +64:11 w: i32 (let)
+  local +66:15 b: i32 (const)
+  local +68:17 packed: i32 (const)
+  callee +68:31 regexDecodeAt -> @nish.regexDecodeAt
+  callee +69:15 Regex.dWideClass -> @nish.Regex.dWideClass
+  local +79:13 at: i32 (const)
+  local +83:11 e: i32 (let)
+  callee +85:13 Regex.dStep -> @nish.Regex.dStep
+  local +120:15 q: i32 (const)
+  callee +120:24 Regex.dSkipTo -> @nish.Regex.dSkipTo
+  callee +125:17 Regex.dStartAt -> @nish.Regex.dStartAt
+  callee +125:47 Regex.ctxBefore -> @nish.Regex.ctxBefore
+  local +132:15 prefOff: i32 (const)
 function Regex.dfaReverse(this: Regex, text: string, from: i32, e: i32, mode: i32): i32 -> @nish.Regex.dfaReverse [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Regex.dStartAt
   escaping: e from mode text
-  calls: nish.Regex.ctxAt nish.Regex.dStartAt nish.Regex.dStep nish.Regex.dWideClass nish.regexByteAt nish.regexDecodeAt nish.regexNegated
+  calls: nish.Regex.ctxAt nish.Regex.dStartAt nish.Regex.dStep nish.Regex.dWideClass nish.regexByteAt nish.regexDecodeAt
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.dStartAt#0 nish.Regex.ctxAt#0 nish.Regex.dWideClass#0 nish.Regex.dStep#0
   stackSites=0 stackLocals=0
   local +0:11 len: i32 (const)
@@ -2320,28 +2353,27 @@ function Regex.dfaReverse(this: Regex, text: string, from: i32, e: i32, mode: i3
   local +10:9 s: i32 (let)
   local +11:9 trans: i32[] (let)
   local +12:11 cls: i32[] (const)
-  local +17:11 q: i32 (let)
-  local +19:15 b: i32 (const)
-  local +24:15 slot: i32 (const)
-  local +28:15 t: i32 (const)
-  local +34:17 neg: i32 (const)
-  callee +34:28 regexNegated -> @nish.regexNegated
-  local +50:11 c: i32 (let)
-  local +51:11 w: i32 (let)
-  local +53:15 b: i32 (const)
-  local +59:17 lim: i32 (const)
-  local +60:15 cp: i32 (let)
-  local +61:15 k: i32 (let)
-  local +64:19 at: i32 (const)
-  local +68:19 lead: i32 (const)
-  callee +68:31 regexByteAt -> @nish.regexByteAt
-  local +70:21 packed: i32 (const)
-  callee +70:35 regexDecodeAt -> @nish.regexDecodeAt
-  callee +82:15 Regex.dWideClass -> @nish.Regex.dWideClass
-  local +86:13 at: i32 (const)
-  local +90:11 t: i32 (let)
-  callee +92:13 Regex.dStep -> @nish.Regex.dStep
-  callee +108:11 regexNegated -> @nish.regexNegated
+  local +20:11 q: i32 (let)
+  local +22:15 b: i32 (const)
+  local +27:15 slot: i32 (const)
+  local +31:15 t: i32 (const)
+  local +37:17 neg: i32 (const)
+  local +49:11 here: i32 (let)
+  local +59:11 c: i32 (let)
+  local +60:11 w: i32 (let)
+  local +62:15 b: i32 (const)
+  local +68:17 lim: i32 (const)
+  local +69:15 cp: i32 (let)
+  local +70:15 k: i32 (let)
+  local +73:19 at: i32 (const)
+  local +77:19 lead: i32 (const)
+  callee +77:31 regexByteAt -> @nish.regexByteAt
+  local +79:21 packed: i32 (const)
+  callee +79:35 regexDecodeAt -> @nish.regexDecodeAt
+  callee +91:15 Regex.dWideClass -> @nish.Regex.dWideClass
+  local +95:13 at: i32 (const)
+  local +99:11 t: i32 (let)
+  callee +101:13 Regex.dStep -> @nish.Regex.dStep
 function Regex.dfaInner(this: Regex, text: string, from: i32, first: boolean): i32 -> @nish.Regex.dfaInner [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -2366,23 +2398,24 @@ function Regex.run(this: Regex, text: string, from: i32, want: i32): boolean -> 
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.findPrefix#0 nish.Regex.setBounds#0 nish.Regex.dfaInit#0 nish.Regex.dfaInner#0 nish.Regex.setBounds#0 nish.Regex.vm#0 nish.Regex.dfaForward#0 nish.Regex.dfaForward#0 nish.Regex.dfaReverse#0 nish.Regex.setBounds#0 nish.Regex.vm#0 nish.Regex.vm#0
   stackSites=0 stackLocals=0
   local +0:11 len: i32 (const)
-  local +5:13 at: i32 (const)
-  callee +5:23 Regex.findPrefix -> @nish.Regex.findPrefix
-  callee +11:9 Regex.setBounds -> @nish.Regex.setBounds
-  callee +16:7 Regex.dfaInit -> @nish.Regex.dfaInit
-  local +19:13 e: i32 (const)
-  callee +19:22 Regex.dfaInner -> @nish.Regex.dfaInner
-  callee +25:11 Regex.setBounds -> @nish.Regex.setBounds
-  callee +30:16 Regex.vm -> @nish.Regex.vm
-  local +34:15 e: i32 (const)
-  callee +34:24 Regex.dfaForward -> @nish.Regex.dfaForward
+  local +5:11 n: i32 (const)
+  local +10:13 at: i32 (const)
+  callee +10:23 Regex.findPrefix -> @nish.Regex.findPrefix
+  callee +16:9 Regex.setBounds -> @nish.Regex.setBounds
+  callee +21:7 Regex.dfaInit -> @nish.Regex.dfaInit
+  local +24:13 e: i32 (const)
+  callee +24:22 Regex.dfaInner -> @nish.Regex.dfaInner
+  callee +30:11 Regex.setBounds -> @nish.Regex.setBounds
+  callee +35:16 Regex.vm -> @nish.Regex.vm
   local +39:15 e: i32 (const)
   callee +39:24 Regex.dfaForward -> @nish.Regex.dfaForward
-  local +44:17 s: i32 (const)
-  callee +44:26 Regex.dfaReverse -> @nish.Regex.dfaReverse
-  callee +46:13 Regex.setBounds -> @nish.Regex.setBounds
-  callee +50:20 Regex.vm -> @nish.Regex.vm
-  callee +55:12 Regex.vm -> @nish.Regex.vm
+  local +44:15 e: i32 (const)
+  callee +44:24 Regex.dfaForward -> @nish.Regex.dfaForward
+  local +49:17 s: i32 (const)
+  callee +49:26 Regex.dfaReverse -> @nish.Regex.dfaReverse
+  callee +51:13 Regex.setBounds -> @nish.Regex.setBounds
+  callee +55:20 Regex.vm -> @nish.Regex.vm
+  callee +60:12 Regex.vm -> @nish.Regex.vm
 function Regex.setBounds(this: Regex, s: i32, e: i32): void -> @nish.Regex.setBounds [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -2397,9 +2430,9 @@ function Regex.vm(this: Regex, text: string, from: i32, want: i32, pinned: boole
   calls: nish.Regex.addThread nish.Regex.classHas nish.Regex.findPrefix nish.Regex.groupSlots nish.Regex.newGeneration nish.Regex.scanTo nish.regexDecodeAt nish.regexLoadSlots nish.regexWidthAt nish_str_eq
   pointer this: size=520 writesThrough=true captured=false passedTo=nish.Regex.groupSlots#0 nish.Regex.findPrefix#0 nish.Regex.scanTo#0 nish.Regex.newGeneration#0 nish.Regex.addThread#0 nish.Regex.newGeneration#0 nish.Regex.classHas#0 nish.Regex.addThread#0
   stackSites=0 stackLocals=0
-  local -13:11 ns: i32 (const)
-  callee -13:46 Regex.groupSlots -> @nish.Regex.groupSlots
-  local -12:11 len: i32 (const)
+  local -18:11 ns: i32 (const)
+  callee -18:46 Regex.groupSlots -> @nish.Regex.groupSlots
+  local -17:11 len: i32 (const)
   local -11:11 anchored: boolean (const)
   local -10:11 hasPrefix: boolean (const)
   local -9:11 hasScan: boolean (const)
@@ -2421,7 +2454,7 @@ function Regex.vm(this: Regex, text: string, from: i32, want: i32, pinned: boole
   callee +35:11 Regex.newGeneration -> @nish.Regex.newGeneration
   local +37:13 k: i32 (let)
   callee +42:23 Regex.addThread -> @nish.Regex.addThread
-  callee +49:36 regexWidthAt -> @nish.regexWidthAt
+  callee +49:18 regexWidthAt -> @nish.regexWidthAt
   local +52:11 cp: i32 (let)
   local +53:11 w: i32 (let)
   local +57:17 packed: i32 (const)
@@ -2434,13 +2467,14 @@ function Regex.vm(this: Regex, text: string, from: i32, want: i32, pinned: boole
   local +69:15 pc: i32 (const)
   local +75:15 o: i32 (const)
   local +76:13 hit: boolean (let)
-  local +83:19 at: i32 (const)
-  callee +86:30 Regex.classHas -> @nish.Regex.classHas
-  callee +97:11 regexLoadSlots -> @nish.regexLoadSlots
-  callee +103:11 regexLoadSlots -> @nish.regexLoadSlots
-  callee +106:25 Regex.addThread -> @nish.Regex.addThread
-  local +117:13 d: i32[] (const)
-  local +120:13 t: i32[] (const)
+  local +83:19 k: i32 (const)
+  local +85:21 at: i32 (const)
+  callee +89:30 Regex.classHas -> @nish.Regex.classHas
+  callee +99:11 regexLoadSlots -> @nish.regexLoadSlots
+  callee +105:11 regexLoadSlots -> @nish.regexLoadSlots
+  callee +108:25 Regex.addThread -> @nish.Regex.addThread
+  local +119:13 d: i32[] (const)
+  local +122:13 t: i32[] (const)
 function Regex.test(this: Regex, text: string): boolean -> @nish.Regex.test [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Regex.run
@@ -2501,20 +2535,20 @@ function Regex.count(this: Regex, text: string): i32 -> @nish.Regex.count [expor
   local +0:11 len: i32 (const)
   local +3:9 n: u32 (let)
   local +4:9 pos: i32 (let)
-  local +6:13 n0: u32 (const)
-  local +8:15 at: i32 (const)
-  callee +8:25 Regex.findPrefix -> @nish.Regex.findPrefix
-  callee +18:7 Regex.dfaInit -> @nish.Regex.dfaInit
-  callee +22:71 Regex.groupSlots -> @nish.Regex.groupSlots
-  local +24:13 e: i32 (let)
-  callee +26:15 Regex.dfaInner -> @nish.Regex.dfaInner
-  callee +28:15 Regex.dfaForward -> @nish.Regex.dfaForward
-  callee +40:26 Regex.run -> @nish.Regex.run
-  local +42:13 s: i32 (const)
-  callee +42:22 Regex.slotOf -> @nish.Regex.slotOf
-  local +43:13 e: i32 (const)
-  callee +43:22 Regex.slotOf -> @nish.Regex.slotOf
-  callee +48:15 Regex.pastEmpty -> @nish.Regex.pastEmpty
+  local +6:13 n0: i32 (const)
+  local +13:15 at: i32 (const)
+  callee +13:25 Regex.findPrefix -> @nish.Regex.findPrefix
+  callee +23:7 Regex.dfaInit -> @nish.Regex.dfaInit
+  callee +27:71 Regex.groupSlots -> @nish.Regex.groupSlots
+  local +29:13 e: i32 (let)
+  callee +31:15 Regex.dfaInner -> @nish.Regex.dfaInner
+  callee +33:15 Regex.dfaForward -> @nish.Regex.dfaForward
+  callee +45:26 Regex.run -> @nish.Regex.run
+  local +47:13 s: i32 (const)
+  callee +47:22 Regex.slotOf -> @nish.Regex.slotOf
+  local +48:13 e: i32 (const)
+  callee +48:22 Regex.slotOf -> @nish.Regex.slotOf
+  callee +53:15 Regex.pastEmpty -> @nish.Regex.pastEmpty
 function Regex.replace(this: Regex, text: string, replacement: string): string -> @nish.Regex.replace [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Regex.replaceMatches
@@ -2558,8 +2592,10 @@ function Regex.replaceMatches(this: Regex, text: string, replacement: string, al
   callee +37:16 regexSpan -> @nish.regexSpan
 function Regex.groupSlots(this: Regex): i32 -> @nish.Regex.groupSlots [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.regexSlot
   pointer this: size=520 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  callee +0:12 regexSlot -> @nish.regexSlot
 function Regex.slotOf(this: Regex, k: i32): i32 -> @nish.Regex.slotOf [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
@@ -2572,7 +2608,7 @@ function Regex.pastEmpty(this: Regex, text: string, e: i32): i32 -> @nish.Regex.
   calls: nish.regexWidthAt
   pointer this: size=520 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:35 regexWidthAt -> @nish.regexWidthAt
+  callee +0:17 regexWidthAt -> @nish.regexWidthAt
 function Regex.namedText(this: Regex, text: string, ns: i32, rep: string, from: i32, to: i32): string -> @nish.Regex.namedText [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: ns text
@@ -2601,21 +2637,23 @@ function Regex.expand(this: Regex, rep: string, text: string, ns: i32, parts: st
   pointer this: size=520 writesThrough=false captured=false passedTo=nish.Regex.slotText#0 nish.Regex.slotOf#0 nish.Regex.slotOf#0 nish.Regex.slotText#0 nish.Regex.slotText#0 nish.Regex.namedText#0
   pointer parts: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -43:11 n: i32 (const)
-  local -41:11 groupsAfterZero: i32 (const)
-  local -40:9 lit: i32 (let)
-  local -39:9 i: i32 (let)
-  local -37:13 c: i32 (const)
-  local -36:11 used: i32 (let)
-  local -35:11 value: string (let)
-  callee -30:17 Regex.slotText -> @nish.Regex.slotText
-  callee -27:35 Regex.slotOf -> @nish.Regex.slotOf
-  callee -24:32 Regex.slotOf -> @nish.Regex.slotOf
-  local -21:15 one: i32 (const)
-  local -20:15 d: i32 (const)
-  callee -18:19 Regex.slotText -> @nish.Regex.slotText
-  callee -15:19 Regex.slotText -> @nish.Regex.slotText
-  local -11:15 close: i32 (const)
+  local -52:11 n: i32 (const)
+  local -50:11 groups: i32 (const)
+  local -49:11 groupsAfterZero: i32 (const)
+  local -48:9 lit: i32 (let)
+  local -47:9 i: i32 (let)
+  local -45:13 c: i32 (const)
+  local -42:13 two: i32 (const)
+  local -41:11 next: i32 (let)
+  local -40:11 value: string (let)
+  callee -35:17 Regex.slotText -> @nish.Regex.slotText
+  callee -32:35 Regex.slotOf -> @nish.Regex.slotOf
+  callee -29:32 Regex.slotOf -> @nish.Regex.slotOf
+  local -26:15 one: i32 (const)
+  local -25:15 d: i32 (const)
+  callee -17:19 Regex.slotText -> @nish.Regex.slotText
+  callee -14:19 Regex.slotText -> @nish.Regex.slotText
+  local -10:15 close: i32 (const)
   callee -8:19 Regex.namedText -> @nish.Regex.namedText
   callee +0:18 regexSpan -> @nish.regexSpan
   callee +5:16 regexSpan -> @nish.regexSpan
