@@ -25,12 +25,16 @@ class Point {
 
 export const main = (): i32 => {
   const { x, y: py } = new Point(3, 4);
-  console.log(`${x} ${py}`);
+  if (x < 0 || x > 10000 || py < 0 || py > 10000) {
+    return 1;
+  }
+  console.log(`${x * x + py * py}`);
   return 0;
 };
 ```
 
-This prints `3 4`. A name the class does not have is refused, as `p.z` would
+This prints `25`. The names a pattern binds are locals, so a test of them, as
+here, is what proves `x * x + py * py` fits an `i32`. A name the class does not have is refused, as `p.z` would
 be. A name you bind and never read is an error, as for any local; to keep it
 on purpose, rename it inside the pattern, `{ x, y: _y }`.
 
@@ -49,11 +53,14 @@ skip it:
 <!-- nish:ok-body -->
 ```ts
 const xs: i32[] = [10, 20, 30];
-const [a, , c] = xs;
+let [a, , c] = xs;
+if (a < 1000000) {
+  a = a + 1;
+}
 console.log(`${a} ${c}`);
 ```
 
-This prints `10 30`. Each element is checked against the array's length like
+This prints `11 30`. Each element is checked against the array's length like
 `xs[i]` is: the compiler refuses a position it cannot prove in range, and
 under `--allow-panics`, where TypeScript would bind `undefined` for an element
 past the end, Nish stops with `index out of range`, because a name always
@@ -74,14 +81,19 @@ class Point {
 
 export const main = (): i32 => {
   const points: Point[] = [new Point(1, 2), new Point(3, 4)];
+  let sum = 0;
   for (const { x, y } of points) {
-    console.log(`(${x}, ${y})`);
+    if (x < 0 || x > 1000 || y < 0 || y > 1000 || sum > 1000000000) {
+      return 1;
+    }
+    sum = sum + x * y;
   }
+  console.log(`${sum}`);
   return 0;
 };
 ```
 
-This prints `(1, 2)` and then `(3, 4)`. The walk must be over an array; a `Map`'s entries are
+This prints `14`. The walk must be over an array; a `Map`'s entries are
 `[key, value]` pairs of two types, which Nish does not have, so walk `keys()`
 and call `get` instead ([Maps and sets](maps-and-sets.md)).
 

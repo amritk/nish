@@ -23,15 +23,26 @@ enum Direction {
   Down,
 }
 
-class Span {
-  low: i32 = 0;
-  high: i32 = 0;
+class Counter {
+  count: i32 = 0;
 
   add(n: i32): void {
-    this.low = n < this.low ? n : this.low;
-    this.high = n > this.high ? n : this.high;
+    const count = this.count;
+    if (n < 0 || n > 1000000 || count > 1000000000) {
+      return;
+    }
+    this.count = count + n;
   }
 }
+
+const manhattan = (p: Point): i32 => {
+  const ax = Math.abs(p.x);
+  const ay = Math.abs(p.y);
+  if (ax < 0 || ax > 1000000 || ay < 0 || ay > 1000000) {
+    return -1;
+  }
+  return ax + ay;
+};
 
 const step = (d: Direction): i32 => {
   switch (d) {
@@ -48,20 +59,21 @@ export const main = (): i32 => {
     { x: 3, y: -4 },
     { x: -1, y: 2 },
   ];
-  const span = new Span();
+  const c = new Counter();
   for (const p of points) {
-    span.add(p.x);
-    span.add(p.y);
+    c.add(manhattan(p));
   }
-  span.add(step(Direction.Down));
-  console.log(`span: ${span.low} to ${span.high}`);
+  c.add(step(Direction.Up));
+  console.log(`total: ${c.count}`);
   return 0;
 };
 ```
 
-That program prints `span: -4 to 3`. It uses `const`, arrow functions,
+That program prints `total: 11`. It uses `const`, arrow functions,
 interfaces, classes with fields and methods, enums, object and array
-literals, `for...of`, `switch`, the ternary operator and template literals.
+literals, `for...of`, `switch` and template literals. The `if` tests in `add`
+and `manhattan` are what let the compiler prove each sum fits an `i32`
+([below](#number-is-an-integer)).
 Some come with limits: `for...of` walks an array (or a `Map` or `Set`), a
 `switch` is on an integer or an enum (a clause without `break` falls through
 into the next, as in TypeScript; see
@@ -141,9 +153,9 @@ Integer arithmetic is also checked. By default the compiler must prove that
 an `i32` or `i64` result fits, and it refuses the program where it cannot;
 with `--allow-panics` it builds a check instead, and an overflow stops the
 program rather than wrap round, as
-[Your first program](first-program.md#exit-codes) shows. A running total of
-values nothing bounds is refused until a guard bounds them, and widening is a
-proof too: `toI64(a) * toI64(b)` always fits an `i64`. `--number-mode f64`
+[Your first program](first-program.md#exit-codes) shows. The first example on
+this page bounds its counter and sums with `if` tests for that reason, and
+widening is a proof too: `toI64(a) * toI64(b)` always fits an `i64`. `--number-mode f64`
 makes `number` mean `f64` for a whole program, as in JavaScript; an explicit
 `i32` or `f64` means the same in either mode. See
 [Types](../language/types.md), and the reference's

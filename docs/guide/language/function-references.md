@@ -260,11 +260,16 @@ reference. The call passes an arrow that calls the reference:
 type F = (x: i32) => i32;
 
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
-const half = (x: i32): i32 => x / 2;
+const inc = (x: i32): i32 => {
+  if (x > 1000000) {
+    return x;
+  }
+  return x + 1;
+};
 
 export const main = (): i32 => {
-  const h: F = half;
-  console.log(`${apply(h, 10)}`);        // 5
+  const h: F = inc;
+  console.log(`${apply(h, 1)}`);         // 2
   return 0;
 };
 ```

@@ -11,37 +11,42 @@ sections.
 
 <!-- nish:ok -->
 ```ts
-class Score {
+class Counter {
   name: string;
-  best: i32 = 0;
+  count: i32 = 0;
 
   constructor(name: string) {
     this.name = name;
   }
 
-  record(points: i32): void {
-    if (points > this.best) {
-      this.best = points;
+  bump(by: i32): boolean {
+    const count = this.count;
+    if (by < 0 || by > 1000 || count > 1000000) {
+      return false;
     }
+    this.count = count + by;
+    return true;
   }
 
   describe(): string {
-    return `${this.name}: ${this.best}`;
+    return `${this.name}: ${this.count}`;
   }
 }
 
 export const main = (): i32 => {
-  const s = new Score("ada");
-  s.record(3);
-  s.record(5);
-  s.record(2);
-  console.log(s.describe());   // ada: 5
+  const c = new Counter("clicks");
+  c.bump(2);
+  c.bump(3);
+  console.log(c.describe());   // clicks: 5
   return 0;
 };
 ```
 
+`bump` tests a local copy of the field, not `this.count` itself: the compiler
+reads a test of a local, and that test is what proves the sum fits an `i32`.
+
 - **Every field has a type annotation.** A field initializer, like
-  `best: i32 = 0`, is a literal, an empty array (`items: i32[] = []`) or a
+  `count: i32 = 0`, is a literal, an empty array (`items: i32[] = []`) or a
   `new` of a non-generic class with literal arguments
   (`left: Leaf = new Leaf(7)`); anything computed goes in the constructor.
   Initializers are stored before the constructor body runs, in declaration

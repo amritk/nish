@@ -160,14 +160,17 @@ export const main = (): i32 => {
   const ages = new Map<string, i32>();
   ages.set("ada", 36).set("grace", 85);
 
-  let oldest = 0;
+  let total = 0;
   for (const name of ages.keys()) {
     console.log(name);
   }
   for (const age of ages.values()) {
-    oldest = Math.max(oldest, age);
+    if (age < 0 || age > 200 || total > 1000000) {
+      continue;
+    }
+    total += age;
   }
-  console.log(`oldest ${oldest}`);
+  console.log(`total ${total}`);
 
   const tags = new Set<string>();
   tags.add("x").add("y");
@@ -178,7 +181,9 @@ export const main = (): i32 => {
 };
 ```
 
-This prints `ada`, `grace`, `oldest 85`, `x` and `y`, one to a line.
+This prints `ada`, `grace`, `total 121`, `x` and `y`, one to a line. The
+test in the second loop skips an age no person has and stops adding past a
+million, which is what proves `total += age` fits an `i32`.
 
 There is no `entries()`, because a `[key, value]` pair holds two types, a
 tuple, which Nish does not have; `ages.forEach((age, name) => ...)` hands you both

@@ -131,8 +131,10 @@ are one node per line, which is to say diffable.
 ## A whole program
 
 This program builds under the default: its `%` sits behind the loop's
-`y > 0` test ([Proving it cannot panic](#proving-it-cannot-panic)). Examples
-below that do integer arithmetic nothing bounds build with `--allow-panics`.
+`y > 0` test ([Proving it cannot panic](#proving-it-cannot-panic)). So do
+the examples below: a sum checks each value against its range and caps the
+running total, and the few that still build with `--allow-panics` say why above
+the block.
 
 <!-- nish:ok -->
 ```ts
@@ -268,6 +270,9 @@ only once the program has no other error, so they show up last.
 const xs: u8[] = [3, 4];
 let total = 0;
 for (const x of xs) {
+  if (total > 1000000) {
+    process.exit(1);   // past what this sum is for
+  }
   total = total + toI32(x);
 }
 const average = total / 2;
@@ -279,6 +284,9 @@ console.log(`${total}`);
 const xs: u8[] = [3, 4];
 let total = 0;
 for (const x of xs) {
+  if (total > 1000000) {
+    process.exit(1);   // past what this sum is for
+  }
   total = total + toI32(x);
 }
 const average = total / 2;
@@ -402,6 +410,9 @@ const sumAll = (buf: u8[]): i32 => {
   let sum = 0;
   for (let i = 0; i < 256 && i < buf.length; i++) {
     const b: integer<0, 255> = i;
+    if (sum > 1000000) {
+      return -1;
+    }
     sum = sum + toI32(getByte(buf, b));
   }
   return sum;
@@ -770,15 +781,12 @@ interface Shape { area: f64; }
 class Circle implements Shape {
   area: f64;
   radius: f64;
-  constructor(r: f64) { this.area = Math.PI * r * r; this.radius = r; }
+  constructor(r: f64) { this.area = 3 * r * r; this.radius = r; }
 }
 
 const areaOf = <T extends Shape>(s: T): f64 => s.area;   // s.radius would be refused
 
-export const main = (): i32 => {
-  console.log(`${areaOf(new Circle(2))}`);   // 12.566370614359172
-  return 0;
-};
+export const main = (): i32 => (areaOf(new Circle(2)) === 12 ? 0 : 1);   // 0
 ```
 
 - **Each type parameter is named once**: `<T, T>` is
@@ -1378,21 +1386,21 @@ export const main = (): i32 => {
 import { Mutex, MutexGuard } from "nish/threads";
 
 class Stats {
-  best: i32 = 0;
+  count: i32 = 0;
 }
 
-const raise = (g: MutexGuard<Stats>, x: i32): void => {
-  if (x > g.value.best) {
-    g.value.best = x;                  // a helper: the block's rules, the block's lock
+const bump = (g: MutexGuard<Stats>): void => {
+  const n = g.value.count;
+  if (n < 2147483647) {                // the bound the `+ 1` needs
+    g.value.count = n + 1;             // a helper: the block's rules, the block's lock
   }
 };
 
 export const main = (): i32 => {
   const m = new Mutex<Stats>(new Stats());
   using g = m.lock();
-  raise(g, 7);
-  console.log(`${g.value.best}`);      // 7
-  return 0;
+  bump(g);
+  return g.value.count === 1 ? 0 : 1;  // 0
 };
 ```
 
@@ -1410,11 +1418,8 @@ export const main = (): i32 => {
   const hits = new AtomicI32(0);
   const top = new AtomicI32(0);
   const xs: i32[] = [3, 9, 4];
-  const ys = new Array<i32>(xs.length);
-  parallelMapInto(xs, ys, (x) => {
-    hits.add(1);
-    return top.max(x);                                      // each answers the old value
-  });
+  const ys = new Array<i64>(xs.length);                     // two `i32`s always fit an `i64`
+  parallelMapInto(xs, ys, (x) => toI64(hits.add(1)) + toI64(top.max(x))); // each answers the old value
   console.log(`${hits.load()} ${top.load()}`);              // 3 9
   return 0;
 };
@@ -1485,28 +1490,29 @@ const produce = (p: Pipe): void => {
 };
 
 const consume = (ch: Channel<i32>): i32 => {
-  let top: i32 = 0;
+  let sum: i32 = 0;
   for (const x of ch) {                           // ends once every sender has returned
-    if (x > top) {
-      top = x;
+    if (x < 0 || x > 1000000 || sum > 1000000000) {
+      return -1;                                  // out of the range this sum is for
     }
+    sum = sum + x;
   }
-  return top;
+  return sum;
 };
 
 export const main = (): i32 => {
-  const tops = new Array<i32>(1);
+  const sums = new Array<i32>(1);
   const ch = new Channel<i32>();                  // a `const`, right before its scope
   {
     using s = scope();
     s.spawn(produce, new Pipe(ch, 10));           // every sender first
     s.spawn(produce, new Pipe(ch, 20));
-    if (tops.length > 0) {
-      s.spawn(consume, ch, tops, 0);              // then the one receiver
+    if (sums.length > 0) {
+      s.spawn(consume, ch, sums, 0);              // then the one receiver
     }
   }
-  if (tops.length > 0) {
-    console.log(`${tops[0]}`);                    // 20
+  if (sums.length > 0) {
+    console.log(`${sums[0]}`);                    // 265
   }
   return 0;
 };
@@ -1768,7 +1774,7 @@ export const main = (): i32 => {
   `realpath(path, null)` passes `NULL`; a nullable pointer held in a variable
   is NL2539, so C is never handed a `NULL` by accident.
 
-<!-- allow-panics: calls `readCString`, whose `NULL` check no proof removes, even after `p === null` returns -->
+<!-- allow-panics: calls `readCString`, whose `NULL` check not even an earlier `p === null` return removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { readCString } from "nish:unsafe";
@@ -1838,25 +1844,26 @@ emitted and no initialiser runs** — every use lowers to the value itself.
 
 ### Module storage
 
-<!-- allow-panics: indexes module storage, whose length no proof reads yet -->
+<!-- allow-panics: indexes module storage, which no guard the checker reads proves in range yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 const SCORES = new Int32Array(4);
 
-const largest = (xs: Int32Array): i32 => {
-  let best: i32 = 0;
+const sum = (xs: Int32Array): i32 => {
+  let total: i32 = 0;
   for (const x of xs) {
-    if (x > best) {
-      best = x;
+    if (x < 0 || x > 1000000 || total > 1000000000) {
+      return -1;                                     // outside the range of a score
     }
+    total += x;
   }
-  return best;
+  return total;
 };
 
 export const main = (): i32 => {
   SCORES[0] = 30;
   SCORES[3] = 4;
-  console.log(`${largest(SCORES)} ${SCORES[1]}`);   // 30 0
+  console.log(`${sum(SCORES)} ${SCORES[1]}`);   // 34 0
   return 0;
 };
 ```
@@ -2000,17 +2007,19 @@ const add = (parent: Node, last: Node | null, kind: i32): Node => {
   return kid;
 };
 
-const largest = (n: Node): i32 => {
-  let best = n.kind;
+// -1 marks a tree whose total leaves the range it is for.
+const sum = (n: Node): i32 => {
+  let s = n.kind;
   let kid = n.first;
   while (kid !== null) {
-    const k = largest(kid);
-    if (k > best) {
-      best = k;
+    const k = sum(kid);
+    if (s < 0 || s > 1000000000 || k < 0 || k > 1000000000) {
+      return -1;
     }
+    s = s + k;
     kid = kid.next;
   }
-  return best;
+  return s;
 };
 
 export const main = (): i32 => {
@@ -2018,7 +2027,7 @@ export const main = (): i32 => {
   const a = add(root, null, 2);
   add(root, a, 3);
   add(a, null, 4);
-  console.log(`${largest(root)}`);
+  console.log(`${sum(root)}`);
   return 0;
 };
 ```
@@ -2065,13 +2074,16 @@ export const main = (): i32 => {
   const t = new Tokens(3);
   t.add(7, 0);
   t.add(9, 4);
-  let at = -1;
+  let s = 0;
   for (let i = 0; i < t.count; i++) {
-    if (uncheckedGet(t.kind, i) === 9) {
-      at = uncheckedGet(t.start, i);
+    const kind = uncheckedGet(t.kind, i);
+    const start = uncheckedGet(t.start, i);
+    if (kind < 0 || kind > 1000 || start < 0 || start > 1000000 || s > 1000000000) {
+      return 1;                     // a kind or an offset out of its range
     }
+    s = s + kind * start;
   }
-  console.log(`${at}`);   // 4
+  console.log(`${s}`);   // 36
   return 0;
 };
 ```
@@ -2287,15 +2299,19 @@ const pick = (round: boolean): Shape => (round ? new Circle() : new Square());
 
 export const main = (): i32 => {
   const shapes: Shape[] = [pick(true), new Square()];
+  let circles = 0;
   let area: f64 = 0;
   for (const s of shapes) {
     if (s.kind === Kind.Circle) {
-      area = area + 3 * s.r * s.r;   // `s` is a `Circle` here
+      if (circles < shapes.length) { // a count of shapes never passes their number
+        circles = circles + 1;       // `s` is a `Circle` here
+      }
+      area = area + 3 * s.r * s.r;
     } else {
       area = area + s.side * s.side; // and a `Square` here
     }
   }
-  return area === 43 ? 0 : 1;
+  return circles === 1 && area === 43 ? 0 : 1;
 };
 ```
 
@@ -2528,21 +2544,23 @@ const firstPair = (limit: i32, target: i32): i32 => {
 };
 
 const classify = (n: i32): i32 => {
-  let ran: i32 = 0;   // one bit per case that ran
+  let score: i32 = 0;
   switch (n) {
     case 0:
-      ran |= 2;       // no `break`: falls into `case 1`
+      score = 10;    // no `break`: falls into `case 1`
     case 1:
-      ran |= 1;
+      if (score < 100) {
+        score += 1;
+      }
       break;
     default:
-      ran = -1;
+      score = -1;
   }
-  return ran;
+  return score;
 };
 
 export const main = (): i32 => {
-  console.log(`${firstPair(10, 12)} ${classify(0)} ${classify(1)}`);   // 304 3 1
+  console.log(`${firstPair(10, 12)} ${classify(0)} ${classify(1)}`);   // 304 11 1
   return 0;
 };
 ```
@@ -2977,12 +2995,14 @@ console.log(`${seen.size} ${counts.size} ${seen.has("b")}`);
 three ways: a default with `??`, a `const` tested with `!== undefined` (or
 `=== undefined` and an early `return`), or a bare test. Each is one probe.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok-body --allow-panics -->
+<!-- nish:ok-body -->
 ```ts
 const counts = new Map<string, i32>();
 for (const w of ["a", "b", "a"]) {
-  counts.set(w, (counts.get(w) ?? 0) + 1);
+  const n = counts.get(w) ?? 0;
+  if (n < 2147483647) {   // the bound the `+ 1` needs
+    counts.set(w, n + 1);
+  }
 }
 const a = counts.get("a");
 if (a !== undefined) {
@@ -3011,8 +3031,7 @@ may `set`, `delete` or `clear` the table inside the walk and get exactly what
 JavaScript gives (a new key is visited later in the same walk; a key deleted
 before it is reached is not).
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok-body --allow-panics -->
+<!-- nish:ok-body -->
 ```ts
 const ages = new Map<string, i32>();
 ages.set("ada", 36).set("alan", 41);
@@ -3023,6 +3042,9 @@ for (const name of ages.keys()) {
   console.log(name);                     // ada, then grace
 }
 for (const age of ages.values()) {
+  if (age < 0 || age > 150 || total > 1000000) {
+    return 1;                            // not an age, or too many of them
+  }
   total += age;
 }
 console.log(`${total}`);                 // 121
@@ -3052,7 +3074,7 @@ string `+`) or assign. Anything else still compiles, as one probe per call.
 inserting it — and `reserve(m, n)`, which sizes the table for `n` entries; both
 are one module with the program and run unchanged under Node.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- allow-panics: counts in one probe, `counts.set(w, (counts.get(w) ?? 0) + 1)`, whose `+ 1` no guard the checker reads bounds yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { getOrInsert, reserve } from "nish/map";
@@ -3158,8 +3180,7 @@ export const main = (): i32 => {
 };
 ```
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonWriter } from "nish/json";
 import { JsonDecoder, JsonNumber, jsonDecode, jsonEncode } from "nish/json-typed";
@@ -3238,15 +3259,18 @@ outlive it — so allocate what must outlive the block before it, and let only
 numbers, booleans and enums out. `arena()` is only ever a `using` initialiser,
 and `a` is never read.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok-body --allow-panics -->
+<!-- nish:ok-body -->
 ```ts
 const rows: string[] = ["a", "bb"];
 let total = 0;
 for (const row of rows) {
   using a = arena();
   const line = `${row}: ${row.length}`;
-  total = total + line.length;
+  const n = line.length;
+  if (n > 1000000 || total > 1000000000) {
+    return 1;                 // past what this count is for
+  }
+  total = total + n;
 }
 ```
 
@@ -3280,7 +3304,7 @@ entry — use a region.** `region(f)` / `regionWith(arg, f)` make one and run
 gives all of it back. `f` is a named function or an arrow that captures
 nothing. `Region<T>` is a number, not a pointer.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/region.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/region.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Region, enter, free, region } from "nish:region";
@@ -3291,7 +3315,10 @@ class Session {
 
 const open = (): Session => new Session();
 const touch = (s: Session): i32 => {
-  s.hits = s.hits + 1;
+  const n = s.hits;
+  if (n < 2147483647) {   // the bound the `+ 1` needs
+    s.hits = n + 1;
+  }
   return s.hits;
 };
 
@@ -3317,12 +3344,11 @@ the module (NL4015).
 
 **Iterate and accumulate** — there is no `reduce` (`map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, but a callback may not assign a local of its caller); fold in a loop:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok-body --allow-panics -->
+<!-- nish:ok-body -->
 ```ts
-const xs: i32[] = [1, 2, 3];
+const xs: f64[] = [1, 2, 3];
 const doubled = xs.map((x) => x * 2);
-let sum = 0;
+let sum: f64 = 0;      // an `f64` sum cannot overflow
 for (const x of doubled) {
   sum += x;
 }
@@ -3688,10 +3714,9 @@ that keeps to it ([LANGUAGE.md](LANGUAGE.md#the-capability-policy)). Under an
 allowlist `exit` is a capability like the others, and `unsafe` can be denied
 but never allowed: importing `nish:unsafe` is the opt-in.
 
-<!-- allow-panics: it shows NL2459, not a panic site; calls a file or entropy builtin that exits on failure -->
-<!-- nish:err NL2459 --deny fs.read --allow-panics -->
+<!-- nish:err NL2459 --deny fs.read -->
 ```ts
-const settings = (): string => readFileSync("settings.txt");
+const settings = (): string => readFileSyncOrNull("settings.txt") ?? "";
 
 export const main = (): i32 => settings().length;
 ```

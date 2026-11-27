@@ -117,26 +117,37 @@ function, of the same name; each file calls its own.
 <!-- nish:ok -->
 ```ts helper.ts
 // helper.ts
-const label = (n: i32): string => `item ${n}`;
+const add = (a: i32, b: i32): i32 => {
+  if (a < 0 || a > 1000000 || b < 0 || b > 1000000) {
+    return -1;
+  }
+  return a + b;
+};
 
-export const describe = (n: i32): string => label(n);
+export const sum3 = (a: i32, b: i32, c: i32): i32 => add(add(a, b), c);
 ```
 
 <!-- nish:ok -->
 ```ts main.ts
 // main.ts
-import { describe } from "./helper";
+import { sum3 } from "./helper";
 
-const label = (n: i32): string => `#${n}`;
+const add = (a: i32, b: i32): i32 => {
+  if (a < 0 || a > 1000 || b < 0 || b > 1000) {
+    return -1;
+  }
+  return a * 10 + b;
+};
 
 export const main = (): i32 => {
-  console.log(`${describe(7)}, ${label(7)}`);
+  console.log(`${sum3(1, 2, 3)} ${add(1, 2)}`);
   return 0;
 };
 ```
 
-This prints `item 7, #7`. Each private `label` gets a symbol named after its file
-(`helper$.label` and `main$.label`), so a native debugger or profiler shows which
+This prints `6 12`; each `add` tests its operands so the compiler can prove
+what it answers fits an `i32`. Each private `add` gets a symbol named after its file
+(`helper$.add` and `main$.add`), so a native debugger or profiler shows which
 one ran. Exported functions are still unique across the program, and so are
 private ones when you build with `--no-strict-exports`, which keeps every
 function's own name as its symbol so a C driver can call it.

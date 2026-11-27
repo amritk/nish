@@ -54,18 +54,28 @@ const update = (b: Ball, input: TermInput): boolean => {
       return false; // q
     }
   }
-  if (b.x + b.dx < 0 || b.x + b.dx > 80) {
-    b.dx = -b.dx;
+  const x: i32 = b.x;
+  const dx: i32 = b.dx;
+  // The ball stays in columns 0 to 80 and moves one a step: anything else
+  // is a state these steps never make, so it ends the loop.
+  if (x < 0 || x > 80 || dx < -1 || dx > 1) {
+    return false;
   }
-  b.x = b.x + b.dx;
+  if (x + dx < 0 || x + dx > 80) {
+    b.dx = -dx; // bounce
+  }
+  b.x = x + b.dx;
   return true;
 };
 
 const render = (b: Ball, frame: Frame): void => {
   frame.framebuffer.fill(0x102040);
-  for (let y = 40; y < 50; y++) {
-    for (let x = b.x; x < b.x + 10; x++) {
-      frame.framebuffer.set(x, y, 0xffcc00);
+  const left: i32 = b.x;
+  if (left >= 0 && left <= 80) {
+    for (let y = 40; y < 50; y++) {
+      for (let x = left; x < left + 10; x++) {
+        frame.framebuffer.set(x, y, 0xffcc00);
+      }
     }
   }
   frame.screen.clear(COLOR_DEFAULT);
@@ -418,6 +428,9 @@ import { isTerminal, terminalSize } from "nish:term";
 
 export const main = (): i32 => {
   const size = terminalSize();
+  if (size.length < 2) {
+    return 1;
+  }
   if (size[0] < 0) {
     console.log(`not a terminal (${size[0]})`);
     return 0;
