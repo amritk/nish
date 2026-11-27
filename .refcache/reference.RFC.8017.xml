@@ -1,0 +1,17 @@
+<reference anchor="RFC8017" target="https://www.rfc-editor.org/info/rfc8017">
+  <front>
+    <title>PKCS #1: RSA Cryptography Specifications Version 2.2</title>
+    <author fullname="K. Moriarty" initials="K." role="editor" surname="Moriarty"/>
+    <author fullname="B. Kaliski" initials="B." surname="Kaliski"/>
+    <author fullname="J. Jonsson" initials="J." surname="Jonsson"/>
+    <author fullname="A. Rusch" initials="A." surname="Rusch"/>
+    <date month="November" year="2016"/>
+    <abstract>
+      <t>This document provides recommendations for the implementation of public-key cryptography based on the RSA algorithm, covering cryptographic primitives, encryption schemes, signature schemes with appendix, and ASN.1 syntax for representing keys and for identifying the schemes.</t>
+      <t>This document represents a republication of PKCS #1 v2.2 from RSA Laboratories' Public-Key Cryptography Standards (PKCS) series. By publishing this RFC, change control is transferred to the IETF.</t>
+      <t>This document also obsoletes RFC 3447.</t>
+    </abstract>
+  </front>
+  <seriesInfo name="RFC" value="8017"/>
+  <seriesInfo name="DOI" value="10.17487/RFC8017"/>
+</reference>
