@@ -65,6 +65,7 @@ const messageOf = (msg: u8[]): string => {
   while (end < msg.length && msg[end] !== 0) {
     end++
   }
+  // Always true, but it is the range proof the no-panic package needs.
   return end <= msg.length ? String.fromBytes(msg, 0, end) : ""
 }
 
@@ -173,6 +174,12 @@ export const main = (): number => {
     console.error("clear: the surface was not configured")
     status = 1
   }
+  // Every offscreen target and surface made from the device goes before it
+  // (std/gpu/sys.ts, nishgfx_device_release), so the device's error drain
+  // also sees a release's error; the window outlives its surface.
+  if (surface !== null) {
+    nishgfx_surface_release(surface)
+  }
   if (device !== null) {
     let kind = nishgfx_error_next(device, msg, toU64(msg.length))
     while (kind !== NISHGFX_ERROR_NONE) {
@@ -184,9 +191,6 @@ export const main = (): number => {
   }
   if (adapter !== null) {
     nishgfx_adapter_release(adapter)
-  }
-  if (surface !== null) {
-    nishgfx_surface_release(surface)
   }
   if (window !== null) {
     nishgfx_window_release(window)
