@@ -586,10 +586,10 @@ const skipDigitsWalk = (b: u8[], from: i32, to: i32): i32 => {
  * Where the well-formed UTF-8 sequence whose lead byte is `b[i]` ends, when it
  * ends at or before `to`, or `i` when there is none: RFC 3629's table, with the
  * narrowed second byte after `E0`, `ED`, `F0` and `F4`. The end, not the
- * length, so the caller steps to it without a sum.
+ * length, so the caller steps to it without a sum. `lead` is `b[i]`, which the
+ * caller read under the loop test that proves it; the walk reads only the rest.
  */
-const bytesUtf8End = (b: u8[], i: i32, to: i32): i32 => {
-  const lead: i32 = toI32(b[i])
+const bytesUtf8End = (b: u8[], i: i32, to: i32, lead: i32): i32 => {
   let low: i32 = BYTES_NON_ASCII
   let high: i32 = BYTES_CONTINUATION_TOP
   let n: i32 = 0
@@ -643,7 +643,7 @@ const skipJsonTextWalk = (b: u8[], from: i32, to: i32): i32 => {
   while (i >= 0 && i < to && i < toI32(b.length)) {
     const c: i32 = toI32(b[i])
     if (c >= BYTES_NON_ASCII) {
-      const end: i32 = bytesUtf8End(b, i, to)
+      const end: i32 = bytesUtf8End(b, i, to, c)
       if (end === i) {
         return i
       }

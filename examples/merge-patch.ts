@@ -1,16 +1,7 @@
-// Opt-out (`--allow-panics`): this file keeps no panic site of its own. The
-// one site its calls still reach is the lead-byte read in `std/bytes`'s UTF-8
-// walk (`bytesUtf8End`, std/bytes.ts:592:27): its caller's loop tests the
-// index, but a call forgets that test. A guard inside the walk proves it, but
-// moves the std-json-typed bench by +0.45% instructions, over its +0.1%
-// tolerance. Once the read is proven without that cost, build this file
-// without `--allow-panics`.
-// smoke: args --allow-panics
-//
 // A JSON Merge Patch (RFC 7396) applied to a typed record, with typed JSON's
 // `presence` option telling a key that was left out from one that was given:
 //
-//     build/nish --allow-panics examples/merge-patch.ts --link build/merge-patch
+//     build/nish examples/merge-patch.ts --link build/merge-patch
 //     build/merge-patch
 //
 // The patch is its own class: every field optional, so a missing key is no
