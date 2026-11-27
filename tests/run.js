@@ -64,6 +64,7 @@ import {
   WASM_PLAIN_DIGESTS,
 } from "./runtime-budgets.js"
 import { linkCompiler } from "./self/compiler-cache.js"
+import { baseKey as linkResultsBase, openLinkResults } from "./link-results.js"
 import { ALLOW_PANICS, listsAllowPanics, withAllowPanics } from "./allow-panics.js"
 import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
@@ -398,6 +399,8 @@ const skip = (reason) => {
  * and the line names that lane.
  */
 const delegated = []
+/** The tests/link programs whose checks this run replayed from `--link-results` (tests/link-results.js). */
+const replayedLinks = []
 const delegate = (name, provedBy) => {
   console.log(`DELEGATED  ${name} -- proved by ${provedBy}`)
   delegated.push({ name, provedBy })
@@ -513,6 +516,18 @@ const summarise = () => {
     summary.push(`${delegated.length} delegated`)
   }
   console.log(`\n${summary.join(", ")}.`)
+
+  // A replayed program's checks are counted as passed: they passed on the run
+  // whose inputs this one's match, every one of them (tests/link-results.js
+  // says what the match covers). Said apart, so a reader knows which part of
+  // the count this run built.
+  if (replayedLinks.length > 0) {
+    console.log(
+      `\nReplayed: ${replayedLinks.length} tests/link program(s) were not built again: an earlier run whose ` +
+        "compiler, harness, runtime, toolchain, program and sources were these passed every one of their checks " +
+        "(--link-results, tests/link-results.js). Their REPLAY lines name them."
+    )
+  }
 
   // Before the skip note, and apart from it, because the two say different
   // things: a skip is unproven, a delegation is proved by the job it names --
@@ -718,8 +733,14 @@ if (
 // The filter is the first argument that is neither a flag nor the value of
 // one (`--shard 2/4`, `--jobs 4`).
 const jobsAt = process.argv.indexOf("--jobs")
+// `--link-results <file>`: where the link programs' results are kept between
+// runs (tests/link-results.js). Read here because its value is not a filter.
+const linkResultsAt = process.argv.indexOf("--link-results")
+const LINK_RESULTS_FILE = linkResultsAt >= 0 ? path.resolve(process.argv[linkResultsAt + 1] ?? "") : null
 const only = withoutSeed(
-  process.argv.slice(2).filter((_, i) => ![shardAt, jobsAt].some((at) => i + 2 === at || i + 1 === at))
+  process.argv
+    .slice(2)
+    .filter((_, i) => ![shardAt, jobsAt, linkResultsAt].some((at) => at >= 0 && (i + 2 === at || i + 1 === at)))
 ).find((arg) => !arg.startsWith("-"))
 const cases = fs
   .readdirSync(casesDir)
@@ -8887,7 +8908,28 @@ const linkSelected = linkTests.filter((name) => (!only || name.includes(only)) &
 const linkRuns = new Array(linkSelected.length).fill(null)
 let linkReported = 0
 let irDelegated = 0
+// `--link-results`: a program whose every input matches a run in which all
+// its checks passed replays that run's record (tests/link-results.js). An
+// `--update-link-goldens` run writes goldens, so it neither reads nor keeps.
+const linkResults = openLinkResults({
+  file: UPDATE_LINK_GOLDENS ? null : LINK_RESULTS_FILE,
+  base: LINK_RESULTS_FILE === null ? "" : linkResultsBase({ nish: NISH, argv: process.argv.slice(2) }),
+  never: LINK_READ_LATER,
+})
+const runOrReplay = async (name) => {
+  const kept = linkResults.lookup(name)
+  if (kept !== null) {
+    return { ...kept, name }
+  }
+  const record = await runLinkProgram(name)
+  linkResults.keep(name, record, path.join(buildDir, "link", name))
+  return record
+}
 const reportLink = (record) => {
+  if (record.replayed) {
+    console.log(`REPLAY link/${record.name}: the checks below passed on a run with these inputs (key ${record.replayed})`)
+    replayedLinks.push(record.name)
+  }
   reportCase(record)
   if (record.irDelegated) {
     irDelegated++
@@ -8895,14 +8937,27 @@ const reportLink = (record) => {
   linkReported++
 }
 await pool(linkSelected, LINK_JOBS, async (name, at) => {
-  linkRuns[at] = LINK_SERIAL.has(name) ? { serial: true } : await runLinkProgram(name)
+  linkRuns[at] = LINK_SERIAL.has(name) ? { serial: true } : await runOrReplay(name)
   while (linkReported < linkRuns.length && linkRuns[linkReported] !== null && !linkRuns[linkReported].serial) {
     reportLink(linkRuns[linkReported])
   }
 })
 while (linkReported < linkRuns.length) {
   const at = linkReported
-  reportLink(linkRuns[at].serial ? await runLinkProgram(linkSelected[at]) : linkRuns[at])
+  reportLink(linkRuns[at].serial ? await runOrReplay(linkSelected[at]) : linkRuns[at])
+}
+if (LINK_RESULTS_FILE !== null) {
+  linkResults.save()
+  const refusedWhy = new Map()
+  for (const why of linkResults.refused.values()) {
+    refusedWhy.set(why, (refusedWhy.get(why) ?? 0) + 1)
+  }
+  console.log(
+    `link results: ${linkResults.replayed.length} of ${linkSelected.length} program(s) replayed, ` +
+      `${linkResults.kept.length} built and kept, ${linkResults.refused.size} not kept` +
+      (refusedWhy.size > 0 ? ` (${[...refusedWhy].map(([why, n]) => `${n}: ${why}`).join("; ")})` : "") +
+      ` -> ${path.relative(root, LINK_RESULTS_FILE)}`
+  )
 }
 
 /** The `.ll` files an output directory holds, in name order. */
@@ -9769,7 +9824,9 @@ if (dealtHere("selfHosting")) {
   {
     const suiteLine = /npm test -- (.*?) \|/.exec(ciJob(ciYmlText, "test"))?.[1] ?? ""
     const words = suiteLine.split(/\s+/).filter(Boolean)
-    const filters = words.filter((w, i) => !w.startsWith("--") && !["--seed", "--shard"].includes(words[i - 1]))
+    const filters = words.filter(
+      (w, i) => !w.startsWith("--") && !["--seed", "--shard", "--link-results"].includes(words[i - 1])
+    )
     const uncommented = ciYmlText
       .split("\n")
       .filter((l) => !l.trimStart().startsWith("#"))
@@ -44140,7 +44197,16 @@ if (selects("ci-scope", "ci.yml")) {
       ...extra,
     })
   const lanes = ciScope.LANES.map((l) => l.name)
-  const everything = (r) => r.full !== null && lanes.every((l) => r.lanes[l] === true)
+  const deferred = ciScope.deferredLanes()
+  const prLanes = lanes.filter((l) => !deferred.includes(l))
+  const everything = (r) => r.full !== null && lanes.every((l) => r.lanes[l] === true) && r.rows === "all"
+  // What a pull request runs when it cannot tell what it changed: every lane
+  // it runs at all, and still none it defers.
+  const everyPrLane = (r) =>
+    r.full !== null &&
+    prLanes.every((l) => r.lanes[l] === true) &&
+    deferred.every((l) => r.lanes[l] === false) &&
+    r.rows === "native"
   const docs = [{ path: "docs/x.md", status: "modified" }]
   const fullCases = [
     ["a push to main", ciScope.decide({ event: "push", files: docs })],
@@ -44152,6 +44218,20 @@ if (selects("ci-scope", "ci.yml")) {
     ["NISH_CI_SCOPE=full", on(["docs/x.md"], { mode: "full" })],
     ["NISH_CI_SCOPE=FULL", on(["docs/x.md"], { mode: " FULL " })],
     ["a CI:Full label", on(["docs/x.md"], { labels: ["CI:Full"] })],
+    ["a change to ci.yml", on(["docs/x.md", ".github/workflows/ci.yml"])],
+    ["a change to an action", on([".github/actions/ci-scope/action.yml"])],
+    ["a change to package.json", on(["package.json"])],
+    ["a change to package-lock.json", on(["package-lock.json"])],
+    ["a nested package.json", on(["docs/cookbook/node_modules/p/package.json"])],
+    ["a change to scripts/ci-scope.mjs", on(["scripts/ci-scope.mjs"])],
+  ]
+  const notFull = fullCases.filter(([, r]) => !everything(r)).map(([n]) => n)
+  check(
+    "ci-scope: every case that must run every lane and every row does",
+    notFull.length === 0,
+    `ran less than everything: ${notFull.join(", ")}`
+  )
+  const unknownCases = [
     ["an empty file list", on([])],
     ["an unknown file list", ciScope.decide({ event: "pull_request" })],
     ["a truncated file list", on(["docs/x.md"], { truncated: true })],
@@ -44164,35 +44244,47 @@ if (selects("ci-scope", "ci.yml")) {
     // tests/postgres/ is read by the postgres lane alone: a rename out of it
     // into docs/ is on every other lane's allowlist at both ends.
     ["a rename out of one lane's read set", on([{ path: "docs/x.ts", status: "renamed", previous: "tests/postgres/x.ts" }])],
-    ["a change to ci.yml", on(["docs/x.md", ".github/workflows/ci.yml"])],
-    ["a change to an action", on([".github/actions/ci-scope/action.yml"])],
-    ["a change to package.json", on(["package.json"])],
-    ["a change to package-lock.json", on(["package-lock.json"])],
-    ["a nested package.json", on(["docs/cookbook/node_modules/p/package.json"])],
-    ["a change to scripts/ci-scope.mjs", on(["scripts/ci-scope.mjs"])],
   ]
-  const notFull = fullCases.filter(([, r]) => !everything(r)).map(([n]) => n)
+  const notPrFull = unknownCases.filter(([, r]) => !everyPrLane(r)).map(([n]) => n)
   check(
-    "ci-scope: every case that must run every lane does",
-    notFull.length === 0,
-    `ran less than everything: ${notFull.join(", ")}`
+    "ci-scope: a pull request whose changes it cannot classify runs every lane but the deferred ones, on the x86_64-linux rows",
+    notPrFull.length === 0 && deferred.length > 0 && deferred.length < lanes.length,
+    `ran less than every pull request lane, or a deferred one: ${notPrFull.join(", ") || "none"}; deferred: ${deferred.join(", ")}`
+  )
+  // The deferral is the rule, not the read set: the deferred lanes' read
+  // sets still name their reads (the command list below holds them), and
+  // what they defer to is a run of every lane.
+  const srcByReads = ciScope.byReadSet({ event: "pull_request", files: [{ path: "src/compile.ts", status: "modified" }] })
+  check(
+    "ci-scope: a pull request defers exactly the pullRequests: false lanes and the other platforms' rows, which its read set alone would run",
+    deferred.join() === "simd,sha256_macos,postgres,gfx_macos" &&
+      deferred.every((l) => srcByReads.lanes[l] === true) &&
+      ciScope.NATIVE_ROW_JOBS.join() === "bootstrap,nish-cmp-elision" &&
+      ciScope.NATIVE_ASSET === "x86_64-linux" &&
+      ciScope.otherPlatformRow("bootstrap (aarch64-linux)") &&
+      ciScope.otherPlatformRow("nish-cmp elision (aarch64-linux)") &&
+      !ciScope.otherPlatformRow("bootstrap (x86_64-linux)") &&
+      !ciScope.otherPlatformRow("nish-cmp (aarch64-linux)"),
+    JSON.stringify({ deferred, srcByReads })
   )
 
   const docsOnly = on(["docs/guide/index.md", "README.md"])
   const srcChange = on(["src/compile.ts"])
   const inertRename = on([{ path: "docs/b.md", status: "renamed", previous: "docs/a.md" }])
   check(
-    "ci-scope: a docs-only change skips every lane, a src/ change runs every lane, an inert rename skips",
+    "ci-scope: a docs-only change skips every lane, a src/ change runs every pull request lane, an inert rename skips",
     docsOnly.full === null &&
       lanes.every((l) => docsOnly.lanes[l] === false) &&
-      lanes.every((l) => srcChange.lanes[l] === true) &&
+      prLanes.every((l) => srcChange.lanes[l] === true) &&
+      deferred.every((l) => srcChange.lanes[l] === false) &&
+      srcChange.rows === "native" &&
       lanes.every((l) => inertRename.lanes[l] === false),
     JSON.stringify({ docsOnly, srcChange, inertRename })
   )
   const unknownPath = on(["somewhere/new.txt"])
   check(
-    "ci-scope: a path on no lane's allowlist of unread paths runs every lane",
-    lanes.every((l) => unknownPath.lanes[l] === true),
+    "ci-scope: a path on no lane's allowlist of unread paths runs every pull request lane",
+    prLanes.every((l) => unknownPath.lanes[l] === true),
     JSON.stringify(unknownPath)
   )
 
@@ -44223,9 +44315,9 @@ if (selects("ci-scope", "ci.yml")) {
     .map((m) => m[1])
   const ungated = jobIds.filter((j) => !gateNeeds.includes(j))
   check(
-    "ci-scope: the scope job outputs every lane, ci.yml reads no other, and ci-gate needs every job",
-    [...lanes, "why"].every((l) => outputs.includes(l)) &&
-      outputs.length === lanes.length + 1 &&
+    "ci-scope: the scope job outputs every lane, rows and why, ci.yml reads no other, and ci-gate needs every job",
+    [...lanes, "rows", "why"].every((l) => outputs.includes(l)) &&
+      outputs.length === lanes.length + 2 &&
       read.every((u) => outputs.includes(u)) &&
       jobIds.length > 0 &&
       ungated.length === 0 &&
@@ -44281,7 +44373,7 @@ if (selects("ci-scope", "ci.yml")) {
     "ci-scope: 30 full pages of changed files is a truncated list, a short page ends it, and an HTTP error throws",
     thirty.truncated === true &&
       thirty.asked.length === 30 &&
-      everything(on(thirty.files.map((f) => f.path), { truncated: thirty.truncated })) &&
+      everyPrLane(on(thirty.files.map((f) => f.path), { truncated: thirty.truncated })) &&
       short.truncated === false &&
       short.files.length === 207 &&
       short.asked.join() === "1,2,3" &&
@@ -44306,18 +44398,21 @@ if (selects("ci-scope", "ci.yml")) {
   const badLabels = runScope(["docs/x.md"], { PR_LABELS: "[not json" })
   const goodLabels = runScope(["docs/x.md"], { PR_LABELS: "[]" })
   const carriage = runScope([".github/a\rb.yml"], { PR_LABELS: "[]" })
-  const laneLines = (lines) => lines.filter((l) => !l.startsWith("why="))
+  const laneLines = (lines) => lines.filter((l) => !l.startsWith("why=") && !l.startsWith("rows="))
+  const rowsOf = (run) => run.lines.find((l) => l.startsWith("rows="))
   check(
-    "ci-scope: unparseable PR_LABELS runs every lane, and the why= output is one line even for a path with a carriage return",
+    "ci-scope: unparseable PR_LABELS runs every lane and row, and the why= output is one line even for a path with a carriage return",
     badLabels.ran.status === 0 &&
       laneLines(badLabels.lines).length === lanes.length &&
       laneLines(badLabels.lines).every((l) => l.endsWith("=true")) &&
+      rowsOf(badLabels) === "rows=all" &&
       goodLabels.ran.status === 0 &&
       laneLines(goodLabels.lines).every((l) => l.endsWith("=false")) &&
+      rowsOf(goodLabels) === "rows=native" &&
       carriage.ran.status === 0 &&
-      carriage.lines.length === lanes.length + 1 &&
+      carriage.lines.length === lanes.length + 2 &&
       carriage.lines.every((l) => !l.includes("\r")) &&
-      carriage.lines.every((l) => l.startsWith("why=") || /^[a-z0-9_]+=(true|false)$/.test(l)),
+      carriage.lines.every((l) => l.startsWith("why=") || /^(rows=(all|native)|[a-z0-9_]+=(true|false))$/.test(l)),
     JSON.stringify({ badLabels: badLabels.lines, goodLabels: goodLabels.lines, carriage: carriage.lines, err: carriage.ran.stderr })
   )
   // The why= line names the lanes that are off, in LANES order, and says so
@@ -44327,22 +44422,25 @@ if (selects("ci-scope", "ci.yml")) {
   const allOn = runScope(["src/x.ts"], { PR_LABELS: "[]" })
   const whyOf = (run) => run.lines.find((l) => l.startsWith("why="))
   const unread = "every changed path of each is on its allowlist of paths it does not read"
+  const deferredWhy =
+    "deferred: simd, sha256_macos, postgres, gfx_macos, the other platforms' bootstrap and nish-cmp elision rows; " +
+    ciScope.DEFERRED
   check(
-    "ci-scope: the why= output of a change some lanes read names exactly the lanes that are off",
-    someOff.ran.status === 0 && whyOf(someOff) === `why=lanes off: nish_cmp, elision, bootstrap; ${unread}`,
+    "ci-scope: the why= output of a change some lanes read names exactly the lanes that are off, then what is deferred",
+    someOff.ran.status === 0 && whyOf(someOff) === `why=lanes off: nish_cmp, elision, bootstrap; ${unread}; ${deferredWhy}`,
     JSON.stringify(someOff.lines)
   )
   check(
-    "ci-scope: the why= output of a docs-only change names every lane as off",
-    whyOf(goodLabels) === `why=lanes off: ${lanes.join(", ")}; ${unread}`,
+    "ci-scope: the why= output of a docs-only change names every pull request lane as off, then what is deferred",
+    whyOf(goodLabels) === `why=lanes off: ${prLanes.join(", ")}; ${unread}; ${deferredWhy}`,
     JSON.stringify(goodLabels.lines)
   )
   check(
-    "ci-scope: the why= output says every lane runs when none is off, and a full-run reason replaces it",
+    "ci-scope: the why= output of a change every lane reads names only what is deferred, and a full-run reason replaces it",
     allOn.ran.status === 0 &&
       laneLines(allOn.lines).length === lanes.length &&
-      laneLines(allOn.lines).every((l) => l.endsWith("=true")) &&
-      whyOf(allOn) === "why=every lane reads a changed path" &&
+      laneLines(allOn.lines).every((l) => l.endsWith(deferred.includes(l.split("=")[0]) ? "=false" : "=true")) &&
+      whyOf(allOn) === `why=${deferredWhy}` &&
       whyOf(badLabels) === "why=the pull request has the `ci:full` label",
     JSON.stringify({ allOn: allOn.lines, badLabels: whyOf(badLabels) })
   )
@@ -44355,9 +44453,165 @@ if (selects("ci-scope", "ci.yml")) {
   })
   const excusedFlakes = [...replay.stdout.matchAll(/^ {2}excused flake (#\d+ \S+)/gm)].map((m) => m[1])
   check(
-    "ci-scope: the backtest replays at least 40 merged pull requests with no miss, excusing only #1666's fuzz-smoke",
-    replay.status === 0 && /^misses: 0$/m.test(replay.stdout) && excusedFlakes.join() === "#1666 fuzz-smoke",
+    "ci-scope: the backtest replays at least 40 merged pull requests with no miss, excusing only #1666's fuzz-smoke, and counts what it defers",
+    replay.status === 0 &&
+      /^misses: 0$/m.test(replay.stdout) &&
+      /^deferred to main \(a deferred lane or a left-out row failed\): \d+$/m.test(replay.stdout) &&
+      excusedFlakes.join() === "#1666 fuzz-smoke",
     `excused: ${excusedFlakes.join(", ") || "none"}\n${replay.stdout}${replay.stderr}`
+  )
+}
+
+// tests/link-results.js: a pull request's `test` shard replays a link
+// program whose every input matches a run in which all its checks passed.
+// A replay that should have been a build is a check that did not run, so
+// each input the key covers is moved here, alone, and must make a miss; and
+// what is never kept is pinned, with ci.yml's restore and save.
+if (selects("link-results", "ci.yml")) {
+  const lr = await import("./link-results.js")
+  const scratch = path.join(buildDir, "link-results-check")
+  fs.rmSync(scratch, { recursive: true, force: true })
+  fs.mkdirSync(path.join(scratch, "src"), { recursive: true })
+  const fakeNish = path.join(scratch, "nish")
+  fs.writeFileSync(fakeNish, "compiler one")
+  const source = path.join(scratch, "src", "lib.ts")
+  fs.writeFileSync(source, "export const a = 1\n")
+  const outDir = path.join(scratch, "out")
+  fs.mkdirSync(outDir)
+  const main = path.join(linkDir, "std_compress", "main.ts")
+  fs.writeFileSync(path.join(outDir, "main.ll"), `; ModuleID = 'main'\nsource_filename = "${main}"\n`)
+  fs.writeFileSync(path.join(outDir, "lib.ll"), `; ModuleID = 'lib'\nsource_filename = "${source}"\n`)
+  const passing = {
+    steps: [
+      { kind: "check", label: "link/std_compress: compiles and links", ok: true },
+      { kind: "check", label: "link/std_compress: exits with 0", ok: true },
+    ],
+    irDelegated: false,
+  }
+  const results = path.join(scratch, "results.json")
+  const argv = ["--seed", "build/seed/bin/nish", "--shard", "3/9", "--link-results", results]
+  const base = lr.baseKey({ nish: fakeNish, argv, env: {} })
+  const write = (b = base, record = passing, never = []) => {
+    const c = lr.openLinkResults({ file: results, base: b, never })
+    const why = c.keep("std_compress", record, outDir)
+    c.save()
+    return why
+  }
+  const read = (b = base, never = []) => lr.openLinkResults({ file: results, base: b, never }).lookup("std_compress")
+  const kept = write()
+  const replay = read()
+  check(
+    "link-results: a passing program is kept and replays the same checks under its key",
+    kept === null &&
+      replay !== null &&
+      JSON.stringify(replay.steps) === JSON.stringify(passing.steps) &&
+      typeof replay.replayed === "string" &&
+      replay.replayed.length === 12,
+    JSON.stringify({ kept, replay })
+  )
+
+  // The run's own inputs: each one moved alone is a new base key, and the
+  // flags that only place work are not.
+  const keyWith = (over) => lr.baseKey({ nish: fakeNish, argv, env: {}, ...over })
+  fs.writeFileSync(fakeNish, "compiler two")
+  const otherCompiler = keyWith({})
+  fs.writeFileSync(fakeNish, "compiler one")
+  const moved = {
+    "the compiler's bytes": otherCompiler,
+    "a NISH_ variable": keyWith({ env: { NISH_SHA256: "soft" } }),
+    "WASI_SYSROOT": keyWith({ env: { WASI_SYSROOT: "/usr" } }),
+    "a flag": keyWith({ argv: [...argv, "--delegate-ir-checks"] }),
+  }
+  const same = {
+    "another shard": keyWith({ argv: ["--seed", "x", "--shard", "1/9", "--link-results", "y"] }),
+    "another width": keyWith({ argv: [...argv, "--jobs", "2"] }),
+  }
+  const harness = lr.harnessFiles("tests/run.js")
+  check(
+    "link-results: the compiler's bytes, a NISH_ variable, WASI_SYSROOT and a flag each move the base key; --shard, --jobs, --seed and --link-results do not",
+    Object.values(moved).every((k) => k !== base) &&
+      Object.values(same).every((k) => k === base) &&
+      ["tests/run.js", "tests/pool.js", "tests/link-results.js", "tests/self/compiler-cache.js", "scripts/ci-scope.mjs"].every(
+        (f) => harness.has(f)
+      ),
+    JSON.stringify({ base, moved, same, harness: [...harness].slice(0, 12) })
+  )
+
+  // The program's own inputs: a source's bytes, a file added beside one,
+  // and a different base each make a miss, and a later run keeps only what
+  // it saw.
+  write()
+  fs.writeFileSync(source, "export const a = 2\n")
+  const editedSource = read()
+  fs.writeFileSync(source, "export const a = 1\n")
+  const restored = read()
+  fs.writeFileSync(path.join(scratch, "src", "lib.js"), "")
+  const sibling = read()
+  fs.rmSync(path.join(scratch, "src", "lib.js"))
+  const otherBase = read(moved["a flag"])
+  check(
+    "link-results: an edited source, a file added beside a source and another base key each miss, and the unchanged inputs replay",
+    editedSource === null && restored !== null && sibling === null && otherBase === null,
+    JSON.stringify({ editedSource, restored: restored !== null, sibling, otherBase })
+  )
+
+  // What is never kept.
+  const failing = { steps: [...passing.steps, { kind: "check", label: "x", ok: false, detail: "no" }] }
+  const logged = { steps: [...passing.steps, { kind: "log", text: "WROTE link/std_compress/main.ll" }] }
+  const outside = path.join(scratch, "outside")
+  fs.mkdirSync(outside)
+  fs.writeFileSync(path.join(outside, "main.ll"), 'source_filename = "/nonexistent/elsewhere.ts"\n')
+  const keepWhy = (record, dir, never = []) => lr.openLinkResults({ file: results, base, never }).keep("std_compress", record, dir)
+  const c = lr.openLinkResults({ file: results, base })
+  const refusals = {
+    failed: keepWhy(failing, outDir),
+    logged: keepWhy(logged, outDir),
+    empty: keepWhy({ steps: [] }, outDir),
+    readLater: keepWhy(passing, outDir, ["std_compress"]),
+    noModule: keepWhy(passing, path.join(scratch, "src")),
+    outsideSource: keepWhy(passing, outside),
+    namesAFile: c.keep("std_json_value", passing, outDir),
+    noFile: lr.openLinkResults({ file: null, base }).keep("std_compress", passing, outDir),
+  }
+  write()
+  const neverReplayed = read(base, ["std_compress"])
+  check(
+    "link-results: a failed check, a log line, no check, a program a later section reads, no module, a source outside the checkout and a named repository path are never kept, nor a read-later program replayed",
+    Object.values(refusals).every((why) => typeof why === "string" && why.length > 0) &&
+      /tests\/json-suite\//.test(refusals.namesAFile) &&
+      neverReplayed === null &&
+      lr.namedOutsidePath("std_compress") === null &&
+      lr.namedOutsidePath("std_json_conformance") !== null,
+    JSON.stringify({ refusals, neverReplayed })
+  )
+  // An unreadable or older file replays nothing, and is replaced.
+  fs.writeFileSync(results, "{not json")
+  const garbled = read()
+  fs.writeFileSync(results, JSON.stringify({ format: "link-results 0", entries: {} }))
+  const older = read()
+  check(
+    "link-results: an unreadable file or one of another format replays nothing",
+    garbled === null && older === null,
+    JSON.stringify({ garbled, older })
+  )
+  fs.rmSync(scratch, { recursive: true, force: true })
+
+  // ci.yml: only a pull request's run restores, every run passes the file
+  // to the suite and saves it, and the key names the shard.
+  const testJobSteps = ciJob(ciYmlText, "test").split(/\n(?= {6}- )/)
+  const stepWith = (re) => testJobSteps.find((step) => re.test(step)) ?? ""
+  const restore = stepWith(/actions\/cache\/restore@[^\n]*\n(?:.*\n)*? {10}path: build\/cache\/link-results$/m)
+  const save = stepWith(/actions\/cache\/save@[^\n]*\n(?:.*\n)*? {10}path: build\/cache\/link-results$/m)
+  const suite = stepWith(/npm test -- /)
+  check(
+    "ci.yml: the `test` job restores the link programs' results on a pull request alone, hands the suite its shard's file, and saves it after every run",
+    /^ {8}if: github\.event_name == 'pull_request'$/m.test(restore) &&
+      /shard\$\{\{ matrix\.shard \}\}-\$\{\{ github\.run_id \}\}/.test(restore) &&
+      /--link-results "build\/cache\/link-results\/shard-\$SHARD\.json"/.test(suite) &&
+      /^ {8}if: \$\{\{ always\(\) && hashFiles\('build\/cache\/link-results\/\*\.json'\) != '' \}\}$/m.test(save) &&
+      testJobSteps.indexOf(restore) < testJobSteps.indexOf(suite) &&
+      testJobSteps.indexOf(suite) < testJobSteps.indexOf(save),
+    `restore:\n${restore || "(none)"}\nsave:\n${save || "(none)"}`
   )
 }
 
@@ -44518,9 +44772,11 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
     }
     return seen
   }
+  // By the read set alone: a deferred lane still names what it reads, for
+  // the push to main and the release that run it.
   const unread = (lane, files) =>
     files.filter(
-      (f) => !ciScope.decide({ event: "pull_request", files: [{ path: f, status: "modified" }] }).lanes[lane]
+      (f) => !ciScope.byReadSet({ event: "pull_request", files: [{ path: f, status: "modified" }] }).lanes[lane]
     )
   const laneJob = (job, jobIf) =>
     job !== "" &&
@@ -44657,6 +44913,20 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
         "runtime/gfx/nish-gfx.overrides.json",
         "tests/gfx/triangle.c",
       ],
+    },    // The same three commands on the Metal row.
+    gfx_macos: {
+      "compiler-cache": compilerCache,
+      "sh scripts/fetch-gfx.sh": ["scripts/fetch-gfx.sh"],
+      "node tests/run.js gfx": [
+        ...importsOf("tests/run.js"),
+        "scripts/build.sh",
+        "src/run-cache.ts",
+        "src/c-symbols.ts",
+        "runtime/gfx/nish-gfx.c",
+        "runtime/gfx/nish-gfx.h",
+        "runtime/gfx/nish-gfx.overrides.json",
+        "tests/gfx/triangle.c",
+      ],
     },
   }
   const commandGaps = Object.entries(laneCommands).flatMap(([lane, commands]) => [
@@ -44669,7 +44939,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   ])
   const uncoveredLanes = ciScope.LANES.map((l) => l.name).filter((l) => !(l in laneCommands))
   check(
-    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (24) of all eight lanes",
+    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (27) of all nine lanes",
     commandGaps.length === 0 && uncoveredLanes.length === 0,
     `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
   )
@@ -44687,7 +44957,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
       .map((f) => `${l.name}: ${f}`)
   )
   const ciScopeRead = ciScope.LANES.filter(
-    (l) => ciScope.decide({ event: "pull_request", files: [{ path: "tests/ci-scope/README.md" }] }).lanes[l.name]
+    (l) => ciScope.byReadSet({ event: "pull_request", files: [{ path: "tests/ci-scope/README.md" }] }).lanes[l.name]
   )
   check(
     "ci-scope: every lane whose job runs tests/run.js turns on for any file under tests/ but tests/ci-scope",
@@ -44853,13 +45123,20 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   // PR's push to main. release.yml calls interop.yml on the tag with the tag
   // push as `github.event`, whose head commit has the same `chore(release)`
   // subject, so a skip that read only the message would skip the release's
-  // own interop run, and release.yml's `interop` job would still pass.
+  // own interop run, and release.yml's `interop` job would still pass. It
+  // also skips a pull request without the `ci:interop` or `ci:full` label,
+  // and only a pull request: the push to main, the Release PR's dispatched
+  // run (release-pr.yml) and the tag run it in full.
   const interopBuildIf = /^ {4}if: (.*)$/m.exec(ciJob(interopYml, "build"))?.[1] ?? ""
+  const releasePrYml = fs.readFileSync(path.join(root, ".github", "workflows", "release-pr.yml"), "utf8")
   check(
-    "interop.yml: `build` skips only a `chore(release)` push to main, never the tag run release.yml calls",
+    "interop.yml: `build` skips only a `chore(release)` push to main and an unlabelled pull request, never the tag run release.yml calls or the Release PR's",
     interopBuildIf ===
-      "${{ github.event_name != 'push' || github.ref != 'refs/heads/main' || !startsWith(github.event.head_commit.message, 'chore(release)') }}" &&
-      /^ {4}uses: \.\/\.github\/workflows\/interop\.yml$/m.test(ciJob(releaseYml, "interop")),
+      "${{ (github.event_name != 'push' || github.ref != 'refs/heads/main' || !startsWith(github.event.head_commit.message, 'chore(release)')) && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci:interop') || contains(github.event.pull_request.labels.*.name, 'ci:full')) }}" &&
+      /^ {4}uses: \.\/\.github\/workflows\/interop\.yml$/m.test(ciJob(releaseYml, "interop")) &&
+      /^ {2}workflow_dispatch:$/m.test(interopYml) &&
+      /^ {4}types: \[opened, synchronize, reopened, labeled\]$/m.test(interopYml) &&
+      /^ {10}for workflow in [^;]*\binterop\.yml\b[^;]*; do$/m.test(releasePrYml),
     `build job's if: ${interopBuildIf || "(none)"}`
   )
 
@@ -44903,10 +45180,13 @@ if (selects("ci.yml", "ci-verdict", "release.yml")) {
     (l) => l === "if: always() && github.event_name == 'workflow_dispatch'", // the dispatch status
     (l) => l === "PR_NUMBER: ${{ github.event.pull_request.number }}",
     (l) => l === "PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}",
+    // The link programs' results are restored on a pull request alone, so a
+    // dispatched run builds every program, as the tag's would.
+    (l) => l === "if: github.event_name == 'pull_request'",
   ]
   const unknownRefReads = refReads.filter((l) => !knownRefReads.some((known) => known(l)))
   check(
-    "ci.yml: only the concurrency group, the `runner` job, the gate, the dispatch status and the scope job read the ref or event",
+    "ci.yml: only the concurrency group, the `runner` job, the gate, the dispatch status, the scope job and the link results' restore read the ref or event",
     unknownRefReads.length === 0 && refReads.length === knownRefReads.length,
     `reads: ${refReads.length} of ${knownRefReads.length} expected\nunknown: ${unknownRefReads.join("\n") || "none"}`
   )
