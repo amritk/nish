@@ -1,5 +1,8 @@
+// biome-ignore lint/style/useNamingConvention: the C function's own name
 declare function slot_open(): CPtr
+// biome-ignore lint/style/useNamingConvention: the C function's own name
 declare function slot_close(p: CPtr): i32
+// biome-ignore lint/style/useNamingConvention: the C function's own name
 declare function slot_read(p: CPtr): i32
 
 class Pair {
@@ -30,9 +33,7 @@ class Stack {
   }
 }
 
-function openPair(): Pair {
-  return new Pair()
-}
+const openPair = (): Pair => new Pair()
 
 const both = (p: Pair): i32 => p.read()
 

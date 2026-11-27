@@ -25,7 +25,15 @@ import { CheckContext } from "./context"
 import { unwrapParens, isAssignmentOperator } from "./emit-util"
 import { StringSet } from "./map"
 import { FLAG_CONST, FLAG_USING, Node, NodeKind } from "./nodes"
-import { CheckedProgram, FieldInfo, FunctionSig, OwnedField, ROLE_CONSTRUCTOR, ROLE_FUNCTION, StructInfo } from "./program"
+import {
+  CheckedProgram,
+  FieldInfo,
+  FunctionSig,
+  OwnedField,
+  ROLE_CONSTRUCTOR,
+  ROLE_FUNCTION,
+  StructInfo,
+} from "./program"
 import { DISPOSE_METHOD } from "./parallel"
 import { Local, sourceLocal } from "./symbols"
 import { TypeTable } from "./types"
@@ -513,7 +521,8 @@ export const handleDisposes = (program: CheckedProgram, table: TypeTable): Handl
   for (const info of local) {
     if (ownerReaches(info, info, 0)) {
       for (const member of info.decl.children[3].children) {
-        const field: FieldInfo | null = member.kind === NodeKind.Field ? info.field(member.children[0].text) : null
+        const field: FieldInfo | null =
+          member.kind === NodeKind.Field ? info.field(member.children[0].text) : null
         const child: StructInfo | null = field === null ? null : handleOf(program, table, field.type)
         if (child !== null && (child === info || ownerReaches(info, child, 0))) {
           out.push(new HandleFinding(member.children[1], handleFieldMessage(info.name)))
@@ -1117,7 +1126,12 @@ const assignedTo = (walk: HandleWalk, member: Node): Node | null => {
  */
 const childWrite = (walk: HandleWalk, node: Node): boolean => {
   const stmt = walk.parent(1)
-  if (stmt === null || stmt.kind !== NodeKind.ExprStmt || node.kind !== NodeKind.Binary || node.text !== "=") {
+  if (
+    stmt === null ||
+    stmt.kind !== NodeKind.ExprStmt ||
+    node.kind !== NodeKind.Binary ||
+    node.text !== "="
+  ) {
     return false
   }
   const target = node.children[0]
@@ -1164,13 +1178,15 @@ const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
         node.kind === NodeKind.Ident || node.kind === NodeKind.This || node.kind === NodeKind.Member
       // A `null` a nullable handle is compared with, or a factory returns,
       // names no handle at all.
-      admitted =
-        node.kind === NodeKind.Null ||
-        (fresh
-          ? freshAdmitted(walk, node, depth)
-          : named
-            ? namedAdmitted(walk, node, type, depth)
-            : childWrite(walk, node))
+      if (node.kind === NodeKind.Null) {
+        admitted = true
+      } else if (fresh) {
+        admitted = freshAdmitted(walk, node, depth)
+      } else if (named) {
+        admitted = namedAdmitted(walk, node, type, depth)
+      } else {
+        admitted = childWrite(walk, node)
+      }
     } else if (result !== null) {
       admitted = resultAdmitted(walk, node, depth)
     }

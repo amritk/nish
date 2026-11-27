@@ -899,7 +899,12 @@ const closeHandle = (emitter: Emitter, info: StructInfo, object: string, nullabl
     if (child !== null) {
       closeHandle(emitter, child, value, owned.tested)
     } else if (close === null) {
-      process.exit(internalErrorFor(`emitter: handle class \`${info.name}\` has no close for \`${owned.name}\``, emitter.opts.json))
+      process.exit(
+        internalErrorFor(
+          `emitter: handle class \`${info.name}\` has no close for \`${owned.name}\``,
+          emitter.opts.json
+        )
+      )
     } else {
       closeNative(emitter, close, field.type, value, owned.tested)
     }
@@ -911,7 +916,13 @@ const closeHandle = (emitter: Emitter, info: StructInfo, object: string, nullabl
 }
 
 /** One call of a native field's close on `value`, behind a test for its "none" (`null`, or a `HostHandle`'s `0`) when `tested`. */
-const closeNative = (emitter: Emitter, close: FunctionSig, type: i32, value: string, tested: boolean): void => {
+const closeNative = (
+  emitter: Emitter,
+  close: FunctionSig,
+  type: i32,
+  value: string,
+  tested: boolean
+): void => {
   const param = emitter.llvmAbi(close.paramTypes[0], false)
   const result = emitter.llvmAbi(close.returnType, false)
   const call = `call ${result} @${close.name}(${param} ${value})`
