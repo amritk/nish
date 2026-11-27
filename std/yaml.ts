@@ -1114,15 +1114,17 @@ const yamlByte = (text: string, i: i32): i32 =>
 
 /** Whether `text[a0, a1)` and `text[b0, b1)` hold the same bytes. */
 const yamlSameBytes = (text: string, a0: i32, a1: i32, b0: i32, b1: i32): boolean => {
-  if (a1 - a0 !== b1 - b0) {
+  if (toI64(a1) - toI64(a0) !== toI64(b1) - toI64(b0)) {
     return false
   }
-  let i: i32 = 0
-  while (i < a1 - a0) {
-    if (yamlByte(text, a0 + i) !== yamlByte(text, b0 + i)) {
+  let i: i32 = a0
+  let j: i32 = b0
+  while (i < a1 && j < b1) {
+    if (yamlByte(text, i) !== yamlByte(text, j)) {
       return false
     }
     i += 1
+    j += 1
   }
   return true
 }
@@ -1130,15 +1132,17 @@ const yamlSameBytes = (text: string, a0: i32, a1: i32, b0: i32, b1: i32): boolea
 /** Whether `text[from, to)` is exactly `word`. */
 const yamlIsWord = (text: string, from: i32, to: i32, word: string): boolean => {
   const n: i32 = toI32(word.length)
-  if (to - from !== n) {
+  if (toI64(to) - toI64(from) !== toI64(n)) {
     return false
   }
   let i: i32 = 0
-  while (i < n) {
-    if (yamlByte(text, from + i) !== toI32(word.charCodeAt(i))) {
+  let j: i32 = from
+  while (i < n && j < to) {
+    if (yamlByte(text, j) !== toI32(word.charCodeAt(i))) {
       return false
     }
     i += 1
+    j += 1
   }
   return true
 }
@@ -1156,8 +1160,9 @@ const yamlIsFlowIndicator = (code: i32): boolean =>
   code === YAML_RBRACE
 const yamlIsDigit = (code: i32): boolean => code >= YAML_ZERO && code <= YAML_NINE
 const yamlHexValue = (code: i32): i32 => {
-  if (code >= YAML_ZERO && code <= YAML_NINE) {
-    return code - YAML_ZERO
+  const zero: i32 = 48
+  if (code >= zero && code <= 57) {
+    return code - zero
   }
   if (code >= 97 && code <= 102) {
     return code - 87
@@ -1168,9 +1173,14 @@ const yamlHexValue = (code: i32): i32 => {
   return -1
 }
 
-/** Past `text[i]`, a break: one byte, or two for CR LF. */
-const yamlAfterBreak = (text: string, i: i32): i32 =>
-  yamlByte(text, i) === YAML_CR && yamlByte(text, i + 1) === YAML_LF ? i + 2 : i + 1
+/** Past `text[i]`, a break: one byte, or two for CR LF; past the text's last byte, its end. */
+const yamlAfterBreak = (text: string, i: i32): i32 => {
+  const n: i32 = toI32(text.length)
+  if (i >= n - 1) {
+    return n
+  }
+  return yamlByte(text, i) === YAML_CR && yamlByte(text, i + 1) === YAML_LF ? i + 2 : i + 1
+}
 
 /**
  * The first break in `text[from, to)`, or `to`. Short of the end of the text
@@ -1193,13 +1203,14 @@ const yamlLineEnd = (text: string, from: i32, to: i32): i32 => {
 
 /** The bytes a scalar decodes to, collected before they become one string. */
 class YamlBuffer {
-  private bytes: u8[]
-  /** @internal Used by `yamlDecodeFlow`. */
-  count: i32 = 0
+  private bytes: u8[] = []
 
-  constructor(room: i32) {
-    const least: i32 = 16
-    this.bytes = new Array<u8>(room > least ? room : least)
+  /**
+   * How many bytes the buffer holds.
+   * @internal Called by `yamlDecodeFlow`.
+   */
+  size(): i32 {
+    return toI32(this.bytes.length)
   }
 
   /**
@@ -1207,11 +1218,7 @@ class YamlBuffer {
    * @internal Called by `yamlDecodeFlow`, `yamlDecodeEscape` and `yamlDecodeBlock`.
    */
   push(code: i32): void {
-    if (this.count >= toI32(this.bytes.length)) {
-      this.bytes = yamlRoomU8(this.bytes, this.count + 1)
-    }
-    yamlPutU8(this.bytes, this.count, code)
-    this.count += 1
+    this.bytes.push(toU8(code))
   }
 
   /**
@@ -1254,18 +1261,18 @@ class YamlBuffer {
     const three: i32 = 0x10000
     if (cp < two) {
       const lead: i32 = 0xc0
-      this.push(lead + (cp >> six))
+      this.push(lead | (cp >> six))
     } else if (cp < three) {
       const lead: i32 = 0xe0
-      this.push(lead + (cp >> (six * 2)))
-      this.push(continuation + ((cp >> six) & low))
+      this.push(lead | (cp >> 12))
+      this.push(continuation | ((cp >> six) & low))
     } else {
       const lead: i32 = 0xf0
-      this.push(lead + (cp >> (six * 3)))
-      this.push(continuation + ((cp >> (six * 2)) & low))
-      this.push(continuation + ((cp >> six) & low))
+      this.push(lead | (cp >> 18))
+      this.push(continuation | ((cp >> 12) & low))
+      this.push(continuation | ((cp >> six) & low))
     }
-    this.push(continuation + (cp & low))
+    this.push(continuation | (cp & low))
   }
 
   /**
@@ -1274,13 +1281,17 @@ class YamlBuffer {
    */
   trimBlanks(floor: i32): void {
     const bytes: u8[] = this.bytes
-    while (this.count > floor) {
-      const at: i32 = this.count - 1
-      const code: i32 = at >= 0 && at < toI32(bytes.length) ? toI32(bytes[at]) : 0
-      if (!yamlIsBlank(code)) {
+    while (bytes.length > 0) {
+      const at: i32 = toI32(bytes.length) - 1
+      if (at < 0 || at < floor) {
         return
       }
-      this.count = at
+      // Spelled out, not `yamlIsBlank`: a call would cost the prover the length the pop needs.
+      const code: i32 = toI32(bytes[at])
+      if (code !== YAML_SPACE && code !== YAML_TAB) {
+        return
+      }
+      bytes.pop()
     }
   }
 
@@ -1289,7 +1300,8 @@ class YamlBuffer {
    * @internal Called by `yamlDecodeFlow` and `yamlDecodeBlock`.
    */
   text(): string {
-    return String.fromBytes(this.bytes, 0, this.count)
+    const bytes: u8[] = this.bytes
+    return String.fromBytes(bytes, 0, toI32(bytes.length))
   }
 }
 
@@ -1329,7 +1341,7 @@ const yamlDecodeFlow = (text: string, from: i32, to: i32, style: i32): string =>
   if (i >= to) {
     return text.substring(from, to)
   }
-  const out: YamlBuffer = new YamlBuffer(to - from)
+  const out: YamlBuffer = new YamlBuffer()
   out.copy(text, from, i)
   // Blanks the source spelled as escapes are content, and a fold never trims them.
   let floor: i32 = 0
@@ -1338,33 +1350,37 @@ const yamlDecodeFlow = (text: string, from: i32, to: i32, style: i32): string =>
     if (yamlIsBreak(code)) {
       out.trimBlanks(floor)
       i = yamlAfterBreak(text, i)
-      let empties: i32 = 0
+      // A break alone folds to a space; each empty line after it, to a newline.
+      let empty: boolean = false
       while (true) {
         let j: i32 = i
         while (j < to && yamlIsBlank(yamlByte(text, j))) {
           j += 1
         }
         if (j < to && yamlIsBreak(yamlByte(text, j))) {
-          empties += 1
+          out.push(YAML_LF)
+          empty = true
           i = yamlAfterBreak(text, j)
         } else {
           i = j
           break
         }
       }
-      if (empties === 0) {
+      if (!empty) {
         out.push(YAML_SPACE)
-      } else {
-        out.repeat(YAML_LF, empties)
       }
-      floor = out.count
+      floor = out.size()
     } else if (style === YAML_SINGLE_QUOTED && code === YAML_SQUOTE) {
       out.push(YAML_SQUOTE)
-      i += yamlByte(text, i + 1) === YAML_SQUOTE ? 2 : 1
+      i += 1
+      if (i < to && yamlByte(text, i) === YAML_SQUOTE) {
+        i += 1
+      }
     } else if (style === YAML_DOUBLE_QUOTED && code === YAML_BACKSLASH) {
-      if (i + 1 < to && yamlIsBreak(yamlByte(text, i + 1))) {
+      const next: i32 = i + 1
+      if (next < to && yamlIsBreak(yamlByte(text, next))) {
         // An escaped break joins the lines; the empty lines after it stay.
-        i = yamlAfterBreak(text, i + 1)
+        i = yamlAfterBreak(text, next)
         while (true) {
           let j: i32 = i
           while (j < to && yamlIsBlank(yamlByte(text, j))) {
@@ -1381,7 +1397,7 @@ const yamlDecodeFlow = (text: string, from: i32, to: i32, style: i32): string =>
       } else {
         i = yamlDecodeEscape(text, i, to, out)
       }
-      floor = out.count
+      floor = out.size()
     } else {
       out.push(code)
       i += 1
@@ -1392,29 +1408,45 @@ const yamlDecodeFlow = (text: string, from: i32, to: i32, style: i32): string =>
 
 /** The low surrogate a `\u` escape at `text[at]` writes, or `-1` when it writes none before `to`. */
 const yamlLowSurrogateAt = (text: string, at: i32, to: i32): i32 => {
-  if (at + 6 > to || yamlByte(text, at) !== YAML_BACKSLASH || yamlByte(text, at + 1) !== 117) {
+  if (at < 0 || at >= to || yamlByte(text, at) !== YAML_BACKSLASH) {
     return -1
   }
+  let j: i32 = at + 1
+  if (j >= to || yamlByte(text, j) !== 117) {
+    return -1
+  }
+  j += 1
   let cp: i32 = 0
   let k: i32 = 0
   while (k < 4) {
-    const v: i32 = yamlHexValue(yamlByte(text, at + 2 + k))
+    if (j >= to) {
+      return -1
+    }
+    const v: i32 = yamlHexValue(yamlByte(text, j))
     if (v < 0) {
       return -1
     }
-    cp = cp * 16 + v
+    cp = (cp << 4) | v
     k += 1
+    j += 1
   }
   return cp >= 0xdc00 && cp < 0xe000 ? cp : -1
 }
 
 /** Appends what the escape at `text[at]`, a `\`, stands for; answers the byte past it. */
 const yamlDecodeEscape = (text: string, at: i32, to: i32, out: YamlBuffer): i32 => {
-  if (at + 1 >= to) {
+  if (at >= to) {
     out.push(YAML_BACKSLASH)
-    return at + 1
+    return to
   }
-  const e: i32 = yamlByte(text, at + 1)
+  // `j` walks the escape: past the `\`, then past each byte it reads.
+  let j: i32 = at + 1
+  if (j >= to) {
+    out.push(YAML_BACKSLASH)
+    return j
+  }
+  const e: i32 = yamlByte(text, j)
+  j += 1
   let digits: i32 = 0
   if (e === 120) {
     digits = 2
@@ -1424,29 +1456,37 @@ const yamlDecodeEscape = (text: string, at: i32, to: i32, out: YamlBuffer): i32 
     digits = 8
   }
   if (digits > 0) {
+    const past: i32 = j
     let cp: i32 = 0
     let k: i32 = 0
-    while (k < digits && at + 2 + k < to) {
-      const v: i32 = yamlHexValue(yamlByte(text, at + 2 + k))
+    while (k < digits && j < to) {
+      const v: i32 = yamlHexValue(yamlByte(text, j))
       if (v < 0 || cp > 0x10ffff) {
         break
       }
-      cp = cp * 16 + v
+      cp = (cp << 4) | v
       k += 1
+      j += 1
     }
     if (k === digits && cp <= 0x10ffff) {
       // A `\u` high surrogate and a `\u` low one after it are one code point, written as one.
-      const low: i32 = digits === 4 && cp >= 0xd800 && cp < 0xdc00 ? yamlLowSurrogateAt(text, at + 6, to) : -1
+      const low: i32 = digits === 4 && cp >= 0xd800 && cp < 0xdc00 ? yamlLowSurrogateAt(text, j, to) : -1
       if (low >= 0) {
-        out.codePoint((cp - 0xd800) * 0x400 + (low - 0xdc00) + 0x10000)
-        return at + 12
+        out.codePoint((cp & 0x3ff) * 0x400 + (low & 0x3ff) + 0x10000)
+        // Past the low surrogate's six bytes, which `yamlLowSurrogateAt` found before `to`.
+        let skip: i32 = 0
+        while (skip < 6 && j < to) {
+          j += 1
+          skip += 1
+        }
+        return j
       }
       out.codePoint(cp)
-      return at + 2 + digits
+      return j
     }
     out.push(YAML_BACKSLASH)
     out.push(e)
-    return at + 2
+    return past
   }
   const mapped: i32 = yamlEscapeValue(e)
   if (mapped < 0) {
@@ -1455,7 +1495,7 @@ const yamlDecodeEscape = (text: string, at: i32, to: i32, out: YamlBuffer): i32 
   } else {
     out.codePoint(mapped)
   }
-  return at + 2
+  return j
 }
 
 /** The code point `\` and `e` stand for in a double-quoted scalar, or `-1` for no escape. */
@@ -1513,7 +1553,7 @@ const yamlDecodeBlock = (text: string, from: i32, to: i32, extras: i32, folded: 
   const indent: i32 = (extras >> 3) - 1
   const explicit: boolean = (extras & 4) !== 0
   const chomp: i32 = extras & 3
-  const out: YamlBuffer = new YamlBuffer(to - from)
+  const out: YamlBuffer = new YamlBuffer()
   let i: i32 = from
   let seenContent: boolean = false
   let previousMore: boolean = false
@@ -1521,13 +1561,15 @@ const yamlDecodeBlock = (text: string, from: i32, to: i32, extras: i32, folded: 
   let pending: i32 = 0
   while (i < to) {
     let j: i32 = i
-    while (j < to && j - i < indent && yamlByte(text, j) === YAML_SPACE) {
+    let column: i32 = 0
+    while (j < to && column < indent && yamlByte(text, j) === YAML_SPACE) {
       j += 1
+      column += 1
     }
     const e: i32 = yamlLineEnd(text, j, to)
     const hasBreak: boolean = e < to
     let empty: boolean = j === e
-    if (!empty && (j - i < indent || (!seenContent && !explicit))) {
+    if (!empty && (column < indent || (!seenContent && !explicit))) {
       // Short of the indent, or before the indent was found: empty when only
       // spaces, as the scanner counts it; a tab makes the first content line.
       let k: i32 = j
@@ -1537,7 +1579,9 @@ const yamlDecodeBlock = (text: string, from: i32, to: i32, extras: i32, folded: 
       empty = k === e
     }
     if (empty) {
-      if (hasBreak) {
+      // Each break counted is a byte of `[from, to)`, so `pending` stays below
+      // `to`: the test never fails, and it is what proves the count.
+      if (hasBreak && pending < to) {
         pending += 1
       }
     } else {
@@ -1545,7 +1589,7 @@ const yamlDecodeBlock = (text: string, from: i32, to: i32, extras: i32, folded: 
       if (!seenContent) {
         out.repeat(YAML_LF, pending)
       } else if (folded && !more && !previousMore) {
-        if (pending === 1) {
+        if (pending <= 1) {
           out.push(YAML_SPACE)
         } else {
           out.repeat(YAML_LF, pending - 1)
@@ -1618,7 +1662,7 @@ const yamlPlainType = (text: string, from: i32, to: i32): i32 => {
     return YAML_STRING
   }
   // Each word is told by its first byte, so a text is compared with its own three at most.
-  if (c === 126 && to - from === 1) {
+  if (c === 126 && to === from + 1) {
     return YAML_NULL
   }
   if (letter) {
@@ -1664,14 +1708,17 @@ const yamlWordType = (text: string, from: i32, to: i32, c: i32): i32 => {
 const yamlIntBase = (text: string, from: i32, to: i32): i32 => {
   let i: i32 = from
   const sign: i32 = yamlByte(text, i)
-  if (sign === YAML_PLUS || sign === YAML_DASH) {
+  if (i < to && (sign === YAML_PLUS || sign === YAML_DASH)) {
     i += 1
   }
   let base: i32 = 10
-  const x: i32 = yamlByte(text, i + 1)
-  if (yamlByte(text, i) === YAML_ZERO && (x === 120 || x === 111)) {
-    base = x === 120 ? 16 : 8
-    i += 2
+  if (i < to && yamlByte(text, i) === YAML_ZERO) {
+    const next: i32 = i + 1
+    const x: i32 = yamlByte(text, next)
+    if (next < to && (x === 120 || x === 111)) {
+      base = x === 120 ? 16 : 8
+      i = next + 1
+    }
   }
   if (i >= to) {
     return 0
@@ -1690,30 +1737,30 @@ const yamlIntBase = (text: string, from: i32, to: i32): i32 => {
 const yamlIsFloatForm = (text: string, from: i32, to: i32): boolean => {
   let i: i32 = from
   const sign: i32 = yamlByte(text, i)
-  if (sign === YAML_PLUS || sign === YAML_DASH) {
+  if (i < to && (sign === YAML_PLUS || sign === YAML_DASH)) {
     i += 1
   }
   const wholeStart: i32 = i
   while (i < to && yamlIsDigit(yamlByte(text, i))) {
     i += 1
   }
-  const whole: i32 = i - wholeStart
+  const whole: boolean = i !== wholeStart
   if (i < to && yamlByte(text, i) === YAML_DOT) {
     i += 1
     const fractionStart: i32 = i
     while (i < to && yamlIsDigit(yamlByte(text, i))) {
       i += 1
     }
-    if (whole === 0 && i === fractionStart) {
+    if (!whole && i === fractionStart) {
       return false
     }
-  } else if (whole === 0) {
+  } else if (!whole) {
     return false
   }
   if (i < to && (yamlByte(text, i) === 101 || yamlByte(text, i) === 69)) {
     i += 1
     const s: i32 = yamlByte(text, i)
-    if (s === YAML_PLUS || s === YAML_DASH) {
+    if (i < to && (s === YAML_PLUS || s === YAML_DASH)) {
       i += 1
     }
     const expStart: i32 = i
@@ -1730,7 +1777,7 @@ const yamlIsFloatForm = (text: string, from: i32, to: i32): boolean => {
 /** `1` for a core-schema positive infinity, `2` for a negative one, `3` for not-a-number, `0` otherwise. */
 const yamlSpecialFloat = (text: string, from: i32, to: i32): i32 => {
   const c: i32 = yamlByte(text, from)
-  const at: i32 = c === YAML_PLUS || c === YAML_DASH ? from + 1 : from
+  const at: i32 = from < to && (c === YAML_PLUS || c === YAML_DASH) ? from + 1 : from
   if (
     yamlIsWord(text, at, to, ".inf") ||
     yamlIsWord(text, at, to, ".Inf") ||
@@ -1756,11 +1803,14 @@ const yamlParseInt = (text: string, from: i32, to: i32): i64 => {
   }
   let i: i32 = from
   const sign: i32 = yamlByte(text, i)
-  if (sign === YAML_PLUS || sign === YAML_DASH) {
+  if (i < to && (sign === YAML_PLUS || sign === YAML_DASH)) {
     i += 1
   }
-  if (base !== 10) {
-    i += 2
+  // Past the `0x` or `0o` that `yamlIntBase` found before `to`.
+  let prefix: i32 = base === 10 ? 0 : 2
+  while (prefix > 0 && i < to) {
+    i += 1
+    prefix -= 1
   }
   const wide: i64 = toI64(base)
   while (i < to) {
@@ -1794,10 +1844,10 @@ const yamlParseFloat = (text: string, from: i32, to: i32): f64 => {
 const yamlStackPush = (a: i32[], top: i32, v: i32): i32 => {
   if (top < toI32(a.length)) {
     yamlPut(a, top, v)
-  } else {
-    a.push(v)
+    return top + 1
   }
-  return top + 1
+  a.push(v)
+  return toI32(a.length)
 }
 
 /** A tag with the core schema's `tag:yaml.org,2002:` prefix taken off. */
@@ -4726,9 +4776,7 @@ const yamlIsMergeKey = (stream: YamlStream, key: i32): boolean => {
   }
   const start: i32 = stream.start(key)
   if (
-    stream.end(key) !== start + 2 ||
-    yamlByte(stream.source, start) !== YAML_LT ||
-    yamlByte(stream.source, start + 1) !== YAML_LT ||
+    !yamlIsWord(stream.source, start, stream.end(key), "<<") ||
     stream.kind(key) !== YAML_SCALAR ||
     stream.style(key) !== YAML_PLAIN
   ) {
