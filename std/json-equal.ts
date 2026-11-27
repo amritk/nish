@@ -173,8 +173,11 @@ export const jsonEqual = (da: JsonDocument, a: i32, db: JsonDocument, b: i32): b
     const x: i32 = left[top]
     left.pop()
     // Never taken: the two stacks are pushed in pairs, so they empty together.
+    // The prover needs both halves, `rightTop` for the index and the length
+    // for the pop; it does not carry one to the other.
     const rightTop: i32 = toI32(right.length) - 1
-    if (rightTop < 0 || !(right.length > 0)) {
+    // biome-ignore lint/style/useExplicitLengthCheck: `< 1` is the form that proves `right.pop()` below
+    if (rightTop < 0 || right.length < 1) {
       return false
     }
     const y: i32 = right[rightTop]

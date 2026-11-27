@@ -1142,7 +1142,8 @@ export class YamlJsonLoader {
     const top: i32 = this.entryTop
     // In `i64`, where a difference or sum of two `i32`s fits.
     const held: i64 = toI64(top) - toI64(base)
-    const scanned: i64 = held < toI64(YAML_JSON_SCAN_KEYS) ? toI64(top) : toI64(base) + toI64(YAML_JSON_SCAN_KEYS)
+    const scanned: i64 =
+      held < toI64(YAML_JSON_SCAN_KEYS) ? toI64(top) : toI64(base) + toI64(YAML_JSON_SCAN_KEYS)
     const keys: string[] = this.entryKeys
     for (let e: i32 = base; toI64(e) < scanned && e >= 0 && e < toI32(keys.length); e += 1) {
       if (keys[e] === key) {
