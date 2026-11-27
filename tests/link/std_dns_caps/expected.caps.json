@@ -430,9 +430,7 @@
               "exported": true,
               "capabilities": [],
               "witnesses": {},
-              "panics": [
-                { "kind": "call", "at": "std/bytes.ts:481:10", "callee": "skipJsonTextWalk", "via": "index" }
-              ]
+              "panics": []
             },
             {
               "name": "tryCopyBytes",
