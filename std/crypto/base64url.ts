@@ -177,9 +177,16 @@ export const base64urlDecode = (text: string): u8[] | null => {
     return null
   }
   // Three bytes per full group of four, and one fewer than the characters in a
-  // short final group; `n * 3 / 4` would overflow for a text over 700 MB. The
-  // sum is a `u32`, exact for any `n` here.
-  const out: u8[] = new Array<u8>(toU32(n >> 2) * 3 + (tail === 0 ? 0 : toU32(tail) - 1))
+  // short final group; `n * 3 / 4` would overflow for a text over 700 MB.
+  // Both parts are `i32`s the bounds prover reads as non-negative, and their
+  // sum, at most three quarters of `n`, as in range, so the allocation is
+  // proven rather than checked.
+  let short: i32 = 0
+  if (tail > 1) {
+    short = tail - 1
+  }
+  const whole: i32 = (n >> 2) * 3
+  const out: u8[] = new Array<u8>(whole + short)
   // All ones once any character is outside the alphabet (a sextet of `-1`
   // shifted right by 31), and non-zero once the text ends on a bit that
   // encodes no byte.
@@ -434,13 +441,28 @@ export const base64StdPadDecode = (text: string): u8[] | null => {
   if ((n & 3) !== 0) {
     return null
   }
-  // A length that is a multiple of four and not 0 is at least 4.
+  // The empty text spells no bytes; any other length that is a multiple of
+  // four is at least 4.
+  if (n < 4) {
+    return new Array<u8>(0)
+  }
   let pad: u32 = 0
-  if (n >= 4 && toI32(text.charCodeAt(n - 1)) === 61) {
+  if (toI32(text.charCodeAt(n - 1)) === 61) {
     pad = toI32(text.charCodeAt(n - 2)) === 61 ? 2 : 1
   }
+  // Three bytes per group before the last, and three less the padding in the
+  // last: two `i32`s the bounds prover reads as non-negative, so the
+  // allocation is proven rather than checked.
+  let last: i32 = 3
+  if (pad === 1) {
+    last = 2
+  }
+  if (pad === 2) {
+    last = 1
+  }
+  const whole: i32 = ((n >> 2) - 1) * 3
+  const out: u8[] = new Array<u8>(whole + last)
   const chars: i32 = toI32(toU32(n) - pad)
-  const out: u8[] = new Array<u8>(toU32(n >> 2) * 3 - pad)
   let bad: i32 = 0
   let acc: i32 = 0
   let bits: u32 = 0
