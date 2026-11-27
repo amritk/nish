@@ -259,6 +259,9 @@
     },
     {
       "includes": ["std/gpu/sys.ts"],
+      "formatter": {
+        "enabled": false
+      },
       "linter": {
         "rules": {
           "style": {
