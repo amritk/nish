@@ -252,6 +252,12 @@ const YAML_BREAKS: string = "\n\r"
 const YAML_MAX_KEY_LENGTH: i32 = 1024
 /** The deepest `maxDepth` may be, and its default. */
 const YAML_MAX_DEPTH: i32 = 1000
+/**
+ * One past the deepest column a block scalar's content may start at: its node
+ * keeps that column, plus one, in the 28 bits above its chomping and indicator
+ * flags.
+ */
+const YAML_MAX_BLOCK_INDENT: i32 = 268435455
 /** Past this many pairs a map's duplicate check hashes instead of comparing every pair with every other. */
 const YAML_PAIRWISE_KEYS: i32 = 16
 /** No node, no slot, no offset: what every lookup answers outside its array. */
@@ -2703,9 +2709,18 @@ class YamlParser {
       }
       return
     }
+    // The escaped character is one to four UTF-8 bytes; step over them one at
+    // a time so a character cut short by the end of the text stops there.
     const width: i32 = yamlCharWidth(e)
-    const escaped: string = this.text.substring(open, open + width)
-    this.error(YAML_ERR_BAD_ESCAPE, `"\\${escaped}" is not a valid escape sequence`, at, open + width)
+    const len: i32 = this.len
+    let stop: i32 = open
+    let k: i32 = 0
+    while (k < width && stop < len) {
+      stop += 1
+      k += 1
+    }
+    const escaped: string = this.text.substring(open, stop)
+    this.error(YAML_ERR_BAD_ESCAPE, `"\\${escaped}" is not a valid escape sequence`, at, stop)
   }
 
   /** Reports a quoted scalar's continuation line at `lineStart` that is not indented past its parent. */
@@ -3106,8 +3121,18 @@ class YamlParser {
     this.checkBlockHeaderEnd()
     this.finishLine()
     const bodyStart: i32 = this.pos
-    let contentIndent: i32 =
-      explicitIndent > 0 ? (parentIndent > 0 ? parentIndent : toI32(0)) + explicitIndent : -1
+    let contentIndent: i32 = -1
+    // An indicator is one digit, 1 to 9, so the upper test never fails.
+    if (explicitIndent > 0 && explicitIndent < 16) {
+      if (parentIndent <= 0) {
+        contentIndent = explicitIndent
+      } else if (parentIndent < 268435455) {
+        contentIndent = parentIndent + explicitIndent
+      } else {
+        // Too deep for the node to keep: the packing below reports it.
+        contentIndent = YAML_MAX_BLOCK_INDENT
+      }
+    }
     let leadingBlank: i32 = -1
     while (this.pos < this.len) {
       const lineStart: i32 = this.pos
@@ -3164,9 +3189,21 @@ class YamlParser {
     const node: i32 = this.stream.newNode(YAML_SCALAR, folded ? YAML_FOLDED : YAML_LITERAL, start, valueEnd)
     yamlPut(this.stream.firsts, node, bodyStart)
     yamlPut(this.stream.counts, node, this.pos)
-    const eight: i32 = 8
-    const four: i32 = 4
-    yamlPut(this.stream.extras, node, (contentIndent + 1) * eight + (explicitIndent > 0 ? four : 0) + chomp)
+    let packed: i32 = chomp
+    if (contentIndent >= -1 && contentIndent < 268435455) {
+      // Bit fields: the column above bit 3, the indicator flag at bit 2 and the
+      // chomping mode (0 to 2) in bits 0 and 1.
+      const flag: i32 = explicitIndent > 0 ? 4 : 0
+      packed = ((contentIndent + 1) << 3) | flag | chomp
+    } else {
+      this.error(
+        YAML_ERR_BAD_INDENT,
+        `A block scalar's content is indented past the ${YAML_MAX_BLOCK_INDENT - 1} columns the parser can hold`,
+        start,
+        valueEnd
+      )
+    }
+    yamlPut(this.stream.extras, node, packed)
     return node
   }
 
@@ -3900,7 +3937,12 @@ class YamlParser {
       let i: i32 = 0
       while (i < count) {
         const item: i32 = stream.child(seq, i)
-        stream.mergeItemsChecked += 1
+        // Each item is read at most once, and a stream holds fewer than 2^31
+        // nodes, so the test never fails; it is what proves the step.
+        const checked: i32 = stream.mergeItemsChecked
+        if (checked < 2147483647) {
+          stream.mergeItemsChecked = checked + 1
+        }
         if (!this.mergesMap(item)) {
           this.badMerge(stream.start(item), stream.end(item))
         }
@@ -3935,7 +3977,11 @@ class YamlParser {
     let good: boolean = true
     let i: i32 = 0
     while (good && i < count) {
-      stream.mergeItemsChecked += 1
+      // As in `checkMerge`: the test never fails and proves the step.
+      const checked: i32 = stream.mergeItemsChecked
+      if (checked < 2147483647) {
+        stream.mergeItemsChecked = checked + 1
+      }
       good = this.mergesMap(stream.child(seq, i))
       i += 1
     }
@@ -4812,7 +4858,21 @@ class YamlParser {
         if (c === YAML_PIPE || c === YAML_GT) {
           item = this.scanBlockScalar(indent)
         } else {
-          item = this.parseNode(this.pos - contentPos + indent, indent, false)
+          // The item's column is the dash's, `indent`, plus its distance from
+          // the dash. Both are below the text's length, so the walk back to the
+          // line start never runs; the test is what proves the sum.
+          const pos: i32 = this.pos
+          let column: i32 = -1
+          if (contentPos >= 0 && pos >= contentPos) {
+            const off: i32 = pos - contentPos
+            if (off >= 0 && off < 1073741824 && indent >= -1 && indent < 1073741824) {
+              column = off + indent
+            }
+          }
+          if (column < 0) {
+            column = this.columnOf(pos)
+          }
+          item = this.parseNode(column, indent, false)
         }
         this.finishLineIfMidLine()
       }
