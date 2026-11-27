@@ -1084,7 +1084,9 @@ const urlHostEnd = (bytes: u8[], h: i32, b: i32): i32 => {
 
 /** The port `bytes[a, b)` names, digits up to 65535, or -1 when it is not one. */
 const urlPortOf = (bytes: u8[], a: i32, b: i32): i32 => {
-  let port: i32 = 0
+  // At most 65535 (`URL_MAX_PORT`, spelled as the range so the proof reads
+  // it), so with a digit added the sum is at most 655359.
+  let port: integer<0, 65535> = 0
   let i: i32 = a
   while (i >= 0 && i < b && i < toI32(bytes.length)) {
     const c: i32 = toI32(bytes[i])
@@ -1092,15 +1094,11 @@ const urlPortOf = (bytes: u8[], a: i32, b: i32): i32 => {
     if (c < 48 || c > 57) {
       return -1
     }
-    // `port` is at most 65535 (`URL_MAX_PORT`, spelled as a literal so the
-    // proof reads it) and `c` a digit, so the sum is at most 655359.
-    if (port < 0 || port > 65535) {
+    const next: i32 = port * 10 + (c - 48)
+    if (next > 65535) {
       return -1
     }
-    port = port * 10 + (c - 48)
-    if (port > URL_MAX_PORT) {
-      return -1
-    }
+    port = next
     i += 1
   }
   return port
