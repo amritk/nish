@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Http1Connection's per-request cost, an old std/net/ against the working tree's.
 //
-//   node bench/http1-conn/run.mjs [--shape hot|cold|idle|direct|idle-dram|direct-dram|stages|rss|all]
+//   node bench/http1-conn/run.mjs [--shape hot|cold|idle|direct|idle-dram|direct-dram|stages|parts|rss|all]
 //                                 [--rounds N] [--requests N] [--connections N]
 //                                 [--evict MiB] [--dram-requests N]
 //                                 [--base <rev>] [--compiler path] [--rss N]
@@ -37,7 +37,15 @@
 // (VmHWM), and reports the difference divided by the connections: the peak
 // memory one idle keep-alive connection costs, with `idleInput` on (the
 // default) and off, after one request a slot and after `--passes` (default 4),
-// when each slot has kept its response head.
+// when each slot has kept its response head, and with `idleInput` on while
+// every connection holds a request it has answered and not yet sent
+// (`rss-serving`, after `--passes`).
+//
+// `--shape parts`, which `all` leaves out, builds bench/http1-conn/parts.ts
+// beside main.ts for each tree and times it in the same rounds: one
+// connection's head parse apart from its header spans, told apart by what
+// `next` is fed, and `Date` with its clock read (parts.ts says how). It
+// reports ns per request, median (min–max) over the rounds, per component.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -127,6 +135,9 @@ const dated = (std, text) =>
         "new Http1Connection(config)\n      conn.date = this.date"
       )
 const source = fs.readFileSync(path.join(here, "main.ts"), "utf8")
+const partsSource = fs.readFileSync(path.join(here, "parts.ts"), "utf8")
+// parts.ts needs `HttpDate.hold`; it is built only when `--shape` names it.
+const withParts = shapeFlag.split(",").includes("parts")
 const sourceFor = (std) =>
   withSendBody(std)
     ? shimmed(std, dated(std, source))
@@ -160,12 +171,37 @@ for (const [label, nish] of Object.entries(compilers)) {
     nish,
     withAllowPanics(nish, [path.join(dir, "main.ts"), "-o", `${dir}/`, "--profile", "speed", "--link", exe])
   )
-  binaries.push({ label, exe })
+  const entry = { label, exe }
+  if (withParts) {
+    const partsDir = path.join(dir, "parts")
+    fs.mkdirSync(partsDir, { recursive: true })
+    fs.writeFileSync(path.join(partsDir, "parts.ts"), partsSource)
+    entry.parts = path.join(dir, "parts-exe")
+    run(
+      nish,
+      withAllowPanics(nish, [
+        path.join(partsDir, "parts.ts"),
+        "-o",
+        `${partsDir}/`,
+        "--profile",
+        "speed",
+        "--link",
+        entry.parts,
+      ])
+    )
+  }
+  binaries.push(entry)
 }
 const copy = path.join(out, "old-copy")
 fs.copyFileSync(binaries[0].exe, copy)
 fs.chmodSync(copy, 0o755)
-binaries.splice(1, 0, { label: "old′", exe: copy })
+const oldCopy = { label: "old′", exe: copy }
+if (withParts) {
+  oldCopy.parts = path.join(out, "old-copy-parts")
+  fs.copyFileSync(binaries[0].parts, oldCopy.parts)
+  fs.chmodSync(oldCopy.parts, 0o755)
+}
+binaries.splice(1, 0, oldCopy)
 
 // [table row, main.ts shape, its arguments]
 const shapes = [
@@ -176,7 +212,8 @@ const shapes = [
   ["idle-dram", "idle", [dramRequests, connections, batches, evict]],
   ["direct-dram", "direct", [dramRequests, connections, batches, evict]],
   ["stages", "stages", [requests, connections, batches]],
-].filter(([s]) => shapeFlag === "all" || shapeFlag.split(",").includes(s))
+  ["parts", "parts", [requests, "1", batches]],
+].filter(([s]) => (shapeFlag === "all" && s !== "parts") || shapeFlag.split(",").includes(s))
 if (shapes.length === 0 && shapeFlag !== "rss") {
   process.stderr.write(`bench/http1-conn: no shape called ${shapeFlag}\n`)
   process.exit(1)
@@ -220,20 +257,54 @@ const record = (label, count, spans) => {
     m.set(s, [...(m.get(s) ?? []), v])
   }
 }
+// The parts shape's components, ns per request: each `next` span holds one
+// clock read, which `clock` (as many reads back to back) takes out.
+// label -> component -> ns per request, one per round
+const partTimes = new Map(binaries.map((b) => [b.label, new Map()]))
+const recordParts = (label, count, spans) => {
+  const words = spans.split(" ")
+  const f = {}
+  for (let i = 0; i + 1 < words.length; i += 2) {
+    f[words[i]] = Number(words[i + 1])
+  }
+  const per = (x) => x / Number(count)
+  const spansNs = per(f.get - f["get-min"] - (f.trailers - f["trailers-0"]))
+  const cells = {
+    "the GET's `next`: head parse and header spans": per(f.get - f.clock),
+    "head parse": per(f.get - f.clock) - spansNs,
+    "header spans: the four field lines kept": spansNs,
+    "the four field lines scanned and counted (trailers)": per(f.trailers - f["trailers-0"]),
+    "the four field lines, all of it (`get` less `get-min`)": per(f.get - f["get-min"]),
+    "clock read (`monotonicNanos`)": per(f.clock),
+    "Date: `hold`, `current`, `unhold`, on the wall clock": per(f["date-held"]),
+    "Date: the same, pinned (no clock read)": per(f["date-pinned"]),
+    "Date's clock read (wall less pinned)": per(f["date-held"] - f["date-pinned"]),
+    "served GET, Date pinned": per(f["serve-pinned"]),
+    "served GET, Date on the wall clock": per(f["serve-dated"]),
+    "Date in a served GET (wall less pinned)": per(f["serve-dated"] - f["serve-pinned"]),
+  }
+  const m = partTimes.get(label)
+  for (const [s, v] of Object.entries(cells)) {
+    m.set(s, [...(m.get(s) ?? []), v])
+  }
+}
 for (let r = 0; r < rounds; r++) {
   for (const [shape, mode, args] of shapes) {
     for (let k = 0; k < binaries.length; k++) {
-      const { label, exe } = binaries[(r + k) % binaries.length]
-      const [line, spans] = bench(exe, [mode, ...args])
+      const { label, exe, parts } = binaries[(r + k) % binaries.length]
+      const [line, spans] = bench(mode === "parts" ? parts : exe, [mode, ...args])
         .trim()
         .split("\n")
       const [, ns, count, sum, ...made] = line.split(" ")
       if (mode === "stages") {
         record(label, count, spans)
       }
+      if (mode === "parts") {
+        recordParts(label, count, spans)
+      }
       // The lending pools are LIFO: one connection at a time borrows, so
       // each makes one buffer however many connections there are.
-      if (mode !== "hot" && mode !== "cold" && made.join(" ") !== "1 1 1") {
+      if (mode !== "hot" && mode !== "cold" && mode !== "parts" && made.join(" ") !== "1 1 1") {
         process.stderr.write(
           `bench/http1-conn: ${label} ${shape} made ${made.join(" ")} input, head and output buffers, expected 1 1 1\n`
         )
@@ -271,6 +342,7 @@ const rssRows = [
   [`idleInput, ${passes} requests`, "rss", passes],
   ["idleInput off, 1 request", "rss-kept", 1],
   [`idleInput off, ${passes} requests`, "rss-kept", passes],
+  [`idleInput, ${passes} requests, then each holding one answered`, "rss-serving", passes],
 ]
 // row -> label -> bytes per idle connection, one per run
 const rss = new Map(rssRows.map(([row]) => [row, new Map()]))
@@ -298,7 +370,7 @@ console.log(
     `${pin ? " pinned to core 1" : " unpinned (no taskset)"}; cold and idle spread them over ${connections} connections` +
     `; the dram shapes run ${dramRequests} a batch with a ${evict} MiB eviction ring`
 )
-const timed = shapes.filter(([, m]) => m !== "stages")
+const timed = shapes.filter(([, m]) => m !== "stages" && m !== "parts")
 if (timed.length > 0) {
   console.log("ns per request: median (min–max), ratio of medians to old\n")
   console.log(`| shape | ${binaries.map((b) => b.label).join(" | ")} |`)
@@ -334,9 +406,25 @@ if (shapes.some(([, m]) => m === "stages")) {
     console.log(`| ${s} | ${cells.join(" | ")} |`)
   }
 }
+if (shapes.some(([, m]) => m === "parts")) {
+  console.log(
+    "\nparts: ns per request on one connection, `next` spans less a clock read: median (min–max), ratio to old"
+  )
+  console.log(`| component | ${binaries.map((b) => b.label).join(" | ")} |`)
+  console.log(`| --- |${binaries.map(() => " --- |").join("")}`)
+  for (const s of partTimes.get(binaries[0].label).keys()) {
+    const first = median(partTimes.get(binaries[0].label).get(s))
+    const cells = binaries.map((b) => {
+      const xs = sorted(partTimes.get(b.label).get(s))
+      const m = median(xs)
+      return `${m.toFixed(1)} (${xs[0].toFixed(1)}–${xs[xs.length - 1].toFixed(1)}) ${(m / first).toFixed(3)}`
+    })
+    console.log(`| ${s} | ${cells.join(" | ")} |`)
+  }
+}
 if (rssRuns > 0) {
   console.log(
-    `\npeak RSS per idle connection, bytes: median (min–max) of ${rssRuns} runs at ${connections} less 0`
+    `\npeak RSS per connection, bytes: median (min–max) of ${rssRuns} runs at ${connections} less 0`
   )
   console.log(`| | ${binaries.map((b) => b.label).join(" | ")} |`)
   console.log(`| --- |${binaries.map(() => " --- |").join("")}`)

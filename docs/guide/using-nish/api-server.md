@@ -9,31 +9,32 @@ answers it. Keep-alive, pipelining, chunked bodies, `HEAD`, timeouts and the
 body cap are taken care of.
 
 You do not register a callback per route. Your program *pulls*: `wait` runs
-one turn of the loop, `ready` and `take` give out the requests it made whole,
-and you dispatch on `req.route` — the number `Router.add` answered, or a
+one turn of the loop, `next` hands out the requests it made whole until it
+answers `null`, and you dispatch on `req.route` — the number `Router.add` answered, or a
 negative `ROUTER_*` code — with a `switch`. An `async` program that would rather hand each request to a function
 of its own, in a task that may await, uses [an async server](async-server.md).
 
 ## A first server
 
-The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): they answer through
-the handler's panicking calls (`send`, `sendJson`, `problem`, ...), which
-panic on a bug in your program by design. A program held to no panics
-answers through the `try` calls below instead, and builds its table with
-`routerChecked(limits)`, which gives `Err` for a limit outside its range
-where `new Router` panics. A program that matches by hand calls
-`router.tryMatch`, which answers `ROUTER_NOT_FOUND` for a range outside its
-buffer, and `router.tryParamCount`, which answers -1 for a route the table
-does not hold, where `match` and `paramCount` panic. The HTTP/1.1 codec and
-the body decoder under the handler keep panic sites no proof removes yet, so
-it too needs `--allow-panics` until they are made panic-free.
+The examples on this page answer through the handler's `try` calls
+(`trySend`, `trySendJson`, `tryProblem`, ...), which give `Err` for a bug in
+your program where their twins (`send`, `sendJson`, `problem`, ...) panic.
+They build the table with `routerChecked(limits)`, which gives `Err` for a
+limit outside its range where `new Router` panics, and open the handler with
+`openHttpHandler`, which does the same for `new HttpHandler`. A program that
+matches by hand calls `router.tryMatch`, which answers `ROUTER_NOT_FOUND` for
+a range outside its buffer, and `router.tryParamCount`, which answers -1 for a
+route the table does not hold, where `match` and `paramCount` panic. The byte
+copies and the body decoder under the handler keep panic sites no proof
+removes yet, so the examples still build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do) until they are made
+panic-free.
 
-<!-- allow-panics: answers through `std/net/handler.ts`'s panicking calls, and `std/net/http1-codec.ts` and `std/net/http-compress.ts` keep panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/handler.ts` code that reaches `std/bytes.ts` and `std/net/http-compress.ts` panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { HandlerLimits, HttpHandler } from "nish/net/handler";
-import { Router, RouterLimits } from "nish/net/router";
+import { HandlerLimits, openHttpHandler } from "nish/net/handler";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { tcpListen } from "nish:net";
 
 // The routes, in the order they are added: `add` answers 0, 1.
@@ -48,8 +49,20 @@ const bytesOf = (text: string): u8[] => {
   return out;
 };
 
+// An answer the handler refuses is a bug in this program: say which.
+const sent = (answered: Result<i32, string>): void => {
+  if (answered.isErr()) {
+    console.error(answered.error);
+  }
+};
+
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    console.error(table.error);
+    return 1;
+  }
+  const router = table.value;
   router.add("GET", "/");
   router.add("GET", "/users/:id");
   const listener: i32 = tcpListen("127.0.0.1", 8080, 1024);
@@ -57,33 +70,38 @@ export const main = (): i32 => {
     console.error(`cannot listen: ${listener}`);
     return 1;
   }
-  const h = new HttpHandler(new HandlerLimits(), listener, router);
+  const opened = openHttpHandler(new HandlerLimits(), listener, router);
+  if (opened.isErr()) {
+    console.error(opened.error);
+    return 1;
+  }
+  const h = opened.value;
   const text = bytesOf("text/plain");
   const hello = bytesOf("hello\n");
   while (true) {
     h.wait(1000);
-    while (h.ready()) {
-      const req = h.take();
+    for (let req = h.next(); req !== null; req = h.next()) {
       switch (req.route) {
         case HELLO:
-          h.send(req, 200, text, hello, 0, toI32(hello.length));
+          sent(h.trySend(req, 200, text, hello, 0, toI32(hello.length)));
           break;
         case USER: {
-          const id: i32 = req.paramDecimal(0);
-          if (id < 0) {
-            h.problem(req, 400, "Bad Request", "the id is a number");
+          // `/users/:id` has parameter 0; one that is not a number is -1.
+          const id = req.tryParamDecimal(0);
+          if (id.isErr() || id.value < 0) {
+            sent(h.tryProblem(req, 400, "Bad Request", "the id is a number"));
             break;
           }
           const w = h.json();
           w.beginObject();
           w.key("id");
-          w.i32(id);
+          w.i32(id.value);
           w.endObject();
-          h.sendJson(req, 200);
+          sent(h.trySendJson(req, 200));
           break;
         }
         default:
-          h.refuse(req); // 404, or 405 with its Allow
+          sent(h.tryRefuse(req)); // 404, or 405 with its Allow
       }
     }
   }
@@ -164,11 +182,11 @@ to `req.route`, lowest id first, then `HANDLER_NEXT` once all have run, or
 on `HANDLER_NEXT`. Once the body has chosen its answer, `h.after(req)` hands
 out the steps that ran, highest id first, before you send it:
 
-<!-- allow-panics: answers through `std/net/handler.ts`'s panicking calls, and `std/net/http1-codec.ts` and `std/net/http-compress.ts` keep panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/router.ts` and `std/net/handler.ts` code that keeps or reaches panic sites (in `std/bytes.ts` and `std/net/http-compress.ts`) no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
-import { HANDLER_ABSENT, HANDLER_NEXT, HandlerLimits, HttpHandler } from "nish/net/handler";
-import { Router, RouterLimits } from "nish/net/router";
+import { HANDLER_ABSENT, HANDLER_NEXT, HandlerLimits, openHttpHandler } from "nish/net/handler";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { tcpListen } from "nish:net";
 
 const HELLO: i32 = 0;
@@ -182,8 +200,18 @@ const bytesOf = (text: string): u8[] => {
   return out;
 };
 
+const sent = (answered: Result<i32, string>): void => {
+  if (answered.isErr()) {
+    console.error(answered.error);
+  }
+};
+
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    return 1;
+  }
+  const router = table.value;
   router.add("GET", "/");
   router.add("GET", "/admin");
   const AUTH: i32 = router.step();
@@ -195,19 +223,22 @@ export const main = (): i32 => {
   if (listener < 0) {
     return 1;
   }
-  const h = new HttpHandler(new HandlerLimits(), listener, router);
+  const opened = openHttpHandler(new HandlerLimits(), listener, router);
+  if (opened.isErr()) {
+    return 1;
+  }
+  const h = opened.value;
   const text = bytesOf("text/plain");
   const hello = bytesOf("hello\n");
   const servedBy = bytesOf("x-served-by");
   const name = bytesOf("nish");
   while (true) {
     h.wait(1000);
-    while (h.ready()) {
-      const req = h.take();
+    for (let req = h.next(); req !== null; req = h.next()) {
       let s: i32 = h.before(req);
       while (s >= 0) {
         if (s === AUTH && req.header("authorization") === HANDLER_ABSENT) {
-          h.problem(req, 401, "Unauthorized", "send a token");
+          sent(h.tryProblem(req, 401, "Unauthorized", "send a token"));
         }
         s = h.before(req);
       }
@@ -227,9 +258,9 @@ export const main = (): i32 => {
         continue; // an after-step answered it
       }
       if (found) {
-        h.send(req, 200, text, hello, 0, toI32(hello.length));
+        sent(h.trySend(req, 200, text, hello, 0, toI32(hello.length)));
       } else {
-        h.refuse(req);
+        sent(h.tryRefuse(req));
       }
     }
   }

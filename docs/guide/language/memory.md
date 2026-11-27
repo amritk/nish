@@ -27,13 +27,7 @@ wherever it can prove that nothing allocated inside them is still reachable
 afterwards, and whatever is left in the arena is released when `main`
 returns.
 
-Several examples on this page do `i32` arithmetic nothing bounds, so the
-compiler cannot prove it fits and they build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
-as the compile error suggests, builds them under the default.
-
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const describe = (name: string, score: i32): i32 => {
   const line = `${name} scored ${score}`;
@@ -43,7 +37,11 @@ const describe = (name: string, score: i32): i32 => {
 export const main = (): i32 => {
   let total = 0;
   for (let i = 0; i < 100000; i++) {
-    total = total + describe("ada", i % 100);
+    const n = describe("ada", i % 100);
+    if (n < 0 || n > 1000 || total > 1000000000) {
+      return 1;   // bounds both sides of the `+`, so it is proven to fit
+    }
+    total = total + n;
   }
   console.log(`${total}`);
   return 0;
@@ -58,22 +56,25 @@ A `Result` held in a `let` that you assign again does not cost a function its
 bracket. The `Ok` and the `Err` below live on `pick`'s stack frame, so calling
 it in a loop leaves the arena where it was:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const pick = (n: i32): i32 => {
   let r: Result<i32, string> = Ok(n);
   if (n % 3 === 0 && r.isOk()) {
     r = Err("three");
   }
-  return r.unwrapOr(-1);
+  return r.unwrapOr(0);
 };
 
 export const main = (): i32 => {
   const before = Arena.used();
   let total = 0;
   for (let i = 0; i < 100000; i++) {
-    total = total + pick(i % 10);
+    const p = pick(i % 10);
+    if (p < 0 || p > 9 || total > 1000000000) {
+      return 1;
+    }
+    total = total + p;
   }
   const flat = Arena.used() === before;
   console.log(`${total} ${flat}`);
@@ -81,7 +82,7 @@ export const main = (): i32 => {
 };
 ```
 
-This prints `230000 true`. A `let` assigned from itself, such as
+This prints `270000 true`. A `let` assigned from itself, such as
 `r = n > 5 ? r : Ok(0)`, is the exception: its values stay in the arena.
 
 None of this changes what a program computes, only where its memory lives
@@ -208,8 +209,7 @@ pointers for each child where a sibling link follows one. On a tree of four
 million nodes, the linked layout took **0.52x the memory and 0.68x the time**
 of an array per node.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Node {
   kind: i32;
@@ -234,14 +234,14 @@ const add = (parent: Node, last: Node | null, kind: i32): Node => {
   return kid;
 };
 
-const sum = (n: Node): i32 => {
-  let s = n.kind;
+// Each node's kind, then its children's, depth first.
+const walk = (n: Node, out: string[]): void => {
+  out.push(`${n.kind}`);
   let kid = n.first;
   while (kid !== null) {
-    s = s + sum(kid);
+    walk(kid, out);
     kid = kid.next;
   }
-  return s;
 };
 
 export const main = (): i32 => {
@@ -249,12 +249,14 @@ export const main = (): i32 => {
   const a = add(root, null, 2);
   add(root, a, 3);
   add(a, null, 4);
-  console.log(`${sum(root)}`);
+  const kinds: string[] = [];
+  walk(root, kinds);
+  console.log(kinds.join(" "));
   return 0;
 };
 ```
 
-This prints `10`. A child is added after the parent's last one, so the
+This prints `1 2 4 3`. A child is added after the parent's last one, so the
 children stay in the order they were made, and the walk reads them in that
 order.
 
@@ -316,15 +318,18 @@ When you know a block's allocations are temporary, say so with
 released when the block ends, on every way out of it: the closing brace, a
 `return`, a `break` or a `continue`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const checksum = (lines: string[]): i32 => {
   let total = 0;
   for (const line of lines) {
     using a = arena();
     const tagged = `${line}:${line.length}`;
-    total = total + tagged.length;
+    const n = tagged.length;
+    if (n > 1000000 || total > 1000000000) {
+      return -1;
+    }
+    total = total + n;
   }
   return total;
 };

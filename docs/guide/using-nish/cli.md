@@ -278,24 +278,26 @@ compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
 any other `sqlite3_*`). You need no SQLite library on your system, and a
 program that does not call SQLite gets none of it.
 
-This example builds with [`--allow-panics`](#asking-what-a-program-can-do): a
-`string` result from C is tested for `NULL` as the program runs, a check no
-proof removes. Declare the result `string | null` and test it for `null` to
-build it under the default.
+The example declares C's `const char *` result `string | null` and tests it
+for `null`: a plain `string` result would be tested for `NULL` as the program
+runs, a check no proof removes, so the default refuses it.
 
-<!-- allow-panics: reads a C pointer that may be `NULL` -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-declare function sqlite3_libversion(): string;
+declare function sqlite3_libversion(): string | null;
 
 export const main = (): i32 => {
-  console.log(sqlite3_libversion());
+  const version = sqlite3_libversion();
+  if (version === null) {
+    return 1;
+  }
+  console.log(version);
   return 0;
 };
 ```
 
 ```console
-$ nish run --allow-panics version.ts
+$ nish run version.ts
 3.54.1
 ```
 

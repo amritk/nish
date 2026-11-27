@@ -18,18 +18,18 @@ native only.
 ## A first server
 
 The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/router` and
-the JSON reads keep panic sites no proof removes yet, so a call to them is
-refused by default until the standard library is made panic-free. The indexes
-and the `panic` call in your own code build under the default once a guard such
-as `i < xs.length` proves each index and the `panic` becomes an error answer.
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/http-server`
+keeps panic sites no proof removes yet, so a call to it is refused by default
+until the standard library is made panic-free. The code around the calls
+builds under the default: it makes the router with `routerChecked`, which gives
+`Err` for a limit outside its range where `new Router` panics.
 
-<!-- allow-panics: calls `panic`; indexes an array without a guard the checker reads; calls `std/net/http-server.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/http-server.ts` code that keeps panic sites, and reaches those of `std/net/http3-server.ts` and `std/net/router.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HttpServer, HttpServerLimits } from "nish/net/http-server";
 import { Http1Config } from "nish/net/http1-server";
-import { Router, RouterLimits } from "nish/net/router";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { tcpListen } from "nish:net";
 
 // The routes, in the order they are added: `add` answers 0, 1.
@@ -45,7 +45,12 @@ const bytesOf = (text: string): u8[] => {
 };
 
 export const main = (): i32 => {
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    console.error(table.error);
+    return 1;
+  }
+  const router = table.value;
   router.add("GET", "/");
   router.add("GET", "/users/:id");
   const listener: i32 = tcpListen("127.0.0.1", 8080, 1024);
