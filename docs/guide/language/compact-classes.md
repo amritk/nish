@@ -11,16 +11,10 @@ built-in module `nish:compact`. The rules are in the reference under
 
 ## Marking a class
 
-Several examples on this page do `i32` arithmetic nothing bounds, so the
-compiler cannot prove it fits and they build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
-as the compile error suggests, builds them under the default.
-
 Import `Compact` and add it to the class's `implements` clause. Nothing else
 in the program changes:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Compact } from "nish:compact";
 
@@ -41,7 +35,12 @@ const count = (t: Tree | null): i32 => {
   if (t === null) {
     return 0;
   }
-  return 1 + count(t.left) + count(t.right);
+  const l = count(t.left);
+  const r = count(t.right);
+  if (l < 0 || l > 1000000000 || r < 0 || r > 1000000000) {
+    return -1;
+  }
+  return 1 + l + r;
 };
 
 export const main = (): i32 => {
@@ -156,8 +155,7 @@ itself, a class with a field of it, and an instantiation such as `Box<Cell>`.
 C holds an instance as a handle, passes it back to an exported function, and
 never reads its fields:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Compact } from "nish:compact";
 
@@ -176,7 +174,11 @@ export const total = (head: Cell | null): i32 => {
   let sum = 0;
   let at = head;
   while (at !== null) {
-    sum = sum + at.value;
+    const v = at.value;
+    if (v < 0 || v > 1000000 || sum > 1000000000) {
+      return -1;
+    }
+    sum = sum + v;
     at = at.next;
   }
   return sum;

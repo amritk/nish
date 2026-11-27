@@ -59,16 +59,17 @@ display's pixel ratio changes, for a game that fits its framebuffer to the
 window (with `gameSetSize`, in framebuffer pixels).
 
 The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do) for the indexes and
-sums in their own code, which the compiler refuses by default until a guard
-proves each, such as `i < xs.length` before an index. The calls they make into
-`nish/host/game`, `nish/raster` and `nish/synth` build under the default.
+[`--allow-panics`](cli.md#asking-what-a-program-can-do) for one thing: they
+index module storage, which no proof reaches yet, so every such index is
+refused by default. Their sums are done in `f64`, which cannot overflow, and
+the calls they make into `nish/host/game`, `nish/raster` and `nish/synth`
+build under the default.
 
 The game's state lives in module storage: typed arrays declared at the top of
 the module, which keep their values from call to call. This game moves a
 square with the arrow keys and beeps when space is pressed:
 
-<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
+<!-- allow-panics: indexes module storage, which no guard the checker reads proves in range yet -->
 <!-- nish:ok --target wasm32 --allow-panics -->
 ```ts
 import { GAME_FRAME, gameHeight, gamePlaySound, gameReadInput, gameSetSize, gameWidth, gameWriteSamples } from "nish/host/game"
@@ -112,15 +113,15 @@ export const step = (nowMs: f64): void => {
     }
   }
   STATE[1] = STATE[0]
-  STATE[0] = Math.min(Math.max(STATE[0] + toF64(HELD[1] - HELD[0]) * 3.0, 0.0), 300.0)
+  STATE[0] = Math.min(Math.max(STATE[0] + (toF64(HELD[1]) - toF64(HELD[0])) * 3.0, 0.0), 300.0)
 }
 
 export const draw = (alpha: f64, frameMs: f64): void => {
   const w: i32 = gameWidth()
   const h: i32 = gameHeight()
   rasterGradient(GAME_FRAME, w, h, 0x101830, 0x302040)
-  const x: i32 = toI32(STATE[1] + (STATE[0] - STATE[1]) * alpha)
-  rasterRect(GAME_FRAME, w, h, x, 80, x + 20, 100, 0xffd040, RASTER_SOLID)
+  const x: f64 = STATE[1] + (STATE[0] - STATE[1]) * alpha
+  rasterRect(GAME_FRAME, w, h, toI32(x), 80, toI32(x + 20.0), 100, 0xffd040, RASTER_SOLID)
   rasterText(GAME_FRAME, w, h, 6, 6, 1, "arrows move, space beeps", 0xf0f0f0)
 }
 ```
@@ -131,7 +132,7 @@ module storage of a class or `null` is
 the world in it, with every array and object it reaches, lasts from `init`
 through every `step` and `draw` while memory stays bounded:
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- allow-panics: indexes module storage, which no guard the checker reads proves in range yet -->
 <!-- nish:ok --target wasm32 --allow-panics -->
 ```ts
 class Ball {

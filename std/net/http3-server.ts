@@ -12,7 +12,7 @@
  *     import { QuicServerConfig } from "nish/net/quic";
  *     import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
  *
- *     // `quicConfig.alpn` is ["h3"]; `privateKey` is the P-256 key of its certificate.
+ *     // `quicConfig.alpn` is ["h3"]; `privateKey` is its certificate's key, P-256 or RSA.
  *     const run = (quicConfig: QuicServerConfig, privateKey: u8[], rounds: i32): void => {
  *       const fd: i32 = udpBind("0.0.0.0", 4433, 0);
  *       const listenerEntropy: u8[] = new Array<u8>(QUIC_LISTENER_ENTROPY_SIZE);
@@ -149,7 +149,7 @@ import {
   quicListenerFlightTime,
   quicListenerTakeFlight,
 } from "nish/net/quic-listener"
-import { TlsP256Signer } from "nish/net/tls"
+import { TlsKeySigner } from "nish/net/tls"
 
 /** The timer wheel's buckets, one millisecond each: its horizon. */
 export const H3_SERVER_WHEEL: i32 = 2048
@@ -749,7 +749,7 @@ export class Http3Server {
   entropy: u8[]
   private flight: QuicFlight
   /** Signs every slot's CertificateVerify in `serve`, one for the server, keeping nothing per signature. */
-  private signer: TlsP256Signer
+  private signer: TlsKeySigner
   /** Each slot's connection-ID index signature, so it is refiled only when its IDs changed. */
   private signatures: i64[]
   private state: i32[]
@@ -886,7 +886,7 @@ export class Http3Server {
     this.from = new Array<u8>(H3_SERVER_ADDRESS)
     this.meta = [H3_SERVER_ZERO, H3_SERVER_ZERO]
     this.flight = new QuicFlight()
-    this.signer = new TlsP256Signer()
+    this.signer = new TlsKeySigner(quicConfig.signatureScheme)
     this.signatures = http3ServerZeroTimes(size)
     this.state = http3ServerFilled(size, H3_SERVER_ZERO)
     this.readyRing = http3ServerFilled(size, H3_SERVER_ZERO)
@@ -1092,7 +1092,7 @@ export class Http3Server {
   /**
    * Reads every datagram waiting on the socket, in at most
    * `H3_SERVER_RECEIVE_BURST` receives, and hands each to its slot or the listener,
-   * signing a handshake's CertificateVerify with `key` (ECDSA P-256) when one
+   * signing a handshake's CertificateVerify with `key` (in `signatureScheme`) when one
    * asks. A GRO receive is cut into its datagrams in place. Answers how many
    * datagrams it read.
    * @param now The current millisecond on the caller's monotonic clock.

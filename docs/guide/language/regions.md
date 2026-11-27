@@ -13,9 +13,8 @@ one `free` gives all of it back. The functions come from the built-in module
 Several examples on this page build with
 [`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): `nish:region`'s code in the
 standard library keeps panic sites no proof removes yet, and they will build
-under the default once it is made panic-free. Some also add, index or size an
-array with nothing bounding it, which a bound or an `i < xs.length` test before
-the index would fix.
+under the default once it is made panic-free. Their own code already carries
+the guards the default asks for.
 
 `region(f)` makes a region and runs `f` in it: every object `f` allocates
 lands in the region, and what `f` answers is the region's *root*. You get back
@@ -23,7 +22,7 @@ a `Region<T>` handle, which is a number, not a pointer. `enter(r, f)` runs
 `f(root)` in the region again and answers what `f` answers. `free(r)` gives
 the memory back:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/region.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/region.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Region, enter, free, region } from "nish:region";
@@ -35,7 +34,10 @@ class Session {
 const open = (): Session => new Session();
 
 const touch = (s: Session): i32 => {
-  s.hits = s.hits + 1;
+  const hits = s.hits;
+  if (hits < 1000000) {
+    s.hits = hits + 1;   // stops at a million, so the `+` fits
+  }
   return s.hits;
 };
 
@@ -57,7 +59,7 @@ region captures nothing.
 `f(arg)` and `f(root, arg)`. Numbers that `f` copies out of the region, into an
 array it was given, are yours to keep after `free`:
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/region.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/region.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Region, enterWith, free, regionWith } from "nish:region";
@@ -65,10 +67,15 @@ import { Region, enterWith, free, regionWith } from "nish:region";
 class Buffer {
   bytes: u8[];
   constructor(size: i32) {
-    this.bytes = new Array<u8>(size);
-    for (let k: i32 = 0; k < size; k++) {
-      this.bytes[k] = 7;
+    let n = 0;
+    if (size > 0) {
+      n = size;   // a negative size makes an empty buffer
     }
+    const bytes = new Array<u8>(n);
+    for (let k: i32 = 0; k < bytes.length; k++) {
+      bytes[k] = 7;
+    }
+    this.bytes = bytes;
   }
 }
 
@@ -87,7 +94,9 @@ export const main = (): i32 => {
   const n = enterWith(r, out, copyOut);
   free(r);
   console.log(n);
-  console.log(out[3]);
+  if (out.length > 3) {
+    console.log(out[3]);
+  }
   return 0;
 };
 ```

@@ -10,14 +10,9 @@ section.
 ## Objects
 
 An object pattern reads fields of a class or interface value. Write a field's
-name to bind it under that name, or `field: name` to rename it. The examples
-on this page do `i32` arithmetic nothing bounds, so the compiler cannot prove
-it fits and they build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
-as the compile error suggests, builds them under the default:
+name to bind it under that name, or `field: name` to rename it:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Point {
   x: i32;
@@ -30,12 +25,16 @@ class Point {
 
 export const main = (): i32 => {
   const { x, y: py } = new Point(3, 4);
+  if (x < 0 || x > 10000 || py < 0 || py > 10000) {
+    return 1;
+  }
   console.log(`${x * x + py * py}`);
   return 0;
 };
 ```
 
-This prints `25`. A name the class does not have is refused, as `p.z` would
+This prints `25`. The names a pattern binds are locals, so a test of them, as
+here, is what proves `x * x + py * py` fits an `i32`. A name the class does not have is refused, as `p.z` would
 be. A name you bind and never read is an error, as for any local; to keep it
 on purpose, rename it inside the pattern, `{ x, y: _y }`.
 
@@ -51,12 +50,13 @@ side once.
 An array pattern reads elements by their position. Leave a position empty to
 skip it:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok-body --allow-panics -->
+<!-- nish:ok-body -->
 ```ts
 const xs: i32[] = [10, 20, 30];
 let [a, , c] = xs;
-a = a + 1;
+if (a < 1000000) {
+  a = a + 1;
+}
 console.log(`${a} ${c}`);
 ```
 
@@ -68,8 +68,7 @@ holds a value of its type.
 
 ## In a `for...of`
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Point {
   x: i32;
@@ -84,6 +83,9 @@ export const main = (): i32 => {
   const points: Point[] = [new Point(1, 2), new Point(3, 4)];
   let sum = 0;
   for (const { x, y } of points) {
+    if (x < 0 || x > 1000 || y < 0 || y > 1000 || sum > 1000000000) {
+      return 1;
+    }
     sum = sum + x * y;
   }
   console.log(`${sum}`);

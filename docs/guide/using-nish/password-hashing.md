@@ -23,11 +23,11 @@ so a program that only calls them builds under the default. The first two
 examples build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do) because
 `crypto.getRandomValues` exits the program when the system has no random
-bytes to give, a check no proof removes. The indexes and sums in the second
-example build under the default once a guard proves each, such as
-`i < xs.length` before an index.
+bytes to give, and has no form that answers instead. The rest of their code is
+written the way the default asks: the second example bounds how many salts it
+draws and where a salt starts before it sums or indexes with them.
 
-<!-- allow-panics: calls a file or entropy builtin that exits on failure -->
+<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { bcryptHash, bcryptVerify } from "nish/crypto/bcrypt";
@@ -122,7 +122,7 @@ the thread that opened the scope waits for the slowest hash rather than for
 all of them in turn. Here three sign-ups that arrived together are hashed side
 by side, given a free core for each:
 
-<!-- allow-panics: builds an array whose length it does not bound; calls a file or entropy builtin that exits on failure; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
+<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; spawns into slots 1 and 2 of a three-element array, which no guard the checker reads proves in range after the spawn before them yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { bcryptHash } from "nish/crypto/bcrypt";
@@ -138,17 +138,30 @@ const bytesOf = (text: string): u8[] => {
 };
 
 // A fresh salt for each password, drawn on the calling thread.
+// One call draws for at most 1024 passwords.
 const freshSalts = (n: i32): u8[] => {
-  const salts: u8[] = new Array<u8>(16 * n);
+  if (n < 0 || n > 1024) {
+    return [];
+  }
+  const size: i32 = 16 * n;
+  const salts: u8[] = new Array<u8>(size);
   crypto.getRandomValues(salts);
   return salts;
 };
 
 // One password's hash under the salt at `at`: the task's whole job.
 const hashAt = (password: Secret<u8[]>, salts: u8[], at: i32): string => {
+  // A salt past those of 1024 passwords, or one the salts end before, is none.
+  if (at < 0 || at > 16384) {
+    return "";
+  }
   const salt: u8[] = new Array<u8>(16);
   for (let i: i32 = 0; i < 16; i++) {
-    salt[i] = salts[at + i];
+    const k: i32 = at + i;
+    if (k >= salts.length) {
+      return "";
+    }
+    salt[i] = salts[k];
   }
   const made = bcryptHash(password, salt, 10);
   return made.isErr() ? "" : made.value;
