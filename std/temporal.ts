@@ -613,10 +613,18 @@ const temporalDayOfYear = (month: i32, day: i32, leap: boolean): i32 => {
 }
 
 /**
- * The ISO weekday of an epoch day: 1 for Monday to 7 for Sunday. 1970-01-01,
- * day 0, was a Thursday, so the day plus 3 taken mod 7 puts it on 4.
+ * The ISO weekday of an epoch day in Temporal's range: 1 for Monday to 7 for
+ * Sunday. The day counts from 1,000 eras before 0000-03-01, nonnegative there,
+ * and 146,816,470 days is 3 more than a whole number of weeks, which puts
+ * 1970-01-01, a Thursday, on 4.
  */
-const temporalDayOfWeek = (epochDay: i64): i32 => temporalModSmall(temporalAdd(epochDay, 3), 7) + 1
+const temporalDayOfWeek = (epochDay: i64): i32 => {
+  // Every caller checked the day is in Temporal's range, far inside `i32`, so
+  // the truncation is exact and the test always true.
+  const day: i32 = toI32(epochDay)
+  const up: i32 = day >= -146816470 && day <= 146816470 ? day + 146816470 : 0
+  return (up % 7) + 1
+}
 
 /** How many ISO weeks `year` has: 53 when it starts on a Thursday, or is a leap year starting on a Wednesday. */
 const temporalWeeksInYear = (year: i32): i32 =>
@@ -2017,8 +2025,10 @@ export class PlainTime {
    */
   toString(): string {
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
-    // The nanoseconds past the second, which the constructor built `nanoOfDay` from.
-    const sub: i32 = temporalModSmall(this.nanoOfDay, 1000000000)
+    // The nanoseconds past the second: each field is under 1000, so this is exact.
+    const sub: i32 = toI32(
+      toI64(this.millisecond) * 1000000 + toI64(this.microsecond) * 1000 + toI64(this.nanosecond)
+    )
     const end: i32 = temporalPutTime(out, 0, this.hour, this.minute, this.second, sub)
     return temporalText(out, end)
   }
@@ -2335,8 +2345,10 @@ export class PlainDateTime {
    */
   toString(): string {
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
-    // The nanoseconds past the second, which the constructor built `nanoOfDay` from.
-    const sub: i32 = temporalModSmall(this.nanoOfDay, 1000000000)
+    // The nanoseconds past the second: each field is under 1000, so this is exact.
+    const sub: i32 = toI32(
+      toI64(this.millisecond) * 1000000 + toI64(this.microsecond) * 1000 + toI64(this.nanosecond)
+    )
     if (this.year >= 0 && this.year <= 9999) {
       const seconds: i32 = temporalPutDateTime4(
         out,

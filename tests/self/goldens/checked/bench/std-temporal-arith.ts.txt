@@ -442,12 +442,10 @@ function temporalDayOfYear(month: i32, day: i32, leap: boolean): i32 -> @nish.te
   stackSites=0 stackLocals=0
   local +0:9 before: i32 (const)
 function temporalDayOfWeek(epochDay: i64): i32 -> @nish.temporalDayOfWeek
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: epochDay
-  calls: nish.temporalAdd nish.temporalModSmall
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  callee +0:51 temporalModSmall -> @nish.temporalModSmall
-  callee +0:68 temporalAdd -> @nish.temporalAdd
+  local +0:9 day: i32 (const)
+  local +1:9 up: i32 (const)
 function temporalWeeksInYear(year: i32): i32 -> @nish.temporalWeeksInYear
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: year
@@ -1159,15 +1157,14 @@ function PlainTime.constructor(this: PlainTime, hour: i32, minute: i32, second: 
   callee +15:22 temporalNanoOfDay -> @nish.temporalNanoOfDay
 function PlainTime.toString(this: PlainTime): string -> @nish.PlainTime.toString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.temporalModSmall nish.temporalPutTime nish.temporalText
+  calls: nish.temporalPutTime nish.temporalText
   pointer this: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 out: u8[] (const)
   local +2:11 sub: i32 (const)
-  callee +2:22 temporalModSmall -> @nish.temporalModSmall
-  local +3:11 end: i32 (const)
-  callee +3:22 temporalPutTime -> @nish.temporalPutTime
-  callee +4:12 temporalText -> @nish.temporalText
+  local +5:11 end: i32 (const)
+  callee +5:22 temporalPutTime -> @nish.temporalPutTime
+  callee +6:12 temporalText -> @nish.temporalText
 function PlainTime.toJSON(this: PlainTime): string -> @nish.PlainTime.toJSON [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.PlainTime.toString
@@ -1290,22 +1287,21 @@ function PlainDateTime.constructor(this: PlainDateTime, isoYear: i32, isoMonth: 
   callee +12:7 temporalRangeError -> @nish.temporalRangeError
 function PlainDateTime.toString(this: PlainDateTime): string -> @nish.PlainDateTime.toString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.temporalModSmall nish.temporalPutByte nish.temporalPutDate nish.temporalPutDateTime4 nish.temporalPutFraction nish.temporalPutTime nish.temporalText
+  calls: nish.temporalPutByte nish.temporalPutDate nish.temporalPutDateTime4 nish.temporalPutFraction nish.temporalPutTime nish.temporalText
   pointer this: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 out: u8[] (const)
   local +2:11 sub: i32 (const)
-  callee +2:22 temporalModSmall -> @nish.temporalModSmall
-  local +4:13 seconds: i32 (const)
-  callee +4:28 temporalPutDateTime4 -> @nish.temporalPutDateTime4
-  callee +14:14 temporalText -> @nish.temporalText
-  callee +14:32 temporalPutFraction -> @nish.temporalPutFraction
-  local +16:11 date: i32 (const)
-  callee +16:23 temporalPutDate -> @nish.temporalPutDate
-  local +17:11 end: i32 (const)
-  callee +17:22 temporalPutTime -> @nish.temporalPutTime
-  callee +19:7 temporalPutByte -> @nish.temporalPutByte
-  callee +25:12 temporalText -> @nish.temporalText
+  local +6:13 seconds: i32 (const)
+  callee +6:28 temporalPutDateTime4 -> @nish.temporalPutDateTime4
+  callee +16:14 temporalText -> @nish.temporalText
+  callee +16:32 temporalPutFraction -> @nish.temporalPutFraction
+  local +18:11 date: i32 (const)
+  callee +18:23 temporalPutDate -> @nish.temporalPutDate
+  local +19:11 end: i32 (const)
+  callee +19:22 temporalPutTime -> @nish.temporalPutTime
+  callee +21:7 temporalPutByte -> @nish.temporalPutByte
+  callee +27:12 temporalText -> @nish.temporalText
 function PlainDateTime.toJSON(this: PlainDateTime): string -> @nish.PlainDateTime.toJSON [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.PlainDateTime.toString
