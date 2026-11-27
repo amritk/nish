@@ -157,11 +157,18 @@ export class ShmError {
 }
 
 /**
- * The errno a failed runtime call answered, negated back to positive. The
- * negation wraps through `u32`, so a stray `-2147483648` from C stays itself
- * instead of overflowing; the runtime only answers small errnos.
+ * The errno a failed runtime call answered, negated back to positive: `-rc`,
+ * spelled `~rc + 1`. The runtime only answers small errnos; a stray
+ * `-2147483648` from C, whose negation is past an `i32`, answers `2147483647`
+ * instead of overflowing, and the test with the literal is what proves the sum.
  */
-const shmErrno = (rc: i32): i32 => toI32(toU32(0) - toU32(rc))
+const shmErrno = (rc: i32): i32 => {
+  const m: i32 = ~rc
+  if (m < 0 || m > 2147483646) {
+    return 2147483647
+  }
+  return m + 1
+}
 
 /** `Ok()` for 0, the error for a negated errno. */
 const shmDone = (rc: i32): Result<void, ShmError> => {
