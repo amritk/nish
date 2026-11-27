@@ -325,13 +325,14 @@ const docText = (s: string): string => {
   if (first === last) {
     return ""
   }
-  const kept = lines.slice(first, last)
-  for (let i = 0; i < kept.length; i++) {
-    if (!emittable(kept[i], AS_COMMENT)) {
+  let kept = ""
+  for (let i = first; i < last; i++) {
+    if (!emittable(lines[i], AS_COMMENT)) {
       return ""
     }
+    kept = i === first ? lines[i] : `${kept}\n${lines[i]}`
   }
-  return kept.join("\n")
+  return kept
 }
 
 /** Whether `c` may continue a C identifier. */
