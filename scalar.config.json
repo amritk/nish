@@ -1984,6 +1984,21 @@
                           ]
                         }
                       },
+                      "/multipart": {
+                        "type": "page",
+                        "title": "multipart",
+                        "filepath": "docs/reference/net/multipart.md",
+                        "head": {
+                          "title": "multipart · Nish",
+                          "meta": [{ "property": "og:title", "content": "multipart" }],
+                          "links": [
+                            {
+                              "rel": "canonical",
+                              "href": "https://nishlang.com/reference/library/net/multipart"
+                            }
+                          ]
+                        }
+                      },
                       "/oidc": {
                         "type": "page",
                         "title": "oidc",
