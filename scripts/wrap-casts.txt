@@ -12,7 +12,6 @@
 4 src/constants.ts
 1 src/emit-ops.ts
 8 std/compress/deflate.ts
-14 std/crypto/x509.ts
 5 std/json-format.ts
 2 std/json-number.ts
 1 std/json-tokenizer.ts
