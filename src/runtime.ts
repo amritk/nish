@@ -872,6 +872,16 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // Its twin, the same shape, answers whether every byte was filled where
+    // `nish_random_fill` exits; still not `willreturn`, as it blocks the same way.
+    this.add(
+      new RuntimeFunction(
+        "nish_random_try_fill",
+        "declare zeroext i1 @nish_random_try_fill(%struct.nish_array* noundef nonnull align 8 nocapture)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // #385, runtime.c. `nish_random_fill`'s shape: writes every byte of the
     // array and keeps nothing of it, so `nocapture` without `readonly`; and
     // `willreturn`, unlike it, because the loop is bounded by `len` and makes

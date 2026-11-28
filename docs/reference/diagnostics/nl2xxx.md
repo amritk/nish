@@ -6702,7 +6702,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…` is refused: the one `crypto` member is `crypto.getRandomValues(bytes)`
+…` is refused: the one `crypto` member is `crypto.getRandomValues(bytes)`…
 ```
 
 [`nl2403_crypto_member.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2403_crypto_member.ts):
@@ -6716,7 +6716,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`crypto.randomUUID` is refused: the one `crypto` member is `crypto.getRandomValues(bytes)`
+`crypto.randomUUID` is refused: the one `crypto` member is `crypto.getRandomValues(bytes)`, with its twin `crypto.tryGetRandomValues(bytes)`, which answers `false` instead of exiting
 ```
 
 ## NL2404

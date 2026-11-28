@@ -1446,6 +1446,20 @@ const typedBuffers = () =>
     why: "the program passes an f32[], i32[], u16[] or u32[] buffer to a declared C function, which the reference refuses because it lends only u8[]",
   }))
 
+/** The changelog words of examples-strict S7e, an entropy builtin that answers instead of exiting. */
+const TRY_RANDOM = "add crypto.tryGetRandomValues"
+const tryRandom = () =>
+  [
+    "tests/cases/os_random_try.ts",
+    "docs/cookbook/builtin-host-entropy-try.ts",
+    "tests/link/deny_panics_entropy_try/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: TRY_RANDOM,
+    why: "the program calls crypto.tryGetRandomValues, which is new in this release, so the candidate compiles it and the reference refuses it",
+  }))
+
 /** The changelog words of WP89 S3b, a module that exports its C bindings. */
 const EXPORTED_BINDINGS = "a module exports its C bindings"
 const exportedBindings = () =>
@@ -16031,6 +16045,7 @@ const DECLARED = [
   ...typedBuffers(),
   ...targetFiles(),
   ...exportedBindings(),
+  ...tryRandom(),
   ...ownedHandles(),
   ...storageIndex(),
   ...arenaStrict(),

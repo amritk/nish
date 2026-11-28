@@ -750,6 +750,14 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
     emitter.fn.emit(`call void ${emitter.useRuntime("nish_random_fill")}(${ARRAY_STRUCT}* ${bytes})`)
     return "void"
   }
+  // Its twin answers whether every byte was filled, where the fill exits.
+  if (name === "crypto.tryGetRandomValues") {
+    emitter.declareType(ARRAY_TYPE)
+    const bytes = emitter.emitExpression(firstArgument(expr))
+    return emitter.fn.emitValue(
+      `call zeroext i1 ${emitter.useRuntime("nish_random_try_fill")}(${ARRAY_STRUCT}* ${bytes})`
+    )
+  }
   process.exit(internalErrorFor(`emitter: unexpected builtin \`${name}\``, emitter.opts.json))
 }
 
@@ -854,6 +862,10 @@ export const builtinCalleesNamed = (
   }
   if (name === "crypto.getRandomValues") {
     out.push("nish_random_fill")
+    return out
+  }
+  if (name === "crypto.tryGetRandomValues") {
+    out.push("nish_random_try_fill")
     return out
   }
   return out

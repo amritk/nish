@@ -1846,6 +1846,45 @@ makes its own may use it freely; one shared between tasks would be a write
 they all see, and is refused. See [Random numbers](../../reference/language/declarations.md#random-numbers-rng-in-nishrandom)
 in the reference.
 
+<a id="random-bytes-for-keys-cryptotrygetrandomvalues"></a>
+
+## Random bytes for keys: `crypto.tryGetRandomValues`
+
+Keys, salts and nonces come from the system's random source, not from
+`nish/random`. `crypto.getRandomValues(bytes)` fills a `u8[]` of at most
+65,536 bytes and stops the program when the source fails, so a program that
+calls it builds only with `--allow-panics`. Its twin
+`crypto.tryGetRandomValues(bytes)` does the same fill and answers `true`, or
+`false` when the source fails or more than 65,536 bytes are asked for, and
+never stops the program: a program built under the default calls it and
+hands the failure on as its own error.
+
+<!-- nish:ok -->
+```ts
+const salt = (): Result<u8[], string> => {
+  const bytes = new Array<u8>(16);
+  if (!crypto.tryGetRandomValues(bytes)) {
+    return Err("the system has no random bytes to give");
+  }
+  return Ok(bytes);
+};
+
+export const main = (): i32 => {
+  const s = salt();
+  if (!s.ok) {
+    console.log(s.error);
+    return 1;
+  }
+  console.log(`${s.value.length} random bytes`); // 16 random bytes
+  return 0;
+};
+```
+
+On `false` some of the bytes may already be written: they are not a key, and
+nothing weaker is tried in their place. Neither builtin exists on a wasm32
+build. See [the host](../../reference/language/builtins.md#the-host-the-wall-clock-entropy-file-times-and-signals)
+in the language reference.
+
 ## `nish/cli`
 
 `nish/cli` builds a command-line tool's `--help`: a header, usage lines,

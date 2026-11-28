@@ -1625,7 +1625,8 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     if (isResultConstructorCall(program, table, owner) || isSpawnCall(program, owner)) {
       return use(USE_ESCAPE)
     }
-    // WP34 N3 and N5: `crypto.getRandomValues(p)` writes every element of
+    // WP34 N3 and N5: `crypto.getRandomValues(p)` (and its twin
+    // `crypto.tryGetRandomValues(p)`) writes every element of
     // `p`, and `netRead(fd, p, off, len)` the range it reads into, and each
     // keeps nothing, as `p.fill(v)` would; without this `p` would be `readonly`.
     if (isWrittenArgument(builtinArgumentLetters(program, owner), index)) {

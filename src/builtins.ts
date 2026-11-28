@@ -91,9 +91,13 @@ const isNamespace = (name: string): boolean =>
 export const dateRefusal = (what: string): string =>
   `\`${what}\` is refused: Nish has no \`Date\` object; the one \`Date\` member is \`Date.now()\`, the wall clock in milliseconds`
 
-/** The same for `crypto`, whose one member is the entropy source. */
+/**
+ * The same for `crypto`, whose one member is the entropy source, with the twin
+ * that answers whether it filled the buffer instead of exiting.
+ */
 export const cryptoRefusal = (what: string): string =>
-  `\`${what}\` is refused: the one \`crypto\` member is \`crypto.getRandomValues(bytes)\``
+  `\`${what}\` is refused: the one \`crypto\` member is \`crypto.getRandomValues(bytes)\`, ` +
+  "with its twin `crypto.tryGetRandomValues(bytes)`, which answers `false` instead of exiting"
 
 /**
  * Refuses a builtin that reaches the operating system when `refused`, on a wasm
@@ -543,7 +547,7 @@ const SUPPORTED_BUILTINS: string =
   "console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, Math.floor, Math.ceil, " +
   "Math.trunc, Math.round, Math.sin, Math.cos, Math.tan, Math.exp, Math.log, Math.pow, Math.atan2, " +
   "Math.hypot, Math.abs, Math.sign, Math.min, Math.max, Math.clz32, Math.imul, Math.random, process.exit, " +
-  "Arena.mark, Arena.used, Date.now, crypto.getRandomValues"
+  "Arena.mark, Arena.used, Date.now, crypto.getRandomValues, crypto.tryGetRandomValues"
 
 /**
  * Whether `arg` holds a function reference, possibly `null`: a local, a field
@@ -893,6 +897,11 @@ const checkDate = (ctx: CheckContext, call: Node, args: Node, name: string, memb
  * machine. A statement, where the Web API also answers its argument, because
  * the argument is already in the caller's hands and an alias of it as the
  * value would be a second name for one buffer.
+ *
+ * `crypto.tryGetRandomValues(bytes)` is its twin for code built without
+ * `--allow-panics`: the same buffer rules, but where the original exits (more
+ * than 65,536 bytes, or a source that fails) it answers `false`, so it is a
+ * `boolean` expression and no panic site (`src/panics.ts`).
  */
 const checkCrypto = (
   ctx: CheckContext,
@@ -902,11 +911,15 @@ const checkCrypto = (
   member: string,
   scope: Scope
 ): i32 => {
-  if (member !== "getRandomValues") {
+  const answers = member === "tryGetRandomValues"
+  if (member !== "getRandomValues" && !answers) {
     return ctx.errorType(call.children[0], cryptoRefusal(name))
   }
   if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
     checkBuffer(ctx, args.children[0], scope, name, T_U8, true)
+  }
+  if (answers) {
+    return T_BOOL
   }
   requireStatementPosition(ctx, call, name)
   return T_VOID

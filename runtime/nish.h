@@ -781,6 +781,11 @@ double nish_date_now(void);
  * bytes, the Web API's limit for one call, and a failing entropy source both
  * print a message and exit 1; nothing weaker is ever substituted. */
 void nish_random_fill(nish_array *bytes);
+/* `crypto.tryGetRandomValues(bytes)`: the same fill from the same source, but
+ * where `nish_random_fill` exits it answers false (more than 65,536 bytes, or
+ * a failing source, which may leave a prefix written); true when every byte
+ * was filled. It never exits. */
+bool nish_random_try_fill(nish_array *bytes);
 /* `statMtimeSync(path)`: the modification time in milliseconds with its
  * sub-millisecond fraction, computed as Node's `mtimeMs` is, or NaN when
  * `stat` fails. Follows a symbolic link. */

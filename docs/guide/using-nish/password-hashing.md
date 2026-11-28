@@ -22,8 +22,11 @@ whether the password is the one the hash was made from.
 so a program that only calls them builds under the default. The first two
 examples build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do) because
-`crypto.getRandomValues` exits the program when the system has no random
-bytes to give, and has no form that answers instead. The rest of their code is
+they call `crypto.getRandomValues`, which exits the program when the system
+has no random bytes to give. Its twin
+[`crypto.tryGetRandomValues`](standard-library.md#random-bytes-for-keys-cryptotrygetrandomvalues)
+answers `false` instead, so a program built under the default can draw a salt
+and report the failure itself. The rest of their code is
 written the way the default asks: the second example bounds how many salts it
 draws and where a salt starts before it sums or indexes with them.
 

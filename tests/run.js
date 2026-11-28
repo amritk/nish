@@ -2041,6 +2041,60 @@ if (dealtHere("osHost")) {
     }
   }
 
+  // tryGetRandomValues: the answering twin fills 32, 0 and 65,536 bytes and
+  // answers false for 65,537, with exit 0 under `--deny-panics`.
+  const tryExe = buildCaseIn(osDir, "os_random_try")
+  const tryWant = "filled 32\ntrue\nfilled 0\nfilled 65536\nno entropy\n"
+  if (tryExe !== null) {
+    const r = osNative(tryExe, [])
+    check("os_random_try: the twin fills up to 65,536 bytes and answers false past them", r.status === 0 && r.stdout === tryWant, shown(r))
+  }
+
+  // A source that fails: a helper this check builds installs a seccomp filter
+  // that answers EPERM to `getrandom`, then execs the program. The twin's
+  // first draw answers false and the program reports it, exiting 0; the
+  // exiting builtin stops with status 1. Exit statuses and the program's own
+  // stdout decide, never a tool's words (docs/security/runtime.md, "Properties verified").
+  if (process.platform === "linux" && (tryExe !== null || randomExe !== null)) {
+    const src = path.join(osDir, "no-getrandom.c")
+    const helper = path.join(osDir, "no-getrandom")
+    fs.writeFileSync(
+      src,
+      "#include <errno.h>\n#include <stddef.h>\n#include <sys/prctl.h>\n#include <sys/syscall.h>\n#include <unistd.h>\n" +
+        "#include <linux/filter.h>\n#include <linux/seccomp.h>\n" +
+        "int main(int argc, char **argv) {\n  if (argc < 2) return 2;\n" +
+        "  struct sock_filter f[] = {\n" +
+        "    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),\n" +
+        "    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_getrandom, 0, 1),\n" +
+        "    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),\n" +
+        "    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),\n  };\n" +
+        "  struct sock_fprog prog = {4, f};\n" +
+        "  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) return 3;\n" +
+        "  if (syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, 0, &prog) != 0) return 3;\n" +
+        "  execv(argv[1], argv + 1);\n  return 111;\n}\n"
+    )
+    const cc = spawnSync("clang", ["-O2", src, "-o", helper], { encoding: "utf8" })
+    if (check("os_random_try: the getrandom-refusing helper builds", cc.status === 0, String(cc.stderr))) {
+      const probe = spawnSync(helper, ["/bin/true"], { encoding: "utf8" })
+      if (probe.status === 3) {
+        skip("os_random_try: this kernel takes no seccomp filter, so the failing source is not checked")
+      } else {
+        if (tryExe !== null) {
+          const r = spawnSync(helper, [tryExe], { cwd: root, encoding: "utf8" })
+          check(
+            "os_random_try: with getrandom refused, every non-empty draw answers false and the program exits 0",
+            r.status === 0 && r.stdout === "no entropy\nfalse\nfilled 0\nno entropy\nno entropy\n",
+            shown(r)
+          )
+        }
+        if (randomExe !== null) {
+          const r = spawnSync(helper, [randomExe, "print"], { cwd: root, encoding: "utf8" })
+          check("os_random: with getrandom refused, crypto.getRandomValues exits 1", r.status === 1, shown(r))
+        }
+      }
+    }
+  }
+
   // statMtimeSync: a file whose mtime is set to a fraction of a millisecond, read
   // natively and under the prelude, and both held to `fs.statSync().mtimeMs`
   // printed as JavaScript prints it. The fraction is the point: a runtime that

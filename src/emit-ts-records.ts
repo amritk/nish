@@ -365,6 +365,13 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
   if (method === "getRandomValues" && args.length === 1 && written === "crypto.getRandomValues") {
     return `${walk.helperName("getRandomValues")}(${operands.at(1)})`
   }
+  // The twin answers `false` where the fill would fail: past 65,536 bytes,
+  // the one failure a JavaScript host's source reports, so the helper is only
+  // reached with a length it fills. One call, so the operand is read once.
+  if (method === "tryGetRandomValues" && args.length === 1 && written === "crypto.tryGetRandomValues") {
+    const fill = walk.helperName("getRandomValues")
+    return `((bytes: number[]): boolean => bytes.length <= 65536 && ${fill}(bytes) === bytes)(${operands.at(1)})`
+  }
   if (method === "pop" && args.length === 0) {
     // Unchecked, the walk proved the array non-empty, which `tsc` cannot
     // see: its `T | undefined` is the element.
