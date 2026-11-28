@@ -122,7 +122,7 @@ function namesBigint(table: TypeTable, sig: FunctionSig): boolean -> @namesBigin
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isBigintWidth
   pointer table: size=176 writesThrough=false captured=false passedTo=isBigintWidth#0 isBigintWidth#0
-  pointer sig: size=296 writesThrough=false captured=false
+  pointer sig: size=304 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 isBigintWidth -> @isBigintWidth
   local +3:14 t: i32 (const)
