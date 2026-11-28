@@ -4467,7 +4467,7 @@ class YamlParser {
       this.handleNames = []
       this.handlePrefixes = []
       this.yamlDirective = false
-      // Each pass pushes one document, so this is always `this.doc + 1`.
+      // Each pass pushes one document, so the count is `this.doc + 1` with no sum to bound.
       this.doc = toI32(this.stream.docRoots.length)
     }
     const stream: YamlStream = this.stream

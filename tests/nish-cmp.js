@@ -24526,6 +24526,10 @@ const DECLARED = [
     "a program new with this change: it pins that parseYaml builds under the no-panic default, and links std/yaml.ts, whose YamlStream and YamlFlowWriter the seed's copy lays out differently and whose functions this change gives other attribute groups, so the program's module and header move",
     { "tests/link/std_yaml_strict/main.ts": ["main.h", "main.ll"] }
   ),
+  ...byFinding(YAML_PANIC_FREE)(
+    "the yaml parse bench declares std/yaml.ts's YamlStream methods, which this change leaves with no panic site and so gives other attribute groups, so the program's module and the header that lists those functions move",
+    { "bench/std-yaml-parse.ts": ["std-yaml-parse.h", "std-yaml-parse.ll"] }
+  ),
   // WP85 S2: the term modules prove or drop their panic sites.
   ...byFinding(TERM_PANIC_FREE)(
     "std/term-rate.ts, std/term-io.ts and std/term-probe.ts prove or drop their panic sites (WP85 S2): `RateController` keeps its fastest, up and level rates as i32 fields and saturates its counters, and the modules' bodies change, so each program's copy of those modules moves",
