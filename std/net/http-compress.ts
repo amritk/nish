@@ -1250,6 +1250,7 @@ export class HttpBodyDecoder {
     if (off < 0 || len < 0 || off > toI32(src.length) - len) {
       return HTTP_DECODE_BAD_CALL
     }
+    const stop: i32 = toI32(toI64(off) + toI64(len))
     const limit: i32 = this.limit
     // A first guess of four times the input, so most bodies decode at once.
     // Under the test, `len` is at most a quarter of `limit`, so four times it
@@ -1269,10 +1270,17 @@ export class HttpBodyDecoder {
       while (toI32(output.length) < size) {
         output.push(0)
       }
+      // The window's test again, on its two ends and after the growth: the
+      // decompressors' range checks are tests of the same ends, so this is
+      // what proves them away. It answers as the first test does, which it
+      // always passes where the first did.
+      if (off < 0 || off > stop || stop > toI32(src.length) || limit < 0) {
+        return HTTP_DECODE_BAD_CALL
+      }
       const end: i32 =
         coding === HTTP_CODING_GZIP
-          ? this.gunzip.decompress(src, off, len, this.output, toI32(0), limit)
-          : this.unzlib.decompress(src, off, len, this.output, toI32(0), limit)
+          ? this.gunzip.decompressRange(src, off, stop, output, 0, limit)
+          : this.unzlib.decompressRange(src, off, stop, output, 0, limit)
       if (end >= 0) {
         return end
       }

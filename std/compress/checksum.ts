@@ -161,11 +161,31 @@ export class Crc32 {
     checksumWindow("Crc32.update", buf, off, len)
     return crc32Walk(this.table, this.braid, crc, buf, off, len)
   }
+
+  /**
+   * The CRC-32 of `buf[off .. end)` alone, a range given by its two ends:
+   * `update` from 0. Its checks test the parameters themselves, so a caller
+   * that has tested the same ends proves them away, which a length cannot
+   * give: the decoders under `nish/net/http-compress` call this one. A range
+   * outside `buf` panics.
+   *
+   * @internal Called by std/compress/gzip.ts's range decoder and header reader.
+   * @param buf The array that holds the bytes to checksum.
+   * @param off Where in `buf` the bytes start.
+   * @param end One past the last byte; `off` answers 0.
+   * @returns The CRC-32 of the range, as `update(0, buf, off, end - off)` answers it.
+   */
+  ofRange(buf: u8[], off: i32, end: i32): u32 {
+    if (off < 0 || off > end || end > toI32(buf.length)) {
+      panic("Crc32.ofRange: the range lies outside its array")
+    }
+    return crc32Walk(this.table, this.braid, toU32(0), buf, off, end - off)
+  }
 }
 
 /**
  * `Crc32.update`'s loop: the CRC-32 of the bytes `crc` was the CRC of,
- * followed by `buf[off .. off + len)`, a window its one caller has checked,
+ * followed by `buf[off .. off + len)`, a window its callers have checked,
  * over the two tables `Crc32`'s constructor built at their full size and
  * nothing replaces. Natively the compiler puts the call
  * behind a branch on `nish_crc32_hw` and hands the same window to the
@@ -291,7 +311,7 @@ export const adler32Update = (adler: u32, buf: u8[], off: i32, len: i32): u32 =>
 
 /**
  * `adler32Update`'s loop: the Adler-32 of the bytes `adler` was the Adler-32
- * of, followed by `buf[off .. off + len)`, a window its one caller has
+ * of, followed by `buf[off .. off + len)`, a window its callers have
  * checked. Natively the compiler puts the call behind a branch on
  * `nish_adler32_hw` and hands the same window to the runtime's
  * `nish_adler32_update`, which runs it on SSSE3 or NEON vectors
@@ -339,3 +359,23 @@ const adler32Walk = (adler: u32, buf: u8[], off: i32, len: i32): u32 => {
  * @returns The Adler-32 of the window, the value zlib's trailer carries.
  */
 export const adler32 = (buf: u8[], off: i32, len: i32): u32 => adler32Update(toU32(1), buf, off, len)
+
+/**
+ * `adler32` over `buf[off .. end)`, a range given by its two ends. Its
+ * checks test the parameters themselves, so a caller that has tested the
+ * same ends proves them away, which a length cannot give: the decoders
+ * under `nish/net/http-compress` call this one. A range outside `buf`
+ * panics.
+ *
+ * @internal Called by std/compress/zlib.ts's range decoder.
+ * @param buf The array that holds the bytes to checksum.
+ * @param off Where in `buf` the bytes start.
+ * @param end One past the last byte to checksum; `off` answers 1.
+ * @returns The Adler-32 of the range, the value zlib's trailer carries.
+ */
+export const adler32Range = (buf: u8[], off: i32, end: i32): u32 => {
+  if (off < 0 || off > end || end > toI32(buf.length)) {
+    panic("adler32Range: the range lies outside its array")
+  }
+  return adler32Walk(toU32(1), buf, off, end - off)
+}

@@ -586,7 +586,7 @@ only.
 | STATIC-9 | Low | `std/net/static.ts` (`staticFill`) | A file streamed from disk that shrinks while it is sent goes out at its declared length, the missing tail as zero bytes: no carrier offers an abort | — |
 | STATIC-10 | Low | `std/net/static.ts` (`staticResolve`) | The path is checked by `realpathSync` and then opened by name, so a writer of the served directory can swap a link between the two | — |
 | STATIC-11 | Low | `std/net/static.ts` (`staticLoad`, `staticTag`) | A file rewritten with the same size within the same millisecond keeps its cache slot and its ETag | — |
-| STATIC-12 | Low | `std/net/static.ts` | Not proven free of panics; `examples/http-app` is built with `--allow-panics` | — |
+| STATIC-12 | Low | `std/net/static.ts` | Not proven free of panics; `examples/http-app` reaches none of the sites | — |
 | CI-4 | Low | `src/c-import.ts` (`readHeader`, `readMacros`) | A header clang refuses has clang's errors printed to stderr as clang wrote them, escape bytes and lines of any file it includes among them, as running clang on the header by hand prints them; the module is not written | — |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by

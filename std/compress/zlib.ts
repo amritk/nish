@@ -23,7 +23,7 @@
  *
  * Written from RFC 1950.
  */
-import { adler32 } from "nish/compress/checksum"
+import { adler32, adler32Range } from "nish/compress/checksum"
 import {
   DEFLATE_ERR_OUTPUT_LIMIT,
   DEFLATE_ERR_TRAILING,
@@ -164,17 +164,54 @@ export class ZlibDecompressor {
    *   nothing.
    */
   decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 {
-    zlibWindow("ZlibDecompressor.decompress", src, off, len)
-    zlibWindow("ZlibDecompressor.decompress", out, at, 0)
+    // Tested on the window's two ends, the form `decompressRange`'s checks
+    // take: a window whose end leaves the i32 range ends before it starts.
+    const end: i32 = toI32(toI64(off) + toI64(len))
+    if (off < 0 || len < 0 || off > end || end > toI32(src.length)) {
+      panic("ZlibDecompressor.decompress: the input window lies outside its array")
+    }
+    if (at < 0 || at > toI32(out.length)) {
+      panic("ZlibDecompressor.decompress: the output start lies outside its array")
+    }
     if (limit < 0) {
       panic("ZlibDecompressor.decompress: a negative limit")
     }
-    // The window was checked in `zlibWindow`; the prover does not carry
-    // that across the call, so the header's bytes are checked again here
-    // and positions are added in i64.
+    return this.decompressRange(src, off, end, out, at, limit)
+  }
+
+  /**
+   * `decompress` over `src[off .. end)`, a range given by its two ends. Its
+   * checks test the parameters themselves, so a caller that has tested the
+   * same ends proves them away, which a length cannot give:
+   * `nish/net/http-compress`'s decoder calls this one. A range outside
+   * `src`, an output start outside `out`, or a negative `limit` panics.
+   *
+   * @internal Called by std/net/http-compress.ts's body decoder.
+   * @param src The array that holds the zlib stream.
+   * @param off Where in `src` the stream starts.
+   * @param end One past the stream's last byte.
+   * @param out The caller's array the data is written into.
+   * @param at Where in `out` the data starts.
+   * @param limit The most bytes of data to accept.
+   * @returns The index in `out` one past the data's last byte, or a negative
+   *   code, as `decompress` answers.
+   */
+  decompressRange(src: u8[], off: i32, end: i32, out: u8[], at: i32, limit: i32): i32 {
+    if (off < 0 || off > end || end > toI32(src.length)) {
+      panic("ZlibDecompressor.decompressRange: the input range lies outside its array")
+    }
+    if (at < 0 || at > toI32(out.length)) {
+      panic("ZlibDecompressor.decompressRange: the output start lies outside its array")
+    }
+    if (limit < 0) {
+      panic("ZlibDecompressor.decompressRange: a negative limit")
+    }
     const n: i32 = toI32(src.length)
+    // Taken in 64 bits: `off` is at most the input's end, but the prover
+    // cannot see that `off + 2` stays in range from the test below.
     const second: i32 = toI32(toI64(off) + 1)
-    if (len < 2 || off < 0 || off >= n || second < 0 || second >= n) {
+    const start: i32 = toI32(toI64(off) + 2)
+    if (end - off < 2 || off >= n || second < 0 || second >= n) {
       return DEFLATE_ERR_TRUNCATED
     }
     const cmf: i32 = toI32(src[off])
@@ -191,8 +228,13 @@ export class ZlibDecompressor {
     }
     const inf: Inflater = this.inflater
     inf.reset()
-    const end: i32 = toI32(toI64(off) + toI64(len))
-    const r: i32 = inf.inflate(src, toI32(toI64(off) + 2), end, false, out, at, outEnd, at)
+    // The checks above hold still, but the call since has taken what the
+    // prover knew of the arrays' lengths: tested again for it, with the
+    // answer a stream past the input's end would get.
+    if (start < 0 || start > end || end > toI32(src.length) || at < 0 || at > outEnd || outEnd > toI32(out.length)) {
+      return DEFLATE_ERR_TRUNCATED
+    }
+    const r: i32 = inf.inflateAll(src, start, end, out, at, outEnd)
     if (r === INFLATE_NEED_OUTPUT) {
       return DEFLATE_ERR_OUTPUT_LIMIT
     }
@@ -217,13 +259,17 @@ export class ZlibDecompressor {
       return DEFLATE_ERR_TRUNCATED
     }
     const want: u32 = (toU32(src[q]) << 24) | (toU32(src[q1]) << 16) | (toU32(src[q2]) << 8) | toU32(src[q3])
-    if (adler32(out, at, toI32(toI64(inf.outPos) - toI64(at))) !== want) {
+    const outPos: i32 = inf.outPos
+    if (at > outPos || outPos > toI32(out.length)) {
+      return DEFLATE_ERR_TRUNCATED
+    }
+    if (adler32Range(out, at, outPos) !== want) {
       return ZLIB_ERR_ADLER
     }
     if (toI64(q) + 4 !== toI64(end)) {
       return DEFLATE_ERR_TRAILING
     }
-    return inf.outPos
+    return outPos
   }
 }
 

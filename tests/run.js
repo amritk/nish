@@ -47596,7 +47596,6 @@ if (!only || "net_static".includes(only) || "http-app".includes(only)) {
     const built = spawnNish(
       [
         path.join(root, "examples", "http-app", "main.ts"),
-        ALLOW_PANICS,
         "--sandbox",
         "--allow",
         `net,signal,clock,fs.read=${www}`,
