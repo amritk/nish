@@ -313,8 +313,10 @@ codes at -1.
 
 A cap out of range panics (`net_http3_bad_config`,
 `net_http3_server_bad_config`, `net_http3_server_bad_idle_timeout`,
-`net_http3_server_bad_head_timeout`), as does a write's window outside its buffer
-(`net_http3_write_window`).
+`net_http3_server_bad_head_timeout`). A write's window outside its buffer is
+not a panic: `writeStream`, `writeData` and `writeDataWhole` answer
+H3_INVALID before anything about the stream is asked
+(`net_http3_write_window`, which prints -22 and exits 0).
 
 Every counter a peer drives saturates: requests rejected, sections answered
 431, stream errors, connections accepted, Initials refused, answers limited,
@@ -392,7 +394,7 @@ without the sites the prover discharges:
 | --- | --- | --- | --- |
 | `std/net/http3-frame.ts` | 21 | 3 | `h3CheckWindow`: a window outside the caller's buffer, and the two exported forwarders' calls of it (`Http3FrameHeader.read`, `h3WindowEnd`) |
 | `std/net/qpack.ts` | 38 | 3 | `qpackCheckWindow`, `qpackPushStreamCancellation`'s stream ID, `QpackDecoder`'s construction limit |
-| `std/net/http3.ts` | 248 | 7 | `http3CheckCap` and three checks of `Http3Connection`'s configuration; three exported forwarders' calls of `h3CheckWindow` |
+| `std/net/http3.ts` | 248 | 4 | `http3CheckCap` and three checks of `Http3Connection`'s configuration |
 | `std/net/http3-server.ts` | 153 | 8 | three checks of `Http3Server`'s configuration; three `udpSendTo`/`udpRecvFrom` buffer range checks; two runtime exits when `crypto.getRandomValues` fails |
 
 Every `panic` left checks an argument the program passes: a window, a cap or a
@@ -423,19 +425,15 @@ for one claiming the largest length a varint holds.
 the guard every caller reached. A program that builds `nish/net` as a
 dependency (relay) sees its calls proven or forwarded. The sweep above builds
 each module as the root package, where an exported forwarder keeps its own
-guard call as an unproven `window` site (`link/window_contract_proven`): two
-in `http3-frame.ts`, three in `http3.ts` and three in `webtransport.ts` (its
-`close`, `write` and `sendDatagram`), each checking the window its caller
-passes, as the guard's `panic` did before. `http3-server.ts`'s receive now
-hands `udpRecvFrom` the whole of `rx`, and its guard refuses a length past
-`rx`'s 65,536 bytes, so its range is proven and the server counts three
-`slice` sites, not four. `std/net/http-server.ts` counts two more `window`
-sites, at its calls of `Http3Connection.writeData`, now a forwarder:
-`HttpServer.carry` hands it the window its own caller passed, and
-`HttpServer.carryEnd` an empty one at `HTTP_SERVER_ZERO`, a module constant
-the prover does not read. `carryEnd`'s is not a forwarder's: its window
-is always empty, and the site counts only because the prover cannot read
-the constant. That file is not this record's, so the site stays.
+guard call as an unproven `window` site (`link/window_contract_proven`): the
+two in `http3-frame.ts`, each checking the window its caller passes, as the
+guard's `panic` did before. `Http3Connection.writeStream`, `writeData` and
+`writeDataWhole`, and `WebTransport.close`, `write` and `sendDatagram`, do not
+call the guard: a window outside `buf` is a failure their callers already
+handle, so they answer H3_INVALID and count no site. `http3-server.ts`'s
+receive now hands `udpRecvFrom` the whole of `rx`, and its guard refuses a
+length past `rx`'s 65,536 bytes, so its range is proven and the server counts
+three `slice` sites, not four.
 
 Where a guard cannot fail, a comment says why: the index is below a length
 read on the line before, or the slot is one the connection numbered. Where
@@ -483,10 +481,12 @@ These changes alter what a caller sees:
   millisecond reading of the monotonic clock stays below 2^44.
 - `Http3Server` sets a slot's state before it restarts or releases the
   slot's connection. The connection reads neither field.
-- `WebTransport.write` checks its window before it looks up stream `id`
-  (examples-strict S8). A window outside `buf` on a stream this layer does
-  not hold now panics, where it used to answer H3_CLOSED; on a stream it
-  holds, `Http3Connection.writeStream` already panicked.
+- A window outside `buf` passed to `Http3Connection.writeStream`,
+  `writeData` or `writeDataWhole`, or to `WebTransport.close`, `write` or
+  `sendDatagram`, answers H3_INVALID (-22) where it used to panic
+  (examples-strict S8). `WebTransport.write` checks its window before it
+  looks up stream `id`, so such a window on a stream this layer does not hold
+  answers H3_INVALID where it used to answer H3_CLOSED.
 
 No public signature changed.
 
