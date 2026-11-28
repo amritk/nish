@@ -197,6 +197,24 @@ stages:
       - id: s9-ratchet
         content: Lower tests/std-panics.json to the new exact per-module counts and lower each instruction count that fell to CI's figure, with the before and after table in the PR body; no count may rise - see WP80 S9
         status: pending
+  - id: s11-gzip-window
+    title: WP80 S11 — gzipWindow as a window guard, freeing http-app
+    goal: std/compress/gzip.ts's gzipWindow is a window guard in the shape src/window-contract.ts records, so its callers discharge the check, and examples/http-app builds without --allow-panics, with no instruction count raised.
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js gzip && node tests/run.js http-app && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/nish-cmp.js --no-sidecars
+    issue: 2450
+    todos:
+      - id: s11-guard
+        content: Respell gzipWindow (std/compress/gzip.ts:95) in the window-guard shape src/window-contract.ts records - const size i32 = toI32(buf.length), then off < 0 || len < 0 || off > size || len > size - off, then a panic with a literal message - so the site at :97:5 moves to its callers, and prove or Result each caller site the forward leaves unproven, never a made-up value - see WP80 S11
+        status: pending
+      - id: s11-optout
+        content: Drop examples/http-app's opt-out header, its // smoke - args --allow-panics line and the ALLOW_PANICS its tests/run.js build passes, and every docs/guide/using-nish/api-server.md marker and sentence the stale opt-out check reports freed - see WP80 S11
+        status: pending
+      - id: s11-pins
+        content: Regenerate the pinned std/compress/gzip.ts line numbers, the checked goldens and docs/reference, and add the nish-cmp DECLARED and file exit entries the PR's IR moves need - see WP80 S11
+        status: pending
+      - id: s11-ratchet
+        content: Lower tests/std-panics.json to the new exact per-module counts and lower each instruction count that fell to CI's figure, with the before and after table in the PR body; no count may rise - see WP80 S11
+        status: pending
 ---
 
 # WP80 — std panic-free for threads, CLI, sync and the HTTP/1 server stack
@@ -314,3 +332,13 @@ Sites the examples reach on 09a6f22a8 (the first per call; more may appear after
 Each new export is public std API, so it lands with its doc comment, its `@param` and `@returns`, its reference page and a guide mention (`docs/guide/using-nish/networking.md`, `docs/guide/using-nish/api-server.md`). The `tests/run.js` builds of file-server and http-app pass `ALLOW_PANICS` today; they drop it with the headers. The prefork snippets in `networking.md` keep their markers unless the stale opt-out check reports them freed.
 
 `examples/multi` builds strict: its `square` answers a `Result`, with the overflow in the `Err` arm. The owner's later decision for the examples-strict run (#2385, `.claude/plans/examples-strict.plan.md`) replaced the earlier one to keep `--allow-panics` there.
+
+## WP80 S11 — gzipWindow as a window guard, freeing http-app
+
+Added on the owner's decision on #2399 (comment 7235889845). #2402 (S9) cleared http-app's sites in `std/net/{handler,static,http-compress,http1-codec}.ts`. One site is left, outside S9's scope: the panic in `gzipWindow` (`std/compress/gzip.ts:97:5`). Its body tests `off > toI32(buf.length) - len` and builds a template-literal message, so it is not the guard shape `src/window-contract.ts` records, and every call stays unproven at the caller. `examples/http-app/main.ts` keeps its opt-out naming that site, as do the two `allow-panics` markers in `docs/guide/using-nish/api-server.md`.
+
+This stage respells `gzipWindow` in the guard shape: `const size: i32 = toI32(buf.length)`, then `if (off < 0 || len < 0 || off > size || len > size - off)`, then a `panic` with a literal message (the shape `bytesWindow` in `std/bytes.ts` uses since S7). Each caller (`GzipCompressor.compress`, `GzipFixedCompressor.compress`, `GzipDecompressor.decompress`, `GzipWriter.write`/`flush`/`finish`, `GzipReader.feed`/`read`) then carries the check, and a caller that tests its window discharges it. A caller site the forward leaves unproven gets a proof or a Result, never a made-up value. If a site outside `std/compress/gzip.ts` is still reached after that, the worker reports it and does not fix it.
+
+Once http-app reaches no site, its opt-out header, its `// smoke: args --allow-panics`, the `ALLOW_PANICS` its `tests/run.js` build passes and the guide markers and sentences the stale opt-out check reports freed are dropped. There is no `src/` change. Rule 6 holds: no count in `bench/instructions.json` may rise.
+
+Owns: `std/compress/gzip.ts`, `examples/http-app/**`, `docs/guide/using-nish/api-server.md`, this plan file (it adds this stage), and its own entries in the shared files (`tests/run.js`, `tests/allow-panics.js`, `tests/std-panics.json`, `tests/nish-cmp.js`, the pinned `std/compress/gzip.ts:LINE:COL` quotes, the checked goldens, `docs/reference/`).
