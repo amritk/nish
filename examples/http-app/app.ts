@@ -313,9 +313,6 @@ const addRoutes = (router: Router): Router => {
   return router
 }
 
-/** The API's routes, added in the order of their constants. */
-export const appRoutes = (): Router => addRoutes(new Router(new RouterLimits()))
-
 /** The API's routes under limits `routerChecked` passed, or the limit it refused. */
 export const tryAppRoutes = (): Result<Router, string> => {
   const made: Result<Router, string> = routerChecked(new RouterLimits())

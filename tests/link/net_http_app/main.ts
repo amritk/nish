@@ -27,7 +27,7 @@ import {
   tcpListen,
 } from "nish:net"
 import { monotonicNanos } from "nish:process"
-import { App, appRoutes, configure, serveTurn } from "../../../examples/http-app/app"
+import { App, configure, serveTurn, tryAppRoutes } from "../../../examples/http-app/app"
 
 const NONE: i32 = 0
 const ONE_MS: i32 = 1
@@ -170,7 +170,11 @@ export const main = (): i32 => {
   check(tally, "--static without one is a usage error", configure(["http-app", "80", "--static"]).error === "--static takes a directory")
 
   const listener: i32 = tcpListen("127.0.0.1", NONE, 64)
-  const h = new HttpHandler(new HandlerLimits(), listener, appRoutes())
+  const routes = tryAppRoutes()
+  if (!routes.ok) {
+    return 1
+  }
+  const h = new HttpHandler(new HandlerLimits(), listener, routes.value)
   const app = new App(h, good)
   const c = connect(netLocalPort(listener))
   c.failures = tally.failures
