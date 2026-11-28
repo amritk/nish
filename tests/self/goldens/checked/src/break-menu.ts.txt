@@ -99,20 +99,22 @@ function pixelsIndex(x: i32, y: i32, width: i32, length: i32): i32 -> @nish.pixe
 function Framebuffer.constructor(this: Framebuffer, width: i32, height: i32): void -> @nish.Framebuffer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: height width
-  calls: nish.pixelsArea nish_panic
+  calls: nish.pixelsArea
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 area: i32 (const)
   callee +0:23 pixelsArea -> @nish.pixelsArea
+  local +4:9 n: i32 (let)
 function Framebuffer.resize(this: Framebuffer, width: i32, height: i32): void -> @nish.Framebuffer.resize [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: height width
-  calls: nish.pixelsArea nish_panic
+  calls: nish.pixelsArea
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 area: i32 (const)
   callee -2:23 pixelsArea -> @nish.pixelsArea
+  local +3:11 n: i32 (let)
 function Framebuffer.pixelWidth(this: Framebuffer): i32 -> @nish.Framebuffer.pixelWidth [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=16 writesThrough=false captured=false
@@ -185,10 +187,10 @@ function scaleFramebuffer(src: Framebuffer, divisor: i32, dst: Framebuffer): voi
   pointer src: size=16 writesThrough=false captured=false
   pointer dst: size=16 writesThrough=true captured=false passedTo=nish.Framebuffer.resize#0
   stackSites=0 stackLocals=0
-  local -19:9 w: i32 (const)
-  callee -19:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
-  local -18:9 h: i32 (const)
-  callee -18:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
+  local -25:9 w: i32 (const)
+  callee -25:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
+  local -24:9 h: i32 (const)
+  callee -24:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
   callee -17:3 Framebuffer.resize -> @nish.Framebuffer.resize
   local -16:9 from: i32[] (const)
   local -15:9 to: i32[] (const)
@@ -2287,7 +2289,7 @@ function countBricks(cells: string): integer<0, 1000> -> @countBricks
   local +1:12 i: i32 (let)
   local +2:11 next: i32 (const)
 function layOutLogo(menu: BreakMenu): void -> @layOutLogo
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via layOutWord
   calls: layOutWord
   pointer menu: size=248 writesThrough=true captured=false passedTo=layOutWord#0 layOutWord#0
@@ -2295,12 +2297,11 @@ function layOutLogo(menu: BreakMenu): void -> @layOutLogo
   local +0:9 next: i32 (const)
   callee +0:21 layOutWord -> @layOutWord
   callee +1:3 layOutWord -> @layOutWord
-function logoRelease(column: integer<0, 48>): i32 -> @logoRelease [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+function logoRelease(column: i32): i32 -> @logoRelease [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function layOutWord(menu: BreakMenu, cells: string, cols: i32, top: f64, first: i32, shift: i32): i32 -> @layOutWord
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: first
   calls: logoRelease menuRandom

@@ -581,7 +581,7 @@ const layOutLogo = (menu: BreakMenu): void => {
  * @param column The brick's column in the logo grid, from 0 to 48.
  * @returns The step, from 0 to 33.
  */
-export const logoRelease = (column: integer<0, 48>): i32 => (column * 7) / 10
+export const logoRelease = (column: i32): i32 => (column / 10) * 7 + ((column % 10) * 7) / 10
 
 /**
  * Place one word's bricks from slot `first` on, its rows `cols` cells wide

@@ -1,19 +1,3 @@
-// Opt-out (`--allow-panics`), for these sites (336 in all), none of which
-// this file can discharge without `nish:unsafe`. Recorded against #2208:
-// - 42 `index` sites here, each a read or write of module storage
-//   (`BREAK_LINK`, `BREAK_HELP_IN`, `BOX`, `ROOT`, `GAME_FRAME`): the checker
-//   keeps no length for a module's array, so even a constant index under a
-//   `K < BREAK_LINK.length` test stays unproven (#2316);
-// - the `slice` in `String.fromBytes` in `startHelp`;
-// - `new Framebuffer(1, 1)`, which reaches `pixelsArea`'s size panic in
-//   std/term-pixels.ts: a call reaches every site of the function it calls,
-//   whatever constants it passes;
-// - 292 sites in the director and the libraries it uses: src/break-game.ts,
-//   break-intro.ts, break-menu.ts, break-gfx.ts, break-director.ts,
-//   break-levels.ts, break-voices.ts and std/raster.ts's 12 array lengths.
-// Follow-up: lengths for module storage in the checker (#2316), and the
-// director's own sites, then build this file without `--allow-panics`.
-//
 // The game behind the docs hero terminal, as a page runs it: the terminal
 // game's director and scenes (src/break-director.ts), stepped and drawn over
 // nish/host/game instead of a terminal. break.mjs is the page side, and
@@ -357,5 +341,3 @@ export const draw = (alpha: f64, frameMs: f64): void => {
   }
   run.turned = turn
 }
-
-// smoke: args --allow-panics

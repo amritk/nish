@@ -665,6 +665,11 @@ export const sizeBreakFramebuffer = (d: BreakDirector, fb: Framebuffer, roomW: i
     w = roomW
     h = (w * 9) / 16
   }
+  // A 16:9 frame inside the bounds above is never past 2^31 - 1 pixels; the
+  // test is the shape that proves `resize`'s size check false at the call.
+  if (w < 0 || h < 0 || toI64(w) * toI64(h) > toI64(2147483647)) {
+    return
+  }
   if (fb.width !== w || fb.height !== h) {
     fb.resize(w, h)
   }
