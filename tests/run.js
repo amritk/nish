@@ -6960,7 +6960,17 @@ if (dealtHere("stdPanics")) {
   {
     const wrapCasts = path.join(root, "scripts", "wrap-casts.mjs")
     const live = spawnSync(process.execPath, [wrapCasts], { cwd: root, encoding: "utf8" })
-    check("std-panics: scripts/wrap-casts.mjs passes the tree, with no cast wrap in std/, src/ or examples/", live.status === 0, shown(live))
+    // The live run lists the tree with git, which no planted copy exercises: the count it reports per
+    // directory must match git's own, so a listing that found nothing cannot pass the tree.
+    const tracked = ["std", "src", "examples"].map(
+      (d) =>
+        `${spawnSync("git", ["ls-files", "--", `${d}/*.ts`], { cwd: root, encoding: "utf8" }).stdout.split("\n").filter((f) => f.endsWith(".ts")).length} ${d}/`
+    )
+    check(
+      "std-panics: scripts/wrap-casts.mjs passes the tree, with no cast wrap in std/, src/ or examples/",
+      live.status === 0 && live.stdout.includes(`no cast wrap in ${tracked.join(", ")} files`) && !tracked.some((t) => t.startsWith("0 ")),
+      shown(live)
+    )
     const update = spawnSync(process.execPath, [wrapCasts, "--update"], { cwd: root, encoding: "utf8" })
     check(
       "std-panics: scripts/wrap-casts.mjs refuses the count-lowering flag it dropped, and no count file sits beside it",

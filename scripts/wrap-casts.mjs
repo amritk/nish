@@ -175,3 +175,6 @@ if (sites.length > 0) {
   )
   process.exit(1)
 }
+// The count per directory lets tests/run.js see that the listing found the files it should.
+const counts = scanned.map((d) => `${files.filter((f) => f.startsWith(`${d}/`)).length} ${d}/`)
+console.log(`wrap-casts: no cast wrap in ${counts.join(", ")} files`)
