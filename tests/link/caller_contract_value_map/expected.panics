@@ -1,0 +1,6 @@
+{"functions":[
+{"name":"half","symbol":"half$","module":"tests/link/caller_contract_value_map/main.ts","line":8,"panics":[{"kind":"panic","line":10,"column":5,"proven":false},{"kind":"divide","line":12,"column":10,"proven":true}]},
+{"name":"main","symbol":"nish_main","module":"tests/link/caller_contract_value_map/main.ts","line":15,"panics":[{"kind":"call","line":17,"column":14,"callee":"map<i32, i32, half>","via":"panic"},{"kind":"oom","line":18,"column":15,"allowed":true},{"kind":"call","line":18,"column":18,"callee":"half","via":"panic"}]},
+{"name":"map<i32, i32, half>","symbol":"nish.map$i32$i32$fn.4.half","module":"std/array.ts","line":43,"panics":[{"kind":"oom","line":44,"column":20,"allowed":true},{"kind":"overflow","line":46,"column":51,"proven":true},{"kind":"oom","line":47,"column":5,"allowed":true},{"kind":"call","line":47,"column":14,"callee":"half","via":"panic"},{"kind":"index","line":47,"column":16,"proven":true}]},
+{"name":"done","symbol":"done","module":"tests/link/caller_contract_value_map/done.ts","line":1,"panics":[]}
+]}
