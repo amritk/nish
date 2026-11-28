@@ -1249,7 +1249,7 @@ const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
     // the guard is what proves the allocation's length.
     const wide: i64 = at < HTTP1_FIRST_SPANS ? toI64(HTTP1_FIRST_SPANS) : toI64(at) * toI64(2) + toI64(4)
     if (wide > toI64(2147483647)) {
-      return
+      return // Not reached: a head under 2^30 holds under 2^28 fields, so `at` is under 2^30.
     }
     const size: i32 = toI32(wide)
     if (size <= 0) {
