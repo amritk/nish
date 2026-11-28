@@ -30,7 +30,7 @@ builds under the default: `flush` and `fill` test the window the connection
 names, and bound the sum that makes its end, before they hand it to `netWrite`
 or `netRead`.
 
-<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; calls `std/net/postgres.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; calls `std/net/postgres.ts` code that keeps panic sites, and reaches those of `std/bytes.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import {

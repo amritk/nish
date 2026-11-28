@@ -1477,7 +1477,7 @@ is about. A parse never fails and never panics on its input; a stream that is
 not valid YAML still answers its nodes, as the parser's best reading of it,
 beside the errors that say why.
 
-<!-- allow-panics: calls `std/yaml.ts` and `std/yaml-lines.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { YAML_INT, YAML_MAP, keyText, parseYaml, pathNode, yamlErrorName } from "nish/yaml";
@@ -1558,7 +1558,7 @@ line that set it. A recursive alias ends the search. A `<<` whose value names
 no map is an error, `BAD_MERGE`. The nodes themselves are not changed: a map
 still holds the pairs it was written with.
 
-<!-- allow-panics: calls `std/yaml.ts` and `std/yaml-lines.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parseYaml, pathNode, pathPair } from "nish/yaml";
