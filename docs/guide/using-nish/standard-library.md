@@ -196,7 +196,7 @@ shown).
 | [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column`; `stringifyYaml` in `nish/yaml-write` to write a JSON value as YAML; `YamlJsonLoader` in `nish/yaml-json` to load a document into a `JsonDocument` with its ranges |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
-| [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
+| [`nish/base64`](#nishbase64) | `base64Encode`, `base64EncodeInto` and `base64EncodeIfFits`: standard base64 with `=` padding, into a string or straight into a byte buffer |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain`, `copyBytes` and `tryCopyBytes` for the runs a parser skips and a writer copies |
 | [`nish/temporal`](dates-and-times.md) | `PlainDate`, `PlainTime`, `PlainDateTime`, `Instant` and `Duration`: JavaScript's `Temporal`, in the ISO calendar, natively and under Node |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
@@ -2492,9 +2492,13 @@ program that wants to write its own loop, or test what it draws, can use it
 alone.
 
 - **`Framebuffer(width, height)`** is a grid of `0xRRGGBB` pixels, black when
-  made, with `set`, `get`, `fill`, `clear` and `resize`. A pixel set off the
-  edge is not drawn. `scaleFramebuffer(src, divisor, dst)` shrinks one by a
-  whole divisor.
+  made, with `set`, `get`, `fill`, `clear` and `resize`, and `pixelWidth()`,
+  `pixelHeight()` and `pixelData()` to read its size and pixels. A pixel set
+  off the edge is not drawn. The constructor and `resize` panic on a negative
+  side or more than 2^31 − 1 pixels; **`tryFramebuffer(width, height)`** and
+  **`fb.tryResize(width, height)`** answer an `Err` naming the problem
+  instead, and a refused `tryResize` leaves the framebuffer as it was.
+  `scaleFramebuffer(src, divisor, dst)` shrinks one by a whole divisor.
 - **`GRAPHICS_ASCII`, `GRAPHICS_HALFBLOCK`, `GRAPHICS_SIXEL` and
   `GRAPHICS_KITTY`** (0 to 3) name the backends, from worst to best, so a
   terminal's backend and a cap combine with `Math.min`.
@@ -2518,7 +2522,9 @@ alone.
 A `PixelBytes` keeps the kitty and Sixel encoders' output and working arrays,
 grown once to the largest frame, so a program that keeps one encodes frame
 after frame without allocating. `out.text()` is the bytes to write and
-`out.reset()` empties it for the next frame.
+`out.reset()` empties it for the next frame. A frame that would grow it past
+2^31 − 1 bytes is cut short with `out.full` set, which `reset` clears: such a
+frame is not one to write.
 
 <!-- allow-panics: calls `std/term-pixels.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
@@ -2724,7 +2730,9 @@ at)` writes the encoding of `src[off..off+len)` into `dst` from `at`,
 allocating nothing, and answers the index after the last character, for a
 program that builds its output in one buffer. `base64EncodedLength(n)` is how
 many characters `n` bytes take, so the buffer can be sized first. A range
-outside its array panics before anything is written. The module only encodes;
+outside its array panics before anything is written;
+`base64EncodeIfFits(src, off, len, dst, at)` writes the same bytes, or answers
+-1 with nothing written, for a program with an answer to a buffer too small. The module only encodes;
 the URL-safe, unpadded decoder for tokens and keys is `nish/crypto/base64url`.
 
 <!-- allow-panics: calls `std/base64.ts` code that keeps panic sites no proof removes yet -->

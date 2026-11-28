@@ -607,7 +607,9 @@ export class RateController {
       return false
     }
     if (this.unacked() >= this.maxUnacked || this.stale > 0) {
-      this.dropped = this.dropped + 1
+      // Stops at 2^31 - 1, about 103 days of refused frames at 240 a second.
+      const dropped: i32 = this.dropped
+      this.dropped = dropped < 2147483647 ? dropped + 1 : dropped
       return false
     }
     return true
@@ -1038,8 +1040,11 @@ export class RateController {
     while (head >= 0 && head < toI32(sent.length) && nowMs - sent[head] > wait) {
       head = head + 1
       this.head = head
-      this.lost = this.lost + 1
-      this.stale = this.stale + 1
+      // Both stop at 2^31 - 1, as `dropped` does.
+      const lost: i32 = this.lost
+      this.lost = lost < 2147483647 ? lost + 1 : lost
+      const stale: i32 = this.stale
+      this.stale = stale < 2147483647 ? stale + 1 : stale
       this.staleSinceMs = nowMs
     }
     this.ageRate(nowMs)

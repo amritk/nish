@@ -1,9 +1,16 @@
 // Opt-out (`--allow-panics`), recorded against #2208, for the std sites left
-// between this file and the no-panic default; it keeps none of its own:
-// `fb.set` reaches the `panic` `Framebuffer.set` keeps in std/term-pixels.ts
-// for a pixel store out of step with its size, and `runTerminal` reaches a
-// `slice` site in std/term-io.ts (#2385). The compiler names one site per
-// call. Follow-up: make both calls panic-free, then build this file without
+// between this file and the no-panic default; it keeps none of its own. All
+// are in std/term-pixels.ts, and the compiler names one site per call:
+// `fb.set` reaches the `panic` `Framebuffer.set` keeps for a pixel store out
+// of step with its size, and `runTerminal` reaches the framebuffer's size
+// checks (`pixelsArea`, through its constructor and `resize`), the
+// out-of-step checks of `scaleFramebuffer`, `kittyFrame` and
+// `drawHalfBlocks`, the divisor and image-id checks, `PixelBytes.text`'s
+// slice, and `sixelFrame`'s check of the register array it sizes itself.
+// They wait on `Framebuffer`'s fields going private after the next release
+// (#2385), when `tryFramebuffer` and `tryResize` become its only constructor
+// and resize and these calls can take their answers, and `sixelFrame`'s on a
+// length the prover can follow; then this file builds without
 // `--allow-panics`.
 //
 // What `nish/term-io` found out about this terminal, and how its frame loop
@@ -59,9 +66,12 @@ const render = (p: Probe, frame: Frame): void => {
   const height: i32 = fb.height
   // The options ask for 320 by 180, so these tests always hold: they are the
   // bounds that prove the band's arithmetic cannot overflow or divide by 0.
+  // The band steps 3 pixels a frame around `span`: the frame count is taken
+  // modulo 65536 first, so `step * 3` is proven to fit rather than wrapped.
   if (width > 20 && height >= 0 && height <= 180) {
     const span: i32 = width - 20
-    const x0: i32 = toI32(p.frames * toU32(3)) % span
+    const step: i32 = toI32(p.frames % toU32(65536))
+    const x0: i32 = step >= 0 && step < 65536 ? (step * 3) % span : 0
     if (x0 >= 0 && x0 < 300) {
       for (let y: i32 = height / 3; y < (height * 2) / 3; y++) {
         for (let x: i32 = x0; x < x0 + 20; x++) {

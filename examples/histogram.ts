@@ -78,19 +78,21 @@ export const main = (): i32 => {
   let total: u32 = 0
   let checksum: u32 = 0
   // Every round seeds its shards afresh and folds its bins into the checksum,
-  // so no round repeats another's work and none of it can be skipped.
-  for (let r: u32 = 0; r < toU32(ROUNDS); r++) {
+  // so no round repeats another's work and none of it can be skipped. The
+  // loop bounds are `ROUNDS` and `TASKS` written out: the prover reads a
+  // literal, so a seed, `r * TASKS + t + 1`, is proven to fit.
+  for (let r: i32 = 0; r < 8; r++) {
     const hist = new Mutex<Hist>(new Hist())
     if (sequential) {
-      for (let t: u32 = 0; t < toU32(TASKS); t++) {
-        values = values + binShard(new Shard(toI32(r * toU32(TASKS) + t + 1), toU32(PER_TASK), hist))
+      for (let t: i32 = 0; t < 4; t++) {
+        values = values + binShard(new Shard(r * TASKS + t + 1, toU32(PER_TASK), hist))
       }
     } else {
       const binned: u32[] = [0, 0, 0, 0]
       {
         using s = scope()
-        for (let t: i32 = 0; t < toI32(binned.length); t++) {
-          const shard = new Shard(toI32(r * toU32(TASKS) + toU32(t) + 1), toU32(PER_TASK), hist)
+        for (let t: i32 = 0; t < 4; t++) {
+          const shard = new Shard(r * TASKS + t + 1, toU32(PER_TASK), hist)
           // The constructor is a call, and a call forgets what the loop's test
           // proved about `binned`'s length: this test states it again at the
           // spawn, which then keeps no slot check (docs/LANGUAGE.md, "Panic sites").

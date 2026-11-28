@@ -6661,9 +6661,8 @@ if (dealtHere("performance")) {
   // compiling fails too, until it comes off the list and the gate holds it.
   const PERF_GATE_REFUSED = new Map([
     ["examples/argv.ts f64", "NL2140"], // `main` answers `number`, which is f64 there
-    ["examples/arrays.ts f64", "NL2021"], // `i * i` is f64 there, and `out` is an Int32Array
+    ["examples/arrays.ts f64", "NL2100"], // `squares`' `i` is f64 there, and its bound `len` an i32
     ["examples/hello.ts f64", "NL2140"],
-    ["examples/multi/main.ts f64", "NL2140"],
     ["examples/nbody.ts i32", "NL2008"], // written for f64 (its `// smoke: args` line): `Math.sqrt` of an i32
   ])
   // The walker the gate reads `std/` through reaches a module in a subdirectory,
@@ -6855,139 +6854,6 @@ if (dealtHere("performance")) {
   )
 }
 
-// ---- std-panics: no u32-cast wrapping sum in std/compress -------------------------
-//
-// WP84 S3 took out every `toI32(toU32(a) + toU32(b))` in std/compress: a sum
-// that wraps through u32 to dodge its overflow proof answers a made-up value
-// where input can reach it. `u32WrappingSums` finds each `toI32(...)` whose
-// argument has a `toU32(...)` call as a direct operand of `+`, `-` or `*`,
-// over any spacing and line breaks, comments blanked. `COMPRESS_UNSIGNED_OPS`
-// lists the genuine unsigned ones by their spacing-free text, how many times
-// each occurs and why it is meant to wrap; any other one fails the check. It
-// pins that shape only: a `toU32` operand inside its own parentheses or under
-// a `/`, and a u32 local summed first and cast later, are not found, so it is
-// not a proof that std/compress wraps nowhere.
-/** The index of the `)` that closes the `(` at `open` in `src`, or -1. */
-const closingParen = (src, open) => {
-  let depth = 0
-  for (let i = open; i < src.length; i += 1) {
-    if (src[i] === "(") {
-      depth += 1
-    } else if (src[i] === ")") {
-      depth -= 1
-      if (depth === 0) {
-        return i
-      }
-    }
-  }
-  return -1
-}
-/** The offsets of each call of `name(` in `src` that is not the tail of a longer identifier. */
-const callsOf = (src, name) => {
-  const at = []
-  for (let i = src.indexOf(`${name}(`); i >= 0; i = src.indexOf(`${name}(`, i + 1)) {
-    if (!/[\w$.]/.test(src[i - 1] ?? "")) {
-      at.push(i)
-    }
-  }
-  return at
-}
-/**
- * The `toI32(...)` calls in `src` whose argument has a `toU32(...)` result as
- * an operand of `+`, `-` or `*`: `{ line, text }`, `text` with its spacing
- * removed. Line comments are blanked first, so a commented-out sum is not one.
- */
-const u32WrappingSums = (source) => {
-  const src = source.replace(/\/\/[^\n]*/g, (c) => " ".repeat(c.length))
-  const found = []
-  for (const at of callsOf(src, "toI32")) {
-    const end = closingParen(src, at + 5)
-    if (end < 0) {
-      continue
-    }
-    const arg = src.slice(at + 6, end)
-    // Each `toU32(...)` in the argument, nested ones within it included, becomes one placeholder.
-    let flat = ""
-    let from = 0
-    for (const u of callsOf(arg, "toU32")) {
-      if (u < from) {
-        continue
-      }
-      const close = closingParen(arg, u + 5)
-      flat += `${arg.slice(from, u)}\u0001`
-      from = close < 0 ? arg.length : close + 1
-    }
-    flat += arg.slice(from)
-    if (/\u0001\s*[-+*]|[-+*]\s*\u0001/.test(flat)) {
-      found.push({
-        line: src.slice(0, at).split("\n").length,
-        text: src.slice(at, end + 1).replace(/\s+/g, ""),
-      })
-    }
-  }
-  return found
-}
-/** The genuine unsigned ops `u32WrappingSums` finds in std/compress, by file and spacing-free text. */
-const COMPRESS_UNSIGNED_OPS = [
-  {
-    file: "std/compress/deflate.ts",
-    text: "toI32((word*toU32(DEFLATE_HASH_MUL))>>>17)",
-    count: 3,
-    reason:
-      "the multiplicative hash of four bytes: the product is meant to wrap mod 2^32 and its top 15 bits are the hash",
-  },
-  {
-    file: "std/compress/deflate.ts",
-    text: "toI32(((word<<8)*toU32(DEFLATE_HASH_MUL))>>>17)",
-    count: 2,
-    reason:
-      "the multiplicative hash of the three bytes after a position: the product is meant to wrap mod 2^32",
-  },
-  {
-    file: "std/compress/deflate.ts",
-    text: "toI32((deflateLoad32(src,q)*toU32(DEFLATE_HASH_MUL))>>>17)",
-    count: 1,
-    reason:
-      "the multiplicative hash of a skipped position's four bytes: the product is meant to wrap mod 2^32",
-  },
-  {
-    file: "std/compress/deflate.ts",
-    text: "toI32((toU32(w)*toU32(DEFLATE_HASH_MUL))>>>shift)",
-    count: 1,
-    reason:
-      "the fixed-Huffman compressor's multiplicative hash: the product is meant to wrap mod 2^32",
-  },
-  {
-    file: "std/compress/deflate.ts",
-    text: "toI32((deflateLoad32(src,qi)*toU32(DEFLATE_HASH_MUL))>>>shift)",
-    count: 1,
-    reason:
-      "the fixed-Huffman compressor's hash of a skipped position: the product is meant to wrap mod 2^32",
-  },
-]
-/** The differences between what `u32WrappingSums` found in each file and the allowlist: one line each. */
-const unsignedOpMismatches = (filesFound, allow) => {
-  const lines = []
-  for (const [file, found] of filesFound) {
-    const listed = allow.filter((a) => a.file === file)
-    for (const site of found) {
-      if (!listed.some((a) => a.text === site.text)) {
-        lines.push(
-          `${file}:${site.line}: ${site.text} wraps through u32; prove the i32 sum or return a DEFLATE_ERR_* code`,
-        )
-      }
-    }
-    for (const a of listed) {
-      const n = found.filter((site) => site.text === a.text).length
-      if (n !== a.count) {
-        lines.push(
-          `${file}: ${a.text} occurs ${n} time(s), the allowlist says ${a.count}`,
-        )
-      }
-    }
-  }
-  return lines
-}
 // ---- std-panics: the ratchet on std/'s panic sites --------------------------------
 //
 // Every git-tracked `std/` module is compiled as a root with `--allow-panics
@@ -7053,49 +6919,61 @@ const residualMismatches = (sites, residual) => {
     .map((k) => `${k}: ${got.get(k) ?? 0} counted, ${want.get(k) ?? 0} listed as residual`)
 }
 if (dealtHere("stdPanics")) {
+  // ---- std-panics: no cast wrap in std/, src/ or examples/ ----------------------
+  //
+  // CLAUDE.md's "A wrap is spelled, never cast": scripts/wrap-casts.mjs (in
+  // `npm run lint`) finds each `toI32(...)` with a `toU32(...)` operand of
+  // `+`, `-` or `*` (and the `toI64`/`toU64` form) in every std/, src/ and
+  // examples/ file, against scripts/wrap-casts.txt, whose counts only fall.
+  // WP84 S3 and WP91 S1 took std/compress, src/ and examples/ to none. This
+  // runs the script on the tree, then on a copy with one cast planted in
+  // std/compress/deflate.ts and on a copy whose baseline lost a line: each
+  // copy must fail, by the script's exit status, or the check is no guard.
   {
-    const files = execFileSync("git", ["ls-files", "--", "std/compress/*.ts"], {
-      cwd: root,
-      encoding: "utf8",
+    const wrapCasts = path.join(root, "scripts", "wrap-casts.mjs")
+    const live = spawnSync(process.execPath, [wrapCasts], { cwd: root, encoding: "utf8" })
+    check(
+      "std-panics: scripts/wrap-casts.mjs passes the tree, with no cast wrap in std/compress, src/ or examples/",
+      live.status === 0 &&
+        !/^\d+ (std\/compress\/|src\/|examples\/)/m.test(fs.readFileSync(path.join(root, "scripts", "wrap-casts.txt"), "utf8")),
+      shown(live)
+    )
+    /** A copy of the scanned tree and its baseline under build/, `edit`ed, and the script's run on it. */
+    const onCopy = (name, edit) => {
+      const dir = path.join(buildDir, "wrap_casts", name)
+      fs.rmSync(dir, { recursive: true, force: true })
+      for (const d of ["std", "src", "examples"]) {
+        fs.cpSync(path.join(root, d), path.join(dir, d), { recursive: true })
+      }
+      fs.mkdirSync(path.join(dir, "scripts"), { recursive: true })
+      fs.copyFileSync(path.join(root, "scripts", "wrap-casts.txt"), path.join(dir, "scripts", "wrap-casts.txt"))
+      edit(dir)
+      return spawnSync(process.execPath, [wrapCasts, "--root", dir], { cwd: root, encoding: "utf8" })
+    }
+    const same = onCopy("same", () => {})
+    const planted = onCopy("planted", (dir) =>
+      fs.appendFileSync(
+        path.join(dir, "std", "compress", "deflate.ts"),
+        "\nexport const plantedWrap = (a: u32, b: u32): i32 =>\n  toI32(toU32(a) +\n    toU32(b))\n"
+      )
+    )
+    check(
+      "std-panics: scripts/wrap-casts.mjs --root fails on a cast wrap planted in std/compress/deflate.ts, and passes the unplanted copy",
+      same.status === 0 && planted.status === 1 && planted.stderr.includes("std/compress/deflate.ts"),
+      `${shown(same)}\n${shown(planted)}`
+    )
+    let dropped = ""
+    const removed = onCopy("removed", (dir) => {
+      const file = path.join(dir, "scripts", "wrap-casts.txt")
+      const lines = fs.readFileSync(file, "utf8").split("\n")
+      const at = lines.findIndex((l) => /^\d+ \S+$/.test(l))
+      dropped = lines[at] ?? ""
+      fs.writeFileSync(file, lines.filter((_, k) => k !== at).join("\n"))
     })
-      .split("\n")
-      .filter((f) => f.endsWith(".ts"))
-    const filesFound = new Map(
-      files.map((f) => [
-        f,
-        u32WrappingSums(fs.readFileSync(path.join(root, f), "utf8")),
-      ]),
-    )
-    const mismatches = unsignedOpMismatches(filesFound, COMPRESS_UNSIGNED_OPS)
     check(
-      `std-panics: std/compress has no u32-cast wrapping sum (${files.length} files, ${COMPRESS_UNSIGNED_OPS.length} genuine unsigned ops listed)`,
-      files.length > 0 &&
-        mismatches.length === 0 &&
-        COMPRESS_UNSIGNED_OPS.every(
-          (a) => files.includes(a.file) && a.reason.length > 0,
-        ),
-      mismatches.join("\n"),
-    )
-    // The scan itself: a sum split over lines with odd spacing is found, a
-    // genuine op is not counted twice, and a commented-out one is not found.
-    const planted = [
-      "const a = toI32(",
-      "  toU32( p )",
-      "    +",
-      "  toU32(len)",
-      ")",
-      "const b = toI32(toU32(x) >>> 3)",
-      "// const c = toI32(toU32(p) + toU32(q))",
-    ].join("\n")
-    const plantedFound = u32WrappingSums(planted)
-    check(
-      `std-panics: the wrapping-sum scan fails on a planted multi-line site, and on no shift or comment`,
-      plantedFound.length === 1 &&
-        plantedFound[0].line === 1 &&
-        plantedFound[0].text === "toI32(toU32(p)+toU32(len))" &&
-        unsignedOpMismatches(new Map([["planted.ts", plantedFound]]), [])
-          .length === 1,
-      JSON.stringify(plantedFound),
+      `std-panics: scripts/wrap-casts.mjs --root fails on a baseline with a line removed (${dropped || "none found"})`,
+      dropped !== "" && removed.status === 1,
+      shown(removed)
     )
   }
   const baselineName = "tests/std-panics.json"
@@ -9914,7 +9792,7 @@ if (dealtHere("selfHosting")) {
     // Two modules: the compiler makes the `<exe>.modules/` directory itself
     // now, and `main()` returns the exit code.
     const multi = path.join(shipDir, "multi")
-    const many = spawnSync(compiler, withAllowPanics(compiler, ["examples/multi/main.ts", ALLOW_PANICS, "--link", multi, "--profile", "debug"]), {
+    const many = spawnSync(compiler, withAllowPanics(compiler, ["examples/multi/main.ts", "--link", multi, "--profile", "debug"]), {
       cwd: root,
       encoding: "utf8",
     })
@@ -10284,7 +10162,6 @@ if (dealtHere("selfHosting")) {
       compiler,
       withAllowPanics(compiler, [
         "examples/add.ts",
-        ALLOW_PANICS,
         "-o",
         path.join(shipDir, "add.ll"),
         "--emit-header",
@@ -10302,7 +10179,7 @@ if (dealtHere("selfHosting")) {
       "the self-hosted compiler: the interop sidecars are passed through and their directory made",
       sidecars.status === 0 &&
         wrote.length === sidecarFiles.length &&
-        selfHeader.includes("int32_t add(int32_t a, int32_t b);"),
+        selfHeader.includes("nish_result_i32_i32_word add(int32_t a, int32_t b);"),
       `${sidecars.status}: ${sidecars.stdout}${sidecars.stderr}wrote: ${wrote.join(",")}`
     )
 
@@ -10327,7 +10204,7 @@ if (dealtHere("selfHosting")) {
     // Every positional is a root, as it is for stage0. Before this the last
     // one won and the others were compiled into nothing.
     const rootsDir = path.join(shipDir, "roots")
-    const roots = spawnSync(compiler, withAllowPanics(compiler, ["examples/hello.ts", "examples/add.ts", ALLOW_PANICS, "-o", `${rootsDir}/`]), {
+    const roots = spawnSync(compiler, withAllowPanics(compiler, ["examples/hello.ts", "examples/add.ts", "-o", `${rootsDir}/`]), {
       cwd: root,
       encoding: "utf8",
     })
@@ -11923,7 +11800,7 @@ if (dealtHere("runtimeCache")) {
     )
 
     fs.rmSync(ccLog, { force: true })
-    const second = link("examples/multi/main.ts", "multi", ["--profile", "debug", ALLOW_PANICS])
+    const second = link("examples/multi/main.ts", "multi", ["--profile", "debug"])
     check(
       "runtime cache: a second link, of a different program, compiles no runtime source and links",
       second.status === 0 &&
@@ -12217,14 +12094,14 @@ if (dealtHere("runtimeCache")) {
       ["examples/argv.ts", ["7", "x"]],
       ["examples/sets.ts", []],
       ["examples/wordcount.ts", []],
-      ["examples/multi/main.ts", [], [ALLOW_PANICS]],
+      ["examples/multi/main.ts", []],
     ]
     for (const profile of ["speed", "size"]) {
-      for (const [source, args, flags = []] of programs) {
+      for (const [source, args] of programs) {
         const name = `${profile}-${path.basename(path.dirname(source))}-${path.basename(source, ".ts")}`
-        const cached = link(source, `${name}-cached`, ["--profile", profile, ...flags])
+        const cached = link(source, `${name}-cached`, ["--profile", profile])
         const irDir = path.join(rcDir, `${name}-ir`)
-        const ir = spawnNish([source, ...flags, "-o", `${irDir}/`], { cwd: root, encoding: "utf8" })
+        const ir = spawnNish([source, "-o", `${irDir}/`], { cwd: root, encoding: "utf8" })
         const lls = fs.existsSync(irDir)
           ? fs
               .readdirSync(irDir)
@@ -20263,7 +20140,11 @@ if (dealtHere("runtimeChecks")) {
       }
     }
 
-    const addLl = caseLl("add")
+    // examples/main.c reads examples/add.ts's Result word, so the size and wasm
+    // builds compile that, not the `add` case; `--emit-dts` writes the loader
+    // examples/node-host.mjs finds beside the wasm.
+    const addLl = path.join(buildDir, "add_example.ll")
+    spawnNish(["examples/add.ts", "-o", addLl, "--emit-dts", path.join(buildDir, "add.d.ts")], { cwd: root })
     const exe = path.join(buildDir, "add_size")
     const r = spawnSync(
       "bash",
@@ -20472,9 +20353,9 @@ if (dealtHere("runtimeChecks")) {
       )
       if (linked.status === 0) {
         const referenceLl = path.join(buildDir, "web_add.ll")
-        // add.ts keeps a panic site on purpose (its header), so both builds pass --allow-panics.
-        execFileSync(NISH, withAllowPanics(NISH, ["examples/add.ts", ALLOW_PANICS, "-o", referenceLl]), { cwd: root, stdio: "pipe" })
-        const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts", "--allow-panics"], {
+        // strict: examples/add.ts proves the default, so neither build passes --allow-panics
+        execFileSync(NISH, ["examples/add.ts", "-o", referenceLl], { cwd: root, stdio: "pipe" })
+        const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts"], {
           cwd: root,
         })
         check(
@@ -21246,7 +21127,7 @@ if (dealtHere("simd")) {
           `${linked.why}objects defining nish_bytes_skip_blank: ${linked.definitions}\ngot  ${linked.got}\nwant 3,6,8,100`
         )
       }
-      const plain = linkFree(irOf(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"), [ALLOW_PANICS]), [], "plain")
+      const plain = linkFree(irOf(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"), []), [], "plain")
       const named = linkFree(hostRuns, ["runtime/runtime-bytes.c"], "named")
       check(
         "simd: the freestanding --profile wasm link adds runtime-bytes.c to no module that calls no run, and not again when the inputs name it",
@@ -21911,7 +21792,7 @@ if (dealtHere("simd")) {
       )
 
       // The two arms around it: no AES, no runtime-aes.c; runtime-aes.c named, not added again.
-      const plainIr = hostIr(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"), [ALLOW_PANICS])
+      const plainIr = hostIr(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"))
       const plain =
         plainIr.lls.length > 0
           ? freestanding([...plainIr.lls, "runtime/runtime-wasm.c"], path.join(freeDir, "plain.wasm"))
@@ -23473,7 +23354,6 @@ if (dealtHere("cliChecks")) {
 
     // Headers.
     const add = emit("examples/add.ts", [
-      ALLOW_PANICS,
       "--emit-header",
       sidecar("add", "h"),
       "--emit-dts",
@@ -23488,8 +23368,8 @@ if (dealtHere("cliChecks")) {
     )
     const addHeader = fs.existsSync(sidecar("add", "h")) ? fs.readFileSync(sidecar("add", "h"), "utf8") : ""
     check(
-      "add.h declares `int32_t add(int32_t a, int32_t b);` with guards and nish.h",
-      addHeader.includes("int32_t add(int32_t a, int32_t b);") &&
+      "add.h declares `nish_result_i32_i32_word add(int32_t a, int32_t b);` with guards and nish.h",
+      addHeader.includes("nish_result_i32_i32_word add(int32_t a, int32_t b);") &&
         addHeader.includes("#ifndef NISH_ADD_H") &&
         addHeader.includes('#include "nish.h"') &&
         addHeader.includes('extern "C"'),
@@ -23518,7 +23398,6 @@ if (dealtHere("cliChecks")) {
     // exists. Emitted late, `arrays.napi.c` was silently skipped on a clean
     // build/ and compiled the *previous* run's copy on a dirty one.
     const arrays = emit("examples/arrays.ts", [
-      ALLOW_PANICS,
       "--emit-header",
       sidecar("arrays", "h"),
       "--emit-dts",
@@ -23733,15 +23612,57 @@ if (dealtHere("cliChecks")) {
       looseHeader || loose.stderr
     )
 
-    const entry = emit("examples/multi/main.ts", [ALLOW_PANICS, "--emit-header", sidecar("multi", "h")], "multi", true)
+    const entry = emit("examples/multi/main.ts", ["--emit-header", sidecar("multi", "h")], "multi", true)
     const entryHeader = entry.status === 0 ? fs.readFileSync(sidecar("multi", "h"), "utf8") : ""
     check(
       "the entry `export function main` is omitted; imported modules are listed",
       !entryHeader.includes("main(") &&
-        entryHeader.includes("int32_t square(int32_t n);") &&
+        entryHeader.includes("nish_result_i32_i32_word square(int32_t n);") &&
         entryHeader.includes("/* examples/multi/math.ts */"),
       entryHeader || entry.stderr
     )
+
+    // multi's `square` at its edge: 46340² is the last square that fits i32, so
+    // 46340 is Ok and 46341 the overflow `Err(1)`; a negative n squares to Ok.
+    const math = emit("examples/multi/math.ts", ["--emit-header", sidecar("multi_math", "h")], "multi_math")
+    if (math.status === 0) {
+      const mathDriver = path.join(interopDir, "multi_math_driver.c")
+      fs.writeFileSync(
+        mathDriver,
+        [
+          "#include <stdio.h>",
+          '#include "multi_math.h"',
+          "static void show(int32_t n) {",
+          "  nish_result_i32_i32_word r = square(n);",
+          '  printf("%d: %s %d\\n", n, r.ok ? "ok" : "err", r.ok ? r.as.value : r.as.error);',
+          "}",
+          "int main(void) {",
+          "  show(46340);",
+          "  show(46341);",
+          "  show(-46340);",
+          "  show(-7);",
+          "  return 0;",
+          "}",
+          "",
+        ].join("\n")
+      )
+      const mathExe = path.join(interopDir, "multi_math_driver")
+      const mathCc = spawnSync(
+        "clang",
+        [...strictC, "-O2", sidecar("multi_math", "ll"), path.join(runtimeDir, "runtime.c"), mathDriver, "-o", mathExe],
+        { cwd: root }
+      )
+      const mathRun = mathCc.status === 0 ? spawnSync(mathExe, { encoding: "utf8" }) : null
+      check(
+        "multi's square answers Ok(46340²) at 46340, Err(1) at 46341 and Ok for a negative n",
+        mathRun !== null &&
+          mathRun.status === 0 &&
+          mathRun.stdout === "46340: ok 2147395600\n46341: err 1\n-46340: ok 2147395600\n-7: ok 49\n",
+        String(mathCc.stderr) + (mathRun ? mathRun.stdout + mathRun.stderr : "")
+      )
+    } else {
+      check("examples/multi/math.ts compiles on its own with its header", false, math.stderr)
+    }
 
     const cxx = spawnSync("clang", [
       "-std=c++17",
@@ -23800,7 +23721,8 @@ if (dealtHere("cliChecks")) {
         '#include "add.h"',
         '#include "export_fn.h"',
         "int main(void) {",
-        "  nish_str *s = nish_str_from_i32(add(40, 2));",
+        "  nish_result_i32_i32_word r = add(40, 2);",
+        "  nish_str *s = nish_str_from_i32(r.ok ? r.as.value : r.as.error);",
         '  printf("add(40, 2) = %s; double_(21) = %d; next(20) = %d\\n", s->data, double_(21), next(20));',
         "  nish_free_arena();",
         "  return 0;",
@@ -23838,8 +23760,8 @@ if (dealtHere("cliChecks")) {
       : ""
     // nish-function: the wasm interop's .d.ts text, not a Nish program
     check(
-      "add.d.ts declares `add(a: number, b: number): number` and `load(bytes: BufferSource): Promise<Exports>`",
-      addDts.includes("  add(a: number, b: number): number;") &&
+      "add.d.ts declares `add` answering `{ ok, value } | { ok, error }` and `load(bytes: BufferSource): Promise<Exports>`",
+      addDts.includes("  add(a: number, b: number): { ok: true; value: number } | { ok: false; error: number };") &&
         addDts.includes("export function load(bytes: BufferSource): Promise<Exports>;"),
       addDts
     )
@@ -23976,20 +23898,20 @@ if (dealtHere("cliChecks")) {
             'import { readFileSync } from "node:fs";',
             'import { createRequire } from "node:module";',
             `const addon = createRequire(import.meta.url)(${JSON.stringify(addon)});`,
-            `const { instance } = await WebAssembly.instantiate(readFileSync(${JSON.stringify(wasm)}), {});`,
-            "const pairs = [[2, 3], [40, 2], [-7, 7], [2147483646, 1], [-2147483647, -1]];",
-            "const same = pairs.every(([a, b]) => addon.add(a, b) === instance.exports.add(a, b));",
-            'console.log(same ? pairs.map(([a, b]) => addon.add(a, b)).join(" ") : "mismatch");',
-            // One past INT_MAX is a checked overflow: the addon would exit the process with
-            // the panic's message, and the wasm module, which links no runtime, traps through
-            // the stub wasm-ld writes for the weak `nish_panic_overflow`.
-            "try { instance.exports.add(2147483647, 1); console.log('no trap'); } catch (e) { console.log(e.constructor.name); }",
+            `const { load } = await import(${JSON.stringify(pathToFileURL(sidecar("add", "mjs")).href)});`,
+            `const wasm = await load(readFileSync(${JSON.stringify(wasm)}));`,
+            // The last two pairs are one past INT_MAX and INT_MIN: add answers its Err arm,
+            // 1 above and -1 below, in both builds, where it used to panic.
+            "const pairs = [[2, 3], [40, 2], [-7, 7], [2147483646, 1], [-2147483647, -1], [2147483647, 1], [-2147483648, -1]];",
+            "const show = (r) => (r.ok ? String(r.value) : `err ${r.error}`);",
+            "const same = pairs.every(([a, b]) => show(addon.add(a, b)) === show(wasm.add(a, b)));",
+            'console.log(same ? pairs.map(([a, b]) => show(addon.add(a, b))).join(" ") : "mismatch");',
           ].join("\n")
           const cmp =
             w.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null
           check(
-            "the .node and .wasm builds of add.ts return identical results up to INT_MAX and INT_MIN, and the wasm one traps one past",
-            cmp !== null && String(cmp.stdout).trim() === "5 42 0 2147483647 -2147483648\nRuntimeError",
+            "the .node and .wasm builds of add.ts return the same Result up to INT_MAX and INT_MIN, and the Err arm one past each",
+            cmp !== null && String(cmp.stdout).trim() === "5 42 0 2147483647 -2147483648 err 1 err -1",
             String(w.stderr) + (cmp ? String(cmp.stdout) + String(cmp.stderr) : "")
           )
         }
@@ -25354,14 +25276,40 @@ if (dealtHere("cliChecks")) {
         arraysDriver,
         [
           "#include <stdio.h>",
+          "#include <string.h>",
           '#include "arrays.h"',
-          "int main(void) {",
+          "int main(int argc, char **argv) {",
+          "  /* The refusals: sumI32's Err arm, and squares and sumI64 reporting and exiting 1. */",
+          '  if (argc > 1 && strcmp(argv[1], "sumI32") == 0) {',
+          "    int32_t big[2] = {2147483647, 1};",
+          "    nish_array over = {2, 2, (char *)big};",
+          "    nish_result_i32_i32_word r = sumI32(&over);",
+          '    printf("ok %d error %d\\n", r.ok, r.as.error);',
+          "    return 0;",
+          "  }",
+          '  if (argc > 1 && strcmp(argv[1], "squares") == 0) { squares(-1); return 0; }',
+          '  if (argc > 1 && strcmp(argv[1], "squares46342") == 0) { squares(46342); return 0; }',
+          '  if (argc > 1 && strcmp(argv[1], "squares46341") == 0) {',
+          "    nish_array *edge = squares(46341);",
+          '    printf("len %llu last %d\\n", (unsigned long long)edge->len, ((int32_t *)edge->data)[edge->len - 1]);',
+          "    return 0;",
+          "  }",
+          "  /* sumI64 at both limits: {MAX, 1} and {MIN, -1} overflow, {MAX - 1, 1} and {MIN + 1, -1} land on the limit. */",
+          "  int64_t edges[4][2] = {{9223372036854775807LL, 1}, {-9223372036854775807LL - 1, -1}, {9223372036854775806LL, 1}, {-9223372036854775807LL, -1}};",
+          '  const char *edgeArms[4] = {"sumI64", "sumI64Below", "sumI64AtMax", "sumI64AtMin"};',
+          "  for (int e = 0; e < 4; e++) {",
+          "    if (argc > 1 && strcmp(argv[1], edgeArms[e]) == 0) {",
+          "      nish_array edge = {2, 2, (char *)edges[e]};",
+          '      printf("%lld\\n", (long long)sumI64(&edge));',
+          "      return 0;",
+          "    }",
+          "  }",
           "  int32_t buf[4] = {1, 2, 3, 4};",
           "  nish_array xs = {4, 4, (char *)buf}; /* a host buffer, borrowed for the calls */",
-          "  int32_t before = sumI32(&xs);",
+          "  int32_t before = sumI32(&xs).as.value;",
           "  fill(&xs, 5);",
           "  nish_array *sq = squares(4); /* arena-owned */",
-          '  printf("sumI32 = %d; after fill buf[3] = %d, sum %d; squares len %llu last %d\\n", before, buf[3], sumI32(&xs), (unsigned long long)sq->len, ((int32_t *)sq->data)[3]);',
+          '  printf("sumI32 = %d; after fill buf[3] = %d, sum %d; squares len %llu last %d\\n", before, buf[3], sumI32(&xs).as.value, (unsigned long long)sq->len, ((int32_t *)sq->data)[3]);',
           "  nish_free_arena();",
           "  return 0;",
           "}",
@@ -25391,6 +25339,38 @@ if (dealtHere("cliChecks")) {
           String(arraysRun.stdout).trim() ===
             "sumI32 = 10; after fill buf[3] = 5, sum 20; squares len 4 last 9",
         String(arraysCc.stderr) + (arraysRun ? String(arraysRun.stdout) + String(arraysRun.stderr) : "")
+      )
+      // Each refusal arrays.ts gives in place of a panic, reached from C: sumI32's Err arm,
+      // and squares(-1) and an i64 overflow in sumI64 reported on stderr with exit 1.
+      const edgeRun = (arm) => (arraysCc.status === 0 ? spawnSync(arraysExe, [arm], { encoding: "utf8" }) : null)
+      const [sq46341, sq46342, below, atMax, atMin] = ["squares46341", "squares46342", "sumI64Below", "sumI64AtMax", "sumI64AtMin"].map(edgeRun)
+      check(
+        "arrays.ts at its edges: squares(46341) ends on 46340², squares(46342) exits 1, sumI64 exits 1 below i64 min and lands exactly on max and min",
+        sq46341 !== null &&
+          sq46341.status === 0 &&
+          sq46341.stdout === "len 46341 last 2147395600\n" &&
+          sq46342.status === 1 &&
+          sq46342.stderr === "squares: n must be in 0..46341\n" &&
+          below.status === 1 &&
+          below.stderr === "sumI64: the sum overflows i64\n" &&
+          atMax.status === 0 &&
+          atMax.stdout === "9223372036854775807\n" &&
+          atMin.status === 0 &&
+          atMin.stdout === "-9223372036854775808\n",
+        [sq46341, sq46342, below, atMax, atMin].map((r) => (r ? `${r.status}: ${r.stdout}${r.stderr}` : "not built")).join("\n")
+      )
+      const refusals = arraysCc.status === 0 ? ["sumI32", "squares", "sumI64"].map((arm) => spawnSync(arraysExe, [arm], { encoding: "utf8" })) : []
+      const [sumI32Err, squaresErr, sumI64Err] = refusals
+      check(
+        "arrays.ts refuses without a panic: sumI32 answers Err(1) past INT_MAX, squares(-1) and sumI64 past i64 max exit 1 with their message",
+        refusals.length === 3 &&
+          sumI32Err.status === 0 &&
+          sumI32Err.stdout === "ok 0 error 1\n" &&
+          squaresErr.status === 1 &&
+          squaresErr.stderr === "squares: n must be in 0..46341\n" &&
+          sumI64Err.status === 1 &&
+          sumI64Err.stderr === "sumI64: the sum overflows i64\n",
+        refusals.map((r) => `${r.status}: ${r.stdout}${r.stderr}`).join("\n")
       )
     }
     if (arrays.status === 0 && (has("wasm-ld") || hasNodeHeaders)) {
@@ -25478,14 +25458,18 @@ if (dealtHere("cliChecks")) {
         "  api.fill(buf, 7);",
         '  let err = "";',
         "  try { api.sumF64(is); } catch (e) { err = e.constructor.name + ': ' + e.message; }",
-        "  const row = [api.sumF64(xs), api.sumI32(is), Array.from(api.scale(xs, 2)).join(','), api.scale(xs, 2).constructor.name,",
+        "  const row = [api.sumF64(xs), api.sumI32(is).value, Array.from(api.scale(xs, 2)).join(','), api.scale(xs, 2).constructor.name,",
         "    Array.from(api.squares(5)).join(','), api.widen(is).constructor.name, String(api.sumI64(new BigInt64Array([1n << 40n, 2n]))),",
         "    Array.from(buf).join(','), err, api.sumF64(big), api.sumF64(big)];",
         "  console.log(name + ' | ' + row.join(' | '));",
+        // sumI32's Err arm: one past INT_MAX is Err(1), one below INT_MIN Err(-1).
+        "  const over = api.sumI32(new Int32Array([2147483647, 1])), under = api.sumI32(new Int32Array([-2147483648, -1]));",
+        "  console.log(name + ' err | ' + [over.ok, over.error, under.ok, under.error].join(' | '));",
         "}",
-        // A trap inside wasm (`new Int32Array(-1)` is a huge allocation: memory.grow fails, `unreachable`)
-        // surfaces as a RuntimeError; the loader's `finally` releases the arena and later calls still work.
-        // The native addon would `_exit(1)` with "out of memory" instead, so only the wasm build is probed.
+        // A trap inside wasm (squares(-1) reaches `exit(1)`, which a module that links no process
+        // runtime lowers to `unreachable`) surfaces as a RuntimeError; the loader's `finally` releases
+        // the arena and later calls still work. The native addon would exit the process with the
+        // message instead, so only the wasm build is probed.
         ...(wasmOk
           ? [
               'let trap = ""; try { apis.wasm.squares(-1); } catch (e) { trap = e.constructor.name; }',
@@ -25518,6 +25502,11 @@ if (dealtHere("cliChecks")) {
           detail
         )
         check(
+          "wasm: sumI32 answers its Err arm, 1 past INT_MAX and -1 past INT_MIN, as { ok: false, error }",
+          lines.includes("wasm err | false | 1 | false | -1"),
+          detail
+        )
+        check(
           "wasm: a trap (squares(-1) -> RuntimeError) releases the arena and the next call works",
           lines.includes("trap | RuntimeError | 4.5"),
           detail
@@ -25527,6 +25516,11 @@ if (dealtHere("cliChecks")) {
         check(
           "N-API: typed arrays are borrowed (fill mutates the Int32Array in place), results are fresh typed arrays, i64 is a bigint",
           lines.includes(`napi | ${roundTrip}`),
+          detail
+        )
+        check(
+          "N-API: sumI32 answers its Err arm, 1 past INT_MAX and -1 past INT_MIN, as { ok: false, error }",
+          lines.includes("napi err | false | 1 | false | -1"),
           detail
         )
         check(
@@ -27417,7 +27411,7 @@ if (dealtHere("cliChecks")) {
       "json-doc":
         "std/json-tokenizer.ts:604:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 120 → 120 bytes",
       "zlib-each":
-        "std/compress/deflate.ts:894:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
+        "std/compress/deflate.ts:904:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
       "request-slot":
         "std/net/http-server.ts:238:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 200 → 200 bytes",
     }
@@ -29720,7 +29714,7 @@ if (dealtHere("releaseChecks")) {
     const added = withAllowPanics(listing, ["run", "tests/cases/panics_index.ts", "--deny-panics"])
     // An opt-out example's build names the flag itself, as its recipe and its
     // `// smoke: args` do; a compiler that does not list it is not passed it.
-    const optOut = ["examples/add.ts", ALLOW_PANICS, "-o", "x.ll"]
+    const optOut = ["examples/term-probe.ts", ALLOW_PANICS, "-o", "x.ll"]
     const optOutRun = ["run", ALLOW_PANICS, "examples/term-probe.ts", ALLOW_PANICS]
     check(
       "allow-panics: the helper leaves a line that decides the scope, an example, a docs program or no compile alone, puts the flag after `run`, and drops a literal flag a compiler does not list",
@@ -29728,7 +29722,7 @@ if (dealtHere("releaseChecks")) {
         JSON.stringify(withAllowPanics(listing, copied)) === JSON.stringify([ALLOW_PANICS, ...copied]) &&
         JSON.stringify(added) === JSON.stringify(["run", ALLOW_PANICS, "tests/cases/panics_index.ts", "--deny-panics"]) &&
         withAllowPanics(listing, optOut) === optOut &&
-        JSON.stringify(withAllowPanics(without, optOut)) === JSON.stringify(["examples/add.ts", "-o", "x.ll"]) &&
+        JSON.stringify(withAllowPanics(without, optOut)) === JSON.stringify(["examples/term-probe.ts", "-o", "x.ll"]) &&
         JSON.stringify(withAllowPanics(without, optOutRun)) === JSON.stringify(["run", "examples/term-probe.ts", ALLOW_PANICS]),
       JSON.stringify(unchanged.filter((args) => withAllowPanics(listing, args) !== args)) + JSON.stringify(added)
     )
@@ -31418,13 +31412,11 @@ if (dealtHere("releaseChecks")) {
                 hello.stdout + hello.stderr
               )
             }
-            // add.ts keeps its checked `a + b` on purpose (its header), so the
-            // helper passes --allow-panics, as its header says a user builds it
-            const ir = spawnSync(
-              bin,
-              withAllowPanics(bin, [path.join(root, "examples", "add.ts"), ALLOW_PANICS, "-o", path.join(work, "add.ll")]),
-              { cwd: work, encoding: "utf8" }
-            )
+            // strict: examples/add.ts builds strict, as its header says a user builds it
+            const ir = spawnSync(bin, [path.join(root, "examples", "add.ts"), "-o", path.join(work, "add.ll")], {
+              cwd: work,
+              encoding: "utf8",
+            })
             check(
               "installed nish compiles examples/add.ts to IR from an unrelated cwd",
               ir.status === 0 && fs.existsSync(path.join(work, "add.ll")),
@@ -32796,7 +32788,7 @@ if (dealtHere("releaseChecks")) {
      */
     const resolveTarget = (spec) => {
       const out = path.join(buildDir, "seed-target-probe.ll")
-      const r = spawnNish([path.join(root, "examples", "add.ts"), ALLOW_PANICS, "--target", spec, "-o", out], {
+      const r = spawnNish([path.join(root, "examples", "add.ts"), "--target", spec, "-o", out], {
         cwd: root,
         encoding: "utf8",
       })
@@ -38704,10 +38696,9 @@ if (!only || "vite".includes(only)) {
     const app = path.join(buildDir, "vite-app")
     fs.rmSync(app, { recursive: true, force: true })
     fs.mkdirSync(path.join(app, "src"), { recursive: true })
-    // The plugin builds as a user's `nish` does, strict. The copied examples keep
-    // their panic sites on purpose (their headers build them with
-    // `--allow-panics`), and the plugin has no flags option, so its compiler here
-    // is one that adds the flag.
+    // The plugin builds as a user's `nish` does, strict. The copied examples build
+    // strict too, but clash.ts's `n + 1` may overflow, and the plugin has no flags
+    // option, so its compiler here is one that adds the flag.
     const relaxed = path.join(app, "nish-relaxed")
     const relax = listsAllowPanics(NISH) ? ` ${ALLOW_PANICS}` : ""
     fs.writeFileSync(
@@ -38845,11 +38836,11 @@ if (!only || "vite".includes(only)) {
     try {
       const generated = path.join(app, "generated-add.mjs")
       fs.writeFileSync(generated, await spelled.load(forms["../ent/add"]))
-      added = (await import(pathToFileURL(generated).href)).add(2, 3)
+      added = JSON.stringify((await import(pathToFileURL(generated).href)).add(2, 3))
     } catch (e) {
       added = String(e.stderr ?? e)
     }
-    check('vite: `import { add } from "../ent/add"` gets the wasm build of ent/add.ts', added === 5, String(added))
+    check('vite: `import { add } from "../ent/add"` gets the wasm build of ent/add.ts', added === '{"ok":true,"value":5}', added)
 
     // A compiler older than `loadSync` writes a loader without it. The plugin says so,
     // naming the compiler and its version, rather than leaving Rollup to report a
@@ -39781,17 +39772,18 @@ if (!only || "host-import".includes(only)) {
 
     // A program with no host module is compiled as it was before host modules:
     // its native and wasm32 IR are these bytes (the .d.ts, the loader and both
-    // profiles' .wasm are held below, against WASM_PLAIN_DIGESTS).
+    // profiles' .wasm are held below, against WASM_PLAIN_DIGESTS). examples-strict S3
+    // (#2385) moved both: add and arrays answer their overflows instead of panicking.
     for (const [src, native, wasm32] of [
       [
         "examples/add.ts",
-        "c9c8b3abb2a28d8d983ca06439bf07fb2d03fd373c18c185caa837eeacd8027b",
-        "2b682ad80229098976b5d710898209a5be40e28fc43bdcb3529e3353fb48ee8a",
+        "2d399ccafb6e3e473b5cab1acfd3286e2c7f7a4cf34f36d32db1af5e04b6382e",
+        "bf638279fc79dc874a8e2f9a8f6c2d7cd247f1bf3899f3b6b2deeb3fdb59fdce",
       ],
       [
         "examples/arrays.ts",
-        "7dc834476d88c90760e9de579ad9ae7d2ede58e3e709a0614bd68f7d6b17c89d",
-        "7e3db328ba5975f0ad3a14cd62f4c22660ce254dcfb697ba46a646f6a8921293",
+        "30d8f5e35963681637d3f1aa9e4d69e6a7eb8928b13dac898a95a8a9241c6ae6",
+        "709fb6dd012b5f9ccb67a757f795175ba0fada94d13a9825bbd6097b66336703",
       ],
     ]) {
       const stem = path.basename(src, ".ts")
@@ -41655,7 +41647,7 @@ if (!only || "wasm-arena".includes(only)) {
           `want ${want}${shown(native)}`
         )
         const emitted = path.join(out, "ts")
-        const ts = spawnNish(["examples/wasm-arena/replay.ts", "--deterministic", ALLOW_PANICS, "--emit-ts", emitted], {
+        const ts = spawnNish(["examples/wasm-arena/replay.ts", "--deterministic", "--emit-ts", emitted], {
           cwd: root,
           encoding: "utf8",
         })

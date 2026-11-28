@@ -2015,6 +2015,8 @@ const TERM_TS_PANIC_FREE = "std/term.ts panic-free"
 const TEMPORAL_PANIC_FREE = "std/temporal.ts panic-free"
 /** The changelog words of WP85 S2: std's term-pixels, term-io, term-rate and term-probe modules prove or drop their panic sites. */
 const TERM_PANIC_FREE = "term-pixels, term-io, term-rate and term-probe panic-free"
+/** The changelog words of examples-strict S4b: Framebuffer's Result-returning factory and resize. */
+const TERM_TRY_FRAMEBUFFER = "add tryFramebuffer and Framebuffer.tryResize"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -11761,8 +11763,129 @@ const HTTP1_TICK = "Http1Server.tick"
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
 /** The changelog words of examples-strict S8: std/net/http3-frame.ts's `h3CheckWindow` takes the window guard's shape and `Http3FrameHeader` gains `read`, so the HTTP/3 windows relay reaches are proven. The change's commit subject carries these words verbatim. */
 const S8_RELAY_STD = "std panic sites relay reaches"
+/** The changelog words of WP91 S1, which spells the cast wraps in std/compress, src/ and examples/. */
+const WP91_S1 = "compress, src/ and examples, and one check for every file"
+const wp91s1 = byFinding(WP91_S1)
 /** The changelog words of WP90 S1, the multipart/form-data reader. */
 const MULTIPART_BODIES = "multipart/form-data bodies"
+
+/** The changelog words of examples-strict S1, indexes into module storage. */
+const STORAGE_INDEX = "prove index sites into module storage"
+/** Why each module examples-strict S1 moves writes different IR. */
+const STORAGE_INDEX_WHY = {
+  "manifest.ll":
+    "src/manifest.ts compares its nesting depth with a constant before it adds one, which now orders the two, so the manifest.ll module drops those overflow checks and renumbers its values",
+  "proto-parse.ll":
+    "src/proto-parse.ts compares its nesting depth with a constant before it adds one, which now orders the two, so the proto-parse.ll module drops those overflow checks and renumbers its values",
+  "bounds.ll":
+    "src/bounds.ts is the prover this change edits, so the bounds.ll module a program that compiles it writes moves with its source",
+  "lexer.ll":
+    "src/lexer.ts compares a character code with a folded module constant before it subtracts, which now orders the two, so the lexer.ll module drops those overflow checks and renumbers its values",
+}
+const storageIndex = () => [
+  ...Object.entries({
+    "src/build-cache.ts": ["manifest.ll"],
+    "src/capability-report.ts": ["manifest.ll"],
+    "src/compilation.ts": ["manifest.ll"],
+    "src/compile.ts": ["manifest.ll", "proto-parse.ll"],
+    "src/dump-checked.ts": ["manifest.ll"],
+    "src/dump.ts": ["manifest.ll"],
+    "src/emit-ts-control.ts": ["manifest.ll"],
+    "src/emit-ts-edits.ts": ["manifest.ll"],
+    "src/emit-ts-numbers.ts": ["manifest.ll"],
+    "src/emit-ts-records.ts": ["manifest.ll"],
+    "src/emit-ts-storage.ts": ["manifest.ll"],
+    "src/emit-ts-strings.ts": ["manifest.ll"],
+    "src/emit-ts.ts": ["manifest.ll"],
+    "src/fault-contract.ts": ["bounds.ll", "lexer.ll"],
+    "src/fix.ts": ["manifest.ll"],
+    "src/interop-abi.ts": ["manifest.ll"],
+    "src/interop-dts.ts": ["manifest.ll"],
+    "src/interop-header.ts": ["manifest.ll"],
+    "src/interop-napi.ts": ["manifest.ll"],
+    "src/interop-wasm.ts": ["manifest.ll"],
+    "src/manifest.ts": ["manifest.ll"],
+    "src/module-twins.ts": ["lexer.ll"],
+    "src/proto-cli.ts": ["lexer.ll", "manifest.ll", "proto-parse.ll"],
+    "src/proto-emit.ts": ["lexer.ll", "proto-parse.ll"],
+    "src/proto-lex.ts": ["lexer.ll"],
+    "src/proto-parse.ts": ["lexer.ll", "proto-parse.ll"],
+    "src/run-cache.ts": ["manifest.ll"],
+    "src/upgrade.ts": ["manifest.ll"],
+    "src/watch.ts": ["manifest.ll"],
+    "src/window-contract.ts": ["bounds.ll", "lexer.ll"],
+    "tests/cases/const_array_numeric.ts": ["const_array_numeric.ll"],
+    "tests/cases/storage_attributes.ts": ["storage_attributes.ll"],
+    "tests/cases/storage_lend.ts": ["storage_lend.ll"],
+    "tests/cases/storage_module.ts": ["storage_module.ll"],
+    "tests/differential/corpus/const_module.ts": ["const_module.ll"],
+    "tests/differential/corpus/const_modules/main.ts": ["main.ll"],
+    "tests/link/httparena_entry/main.ts": ["pg.ll"],
+    "tests/link/net_http2_stream/main.ts": ["main.ll"],
+    "tests/link/net_http_server_h1_tls/main.ts": ["peer.ll"],
+    "tests/link/net_protobuf/main.ts": ["checks.ll"],
+    "tests/link/net_protobuf_bad_depth/main.ts": ["main.ll"],
+    "tests/link/net_protobuf_f64/main.ts": ["checks.ll"],
+    "tests/link/module_target_std_twin/main.ts": ["lexer.ll", "manifest.ll"],
+    "tests/link/module_target_twin/main.ts": ["lexer.ll"],
+    "tests/link/storage_import_record/main.ts": ["cells.ll", "main.ll"],
+    "tests/link/storage_lend_import/main.ts": ["main.ll"],
+    "tests/link/storage_parallel_read/main.ts": ["main.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: STORAGE_INDEX,
+      why:
+        STORAGE_INDEX_WHY[file] ??
+        `the program indexes module storage or compares with a constant, which src/bounds.ts now proves, so ${file} drops those index or overflow checks and renumbers its values`,
+    }))
+  ),
+  {
+    file: "net_quic_conn_replay_server.ll",
+    changelog: STORAGE_INDEX,
+    why: "the QUIC replay server's helpers compare against folded module constants, which the prover now orders, so a dropped overflow check renumbers the module's attribute groups in every program that builds it",
+  },
+  {
+    file: "net_http3_peer.ll",
+    changelog: STORAGE_INDEX,
+    why: "a callee the HTTP/3 peer declares now proves its constant-guarded arithmetic, so its attribute group number moves in every program that builds the peer",
+  },
+  {
+    file: "chacha20poly1305.ll",
+    changelog: STORAGE_INDEX,
+    why: "chacha20Poly1305Open returns when the sealed length is below POLY1305_TAG_SIZE, a folded module constant the guard now orders, so `new Array<u8>(total - POLY1305_TAG_SIZE)` is proven non-negative and the module every importer writes drops that array-length check and its string",
+  },
+  {
+    program: "tests/cases/deny_panics_storage_index.ts",
+    file: "exit",
+    changelog: STORAGE_INDEX,
+    why: "the program indexes module storage under --deny-panics with every index bounded, which the candidate proves and the reference refuses as a site that may panic",
+  },
+  {
+    program: "tests/cases/deny_panics_storage_const_guard.ts",
+    file: "exit",
+    changelog: STORAGE_INDEX,
+    why: "the program adds 1 past a guard against a folded module constant under --deny-panics, which the candidate reads as an order and the reference refuses as an overflow that may panic",
+  },
+  {
+    program: "tests/cases/deny_panics_storage_local_const.ts",
+    file: "exit",
+    changelog: STORAGE_INDEX,
+    why: "the program indexes module storage past a guard against a function const under --deny-panics, which the candidate proves and the reference refuses as a site that may panic",
+  },
+]
+
+/** The changelog words of examples-strict S5: the wasm-arena example drops `--allow-panics`. */
+const ARENA_STRICT = "wasm-arena builds without --allow-panics"
+/** examples-strict S5: the arena programs the reference refuses once their smoke args drop the flag. */
+const arenaStrict = () =>
+  ["examples/wasm-arena/sim.ts", "examples/wasm-arena/replay.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: ARENA_STRICT,
+    why: "the arena's sim.ts now builds without --allow-panics: its loops index BODIES and SHOTS up to their caps and each helper handed an index tests it against the cap, which the candidate proves and the reference refuses as index sites that may panic",
+  }))
 
 /** The release-note words of TLS RSA S1, RSA-PSS CertificateVerify on the TLS and QUIC servers. */
 const RSA_PSS_SERVER = "RSA-PSS CertificateVerify under an RSA certificate"
@@ -12335,6 +12458,14 @@ const DECLARED = [
     file: "exit",
     changelog: CHECKED_CONFIG,
     why: "the program calls routerChecked, which the seed's nish/net/router does not export, so only the candidate compiles it",
+  },
+  // #2385 S3: arrays.ts's `squares` refuses an out-of-range count before
+  // `new Array`, which the candidate's strict default accepts.
+  {
+    program: "examples/arrays.ts",
+    file: "exit",
+    changelog: "add, multi and arrays build without --allow-panics",
+    why: "squares checks its count before `new Array`, which the candidate's strict default proves and the seed refuses as an array-length panic site",
   },
   // #2297: the bounds walk proves `end - start` of two index locals with
   // `0 <= start <= end` cannot overflow, so `hasTwinWord`'s `i - from` and
@@ -14462,6 +14593,8 @@ const DECLARED = [
   ...typedBuffers(),
   ...targetFiles(),
   ...exportedBindings(),
+  ...storageIndex(),
+  ...arenaStrict(),
   {
     program: "tests/link/net_grpc/main.ts",
     file: "exit",
@@ -23991,6 +24124,20 @@ const DECLARED = [
       "tests/link/std_term_rate_f64/main.ts": ["main.h"],
     }
   ),
+  // examples-strict S4b: Framebuffer's Result API and the term sites term-probe reaches.
+  ...byFinding(TERM_TRY_FRAMEBUFFER)(
+    "the program calls tryFramebuffer, Framebuffer.tryResize or base64EncodeIfFits, or reaches std/term-io.ts code that reads `PixelBytes.full`, which are new in this release (examples-strict S4b), so the seed's standard library has no such exports or field and refuses it",
+    {
+      "tests/link/break_game/main.ts": ["exit"],
+      "tests/link/break_gfx/main.ts": ["exit"],
+      "tests/link/std_base64_if_fits/main.ts": ["exit"],
+      "tests/link/std_term_pixels_try/main.ts": ["exit"],
+    }
+  ),
+  ...byFinding(TERM_TRY_FRAMEBUFFER)(
+    "Framebuffer gains tryResize, which returns a Result<void, string>, and its constructor checks the size through the rule tryFramebuffer shares (examples-strict S4b), so a module that lays out or constructs a Framebuffer declares the Result struct and its calls into the class move",
+    { "tests/link/std_term_pixels_negative_desync/main.ts": ["main.ll"] }
+  ),
   // WP87 S2: std/math, base64, random, regex, release, sqlite, testing and
   // text prove or remove their counted panic sites.
   ...s2RestPanicFree(
@@ -24254,6 +24401,36 @@ const DECLARED = [
       "tests/link/net_http_server_trailers_short/main.ts": ["http3-frame.ll", "http3.ll"],
       "tests/link/net_http_server_trailers_unstarted/main.ts": ["http3-frame.ll", "http3.ll"],
       "tests/link/net_static/main.ts": ["http3-frame.ll", "http3.ll", "net_http3_peer.ll"],
+    }
+  ),
+  ...wp91s1(
+    "std/compress/deflate.ts's `deflateHash` multiplies with `wrappingMul` from nish:unsafe instead of casting through `u32`, so deflate.ll moves in every program that compresses",
+    {
+      "bench/pg-carrier.ts": ["deflate.ll"],
+      "bench/std-compress-deflate.ts": ["deflate.ll"],
+      "bench/std-compress-gzip.ts": ["deflate.ll"],
+      "bench/std-compress-inflate.ts": ["deflate.ll"],
+      "bench/std-http1.ts": ["deflate.ll"],
+      "examples/file-server.ts": ["deflate.ll"],
+      "examples/http-app/main.ts": ["deflate.ll"],
+      "examples/prefork-server.ts": ["deflate.ll"],
+      "examples/relay/main.ts": ["deflate.ll"],
+      "tests/link/net_http1_server_checked/main.ts": ["deflate.ll"],
+      "tests/link/std_compress_deflate_bounds/main.ts": ["deflate.ll"],
+      "tests/link/std_compress_sweep/main.ts": ["deflate.ll"],
+      "tests/link/std_http1_config_checked/main.ts": ["deflate.ll"],
+    }
+  ),
+  ...wp91s1(
+    "each example's cast wrap is spelled with nish:unsafe's wrapping operations or replaced by a bound the prover reads, so the example's own module moves",
+    {
+      "examples/file-server.ts": ["file-server.ll"],
+      "examples/histogram-atomic.ts": ["histogram-atomic.ll"],
+      "examples/histogram.ts": ["histogram.ll"],
+      "examples/http-app/main.ts": ["main.ll"],
+      "examples/prefork-jobs.ts": ["prefork-jobs.ll"],
+      "examples/relay/main.ts": ["main.ll"],
+      "examples/term-probe.ts": ["term-probe.ll"],
     }
   ),
   // WP91 S3: the cast wraps of std/json*, text, temporal, sqlite and sync

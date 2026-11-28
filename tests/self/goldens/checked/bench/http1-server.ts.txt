@@ -11616,7 +11616,7 @@ function exposeWith<u8[], u8[], u8[] | null, p256EcdhExposed>(s: Secret<u8[]>, a
   stackSites=0 stackLocals=0
   callee +0:93 p256EcdhExposed -> @nish.p256EcdhExposed
 function exposeWith<u8[], u8[], u8[] | null, p256SignExposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] | null -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SignExposed
   calls: nish.p256SignExposed
   pointer s: size=8 writesThrough=false captured=false
@@ -11753,7 +11753,7 @@ function exposeWith<u8[], u8[], u8[], tlsTicketSealExposed>(s: Secret<u8[]>, arg
   stackSites=0 stackLocals=0
   callee +0:93 tlsTicketSealExposed -> @nish.tlsTicketSealExposed
 function exposeWith<u8[], u8[], u8[], tlsTicketOpenExposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.25.nish.tlsTicketOpenExposed [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsTicketOpenExposed
   calls: nish.tlsTicketOpenExposed
   pointer s: size=8 writesThrough=false captured=false
@@ -12226,248 +12226,251 @@ module std/compress/deflate.ts [package nish]
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+import wrappingMul from "nish:unsafe" -> builtin wrappingMul
 import wrappingSub from "nish:unsafe" -> builtin wrappingSub
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
 import tryCopyBytes from "nish/bytes" -> function @nish.tryCopyBytes
 unsafe import 55:10 uncheckedGet from "nish:unsafe"
 unsafe import 55:24 uncheckedSet from "nish:unsafe"
 unsafe import 55:38 wrappingAdd from "nish:unsafe"
-unsafe import 55:51 wrappingSub from "nish:unsafe"
-unsafe call 239:9 uncheckedGet (node 596)
-unsafe call 240:10 uncheckedGet (node 607)
-unsafe call 241:10 uncheckedGet (node 623)
-unsafe call 242:10 uncheckedGet (node 639)
-unsafe call 251:9 uncheckedGet (node 671)
-unsafe call 252:10 uncheckedGet (node 682)
-unsafe call 253:10 uncheckedGet (node 702)
-unsafe call 254:10 uncheckedGet (node 722)
-unsafe call 255:10 uncheckedGet (node 742)
-unsafe call 256:10 uncheckedGet (node 762)
-unsafe call 257:10 uncheckedGet (node 782)
-unsafe call 258:10 uncheckedGet (node 802)
-unsafe call 262:3 uncheckedSet (node 840)
-unsafe call 263:3 uncheckedSet (node 852)
-unsafe call 264:3 uncheckedSet (node 872)
-unsafe call 265:3 uncheckedSet (node 892)
-unsafe call 266:3 uncheckedSet (node 912)
-unsafe call 267:3 uncheckedSet (node 932)
-unsafe call 268:3 uncheckedSet (node 952)
-unsafe call 269:3 uncheckedSet (node 972)
-unsafe call 326:9 uncheckedGet (node 1315)
-unsafe call 326:38 uncheckedGet (node 1323)
-unsafe call 646:7 uncheckedSet (node 2657)
-unsafe call 647:7 uncheckedSet (node 2665)
-unsafe call 677:7 uncheckedSet (node 2842)
-unsafe call 684:23 uncheckedGet (node 2927)
-unsafe call 686:28 uncheckedGet (node 2947)
-unsafe call 690:7 uncheckedSet (node 2962)
-unsafe call 698:22 uncheckedGet (node 3003)
-unsafe call 699:7 uncheckedSet (node 3010)
-unsafe call 706:22 uncheckedGet (node 3058)
-unsafe call 710:29 uncheckedGet (node 3086)
-unsafe call 714:7 uncheckedSet (node 3101)
-unsafe call 715:7 uncheckedSet (node 3115)
-unsafe call 715:32 uncheckedGet (node 3121)
-unsafe call 716:7 uncheckedSet (node 3128)
-unsafe call 722:7 uncheckedSet (node 3156)
-unsafe call 722:29 uncheckedGet (node 3162)
-unsafe call 723:7 uncheckedSet (node 3169)
-unsafe call 723:29 uncheckedGet (node 3175)
-unsafe call 729:19 uncheckedGet (node 3188)
-unsafe call 730:19 uncheckedGet (node 3200)
-unsafe call 734:3 uncheckedSet (node 3227)
-unsafe call 742:25 uncheckedGet (node 3279)
-unsafe call 742:52 uncheckedGet (node 3285)
-unsafe call 743:7 uncheckedSet (node 3295)
-unsafe call 743:32 uncheckedGet (node 3301)
-unsafe call 744:7 uncheckedSet (node 3308)
-unsafe call 747:7 uncheckedSet (node 3321)
-unsafe call 747:32 uncheckedGet (node 3327)
-unsafe call 753:24 uncheckedGet (node 3351)
-unsafe call 754:41 uncheckedGet (node 3365)
-unsafe call 754:68 uncheckedGet (node 3371)
-unsafe call 755:27 uncheckedGet (node 3387)
-unsafe call 759:7 uncheckedSet (node 3414)
-unsafe call 760:7 uncheckedSet (node 3424)
-unsafe call 763:27 uncheckedGet (node 3442)
-unsafe call 767:7 uncheckedSet (node 3469)
-unsafe call 773:3 uncheckedSet (node 3483)
-unsafe call 775:21 uncheckedGet (node 3515)
-unsafe call 775:40 uncheckedGet (node 3520)
-unsafe call 779:5 uncheckedSet (node 3535)
-unsafe call 796:25 uncheckedGet (node 3613)
-unsafe call 879:22 uncheckedGet (node 4021)
-unsafe call 1272:7 uncheckedSet (node 5840)
-unsafe call 1298:9 uncheckedSet (node 6003)
-unsafe call 1299:9 uncheckedSet (node 6021)
-unsafe call 1300:9 uncheckedSet (node 6048)
-unsafe call 1301:9 uncheckedSet (node 6075)
-unsafe call 1477:21 uncheckedGet (node 6998)
-unsafe call 1478:5 uncheckedSet (node 7005)
-unsafe call 1479:5 uncheckedSet (node 7013)
-unsafe call 1512:24 uncheckedGet (node 7184)
-unsafe call 1525:13 uncheckedGet (node 7245)
-unsafe call 1529:16 uncheckedGet (node 7265)
-unsafe call 1557:14 uncheckedGet (node 7427)
-unsafe call 1630:25 uncheckedGet (node 7864)
-unsafe call 1631:9 uncheckedSet (node 7871)
-unsafe call 1632:9 uncheckedSet (node 7879)
-unsafe call 1679:18 uncheckedGet (node 8199)
-unsafe call 1693:9 uncheckedSet (node 8275)
-unsafe call 1695:37 uncheckedGet (node 8305)
-unsafe call 1696:25 uncheckedGet (node 8320)
-unsafe call 1698:25 uncheckedGet (node 8340)
-unsafe call 1698:56 uncheckedGet (node 8348)
-unsafe call 1700:25 uncheckedGet (node 8368)
-unsafe call 1704:9 uncheckedSet (node 8388)
-unsafe call 1705:9 uncheckedSet (node 8398)
-unsafe call 1715:11 uncheckedSet (node 8495)
-unsafe call 1715:57 uncheckedGet (node 8506)
-unsafe call 1716:11 uncheckedSet (node 8513)
-unsafe call 1720:30 uncheckedGet (node 8535)
-unsafe call 1721:9 uncheckedSet (node 8542)
-unsafe call 1723:24 uncheckedGet (node 8559)
-unsafe call 1727:9 uncheckedSet (node 8575)
-unsafe call 1803:30 uncheckedGet (node 8991)
-unsafe call 1804:9 uncheckedSet (node 8998)
-unsafe call 1806:24 uncheckedGet (node 9015)
-unsafe call 1810:9 uncheckedSet (node 9031)
-unsafe call 1818:9 uncheckedSet (node 9089)
-unsafe call 1820:37 uncheckedGet (node 9119)
-unsafe call 1821:25 uncheckedGet (node 9134)
-unsafe call 1823:25 uncheckedGet (node 9154)
-unsafe call 1823:56 uncheckedGet (node 9162)
-unsafe call 1825:25 uncheckedGet (node 9182)
-unsafe call 1829:9 uncheckedSet (node 9202)
-unsafe call 1830:9 uncheckedSet (node 9212)
-unsafe call 1853:11 uncheckedSet (node 9381)
-unsafe call 1853:57 uncheckedGet (node 9392)
-unsafe call 1854:11 uncheckedSet (node 9399)
-unsafe call 1926:9 uncheckedSet (node 9805)
-unsafe call 1927:9 uncheckedSet (node 9819)
-unsafe call 1928:9 uncheckedSet (node 9835)
-unsafe call 1929:9 uncheckedSet (node 9852)
-unsafe call 1984:34 uncheckedGet (node 10094)
-unsafe call 1984:57 uncheckedGet (node 10100)
-unsafe call 1989:28 uncheckedGet (node 10132)
-unsafe call 1989:57 uncheckedGet (node 10140)
-unsafe call 2008:11 uncheckedSet (node 10268)
-unsafe call 2020:11 uncheckedSet (node 10356)
-unsafe call 2040:11 uncheckedSet (node 10495)
-unsafe call 2073:20 uncheckedGet (node 10649)
-unsafe call 2077:5 uncheckedSet (node 10669)
-unsafe call 2078:5 uncheckedSet (node 10677)
-unsafe call 2181:22 uncheckedGet (node 11261)
-unsafe call 2182:24 uncheckedGet (node 11273)
-unsafe call 2183:24 uncheckedGet (node 11285)
-unsafe call 2184:39 uncheckedGet (node 11305)
-unsafe call 2208:22 uncheckedGet (node 11414)
-unsafe call 2209:24 uncheckedGet (node 11426)
-unsafe call 2210:28 uncheckedGet (node 11442)
-unsafe call 2377:22 uncheckedGet (node 12478)
-unsafe call 2380:24 uncheckedGet (node 12502)
-unsafe call 2384:32 uncheckedGet (node 12534)
-unsafe call 2391:30 uncheckedGet (node 12582)
-unsafe call 2393:24 uncheckedGet (node 12603)
-unsafe call 2397:30 uncheckedGet (node 12632)
-unsafe call 2398:32 uncheckedGet (node 12651)
-unsafe call 2400:49 uncheckedGet (node 12693)
-unsafe call 2405:13 uncheckedSet (node 12745)
-unsafe call 2406:13 uncheckedSet (node 12757)
-unsafe call 2407:13 uncheckedSet (node 12777)
-unsafe call 2408:13 uncheckedSet (node 12797)
-unsafe call 2417:25 uncheckedGet (node 12857)
-unsafe call 2417:56 uncheckedGet (node 12865)
-unsafe call 2419:25 uncheckedGet (node 12885)
-unsafe call 2423:31 uncheckedGet (node 12914)
-unsafe call 2424:32 uncheckedGet (node 12933)
-unsafe call 2426:45 uncheckedGet (node 12973)
-unsafe call 2432:11 uncheckedSet (node 13019)
-unsafe call 2433:11 uncheckedSet (node 13031)
-unsafe call 2434:11 uncheckedSet (node 13051)
-unsafe call 2435:11 uncheckedSet (node 13071)
-unsafe call 2646:27 uncheckedGet (node 14168)
-unsafe call 2651:9 uncheckedSet (node 14192)
-unsafe call 2680:25 uncheckedGet (node 14401)
-unsafe call 2680:53 uncheckedGet (node 14410)
-unsafe call 2692:25 uncheckedGet (node 14501)
-unsafe call 2695:42 uncheckedGet (node 14541)
-unsafe call 2695:67 uncheckedGet (node 14547)
-unsafe call 2696:31 uncheckedGet (node 14568)
-unsafe call 2699:32 uncheckedGet (node 14619)
-unsafe call 2701:43 uncheckedGet (node 14659)
-unsafe call 2718:11 uncheckedSet (node 14785)
-unsafe call 2731:9 uncheckedSet (node 14841)
-unsafe call 2732:9 uncheckedSet (node 14853)
-unsafe call 2733:9 uncheckedSet (node 14873)
-unsafe call 2734:9 uncheckedSet (node 14893)
-unsafe call 2758:7 uncheckedSet (node 15042)
-unsafe call 2832:5 uncheckedSet (node 15264)
-unsafe call 2832:30 uncheckedGet (node 15270)
-unsafe call 3054:22 uncheckedGet (node 16447)
-unsafe call 3109:22 uncheckedGet (node 16737)
-unsafe call 3142:9 uncheckedSet (node 16904)
-unsafe call 3147:32 uncheckedGet (node 16950)
-unsafe call 3166:13 uncheckedSet (node 17089)
-unsafe call 3196:9 uncheckedSet (node 17236)
-unsafe call 3283:9 uncheckedSet (node 17669)
-unsafe call 3312:9 uncheckedSet (node 17842)
-unsafe call 3414:26 uncheckedGet (node 18415)
-unsafe call 3487:26 uncheckedGet (node 18724)
-unsafe call 3527:30 uncheckedGet (node 19028)
-unsafe call 3570:30 uncheckedGet (node 19301)
-unsafe call 3576:22 uncheckedGet (node 19329)
-unsafe call 3756:34 uncheckedGet (node 20156)
-unsafe call 3756:66 uncheckedGet (node 20167)
-unsafe call 3757:35 uncheckedGet (node 20188)
-unsafe call 3757:71 uncheckedGet (node 20201)
-unsafe call 3890:14 wrappingAdd (node 20876)
-unsafe call 3892:22 uncheckedGet (node 20906)
-unsafe call 3898:18 wrappingSub (node 20942)
-unsafe call 3899:13 uncheckedSet (node 20949)
-unsafe call 3900:18 wrappingAdd (node 20965)
-unsafe call 3901:17 uncheckedGet (node 20974)
-unsafe call 3904:20 wrappingSub (node 21007)
-unsafe call 3905:15 uncheckedSet (node 21014)
-unsafe call 3906:20 wrappingAdd (node 21030)
-unsafe call 3907:19 uncheckedGet (node 21039)
-unsafe call 3910:22 wrappingSub (node 21072)
-unsafe call 3911:17 uncheckedSet (node 21079)
-unsafe call 3912:22 wrappingAdd (node 21095)
-unsafe call 3913:21 uncheckedGet (node 21104)
-unsafe call 3920:20 wrappingSub (node 21142)
-unsafe call 3923:19 uncheckedGet (node 21151)
-unsafe call 3935:18 wrappingSub (node 21218)
-unsafe call 3938:17 uncheckedSet (node 21245)
-unsafe call 3939:22 wrappingAdd (node 21261)
-unsafe call 3940:21 uncheckedGet (node 21270)
-unsafe call 3956:20 wrappingSub (node 21363)
-unsafe call 3957:28 uncheckedGet (node 21375)
-unsafe call 3960:22 wrappingSub (node 21410)
-unsafe call 3962:21 uncheckedGet (node 21419)
-unsafe call 3974:20 wrappingSub (node 21485)
-unsafe call 3979:20 wrappingSub (node 21545)
-unsafe call 3989:19 uncheckedGet (node 21578)
-unsafe call 3990:33 wrappingAdd (node 21596)
-unsafe call 4004:24 wrappingAdd (node 21655)
-unsafe call 4005:26 wrappingAdd (node 21664)
-unsafe call 4008:19 uncheckedSet (node 21676)
-unsafe call 4008:41 uncheckedGet (node 21682)
-unsafe call 4009:24 wrappingAdd (node 21691)
-unsafe call 4010:26 wrappingAdd (node 21700)
-unsafe call 4015:41 uncheckedGet (node 21721)
-unsafe call 4020:24 wrappingAdd (node 21782)
-unsafe call 4023:19 uncheckedSet (node 21794)
-unsafe call 4024:24 wrappingAdd (node 21808)
-unsafe call 4031:19 uncheckedSet (node 21837)
-unsafe call 4031:41 uncheckedGet (node 21843)
-unsafe call 4032:24 wrappingAdd (node 21852)
-unsafe call 4033:26 wrappingAdd (node 21861)
-unsafe call 4044:16 wrappingAdd (node 21920)
-unsafe call 4064:28 uncheckedGet (node 22049)
-unsafe call 4100:9 uncheckedSet (node 22213)
-unsafe call 4186:11 uncheckedSet (node 22709)
-unsafe call 4186:33 uncheckedGet (node 22715)
+unsafe import 55:51 wrappingMul from "nish:unsafe"
+unsafe import 55:64 wrappingSub from "nish:unsafe"
+unsafe call 239:9 uncheckedGet (node 599)
+unsafe call 240:10 uncheckedGet (node 610)
+unsafe call 241:10 uncheckedGet (node 626)
+unsafe call 242:10 uncheckedGet (node 642)
+unsafe call 252:3 wrappingMul (node 667)
+unsafe call 261:9 uncheckedGet (node 700)
+unsafe call 262:10 uncheckedGet (node 711)
+unsafe call 263:10 uncheckedGet (node 731)
+unsafe call 264:10 uncheckedGet (node 751)
+unsafe call 265:10 uncheckedGet (node 771)
+unsafe call 266:10 uncheckedGet (node 791)
+unsafe call 267:10 uncheckedGet (node 811)
+unsafe call 268:10 uncheckedGet (node 831)
+unsafe call 272:3 uncheckedSet (node 869)
+unsafe call 273:3 uncheckedSet (node 881)
+unsafe call 274:3 uncheckedSet (node 901)
+unsafe call 275:3 uncheckedSet (node 921)
+unsafe call 276:3 uncheckedSet (node 941)
+unsafe call 277:3 uncheckedSet (node 961)
+unsafe call 278:3 uncheckedSet (node 981)
+unsafe call 279:3 uncheckedSet (node 1001)
+unsafe call 336:9 uncheckedGet (node 1344)
+unsafe call 336:38 uncheckedGet (node 1352)
+unsafe call 656:7 uncheckedSet (node 2686)
+unsafe call 657:7 uncheckedSet (node 2694)
+unsafe call 687:7 uncheckedSet (node 2871)
+unsafe call 694:23 uncheckedGet (node 2956)
+unsafe call 696:28 uncheckedGet (node 2976)
+unsafe call 700:7 uncheckedSet (node 2991)
+unsafe call 708:22 uncheckedGet (node 3032)
+unsafe call 709:7 uncheckedSet (node 3039)
+unsafe call 716:22 uncheckedGet (node 3087)
+unsafe call 720:29 uncheckedGet (node 3115)
+unsafe call 724:7 uncheckedSet (node 3130)
+unsafe call 725:7 uncheckedSet (node 3144)
+unsafe call 725:32 uncheckedGet (node 3150)
+unsafe call 726:7 uncheckedSet (node 3157)
+unsafe call 732:7 uncheckedSet (node 3185)
+unsafe call 732:29 uncheckedGet (node 3191)
+unsafe call 733:7 uncheckedSet (node 3198)
+unsafe call 733:29 uncheckedGet (node 3204)
+unsafe call 739:19 uncheckedGet (node 3217)
+unsafe call 740:19 uncheckedGet (node 3229)
+unsafe call 744:3 uncheckedSet (node 3256)
+unsafe call 752:25 uncheckedGet (node 3308)
+unsafe call 752:52 uncheckedGet (node 3314)
+unsafe call 753:7 uncheckedSet (node 3324)
+unsafe call 753:32 uncheckedGet (node 3330)
+unsafe call 754:7 uncheckedSet (node 3337)
+unsafe call 757:7 uncheckedSet (node 3350)
+unsafe call 757:32 uncheckedGet (node 3356)
+unsafe call 763:24 uncheckedGet (node 3380)
+unsafe call 764:41 uncheckedGet (node 3394)
+unsafe call 764:68 uncheckedGet (node 3400)
+unsafe call 765:27 uncheckedGet (node 3416)
+unsafe call 769:7 uncheckedSet (node 3443)
+unsafe call 770:7 uncheckedSet (node 3453)
+unsafe call 773:27 uncheckedGet (node 3471)
+unsafe call 777:7 uncheckedSet (node 3498)
+unsafe call 783:3 uncheckedSet (node 3512)
+unsafe call 785:21 uncheckedGet (node 3544)
+unsafe call 785:40 uncheckedGet (node 3549)
+unsafe call 789:5 uncheckedSet (node 3564)
+unsafe call 806:25 uncheckedGet (node 3642)
+unsafe call 889:22 uncheckedGet (node 4050)
+unsafe call 1282:7 uncheckedSet (node 5869)
+unsafe call 1308:9 uncheckedSet (node 6032)
+unsafe call 1309:9 uncheckedSet (node 6050)
+unsafe call 1310:9 uncheckedSet (node 6077)
+unsafe call 1311:9 uncheckedSet (node 6104)
+unsafe call 1484:21 uncheckedGet (node 7010)
+unsafe call 1485:5 uncheckedSet (node 7017)
+unsafe call 1486:5 uncheckedSet (node 7025)
+unsafe call 1519:24 uncheckedGet (node 7196)
+unsafe call 1532:13 uncheckedGet (node 7257)
+unsafe call 1536:16 uncheckedGet (node 7277)
+unsafe call 1564:14 uncheckedGet (node 7439)
+unsafe call 1637:25 uncheckedGet (node 7868)
+unsafe call 1638:9 uncheckedSet (node 7875)
+unsafe call 1639:9 uncheckedSet (node 7883)
+unsafe call 1686:18 uncheckedGet (node 8203)
+unsafe call 1700:9 uncheckedSet (node 8279)
+unsafe call 1702:37 uncheckedGet (node 8309)
+unsafe call 1703:25 uncheckedGet (node 8324)
+unsafe call 1705:25 uncheckedGet (node 8344)
+unsafe call 1705:56 uncheckedGet (node 8352)
+unsafe call 1707:25 uncheckedGet (node 8372)
+unsafe call 1711:9 uncheckedSet (node 8392)
+unsafe call 1712:9 uncheckedSet (node 8402)
+unsafe call 1722:11 uncheckedSet (node 8491)
+unsafe call 1722:57 uncheckedGet (node 8502)
+unsafe call 1723:11 uncheckedSet (node 8509)
+unsafe call 1727:30 uncheckedGet (node 8531)
+unsafe call 1728:9 uncheckedSet (node 8538)
+unsafe call 1730:24 uncheckedGet (node 8555)
+unsafe call 1734:9 uncheckedSet (node 8571)
+unsafe call 1810:30 uncheckedGet (node 8987)
+unsafe call 1811:9 uncheckedSet (node 8994)
+unsafe call 1813:24 uncheckedGet (node 9011)
+unsafe call 1817:9 uncheckedSet (node 9027)
+unsafe call 1825:9 uncheckedSet (node 9085)
+unsafe call 1827:37 uncheckedGet (node 9115)
+unsafe call 1828:25 uncheckedGet (node 9130)
+unsafe call 1830:25 uncheckedGet (node 9150)
+unsafe call 1830:56 uncheckedGet (node 9158)
+unsafe call 1832:25 uncheckedGet (node 9178)
+unsafe call 1836:9 uncheckedSet (node 9198)
+unsafe call 1837:9 uncheckedSet (node 9208)
+unsafe call 1858:11 uncheckedSet (node 9360)
+unsafe call 1858:57 uncheckedGet (node 9371)
+unsafe call 1859:11 uncheckedSet (node 9378)
+unsafe call 1931:9 uncheckedSet (node 9784)
+unsafe call 1932:9 uncheckedSet (node 9798)
+unsafe call 1933:9 uncheckedSet (node 9814)
+unsafe call 1934:9 uncheckedSet (node 9831)
+unsafe call 1989:34 uncheckedGet (node 10073)
+unsafe call 1989:57 uncheckedGet (node 10079)
+unsafe call 1994:28 uncheckedGet (node 10111)
+unsafe call 1994:57 uncheckedGet (node 10119)
+unsafe call 2013:11 uncheckedSet (node 10247)
+unsafe call 2025:11 uncheckedSet (node 10335)
+unsafe call 2045:11 uncheckedSet (node 10474)
+unsafe call 2078:20 uncheckedGet (node 10628)
+unsafe call 2082:5 uncheckedSet (node 10648)
+unsafe call 2083:5 uncheckedSet (node 10656)
+unsafe call 2186:22 uncheckedGet (node 11240)
+unsafe call 2187:24 uncheckedGet (node 11252)
+unsafe call 2188:24 uncheckedGet (node 11264)
+unsafe call 2189:39 uncheckedGet (node 11284)
+unsafe call 2213:22 uncheckedGet (node 11393)
+unsafe call 2214:24 uncheckedGet (node 11405)
+unsafe call 2215:28 uncheckedGet (node 11421)
+unsafe call 2382:22 uncheckedGet (node 12457)
+unsafe call 2385:24 uncheckedGet (node 12481)
+unsafe call 2389:32 uncheckedGet (node 12513)
+unsafe call 2396:30 uncheckedGet (node 12561)
+unsafe call 2398:24 uncheckedGet (node 12582)
+unsafe call 2402:30 uncheckedGet (node 12611)
+unsafe call 2403:32 uncheckedGet (node 12630)
+unsafe call 2405:49 uncheckedGet (node 12672)
+unsafe call 2410:13 uncheckedSet (node 12724)
+unsafe call 2411:13 uncheckedSet (node 12736)
+unsafe call 2412:13 uncheckedSet (node 12756)
+unsafe call 2413:13 uncheckedSet (node 12776)
+unsafe call 2422:25 uncheckedGet (node 12836)
+unsafe call 2422:56 uncheckedGet (node 12844)
+unsafe call 2424:25 uncheckedGet (node 12864)
+unsafe call 2428:31 uncheckedGet (node 12893)
+unsafe call 2429:32 uncheckedGet (node 12912)
+unsafe call 2431:45 uncheckedGet (node 12952)
+unsafe call 2437:11 uncheckedSet (node 12998)
+unsafe call 2438:11 uncheckedSet (node 13010)
+unsafe call 2439:11 uncheckedSet (node 13030)
+unsafe call 2440:11 uncheckedSet (node 13050)
+unsafe call 2651:27 uncheckedGet (node 14135)
+unsafe call 2656:9 uncheckedSet (node 14159)
+unsafe call 2685:25 uncheckedGet (node 14368)
+unsafe call 2685:53 uncheckedGet (node 14377)
+unsafe call 2697:25 uncheckedGet (node 14468)
+unsafe call 2700:42 uncheckedGet (node 14508)
+unsafe call 2700:67 uncheckedGet (node 14514)
+unsafe call 2701:31 uncheckedGet (node 14535)
+unsafe call 2704:32 uncheckedGet (node 14586)
+unsafe call 2706:43 uncheckedGet (node 14626)
+unsafe call 2723:11 uncheckedSet (node 14744)
+unsafe call 2736:9 uncheckedSet (node 14800)
+unsafe call 2737:9 uncheckedSet (node 14812)
+unsafe call 2738:9 uncheckedSet (node 14832)
+unsafe call 2739:9 uncheckedSet (node 14852)
+unsafe call 2763:7 uncheckedSet (node 15001)
+unsafe call 2837:5 uncheckedSet (node 15223)
+unsafe call 2837:30 uncheckedGet (node 15229)
+unsafe call 3059:22 uncheckedGet (node 16406)
+unsafe call 3114:22 uncheckedGet (node 16696)
+unsafe call 3147:9 uncheckedSet (node 16863)
+unsafe call 3152:32 uncheckedGet (node 16909)
+unsafe call 3171:13 uncheckedSet (node 17048)
+unsafe call 3201:9 uncheckedSet (node 17195)
+unsafe call 3288:9 uncheckedSet (node 17628)
+unsafe call 3317:9 uncheckedSet (node 17801)
+unsafe call 3419:26 uncheckedGet (node 18374)
+unsafe call 3492:26 uncheckedGet (node 18683)
+unsafe call 3532:30 uncheckedGet (node 18987)
+unsafe call 3575:30 uncheckedGet (node 19260)
+unsafe call 3581:22 uncheckedGet (node 19288)
+unsafe call 3761:34 uncheckedGet (node 20115)
+unsafe call 3761:66 uncheckedGet (node 20126)
+unsafe call 3762:35 uncheckedGet (node 20147)
+unsafe call 3762:71 uncheckedGet (node 20160)
+unsafe call 3895:14 wrappingAdd (node 20835)
+unsafe call 3897:22 uncheckedGet (node 20865)
+unsafe call 3903:18 wrappingSub (node 20901)
+unsafe call 3904:13 uncheckedSet (node 20908)
+unsafe call 3905:18 wrappingAdd (node 20924)
+unsafe call 3906:17 uncheckedGet (node 20933)
+unsafe call 3909:20 wrappingSub (node 20966)
+unsafe call 3910:15 uncheckedSet (node 20973)
+unsafe call 3911:20 wrappingAdd (node 20989)
+unsafe call 3912:19 uncheckedGet (node 20998)
+unsafe call 3915:22 wrappingSub (node 21031)
+unsafe call 3916:17 uncheckedSet (node 21038)
+unsafe call 3917:22 wrappingAdd (node 21054)
+unsafe call 3918:21 uncheckedGet (node 21063)
+unsafe call 3925:20 wrappingSub (node 21101)
+unsafe call 3928:19 uncheckedGet (node 21110)
+unsafe call 3940:18 wrappingSub (node 21177)
+unsafe call 3943:17 uncheckedSet (node 21204)
+unsafe call 3944:22 wrappingAdd (node 21220)
+unsafe call 3945:21 uncheckedGet (node 21229)
+unsafe call 3961:20 wrappingSub (node 21322)
+unsafe call 3962:28 uncheckedGet (node 21334)
+unsafe call 3965:22 wrappingSub (node 21369)
+unsafe call 3967:21 uncheckedGet (node 21378)
+unsafe call 3979:20 wrappingSub (node 21444)
+unsafe call 3984:20 wrappingSub (node 21504)
+unsafe call 3994:19 uncheckedGet (node 21537)
+unsafe call 3995:33 wrappingAdd (node 21555)
+unsafe call 4009:24 wrappingAdd (node 21614)
+unsafe call 4010:26 wrappingAdd (node 21623)
+unsafe call 4013:19 uncheckedSet (node 21635)
+unsafe call 4013:41 uncheckedGet (node 21641)
+unsafe call 4014:24 wrappingAdd (node 21650)
+unsafe call 4015:26 wrappingAdd (node 21659)
+unsafe call 4020:41 uncheckedGet (node 21680)
+unsafe call 4025:24 wrappingAdd (node 21741)
+unsafe call 4028:19 uncheckedSet (node 21753)
+unsafe call 4029:24 wrappingAdd (node 21767)
+unsafe call 4036:19 uncheckedSet (node 21796)
+unsafe call 4036:41 uncheckedGet (node 21802)
+unsafe call 4037:24 wrappingAdd (node 21811)
+unsafe call 4038:26 wrappingAdd (node 21820)
+unsafe call 4049:16 wrappingAdd (node 21879)
+unsafe call 4069:28 uncheckedGet (node 22008)
+unsafe call 4105:9 uncheckedSet (node 22172)
+unsafe call 4191:11 uncheckedSet (node 22668)
+unsafe call 4191:33 uncheckedGet (node 22674)
 const DEFLATE_STORE: i32 = 0 [exported]
 const DEFLATE_FAST: i32 = 1 [exported]
 const DEFLATE_DEFAULT: i32 = 6 [exported]
@@ -12489,7 +12492,7 @@ const DEFLATE_MAX_MATCH: i32 = 258
 const DEFLATE_HASH_SIZE: i32 = 32768
 const DEFLATE_BLOCK_TOKENS: i32 = 16384
 const DEFLATE_REBASE: i32 = 1073741824
-const DEFLATE_HASH_MUL: i64 = 2654435761
+const DEFLATE_HASH_MUL: i32 = -1640531535
 const FIXED_HASH_BITS: i32 = 14
 const FIXED_HASH_SIZE: i32 = 16384
 const INF_LITERAL: i32 = 0
@@ -12680,6 +12683,9 @@ function deflateWindow(what: string, buf: u8[], off: i32, len: i32): void -> @ni
 function deflateLoad32(b: u8[], p: integer<0, 2147483639>): u32 -> @nish.deflateLoad32
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function deflateHash(word: u32, shift: i32): i32 -> @nish.deflateHash
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function deflateLoad64(b: u8[], p: integer<0, 2147483639>): u64 -> @nish.deflateLoad64
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -13051,19 +13057,21 @@ function Deflater.longest(this: Deflater, src: u8[], p: i32, end: i32, histStart
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: p
-  calls: nish.Deflater.position nish.deflateCtz64 nish.deflateLoad32 nish.deflateLoad64 nish.deflateMatchLength
+  calls: nish.Deflater.position nish.deflateCtz64 nish.deflateHash nish.deflateLoad32 nish.deflateLoad64 nish.deflateMatchLength
   pointer this: size=264 writesThrough=false captured=false passedTo=nish.Deflater.position#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad32#0 nish.deflateLoad64#0 nish.deflateLoad64#0 nish.deflateMatchLength#0 nish.deflateLoad32#0 nish.deflateMatchLength#0
   stackSites=0 stackLocals=0
-  local -28:11 head: i32[] (const)
-  local -27:11 prev: i32[] (const)
-  local -15:11 minMatch: i32 (const)
-  local -11:11 v: i32 (const)
-  callee -11:20 Deflater.position -> @nish.Deflater.position
-  local -7:11 at: integer<0, 2147483639> (const)
-  local -6:11 word: u32 (const)
-  callee -6:23 deflateLoad32 -> @nish.deflateLoad32
-  local -5:11 h: i32 (const)
+  local -25:11 head: i32[] (const)
+  local -24:11 prev: i32[] (const)
+  local -12:11 minMatch: i32 (const)
+  local -8:11 v: i32 (const)
+  callee -8:20 Deflater.position -> @nish.Deflater.position
+  local -4:11 at: integer<0, 2147483639> (const)
+  local -3:11 word: u32 (const)
+  callee -3:23 deflateLoad32 -> @nish.deflateLoad32
+  local -2:11 h: i32 (const)
+  callee -2:37 deflateHash -> @nish.deflateHash
+  callee -2:66 deflateHash -> @nish.deflateHash
   local -1:9 cand: i32 (let)
   local +4:11 roomy: boolean (const)
   local +5:11 maxLen: i32 (const)
@@ -13098,7 +13106,7 @@ function Deflater.collectGreedy(this: Deflater, src: u8[], start: i32, end: i32,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: start
-  calls: nish.Deflater.position nish.Deflater.startBlock nish.deflateCtz64 nish.deflateLoad32 nish.deflateLoad64 nish.deflateMatchLength
+  calls: nish.Deflater.position nish.Deflater.startBlock nish.deflateCtz64 nish.deflateHash nish.deflateLoad32 nish.deflateLoad64 nish.deflateMatchLength
   pointer this: size=264 writesThrough=true captured=false passedTo=nish.Deflater.startBlock#0 nish.Deflater.position#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad32#0 nish.deflateLoad32#0 nish.deflateLoad64#0 nish.deflateLoad64#0 nish.deflateMatchLength#0 nish.deflateMatchLength#0 nish.deflateLoad32#0
   stackSites=0 stackLocals=0
@@ -13126,6 +13134,7 @@ function Deflater.collectGreedy(this: Deflater, src: u8[], start: i32, end: i32,
   local -3:15 word: u32 (const)
   callee -3:27 deflateLoad32 -> @nish.deflateLoad32
   local -2:15 h: i32 (const)
+  callee -2:24 deflateHash -> @nish.deflateHash
   local -1:13 cand: i32 (let)
   local +3:15 tail: i32 (const)
   local +4:15 maxLen: i32 (const)
@@ -13160,14 +13169,15 @@ function Deflater.collectGreedy(this: Deflater, src: u8[], start: i32, end: i32,
   local +81:17 q: i32 (const)
   local +82:17 vq: i32 (const)
   local +83:17 hq: i32 (const)
-  callee +83:34 deflateLoad32 -> @nish.deflateLoad32
+  callee +83:27 deflateHash -> @nish.deflateHash
+  callee +83:39 deflateLoad32 -> @nish.deflateLoad32
   local +89:15 b: i32 (const)
   local +92:15 c: i32 (const)
 function Deflater.collectLazy(this: Deflater, src: u8[], start: i32, end: i32, histStart: i32): i32 -> @nish.Deflater.collectLazy [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: end histStart start
-  calls: nish.Deflater.longest nish.Deflater.position nish.Deflater.startBlock nish.deflateLoad32
+  calls: nish.Deflater.longest nish.Deflater.position nish.Deflater.startBlock nish.deflateHash nish.deflateLoad32
   pointer this: size=264 writesThrough=true captured=false passedTo=nish.Deflater.startBlock#0 nish.Deflater.longest#0 nish.Deflater.longest#0 nish.Deflater.position#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.Deflater.longest#1 nish.Deflater.longest#1 nish.deflateLoad32#0
   stackSites=0 stackLocals=0
@@ -13211,6 +13221,8 @@ function Deflater.collectLazy(this: Deflater, src: u8[], start: i32, end: i32, h
   local +45:17 word: u32 (const)
   callee +45:29 deflateLoad32 -> @nish.deflateLoad32
   local +46:17 hq: i32 (const)
+  callee +46:35 deflateHash -> @nish.deflateHash
+  callee +46:64 deflateHash -> @nish.deflateHash
 function Deflater.storedExtra(this: Deflater, n: i32, pending: i32): i32 -> @nish.Deflater.storedExtra [exported method]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=264 writesThrough=false captured=false
@@ -13445,7 +13457,7 @@ function FixedDeflater.compress(this: FixedDeflater, src: u8[], off: i32, len: i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off room
-  calls: nish.deflateCtz64 nish.deflateLoad32 nish.deflateLoad64 nish.deflateMatchLength nish.deflateWindow nish.deflateWindowEnd
+  calls: nish.deflateCtz64 nish.deflateHash nish.deflateLoad32 nish.deflateLoad64 nish.deflateMatchLength nish.deflateWindow nish.deflateWindowEnd
   pointer this: size=56 writesThrough=false captured=false
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateWindow#1 nish.deflateWindowEnd#0 nish.deflateLoad64#0 nish.deflateLoad64#0 nish.deflateMatchLength#0 nish.deflateLoad32#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.deflateWindow#1 nish.deflateWindowEnd#0
@@ -13460,7 +13472,7 @@ function FixedDeflater.compress(this: FixedDeflater, src: u8[], off: i32, len: i
   local -19:11 dbase: u16[] (const)
   local -18:11 dextra: u8[] (const)
   local -4:9 bits: i32 (let)
-  local +1:11 shift: u32 (const)
+  local +1:11 shift: i32 (const)
   local +3:11 end: i32 (const)
   callee +3:22 deflateWindowEnd -> @nish.deflateWindowEnd
   local +4:11 outEnd: i32 (const)
@@ -13479,6 +13491,7 @@ function FixedDeflater.compress(this: FixedDeflater, src: u8[], off: i32, len: i
   local +31:15 w: u64 (const)
   callee +31:24 deflateLoad64 -> @nish.deflateLoad64
   local +32:15 h: i32 (const)
+  callee +32:24 deflateHash -> @nish.deflateHash
   local +35:15 seen: i32 (const)
   local +36:15 rel: i32 (const)
   local +41:15 dd: i32 (const)
@@ -13509,7 +13522,8 @@ function FixedDeflater.compress(this: FixedDeflater, src: u8[], off: i32, len: i
   local +103:15 q: i32 (const)
   local +105:17 qi: integer<0, 2147483639> (const)
   local +106:17 hq: i32 (const)
-  callee +106:34 deflateLoad32 -> @nish.deflateLoad32
+  callee +106:27 deflateHash -> @nish.deflateHash
+  callee +106:39 deflateLoad32 -> @nish.deflateLoad32
   local +113:13 ct: i32 (const)
   local +116:15 oc: i32 (const)
   local +130:11 cf: i32 (const)
@@ -16878,7 +16892,7 @@ function tlsEcdsaDerSignature(rs: u8[]): u8[] | null -> @nish.tlsEcdsaDerSignatu
   callee +0:35 tlsEcdsaDerLength -> @nish.tlsEcdsaDerLength
   callee +1:3 tlsEcdsaDerInto -> @nish.tlsEcdsaDerInto
 function tlsSignEcdsaP256(priv: Secret<u8[]>, content: u8[]): u8[] | null -> @nish.tlsSignEcdsaP256 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SignSha256
   calls: nish.p256SignSha256 nish.tlsEcdsaDerSignature
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.p256SignSha256#0
@@ -17483,7 +17497,7 @@ function TlsServer.ticketFits(this: TlsServer): boolean -> @nish.TlsServer.ticke
   callee +3:9 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
   callee +11:7 timingSafeEqualAt -> @nish.timingSafeEqualAt
 function TlsServer.selectTicket(this: TlsServer, current: Secret<u8[]>, currentInfo: TlsTicketKeyInfo, previous: Secret<u8[]>, previousInfo: TlsTicketKeyInfo, strikes: TlsTicketStrikes, now: i64): i32 -> @nish.TlsServer.selectTicket [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: now
   calls: nish.TlsServer.ticketFits nish.TlsTicketState.expiresAt nish.TlsTicketStrikes.take nish.___std_net_tls$.tlsZeros nish.tlsSelectPskIdentity nish.tlsServerStrikeProbe nish.tlsTicketOpen nish_arena_mark nish_arena_release nish_wipe
@@ -19658,40 +19672,25 @@ function Sha256.constructor(this: Sha256): void -> @nish.Sha256.constructor [exp
   stackSites=0 stackLocals=0
   local +0:11 h: u32[] (const)
 function Sha256.update(this: Sha256, data: u8[], off: i32, len: i32): void -> @nish.Sha256.update [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.sha256Absorb
   escaping: len off
-  calls: nish.sha256Compress nish_panic
-  pointer this: size=40 writesThrough=true captured=false
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256Compress#2
+  calls: nish.sha256Absorb nish_panic
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.sha256Absorb#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorb#1
   stackSites=0 stackLocals=0
-  local -5:11 size: i32 (const)
-  local +1:11 state: u32[] (const)
-  local +2:11 schedule: u32[] (const)
-  local +3:11 block: u8[] (const)
-  local +4:11 room: i32 (const)
-  local +5:9 at: i32 (let)
-  local +6:9 left: i32 (let)
-  local +7:9 fill: i32 (let)
-  callee +22:7 sha256Compress -> @nish.sha256Compress
-  callee +27:7 sha256Compress -> @nish.sha256Compress
+  callee +0:10 sha256Absorb -> @nish.sha256Absorb
 function Sha256.updateAll(this: Sha256, data: u8[]): void -> @nish.Sha256.updateAll [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish.Sha256.update nish.sha256Compress
-  pointer this: size=40 writesThrough=true captured=false passedTo=nish.Sha256.update#0
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Sha256.update
+  calls: nish.Sha256.update nish.sha256AbsorbLong
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.Sha256.update#0 nish.sha256AbsorbLong#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1 nish.sha256AbsorbLong#1
   stackSites=0 stackLocals=0
-  local -8:11 n: i32 (const)
-  local -4:13 from: i32 (const)
-  callee -3:7 Sha256.update -> @nish.Sha256.update
-  local +1:11 state: u32[] (const)
-  local +2:11 schedule: u32[] (const)
-  local +3:11 block: u8[] (const)
-  local +4:11 room: i32 (const)
-  local +5:9 fill: i32 (let)
-  local +6:9 off: i32 (let)
-  callee +17:7 sha256Compress -> @nish.sha256Compress
+  local +0:11 n: i32 (const)
+  local +4:13 from: i32 (const)
+  callee +5:7 Sha256.update -> @nish.Sha256.update
+  callee +8:5 sha256AbsorbLong -> @nish.sha256AbsorbLong
 function Sha256.copy(this: Sha256): Sha256 -> @nish.Sha256.copy [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:7
@@ -19731,25 +19730,85 @@ function Sha256.digestInto(this: Sha256, out: u8[], at: i32): boolean -> @nish.S
   local +9:13 room: i32 (const)
   local +10:13 fill: i32 (const)
   local +11:16 i: i32 (let)
-  callee +15:9 sha256Compress -> @nish.sha256Compress
-  local +16:18 i: i32 (let)
-  local +20:13 bits: u64 (const)
-  local +21:11 shift: u64 (let)
-  local +22:16 i: i32 (let)
-  callee +26:7 sha256Compress -> @nish.sha256Compress
-  local +28:9 p: i32 (let)
-  local +29:14 i: i32 (let)
-  local +30:13 word: u32 (const)
+  callee +18:9 sha256Compress -> @nish.sha256Compress
+  local +19:18 i: i32 (let)
+  local +23:13 bits: u64 (const)
+  local +24:11 shift: u64 (let)
+  local +25:16 i: i32 (let)
+  callee +29:7 sha256Compress -> @nish.sha256Compress
+  local +31:9 p: i32 (let)
+  local +32:14 i: i32 (let)
+  local +33:13 word: u32 (const)
+function sha256Absorb(h: Sha256, data: u8[], off: i32, len: i32): boolean -> @nish.sha256Absorb
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: len off
+  calls: nish.sha256Compress
+  pointer h: size=40 writesThrough=true captured=false
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256Compress#2
+  stackSites=0 stackLocals=0
+  local -5:9 size: i32 (const)
+  local +1:9 state: u32[] (const)
+  local +2:9 schedule: u32[] (const)
+  local +3:9 block: u8[] (const)
+  local +4:9 room: i32 (const)
+  local +5:7 at: i32 (let)
+  local +6:7 left: i32 (let)
+  local +7:7 fill: i32 (let)
+  callee +22:5 sha256Compress -> @nish.sha256Compress
+  callee +27:5 sha256Compress -> @nish.sha256Compress
+function sha256AbsorbLong(h: Sha256, data: u8[]): void -> @nish.sha256AbsorbLong
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: nish.sha256Compress
+  pointer h: size=40 writesThrough=true captured=false
+  pointer data: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -1:9 n: i32 (const)
+  local +1:9 state: u32[] (const)
+  local +2:9 schedule: u32[] (const)
+  local +3:9 block: u8[] (const)
+  local +4:9 room: i32 (const)
+  local +5:7 fill: i32 (let)
+  local +6:7 off: i32 (let)
+  callee +17:5 sha256Compress -> @nish.sha256Compress
+function sha256AbsorbWhole(h: Sha256, data: u8[]): void -> @nish.sha256AbsorbWhole
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.sha256Absorb
+  calls: nish.sha256Absorb nish.sha256AbsorbLong
+  pointer h: size=40 writesThrough=true captured=false passedTo=nish.sha256Absorb#0 nish.sha256AbsorbLong#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorb#1 nish.sha256AbsorbLong#1
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  callee +3:5 sha256Absorb -> @nish.sha256Absorb
+  callee +5:5 sha256AbsorbLong -> @nish.sha256AbsorbLong
 function sha256(data: u8[]): u8[] -> @nish.sha256 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Sha256.updateAll
-  calls: nish.Sha256.constructor nish.Sha256.digest nish.Sha256.updateAll
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.updateAll#1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.sha256AbsorbWhole
+  calls: nish.Sha256.constructor nish.Sha256.digest nish.sha256AbsorbWhole
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
   stackSites=1 stackLocals=1
   local +0:9 hasher: Sha256 (const)
   callee +0:26 new Sha256 -> @nish.Sha256.constructor
-  callee +1:3 Sha256.updateAll -> @nish.Sha256.updateAll
+  callee +1:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
   callee +2:10 Sha256.digest -> @nish.Sha256.digest
+function sha256Absorbed(a: u8[], b: u8[], c: u8[], d: u8[], e: u8[]): Sha256 -> @nish.sha256Absorbed [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
+  sharedWrite: via nish.sha256AbsorbWhole
+  calls: nish.Sha256.constructor nish.sha256AbsorbWhole nish_alloc_struct
+  pointer a: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
+  pointer c: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
+  pointer d: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
+  pointer e: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
+  stackSites=0 stackLocals=0
+  local +0:9 hasher: Sha256 (const)
+  callee +0:26 new Sha256 -> @nish.Sha256.constructor
+  callee +1:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
+  callee +2:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
+  callee +3:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
+  callee +4:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
+  callee +5:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
 module std/crypto/sha512.ts [package nish]
 const SHA512_SIZE: i32 = 64 [exported]
 const SHA384_SIZE: i32 = 48 [exported]
@@ -20175,6 +20234,7 @@ import wipe from "nish:secret" -> generic function wipe
 import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
 import Sha256 from "nish/crypto/sha256" -> struct Sha256
 import sha256 from "nish/crypto/sha256" -> function @nish.sha256
+import sha256Absorbed from "nish/crypto/sha256" -> function @nish.sha256Absorbed
 import timingSafeEqual from "nish/crypto/ct" -> function @nish.timingSafeEqual
 const P256_SCALAR_SIZE: i32 = 32 [exported]
 const P256_POINT_SIZE: i32 = 65 [exported]
@@ -23582,41 +23642,35 @@ function p256WipeHash(h: Sha256): void -> @nish.p256WipeHash
   callee +1:3 wipe<u8[]> -> @nish.wipe$arr.u8
   callee +2:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function p256Mac(k: u8[], a: u8[], b: u8[], c: u8[], d: u8[]): u8[] -> @nish.p256Mac
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Sha256.update
-  calls: nish.Sha256.constructor nish.Sha256.digest nish.Sha256.update nish.p256PadBlock nish.p256WipeHash nish.wipe$arr.u8
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.sha256Absorbed
+  calls: nish.Sha256.digest nish.p256PadBlock nish.p256WipeHash nish.sha256Absorbed nish.wipe$arr.u8
   pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256PadBlock#0 nish.p256PadBlock#0
-  pointer a: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
-  pointer c: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
-  pointer d: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
-  stackSites=2 stackLocals=2
+  pointer a: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorbed#1
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorbed#2
+  pointer c: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorbed#3
+  pointer d: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorbed#4
+  stackSites=1 stackLocals=1
   local +0:9 ipad: u8[] (const)
   callee +0:22 p256PadBlock -> @nish.p256PadBlock
   local +1:9 opad: u8[] (const)
   callee +1:22 p256PadBlock -> @nish.p256PadBlock
   local +2:9 inner: Sha256 (const)
-  callee +2:17 new Sha256 -> @nish.Sha256.constructor
-  callee +3:3 Sha256.update -> @nish.Sha256.update
-  callee +4:3 Sha256.update -> @nish.Sha256.update
-  callee +5:3 Sha256.update -> @nish.Sha256.update
-  callee +6:3 Sha256.update -> @nish.Sha256.update
-  callee +7:3 Sha256.update -> @nish.Sha256.update
-  local +8:9 innerDigest: u8[] (const)
-  callee +8:29 Sha256.digest -> @nish.Sha256.digest
-  local +9:9 outer: Sha256 (const)
-  callee +9:17 new Sha256 -> @nish.Sha256.constructor
-  callee +10:3 Sha256.update -> @nish.Sha256.update
-  callee +11:3 Sha256.update -> @nish.Sha256.update
-  local +12:9 tag: u8[] (const)
-  callee +12:21 Sha256.digest -> @nish.Sha256.digest
-  callee +13:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +14:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +15:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +16:3 p256WipeHash -> @nish.p256WipeHash
-  callee +17:3 p256WipeHash -> @nish.p256WipeHash
+  callee +2:25 sha256Absorbed -> @nish.sha256Absorbed
+  local +3:9 innerDigest: u8[] (const)
+  callee +3:29 Sha256.digest -> @nish.Sha256.digest
+  local +4:9 empty: u8[] (const)
+  local +5:9 outer: Sha256 (const)
+  callee +5:25 sha256Absorbed -> @nish.sha256Absorbed
+  local +6:9 tag: u8[] (const)
+  callee +6:21 Sha256.digest -> @nish.Sha256.digest
+  callee +7:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +8:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +9:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +10:3 p256WipeHash -> @nish.p256WipeHash
+  callee +11:3 p256WipeHash -> @nish.p256WipeHash
 function p256NonceKey(k: u8[], v: u8[], sep: u8, x: u8[], h: u8[]): u8[] -> @nish.p256NonceKey
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Mac
   escaping: sep
   calls: nish.p256Mac
@@ -23628,7 +23682,7 @@ function p256NonceKey(k: u8[], v: u8[], sep: u8, x: u8[], h: u8[]): u8[] -> @nis
   local +0:9 separator: u8[] (const)
   callee +2:10 p256Mac -> @nish.p256Mac
 function p256NonceValue(k: u8[], v: u8[]): u8[] -> @nish.p256NonceValue
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Mac
   calls: nish.p256Mac
   pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256Mac#0
@@ -23637,7 +23691,7 @@ function p256NonceValue(k: u8[], v: u8[]): u8[] -> @nish.p256NonceValue
   local +0:9 empty: u8[] (const)
   callee +1:10 p256Mac -> @nish.p256Mac
 function p256SignScalar(priv: u8[], z: u32[]): u8[] | null -> @nish.p256SignScalar
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256AffineX nish.p256BaseMult nish.p256FiatNonzero nish.p256FiatScalarAdd nish.p256FiatScalarMul nish.p256Limbs nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceKey nish.p256NonceValue nish.p256Order nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ScalarR2 nish.p256WipePoint nish.p256WipeScratch nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256NonceKey#3 nish.p256NonceKey#3 nish.p256LimbsFromBytes#1
@@ -23775,7 +23829,7 @@ function p256EcdhExposed(priv: u8[], peerPoint: u8[]): u8[] | null -> @nish.p256
   callee +26:3 p256WipePoint -> @nish.p256WipePoint
   callee +28:5 wipe<u8[]> -> @nish.wipe$arr.u8
 function p256Sign(priv: Secret<u8[]>, digest: u8[]): u8[] | null -> @nish.p256Sign [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed
   calls: nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed#0
@@ -23783,7 +23837,7 @@ function p256Sign(priv: Secret<u8[]>, digest: u8[]): u8[] | null -> @nish.p256Si
   stackSites=0 stackLocals=0
   callee +0:3 exposeWith<u8[], u8[], u8[] | null, p256SignExposed> -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed
 function p256SignExposed(priv: u8[], digest: u8[]): u8[] | null -> @nish.p256SignExposed
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256ScalarInRange
   calls: nish.p256DigestScalar nish.p256Limbs nish.p256ScalarInRange nish.p256SignScalar
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256ScalarInRange#0 nish.p256SignScalar#0
@@ -23942,7 +23996,7 @@ function p256Verify(pub: u8[], digest: u8[], sig: u8[]): boolean -> @nish.p256Ve
   callee +51:10 p256LimbsToBytes -> @nish.p256LimbsToBytes
   callee +51:44 timingSafeEqual -> @nish.timingSafeEqual
 function p256SignSha256(priv: Secret<u8[]>, msg: u8[]): u8[] | null -> @nish.p256SignSha256 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Sign
   calls: nish.p256Sign nish.sha256
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.p256Sign#0
@@ -23951,7 +24005,7 @@ function p256SignSha256(priv: Secret<u8[]>, msg: u8[]): u8[] | null -> @nish.p25
   callee +0:79 p256Sign -> @nish.p256Sign
   callee +0:94 sha256 -> @nish.sha256
 function p256VerifySha256(pub: u8[], msg: u8[], sig: u8[]): boolean -> @nish.p256VerifySha256 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Verify
   calls: nish.p256Verify nish.sha256
   pointer pub: size=0 writesThrough=false captured=false passedTo=nish.p256Verify#0
@@ -27799,7 +27853,7 @@ function tlsTicketSeal(key: Secret<u8[]>, info: TlsTicketKeyInfo, state: TlsTick
   callee -3:5 tlsTicketCopy -> @nish.tlsTicketCopy
   callee +0:19 tlsTicketAdd -> @nish.tlsTicketAdd
 function tlsTicketOpenExposed(key: u8[], ticket: u8[]): u8[] -> @nish.tlsTicketOpenExposed
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20Poly1305Open
   calls: nish.chacha20Poly1305Open nish.tlsTicketRange
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Open#0
@@ -27848,7 +27902,7 @@ function tlsTicketNamesKey(info: TlsTicketKeyInfo, ticket: u8[]): boolean -> @ni
   local +0:9 id: u8[] (const)
   local +4:12 k: i32 (let)
 function tlsTicketOpen(key: Secret<u8[]>, info: TlsTicketKeyInfo, ticket: u8[], now: i64, out: TlsTicketState): boolean -> @nish.tlsTicketOpen [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: now
   calls: nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.25.nish.tlsTicketOpenExposed nish.tlsTicketCopy nish.tlsTicketKeyOpens nish.tlsTicketNamesKey nish.tlsTicketParse nish_arena_mark nish_arena_release nish_wipe
@@ -28278,9 +28332,9 @@ function chacha20Poly1305Seal(key: u8[], nonce: u8[], aad: u8[], plaintext: u8[]
   callee +26:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +27:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function chacha20Poly1305Open(key: u8[], nonce: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.chacha20Poly1305Open [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20Poly1305Setup
-  calls: nish.chacha20CounterFits nish.chacha20Poly1305Setup nish.chacha20Poly1305Tag nish.chacha20Poly1305TagMatch nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32 nish.wipe$arr.u8 nish_panic
+  calls: nish.chacha20CounterFits nish.chacha20Poly1305Setup nish.chacha20Poly1305Tag nish.chacha20Poly1305TagMatch nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Tag#1
@@ -30366,7 +30420,7 @@ function aesGcmSeal(key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | n
 function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.aesGcmOpen [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$arr.u8
-  calls: nish.aesGcmCtr nish.aesGcmJ0 nish.aesGcmLengthFits nish.aesGcmTag nish.aesGcmTagMask nish.aesKeyUsable nish.aesLoad64 nish.wipe$arr.u64 nish.wipe$arr.u8 nish_panic
+  calls: nish.aesGcmCtr nish.aesGcmJ0 nish.aesGcmLengthFits nish.aesGcmTag nish.aesGcmTagMask nish.aesKeyUsable nish.aesLoad64 nish.wipe$arr.u64 nish.wipe$arr.u8
   pointer key: size=24 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesGcmJ0#0 nish.aesGcmTag#1 nish.aesGcmCtr#0
   pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesGcmJ0#3
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.aesGcmTag#5
@@ -40796,7 +40850,7 @@ function pkiIssuerCode(s: PkiSearch, child: X509Certificate, cand: X509Certifica
   callee +41:26 pkiCheckSignature -> @nish.pkiCheckSignature
   callee +42:45 pkiKeyIdsCode -> @nish.pkiKeyIdsCode
 function pkiIsDistrusted(store: PkiTrustStore, cert: X509Certificate): boolean -> @nish.pkiIsDistrusted
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.sha256
   calls: nish.Map$str$bool.has nish.pkiHex nish.sha256
   pointer store: size=24 writesThrough=false captured=false
@@ -43328,7 +43382,7 @@ function x509ParseChain(pem: string): X509Certificate[] | null -> @nish.x509Pars
   local +6:11 cert: X509Certificate | null (const)
   callee +6:42 x509ParseCertificate -> @nish.x509ParseCertificate
 function x509VerifySignature(cert: X509Certificate, issuer: X509Certificate): boolean -> @nish.x509VerifySignature [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.x509DerSignatureRS
   calls: nish.p256VerifySha256 nish.x509DerSignatureRS
   pointer cert: size=184 writesThrough=false captured=false
@@ -43341,7 +43395,7 @@ function x509MintExtensions(): u8[] -> @nish.x509MintExtensions
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function x509MintSelfSigned(priv: Secret<u8[]>, commonName: string, notBeforeMs: i64, days: i32, serial: u8[]): u8[] | null -> @nish.x509MintSelfSigned [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256PublicKey
   escaping: commonName
   calls: nish.p256PublicKey nish.p256SignSha256 nish.x509Bytes nish.x509DerBitString nish.x509DerSlice nish.x509DerTimeAt nish.x509DerTlv nish.x509DerUnsignedInteger nish.x509DerWrap nish.x509IsUtf8Name nish.x509MintExtensions nish.x509OidCommonName nish.x509OidEcPublicKey nish.x509OidEcdsaSha256 nish.x509OidPrime256v1
@@ -43401,7 +43455,7 @@ function x509MintSelfSigned(priv: Secret<u8[]>, commonName: string, notBeforeMs:
   callee +64:10 x509DerWrap -> @nish.x509DerWrap
   callee +64:58 x509DerBitString -> @nish.x509DerBitString
 function x509CertificateHash(der: u8[]): u8[] -> @nish.x509CertificateHash [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.sha256
   calls: nish.sha256
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.sha256#0
