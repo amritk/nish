@@ -1449,7 +1449,11 @@ const typedBuffers = () =>
 /** The changelog words of examples-strict S7e, an entropy builtin that answers instead of exiting. */
 const TRY_RANDOM = "add crypto.tryGetRandomValues"
 const tryRandom = () =>
-  ["tests/cases/os_random_try.ts", "docs/cookbook/builtin-host-entropy-try.ts"].map((program) => ({
+  [
+    "tests/cases/os_random_try.ts",
+    "docs/cookbook/builtin-host-entropy-try.ts",
+    "tests/link/deny_panics_entropy/main.ts",
+  ].map((program) => ({
     program,
     file: "exit",
     changelog: TRY_RANDOM,
