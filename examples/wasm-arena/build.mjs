@@ -47,11 +47,8 @@ fs.mkdirSync(web, { recursive: true })
 fs.mkdirSync(ll, { recursive: true })
 
 // The page module: client.ts, with sim.ts and nish/host/ring, one .ll each.
-// --allow-panics: client.ts and sim.ts opt out of the no-panic default (the
-// reason is client.ts's header).
 run(nish, [
   "examples/wasm-arena/client.ts",
-  "--allow-panics",
   "--target",
   "wasm32",
   "--host",
@@ -74,7 +71,6 @@ process.stdout.write(
 run(nish, [
   "examples/wasm-arena/replay.ts",
   "--deterministic",
-  "--allow-panics",
   "-o",
   `${path.join(out, "replay-ll")}/`,
   "--link",

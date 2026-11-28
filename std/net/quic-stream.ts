@@ -118,6 +118,7 @@ import {
 } from "nish/net/quic-frame"
 import { BufferPool } from "nish/net/buffer-pool"
 import { copyBytes } from "nish/bytes"
+import { wrappingAdd, wrappingSub } from "nish:unsafe"
 
 // ---- What the stream calls answer -----------------------------------------------
 
@@ -408,16 +409,17 @@ const quicStreamZeros = (count: i32): i32[] => {
 }
 
 /** 2^63 − 1, the largest `i64`, which a sum past it is held at. */
-const quicStreamTop = (): i64 => toI64((toU64(1) << toU64(63)) - toU64(1))
+const quicStreamTop = (): i64 => toI64(-1) >>> toI64(1)
 
 /**
  * `a + b`, held at 2^63 − 1 when the true sum is past it and at −2^63 when it is below. Stream
  * offsets, counts and limits are varints, below 2^62, so a held sum is one no peer can send:
- * a limit that is never reached. Taken in `u64`, whose `+` wraps, and read back as the `i64`
- * with the same bits, which is the true sum whenever that fits.
+ * a limit that is never reached. The wrap is how the overflow is seen, not an answer:
+ * `wrappingAdd` is the true sum whenever that fits, and its sign crosses only when it does
+ * not, which is held instead.
  */
 const quicStreamSum = (a: i64, b: i64): i64 => {
-  const sum: i64 = toI64(toU64(a) + toU64(b))
+  const sum: i64 = wrappingAdd(a, b)
   if (a >= 0 && b >= 0 && sum < 0) {
     return quicStreamTop()
   }
@@ -429,7 +431,7 @@ const quicStreamSum = (a: i64, b: i64): i64 => {
 
 /** `a − b`, held at 2^63 − 1 / −2^63 where the true difference passes either, as `quicStreamSum` holds a sum. */
 const quicStreamLess = (a: i64, b: i64): i64 => {
-  const diff: i64 = toI64(toU64(a) - toU64(b))
+  const diff: i64 = wrappingSub(a, b)
   if (a >= 0 && b < 0 && diff < 0) {
     return quicStreamTop()
   }
