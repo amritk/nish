@@ -5,47 +5,50 @@
  *   node tests/run.js --link-results build/cache/link-results/shard-3.json --shard 3/9
  *
  * A link program is a compile, a link, a run and the checks on what they
- * wrote; it reads the compiler under test, the runtime and the link recipe,
- * the program's own directory and the sources the compiler follows from its
- * `main.ts`, the toolchain, and the harness that runs it. When none of those
- * changed since a run in which every one of its checks passed, the same
- * checks pass again, so a pull request's second push, or a first push that
- * leaves a program's inputs as `main` had them, replays that run's record
- * instead of building the program again. The `test` job keeps the file in
- * the Actions cache, per shard (`docs/wp10-ci.md`, "Link-program results
- * across runs"); the push to main and the release never read it.
+ * wrote; it reads the compiler under test, std/, the runtime and the link
+ * recipe, its own directory and the tests/link directories it imports, the
+ * toolchain, and the harness that runs it. When none of those changed since a
+ * run in which every one of its checks passed, the same checks pass again, so
+ * a pull request's second push, or a first push that leaves a program's
+ * inputs as `main` had them, replays that run's record instead of building
+ * the program again. The `test` job keeps the file in the Actions cache, per
+ * shard (`docs/wp10-ci.md`, "Link-program results across runs"); the push to
+ * main and the release never read it.
  *
- * **What the key covers** (`baseKey`, then each entry's own):
+ * **What the key covers** (`baseKey`, then each program's own):
  *
  *   - the compiler under test, byte for byte, and the suite's flags other
  *     than the ones that only place work (`--shard`, `--jobs`, `--seed`,
  *     `--link-results`): the seed is in the binary already;
  *   - the harness: tests/run.js and every file it imports, followed through
  *     relative imports, so any edit to the suite's code is a new key;
- *   - everything under runtime/, scripts/build.sh, package.json and
- *     nish-capabilities.lock.json, which every `--link` reads;
- *   - the toolchain by `--version`, Node's version, the platform, the
- *     architecture, the kernel release, glibc, the CPU's model and feature
- *     flags (a kernel path the runtime picks at run time), the core count, and
- *     every variable whose name starts with `NISH_`, with `WASI_SYSROOT` and
- *     `CC`;
- *   - the program's directory, every file under it by content;
- *   - the sources: each module the compile wrote names its own file in
- *     `source_filename`, as `tests/self/compiler-cache.js` reads them, and the
- *     entry keeps each one's hash and the names in its directory, so an edited
- *     import, or a file added beside one that a resolver could pick instead,
- *     is a miss.
+ *   - every file under std/ and runtime/, scripts/build.sh, package.json and
+ *     nish-capabilities.lock.json. All of std/, not the modules a compile
+ *     writes: a library of generics writes no `.ll` of its own
+ *     (`std/collections.ts`), so no output names it;
+ *   - the toolchain and the tools a run drives, by `--version`; Node's version,
+ *     the platform, the architecture, the kernel release, glibc, the CPU's
+ *     model and feature flags (a kernel path the runtime picks at run time),
+ *     the core count; and the variables a build or a run reads (`ENV_KEYS`,
+ *     and every `NISH_*`);
+ *   - the program's directory and every tests/link directory it imports by a
+ *     relative path, followed transitively, each whole by content.
  *
  * **What is never kept**, so always run: a record with a failed check, or no
  * check, or a log line (an `--update` run writes goldens); a program a later
  * section reads the output of (`never`, `LINK_READ_LATER` in tests/run.js);
- * a program that wrote no module, or whose module names a file outside the
- * checkout; and a program any file of whose directory names a path under
- * another top-level directory of the checkout (`"tests/json-suite/..."`,
- * `"runtime/runtime.c"`): such a program reads that file at run time, which
- * no compile names, so its key cannot see it. A path built at run time from
- * pieces is the one read this cannot find; the push to main, which never
- * replays, runs every program in full.
+ * a program that wrote no module (a rejection); a program whose compile names
+ * a source outside std/ and its directories, or whose relative imports leave
+ * them; and a program any file of whose directory names a path of the
+ * checkout outside them in a string (`"tests/json-suite/..."`,
+ * `` `runtime/${f}` ``, `"../../README.md"`) or a word of `args`: such a
+ * program can read that file at run time, which no compile names. A path
+ * built at run time from pieces is the one read this cannot find.
+ *
+ * **Age.** A record replays for `MAX_AGE_MS` after the run that built it,
+ * and a replay carries that time forward unchanged, so the clock (a
+ * certificate's validity, a date in a golden) is checked at least that
+ * often. The push to main, which never replays, builds every program in full.
  */
 import crypto from "node:crypto"
 import { spawnSync } from "node:child_process"
@@ -54,13 +57,68 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
 /** Bumped when what the key covers changes, so an older file is never read as this one. */
-export const FORMAT = "link-results 1"
+export const FORMAT = "link-results 2"
 
 /** The suite's flags that only place work, each with the value after it. */
 export const PLACING_FLAGS = ["--shard", "--jobs", "--seed", "--link-results"]
+
+/** How long a record replays after the run that built it: a week. */
+export const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+
+/** The variables besides `NISH_*` a build or a program's run reads, by name. */
+export const ENV_KEYS = [
+  "CC",
+  "CFLAGS",
+  "LDFLAGS",
+  "WASI_SYSROOT",
+  "HOME",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
+  "TMPDIR",
+  "TZ",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TERM",
+  "COLUMNS",
+  "LINES",
+  "NO_COLOR",
+  "FORCE_COLOR",
+  "PATH",
+  "LD_LIBRARY_PATH",
+  "LD_PRELOAD",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+]
+
+/** The tools a link program's build or checks run, whose version is part of the key. */
+export const TOOLS = [
+  "clang",
+  "ld.lld",
+  "llvm-as",
+  "opt",
+  "wasm-ld",
+  "openssl",
+  "curl",
+  "python3",
+  "valgrind",
+]
+
+/** The root-level entries no program names as an input: generated, or not the project's. */
+const NOT_INPUTS = new Set(["node_modules", "build", ".git"])
+
+/** What the base key holds whole, so a program may name it. */
+export const BASE_INPUTS = [
+  "std",
+  "runtime",
+  "scripts/build.sh",
+  "package.json",
+  "nish-capabilities.lock.json",
+]
 
 const sha = (data) => crypto.createHash("sha256").update(data).digest("hex")
 
@@ -88,8 +146,11 @@ const treeHash = (dir) => {
 /** A file's hash, or `absent`. */
 const fileHash = (file) => (fs.existsSync(file) ? sha(fs.readFileSync(file)) : "absent")
 
-/** The names in a directory, sorted and hashed: what a resolver choosing among them could see. */
-const listingHash = (dir) => (fs.existsSync(dir) ? sha(fs.readdirSync(dir).sort().join("\0")) : "absent")
+/** `rel` under `dir`, as a path relative to the checkout, or null when it leaves the checkout. */
+const within = (top, rel) => {
+  const r = path.relative(top, rel).split(path.sep).join("/")
+  return r.startsWith("..") || path.isAbsolute(r) ? null : r
+}
 
 /**
  * `file` and every file it imports by a relative path, followed transitively:
@@ -97,44 +158,67 @@ const listingHash = (dir) => (fs.existsSync(dir) ? sha(fs.readdirSync(dir).sort(
  *
  * @param {string} file a path relative to the checkout
  * @param {Set<string>} [seen] the files found so far
+ * @param {string} [top] the checkout
  * @returns {Set<string>} the closure, relative to the checkout
  */
-export const harnessFiles = (file, seen = new Set()) => {
-  if (seen.has(file) || !fs.existsSync(path.join(root, file))) {
+export const harnessFiles = (file, seen = new Set(), top = repoRoot) => {
+  if (seen.has(file) || !fs.existsSync(path.join(top, file))) {
     return seen
   }
   seen.add(file)
-  const text = fs.readFileSync(path.join(root, file), "utf8")
+  const text = fs.readFileSync(path.join(top, file), "utf8")
   for (const m of text.matchAll(/^(?:import|export) [^"]*?from "(\.\.?\/[^"]+)"/gm)) {
-    harnessFiles(path.posix.normalize(path.posix.join(path.posix.dirname(file), m[1])), seen)
+    harnessFiles(path.posix.normalize(path.posix.join(path.posix.dirname(file), m[1])), seen, top)
   }
   return seen
+}
+
+const harnessMemo = new Map()
+
+/** `harnessFiles("tests/run.js")` for a checkout, read once per run. */
+const harnessOf = (top) => {
+  if (!harnessMemo.has(top)) {
+    harnessMemo.set(top, [...harnessFiles("tests/run.js", new Set(), top)])
+  }
+  return harnessMemo.get(top)
 }
 
 /** `<tool> --version`, or that it is not there. */
 const toolVersion = (tool) => {
   const ran = spawnSync(tool, ["--version"], { encoding: "utf8" })
-  return ran.status === 0 ? ran.stdout : `${tool}: not runnable`
-}
-
-/** The CPU's model name and feature flags, from /proc/cpuinfo where there is one. */
-const cpuIdentity = () => {
-  const text = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
-  const field = (name) => new RegExp(`^${name}\\s*:\\s*(.*)$`, "m").exec(text)?.[1] ?? ""
-  return `${field("model name")}|${field("flags") || field("Features")}|${os.cpus()[0]?.model ?? ""}`
+  return ran.status === 0 ? `${ran.stdout}${ran.stderr}` : `${tool}: not runnable`
 }
 
 /**
- * What every program of this run shares: the compiler, the harness, the
- * link's own inputs, the machine and the flags.
+ * The machine a program builds and runs on: the tools' versions, Node, the
+ * kernel, glibc, the CPU's model and feature flags, and the core count.
+ *
+ * @returns {string} one line per fact
+ */
+export const machineIdentity = () => {
+  const cpuinfo = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
+  const field = (name) => new RegExp(`^${name}\\s*:\\s*(.*)$`, "m").exec(cpuinfo)?.[1] ?? ""
+  const glibc = process.report?.getReport?.().header?.glibcVersionRuntime ?? ""
+  return [
+    ...TOOLS.map((t) => `${t} ${toolVersion(t)}`),
+    `node ${process.version} ${process.platform} ${process.arch} ${os.release()} glibc ${glibc}`,
+    `cpu ${field("model name")}|${field("flags") || field("Features")}|${os.cpus()[0]?.model ?? ""} cores ${os.cpus().length}`,
+  ].join("\n")
+}
+
+/**
+ * What every program of this run shares: the compiler, the harness, std/,
+ * the link's own inputs, the machine, the environment and the flags.
  *
  * @param {object} run the run
  * @param {string} run.nish the compiler under test
  * @param {string[]} run.argv the suite's arguments after `node tests/run.js`
  * @param {NodeJS.ProcessEnv} [run.env] the environment the programs inherit
+ * @param {string} [run.machine] `machineIdentity()`, which a check replaces
+ * @param {string} [run.top] the checkout, which a check replaces
  * @returns {string} the key, hex
  */
-export const baseKey = ({ nish, argv, env = process.env }) => {
+export const baseKey = ({ nish, argv, env = process.env, machine, top = repoRoot }) => {
   const flags = []
   for (let i = 0; i < argv.length; i++) {
     if (PLACING_FLAGS.includes(argv[i])) {
@@ -143,63 +227,114 @@ export const baseKey = ({ nish, argv, env = process.env }) => {
       flags.push(argv[i])
     }
   }
-  const harness = [...harnessFiles("tests/run.js")].sort()
+  const harness = [...harnessFiles("tests/run.js", new Set(), top)].sort()
   const vars = Object.keys(env)
-    .filter((k) => k.startsWith("NISH_") || k === "WASI_SYSROOT" || k === "CC")
+    .filter((k) => k.startsWith("NISH_") || ENV_KEYS.includes(k))
     .sort()
     .map((k) => `${k}=${env[k]}`)
-  const glibc = process.report?.getReport?.().header?.glibcVersionRuntime ?? ""
   const parts = [
     FORMAT,
     `compiler ${fileHash(nish)}`,
     `flags ${JSON.stringify(flags)}`,
-    ...harness.map((f) => `harness ${f} ${fileHash(path.join(root, f))}`),
-    `runtime ${treeHash(path.join(root, "runtime"))}`,
+    ...harness.map((f) => `harness ${f} ${fileHash(path.join(top, f))}`),
+    `std ${treeHash(path.join(top, "std"))}`,
+    `runtime ${treeHash(path.join(top, "runtime"))}`,
     ...["scripts/build.sh", "package.json", "nish-capabilities.lock.json"].map(
-      (f) => `${f} ${fileHash(path.join(root, f))}`
+      (f) => `${f} ${fileHash(path.join(top, f))}`
     ),
-    ...["clang", "ld.lld", "llvm-as", "opt", "wasm-ld"].map((t) => `${t} ${toolVersion(t)}`),
-    `node ${process.version} ${process.platform} ${process.arch} ${os.release()} glibc ${glibc}`,
-    `cpu ${cpuIdentity()} cores ${os.cpus().length}`,
+    machine ?? machineIdentity(),
     `env ${JSON.stringify(vars)}`,
   ]
   return sha(parts.join("\n"))
 }
 
-/** Top-level directories of the checkout, which a string naming a file under one points into. */
-const topLevelDirs = () =>
-  fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter(
-      (e) => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules" && e.name !== "build"
-    )
-    .map((e) => e.name)
+/** A text file of a program's directory, other than what its packages hold. */
+const ownFiles = (top, dir) =>
+  filesUnder(path.join(top, dir)).filter((f) => !f.split("/").includes("node_modules"))
 
 /**
- * The first path under another top-level directory that a file of the
- * program's directory names, or null: a program that names one may read it
- * at run time, which its key would not see.
+ * The tests/link directories a program is built from: its own, and each one
+ * a relative import reaches from it, transitively. A relative import that
+ * leaves tests/link for anywhere but std/ (which the base key holds whole) is
+ * a refusal: the file it reaches is in no key.
  *
  * @param {string} name the program, a directory under tests/link
- * @returns {string | null} the path named, or null
+ * @param {string} [top] the checkout
+ * @returns {{dirs: string[], refusal: string | null}} the directories, relative to the checkout, or why not
  */
-export const namedOutsidePath = (name) => {
-  const dir = path.join(root, "tests", "link", name)
-  const own = `tests/link/${name}/`
-  const tops = topLevelDirs()
-  // A quoted string in a source, or a word of `args` (the compiler's own
-  // command line): prose in a comment names files too, and is not a read.
-  const quoted = new RegExp(`["'](?:\\./)?((?:${tops.join("|")})/[^"'\\s]*)`, "g")
-  const word = new RegExp(`(?:^|\\s)(?:\\./)?((?:${tops.join("|")})/\\S*)`, "g")
-  for (const f of filesUnder(dir)) {
-    if (f.split("/").includes("node_modules")) {
+export const linkDirsOf = (name, top = repoRoot) => {
+  const dirs = new Set()
+  const todo = [`tests/link/${name}`]
+  const importRe = /(?:\bfrom|\bimport)\s*\(?\s*["'](\.{1,2}\/[^"']+)["']/g
+  while (todo.length > 0) {
+    const dir = todo.pop()
+    if (dirs.has(dir)) {
       continue
     }
-    const text = fs.readFileSync(path.join(dir, f), "latin1")
-    for (const m of text.matchAll(f === "args" ? word : quoted)) {
-      const named = m[1].replace(/\/+$/, "")
-      if (!`${named}/`.startsWith(own) && fs.existsSync(path.join(root, named))) {
-        return named
+    dirs.add(dir)
+    for (const f of ownFiles(top, dir).filter((file) => /\.(m?ts|m?js)$/.test(file))) {
+      const text = fs.readFileSync(path.join(top, dir, f), "utf8")
+      for (const m of text.matchAll(importRe)) {
+        const target = within(top, path.resolve(top, dir, path.dirname(f), m[1]))
+        if (target === null) {
+          return { dirs: [], refusal: `it imports ${m[1]}, outside the checkout` }
+        }
+        const parts = target.split("/")
+        if (parts[0] === "tests" && parts[1] === "link" && parts.length > 3) {
+          todo.push(`tests/link/${parts[2]}`)
+        } else if (parts[0] !== "std") {
+          return { dirs: [], refusal: `it imports ${target}, outside tests/link and std/` }
+        }
+      }
+    }
+  }
+  return { dirs: [...dirs].sort(), refusal: null }
+}
+
+/**
+ * The first path of the checkout outside a program's directories, the
+ * harness and `BASE_INPUTS` that a file of its own directory names, or null: a program that names one may read it
+ * at run time, which its key would not see. A string in a source names one
+ * when it starts with a root-level entry of the checkout, or with `../` and
+ * is not an import specifier; a word of `args` names one when it starts with
+ * a root-level entry.
+ *
+ * @param {string} name the program, a directory under tests/link
+ * @param {string[]} [dirs] the program's directories (`linkDirsOf`)
+ * @param {string} [top] the checkout
+ * @returns {string | null} the path named, or null
+ */
+export const namedOutsidePath = (name, dirs = [`tests/link/${name}`], top = repoRoot) => {
+  const own = `tests/link/${name}`
+  const entries = fs
+    .readdirSync(top)
+    .filter((e) => !NOT_INPUTS.has(e))
+    .map((e) => e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  const rooted = `(?:\\./)?((?:${entries.join("|")})(?:/[^"'\`\\s]*)?)`
+  const quoted = new RegExp(`["'\`]${rooted}["'\`/$]`, "g")
+  const relative = /(\bfrom\s*|\bimport\s*\(?\s*)?["'`](\.\.\/[^"'`\s]*)/g
+  const word = new RegExp(`(?:^|\\s)${rooted}(?=\\s|$)`, "g")
+  const covered = [...dirs, ...BASE_INPUTS, ...harnessOf(top)]
+  const outside = (rel) => !covered.some((d) => rel === d || rel.startsWith(`${d}/`))
+  for (const f of ownFiles(top, own)) {
+    const text = fs.readFileSync(path.join(top, own, f), "latin1")
+    const found =
+      f === "args"
+        ? [...text.matchAll(word)].map((m) => m[1])
+        : [
+            ...[...text.matchAll(quoted)].map((m) => m[1]),
+            ...[...text.matchAll(relative)]
+              .filter((m) => m[1] === undefined)
+              .map((m) => within(top, path.resolve(top, own, path.dirname(f), m[2]))),
+          ]
+    for (const named of found) {
+      if (named === null) {
+        return `${own}/${f}: a relative path outside the checkout`
+      }
+      // A template literal names the directory its first `${` is in.
+      const rel = named.split("${")[0].replace(/\/+$/, "")
+      if (rel !== "" && outside(rel) && fs.existsSync(path.join(top, rel))) {
+        return rel
       }
     }
   }
@@ -212,9 +347,10 @@ export const namedOutsidePath = (name) => {
  * not inside the checkout.
  *
  * @param {string} outDir the compile's output directory
+ * @param {string} [top] the checkout
  * @returns {string[] | null} the sources, or null
  */
-export const sourcesIn = (outDir) => {
+export const sourcesIn = (outDir, top = repoRoot) => {
   const modules = fs.existsSync(outDir) ? fs.readdirSync(outDir).filter((f) => f.endsWith(".ll")) : []
   const files = new Set()
   for (const module of modules) {
@@ -226,12 +362,11 @@ export const sourcesIn = (outDir) => {
     if (named === null) {
       return null
     }
-    const file = path.resolve(root, named[1])
-    const rel = path.relative(root, file)
-    if (rel.startsWith("..") || path.isAbsolute(rel) || !fs.existsSync(file)) {
+    const rel = within(top, path.resolve(top, named[1]))
+    if (rel === null || !fs.existsSync(path.join(top, rel))) {
       return null
     }
-    files.add(rel.split(path.sep).join("/"))
+    files.add(rel)
   }
   return files.size > 0 ? [...files].sort() : null
 }
@@ -249,6 +384,8 @@ export const keepable = (record) =>
  * @param {string | null} options.file the results file (`--link-results`), or null for none
  * @param {string} options.base `baseKey` of this run
  * @param {Iterable<string>} [options.never] programs that always run
+ * @param {() => number} [options.now] the clock, which a check replaces
+ * @param {string} [options.top] the checkout, which a check replaces
  * @returns {{
  *   lookup: (name: string) => object | null,
  *   keep: (name: string, record: object, outDir: string) => string | null,
@@ -259,7 +396,7 @@ export const keepable = (record) =>
  * }} the cache: `lookup` gives a kept record or null, `keep` stores a fresh one
  *   (or says why not), and `save` writes every entry of this run
  */
-export const openLinkResults = ({ file, base, never = [] }) => {
+export const openLinkResults = ({ file, base, never = [], now = Date.now, top = repoRoot }) => {
   const nevers = new Set(never)
   let old = {}
   if (file !== null && fs.existsSync(file)) {
@@ -277,17 +414,25 @@ export const openLinkResults = ({ file, base, never = [] }) => {
   const replayed = []
   const kept = []
   const refused = new Map()
-  const programKey = (name) => sha(`${base}\n${treeHash(path.join(root, "tests", "link", name))}`)
-  const stillTrue = (entry) =>
-    Object.entries(entry.sources ?? {}).every(([f, h]) => fileHash(path.join(root, f)) === h) &&
-    Object.entries(entry.dirs ?? {}).every(([d, h]) => listingHash(path.join(root, d)) === h)
+  /** The program's key, or null when its directories cannot be told. */
+  const programKey = (name) => {
+    const { dirs, refusal } = linkDirsOf(name, top)
+    return refusal !== null
+      ? null
+      : sha([base, ...dirs.map((d) => `${d} ${treeHash(path.join(top, d))}`)].join("\n"))
+  }
   return {
     lookup: (name) => {
       if (file === null || nevers.has(name)) {
         return null
       }
       const entry = old[name]
-      if (!entry || entry.key !== programKey(name) || !keepable(entry.record) || !stillTrue(entry)) {
+      const age = now() - Number(entry?.built)
+      if (!entry || !(age >= 0 && age <= MAX_AGE_MS) || !keepable(entry.record)) {
+        return null
+      }
+      const key = programKey(name)
+      if (key === null || entry.key !== key) {
         return null
       }
       fresh[name] = entry
@@ -308,23 +453,25 @@ export const openLinkResults = ({ file, base, never = [] }) => {
       if (!keepable(record)) {
         return refuse("not every check passed")
       }
-      const outside = namedOutsidePath(name)
-      if (outside !== null) {
-        return refuse(`it names ${outside}, which it may read at run time`)
+      const { dirs, refusal } = linkDirsOf(name, top)
+      if (refusal !== null) {
+        return refuse(refusal)
       }
-      const sources = sourcesIn(outDir)
+      const named = namedOutsidePath(name, dirs, top)
+      if (named !== null) {
+        return refuse(`it names ${named}, which it may read at run time`)
+      }
+      const sources = sourcesIn(outDir, top)
       if (sources === null) {
         return refuse("its compile names no source file inside the checkout")
       }
+      const unkeyed = sources.find((f) => !f.startsWith("std/") && !dirs.some((d) => f.startsWith(`${d}/`)))
+      if (unkeyed !== undefined) {
+        return refuse(`its compile reads ${unkeyed}, which no key holds`)
+      }
       fresh[name] = {
         key: programKey(name),
-        sources: Object.fromEntries(sources.map((f) => [f, fileHash(path.join(root, f))])),
-        dirs: Object.fromEntries(
-          [...new Set(sources.map((f) => path.posix.dirname(f)))].map((d) => [
-            d,
-            listingHash(path.join(root, d)),
-          ])
-        ),
+        built: now(),
         record: { steps: record.steps, irDelegated: record.irDelegated === true },
       }
       kept.push(name)

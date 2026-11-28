@@ -51,11 +51,14 @@
 #       only when every changed path is one that job is proven not to read;
 #       bootstrap, nish-cmp, nish-cmp-elision, simd-arm64, sha256-macos,
 #       fuzz-smoke and postgres-live then skip their steps and still report.
-#       A pull request also defers simd-arm64, sha256-macos, gfx-macos,
-#       postgres-live and the aarch64 rows of bootstrap and nish-cmp-elision
-#       to the push to main, the Release PR and the release, which run every
-#       lane and row (docs/wp10-ci.md, "Deferred lanes"; ci:full runs them).
-#       The test shards and lint always run. `ci-gate` needs every job and
+#       A pull request also defers simd-arm64, sha256-macos, gfx-macos and
+#       postgres-live, unless it changes the code only that job runs, and the
+#       aarch64 rows of bootstrap and nish-cmp-elision, to the push to main,
+#       the merge queue, the Release PR and the release, which run every lane
+#       and row (docs/wp10-ci.md, "Deferred lanes"; ci:full runs them).
+#       lint always runs; the test shards and examples skip only for a pull
+#       request every changed path of which the suite never reads
+#       (SUITE_UNREAD in scripts/ci-scope.mjs: .claude/plans/). `ci-gate` needs every job and
 #       fails unless each one it selected succeeded: it is the one check
 #       branch protection has to require.
 #
@@ -182,9 +185,12 @@ jobs:
   # request is the only event that can turn a lane off; any other event (a
   # push to main, the merge queue, workflow_call) runs everything, as do the
   # `ci:full` label and the NISH_CI_SCOPE repository variable set to `full`.
-  # A pull request also defers the `pullRequests: false` lanes and writes
-  # `rows=native`, whatever it changes.
-  # The test shards and lint are never lanes and do not wait on this job.
+  # A pull request whose file list it read also defers each
+  # `pullRequests: false` lane it changes none of the own paths of, and
+  # writes `rows=native`.
+  # `lint` is never a lane. The test shards and `examples` wait on this job
+  # for `suite`, which is false only for a pull request that changes nothing
+  # the suite reads.
   scope:
     name: scope
     runs-on: ubuntu-latest
@@ -208,6 +214,9 @@ jobs:
       # `nish-cmp-elision` take only the x86_64-linux seed row (the `seeds`
       # job's `rows_native` and `cmp_native`); `all` otherwise.
       rows: ${{ steps.scope.outputs.rows }}
+      # `false` on a pull request every changed path of which the suite never
+      # reads (SUITE_UNREAD: .claude/plans/): `test` and `examples` skip.
+      suite: ${{ steps.scope.outputs.suite }}
       why: ${{ steps.scope.outputs.why }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -226,6 +235,12 @@ jobs:
 
   test:
     name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/9)
+    # The one case it skips: a pull request that changes only paths the suite
+    # never reads (scripts/ci-scope.mjs, SUITE_UNREAD), where `ci-gate`
+    # expects the skip. Every other event and change runs it; a failed
+    # `scope` skips it too, and `ci-gate` fails on that.
+    needs: scope
+    if: needs.scope.outputs.suite != 'false'
     runs-on: ${{ matrix.os }}
     # 25 minutes, up from 15: shard 1 took 14m49s on main at 6e11fa6b once
     # #663 added about 3 s of clang -O2 to each program that imports p256, so
@@ -471,9 +486,9 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: build/cache/link-results
-          key: link-results-1-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: link-results-2-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            link-results-1-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-
+            link-results-2-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-
 
       # `--seed` rather than NISH_BOOTSTRAP: the variable also turns on
       # `tests/nish-cmp.js`, which the `nish-cmp` job below already runs, one
@@ -551,18 +566,20 @@ jobs:
         run: node scripts/ci-test-summary.mjs "$RUNNER_TEMP/test.log" "$RUNNER_TEMP/test.status"
 
       # What this run kept, for the next push of this pull request, or, from
-      # main, for every pull request's first. Saved after a red run too: it
+      # main, for every pull request's first; nothing restores another event's
+      # (the merge queue's, the Release PR's), so those keep none. Saved after
+      # a red run too: it
       # holds only programs whose every check passed, so the push that fixes
       # the failure builds the failed programs and replays the rest. And after
       # a cancelled one: a newer merge cancels most pushes to main, and the
       # suite writes the file whole (a rename) once the link programs are done,
       # so a run cancelled before then has none to save.
       - name: Keep the link programs' results
-        if: ${{ always() && hashFiles('build/cache/link-results/*.json') != '' }}
+        if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && hashFiles('build/cache/link-results/*.json') != '' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: build/cache/link-results
-          key: link-results-1-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: link-results-2-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The steps from here on run in one shard each: each answers once for
       # the commit, and every shard built the same compiler. Those that read
@@ -751,6 +768,9 @@ jobs:
   # every event, and `ci-gate` needs it.
   examples:
     name: examples
+    # Skipped with the `test` shards, for the same pull requests.
+    needs: scope
+    if: needs.scope.outputs.suite != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -2423,7 +2443,9 @@ jobs:
   # means its `needs` failed, and fails the gate. EXPECT_SKIP lists the jobs
   # whose own `if:` is false on this run, written from those `if:`s:
   # runtime-net (`if: false`), runner (a tag or release/next only), bootstrap
-  # (no seed rows) and the two nish-cmp jobs (no cmp rows).
+  # (no seed rows), the two nish-cmp jobs (no cmp rows), and `test` and
+  # `examples` (`suite=false`: a pull request that changes nothing the suite
+  # reads).
   ci-gate:
     name: ci-gate
     if: always()
@@ -2461,7 +2483,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           EXPECT_SKIP: >-
-            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}]
+            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}${{ needs.scope.outputs.suite == 'false' && ', "test", "examples"' || '' }}]
         run: node scripts/ci-scope.mjs --gate
 
       # A pull request's required checks count only check runs from push,

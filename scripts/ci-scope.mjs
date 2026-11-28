@@ -10,12 +10,16 @@
 // paths it reads (`reads`, which win over `inert`). Anything this script cannot
 // classify, cannot fetch or cannot parse turns every lane on.
 //
-// Some lanes are deferred instead (`pullRequests: false`): another platform's
-// copy of a check an x86_64 job already makes, or a live service. A pull
-// request leaves them, and the other platforms' `bootstrap` and
-// `nish-cmp-elision` rows (`rows=native`), to the push to main, the Release
-// PR's dispatched run and the release, which run every lane; `ci:full` and
-// NISH_CI_SCOPE=full run them on a pull request too.
+// Some lanes are deferred instead (`pullRequests: false`): the jobs that run
+// one platform's code no other job runs (NEON and the ARMv8 kernels, Apple's
+// detection and the Metal link) and a live server. A pull request runs one
+// only when it changes a path of the lane's `pullRequestPaths`, the code that
+// platform path or that server exchange is in, and otherwise leaves it, with
+// the other platforms' `bootstrap` and `nish-cmp-elision` rows
+// (`rows=native`), to the push to main, the merge queue, the Release PR's
+// dispatched run and the release, which run every lane. `ci:full`,
+// NISH_CI_SCOPE=full, a change to CI itself and a file list this script
+// cannot read run them on a pull request too.
 //
 //   node scripts/ci-scope.mjs                     # in the `scope` job (env below)
 //   node scripts/ci-scope.mjs --files <file>      # a newline-separated path list
@@ -155,9 +159,31 @@ export const LANES = [
     jobs: ["simd-arm64"],
     names: ["the NEON path agrees (aarch64-linux)"],
     minutes: 5.5,
-    // The x86_64 `test` job runs the same agreement tests on its AVX2,
-    // AES-NI, SHA-NI and PCLMULQDQ paths.
+    // The one job that runs the NEON, ARMv8 AES/PMULL, SHA-256 and CRC32
+    // paths (no x86_64 job can), so a pull request that changes those kernels,
+    // their lowerings or the link recipe still runs it.
     pullRequests: false,
+    pullRequestPaths: [
+      "runtime/runtime-simd.c",
+      "runtime/runtime-bytes.c",
+      "runtime/runtime-aes.c",
+      "runtime/runtime-sha256.c",
+      "runtime/runtime-chacha20.c",
+      "runtime/runtime-checksum.c",
+      "runtime/*.h",
+      "src/kernels.ts",
+      "src/target.ts",
+      "std/crypto/aes.ts",
+      "std/crypto/sha256.ts",
+      "std/crypto/chacha20poly1305.ts",
+      "std/compress/checksum.ts",
+      "tests/simd/**",
+      "bench/sha256/**",
+      "bench/crc32.mjs",
+      "bench/adler32.mjs",
+      "bench/chacha20.mjs",
+      "scripts/build.sh",
+    ],
     // tests/run.js's simd, float-corpus and kernel sections, bench/*.mjs and build/test/simd/*.
     // The `crc32 kernel` section's std_compress_gzip_files gzips docs/LANGUAGE.md.
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**", "docs/LANGUAGE.md"],
@@ -169,8 +195,18 @@ export const LANES = [
     jobs: ["sha256-macos"],
     names: ["SHA-256 on Apple silicon (macos-latest)"],
     minutes: 2.1,
-    // simd-arm64 runs the same ARMv8 kernel on Linux; this row is Apple's detection.
+    // The one job that runs runtime-sha256.c's Apple detection, so a pull
+    // request that changes the kernel, its lowering or the link recipe still runs it.
     pullRequests: false,
+    pullRequestPaths: [
+      "runtime/runtime-sha256.c",
+      "runtime/*.h",
+      "src/kernels.ts",
+      "std/crypto/sha256.ts",
+      "tests/simd/sha256*",
+      "bench/sha256/**",
+      "scripts/build.sh",
+    ],
     // tests/simd/sha256*.c, tests/run.js sha256_hw and bench/sha256/run.mjs.
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
     unread: RUN_JS_UNREAD,
@@ -192,8 +228,10 @@ export const LANES = [
     jobs: ["postgres-live"],
     names: ["postgres-live"],
     minutes: 1.8,
-    // A live server; the `test` job's std_postgres link programs run on every pull request.
+    // A live server, which a recorded exchange can disagree with, so a pull
+    // request that changes the client, its tests or the servers still runs it.
     pullRequests: false,
+    pullRequestPaths: ["std/postgres.ts", "std/postgres-*.ts", "tests/postgres/**", "bench/techempower/**"],
     // .github/actions/compiler-cache (tests/self/compiler-cache.js and
     // seed.js), tests/postgres/live/run.mjs, tls-certs.sh and the
     // bench/techempower servers.
@@ -226,17 +264,37 @@ export const LANES = [
     names: ["gfx (macos-latest, Metal)"],
     // Run 45857452100's row, 4.5 minutes.
     minutes: 4.5,
-    // The same commands as `gfx`, on Metal; the lavapipe row runs on every pull request.
+    // The one job that links SDL's Cocoa driver and wgpu-native's Metal
+    // backend, so a pull request that changes the gfx runtime or the link
+    // recipe still runs it.
     pullRequests: false,
+    pullRequestPaths: [
+      "runtime/gfx/**",
+      "scripts/build.sh",
+      "scripts/fetch-gfx.sh",
+      "tests/gfx/**",
+      "tests/gfx.js",
+      "src/c-symbols.ts",
+      "src/run-cache.ts",
+    ],
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
     unread: RUN_JS_UNREAD,
     inert: [...INERT, "CHANGELOG.md", "changelog/**"],
   },
 ]
 
-/** Why a pull request turns a `pullRequests: false` lane off, whatever it changes. */
+/** Why a pull request turns a `pullRequests: false` lane off. */
 export const DEFERRED =
-  "a pull request leaves it to the push to main, the Release PR and the release (add ci:full to run it here)"
+  "this pull request changes none of their own paths, so they are left to the push to main, the merge queue, the Release PR and the release (add ci:full to run them here)"
+
+/**
+ * Paths the whole suite never reads: no file of tests/, scripts/, bench/,
+ * src/, std/ or .github/ names them (`node tests/run.js ci-scope` greps for
+ * it). A pull request every one of whose changed paths is here skips the
+ * `test` shards and `examples` (`suite=false`); `lint` still runs, since
+ * docs/check-links.mjs reads every Markdown file.
+ */
+export const SUITE_UNREAD = [".claude/plans/**"]
 
 /** The lanes a pull request leaves to the push to main and the release. */
 export const deferredLanes = () => LANES.filter((l) => l.pullRequests === false).map((l) => l.name)
@@ -418,8 +476,9 @@ export const byReadSet = ({ event, labels = [], mode = "", files, truncated = fa
 
 /**
  * Decides every lane for one change: `byReadSet`, then, on a pull request
- * that does not run everything, the deferred lanes off and only the
- * x86_64-linux rows of `NATIVE_ROW_JOBS`.
+ * whose file list it read and that does not run everything, each deferred
+ * lane off unless a changed path is one of its `pullRequestPaths`, and only
+ * the x86_64-linux rows of `NATIVE_ROW_JOBS`.
  *
  * @param {object} change what the pull request is
  * @param {string} change.event the GitHub event name
@@ -427,19 +486,28 @@ export const byReadSet = ({ event, labels = [], mode = "", files, truncated = fa
  * @param {string} [change.mode] the NISH_CI_SCOPE variable
  * @param {{path: string, status?: string, previous?: string}[] | null} change.files the changed files, or null when unknown
  * @param {boolean} [change.truncated] the file list hit the API's cap
- * @returns {{full: string | null, lanes: Record<string, boolean>, rows: "all" | "native"}} `full` is
- *   why every lane its read set selects runs, or null; `rows` is whether the matrix jobs take every
- *   seed's row or only x86_64-linux's
+ * @returns {{full: string | null, lanes: Record<string, boolean>, rows: "all" | "native", deferred: string[], suite: boolean}}
+ *   `full` is why every lane its read set selects runs, or null; `rows` is whether the matrix jobs
+ *   take every seed's row or only x86_64-linux's; `deferred` names the lanes its read set ran
+ *   and the deferral turned off; `suite` is whether the `test` shards and `examples` run
  */
 export const decide = (change) => {
   const { full, lanes, everything } = byReadSet(change)
-  if (everything) {
-    return { full, lanes, rows: "all" }
+  // A file list it cannot read defers nothing: whether a pull request
+  // changes a deferred lane's own paths is a fact about that list.
+  if (everything || full !== null) {
+    return { full, lanes, rows: "all", deferred: [], suite: true }
   }
-  for (const name of deferredLanes()) {
-    lanes[name] = false
+  const paths = change.files.flatMap((f) => [f.path, f.previous].filter(Boolean))
+  const suite = !paths.every((p) => matches(p, SUITE_UNREAD))
+  const deferred = []
+  for (const lane of LANES.filter((l) => l.pullRequests === false)) {
+    if (lanes[lane.name] && !paths.some((p) => matches(p, lane.pullRequestPaths ?? []))) {
+      lanes[lane.name] = false
+      deferred.push(lane.name)
+    }
   }
-  return { full, lanes, rows: "native" }
+  return { full, lanes, rows: "native", deferred, suite }
 }
 
 /**
@@ -563,20 +631,22 @@ const backtest = (file) => {
   const skipped = Object.fromEntries(LANES.map((l) => [l.name, 0]))
   const misses = []
   const excused = []
-  // A deferred lane's failure, or a left-out row's, is not a miss of the
-  // read-set rule: it is what the push to main would have found instead.
+  // A deferred lane's failure, or a left-out row's, where the read set ran
+  // it, is not a miss of the read-set rule: it is what the push to main
+  // would have found instead. One the read set skipped is still a miss.
   const deferred = []
   let saved = 0
   for (const pr of prs) {
-    const { lanes, rows } = decide({
+    const decision = decide({
       event: "pull_request",
       labels: pr.labels ?? [],
       files: pr.files,
       truncated: pr.truncated === true,
     })
-    if (rows === "native") {
+    const { lanes } = decision
+    if (decision.rows === "native") {
       for (const run of pr.runs ?? []) {
-        for (const job of (run.failed ?? []).filter(otherPlatformRow)) {
+        for (const job of (run.failed ?? []).filter((j) => otherPlatformRow(j) && lanes[laneOf(j)?.name])) {
           deferred.push(`#${pr.number} ${job} (run ${run.id})`)
         }
       }
@@ -597,7 +667,7 @@ const backtest = (file) => {
           }
           const line = `#${pr.number} ${job} (run ${run.id})`
           const flake = run.flakes?.[job]
-          if (lane.pullRequests === false) {
+          if (decision.deferred.includes(lane.name)) {
             deferred.push(line)
           } else if (flake) {
             excused.push(`${line}: ${flake}`)
@@ -645,8 +715,7 @@ const backtest = (file) => {
  * @param {ReturnType<typeof decide>} result the decision
  * @returns {void}
  */
-const emit = ({ full, lanes, rows }) => {
-  const deferredOff = deferredLanes().filter((k) => !lanes[k])
+const emit = ({ full, lanes, rows, deferred: deferredOff = [], suite = true }) => {
   const off = Object.keys(lanes).filter((k) => !lanes[k] && !deferredOff.includes(k))
   const parts = []
   if (off.length > 0) {
@@ -659,6 +728,11 @@ const emit = ({ full, lanes, rows }) => {
       `deferred: ${[...deferredOff, ...(rows === "native" ? ["the other platforms' bootstrap and nish-cmp elision rows"] : [])].join(", ")}; ${DEFERRED}`
     )
   }
+  if (!suite) {
+    parts.push(
+      `the test shards and examples skip: every changed path is one the suite never reads (${SUITE_UNREAD.join(", ")})`
+    )
+  }
   // `full` alone is the reason when every lane runs; on a pull request that
   // still defers, the deferral is said too.
   let why = parts.length > 0 ? parts.join("; ") : "every lane reads a changed path"
@@ -668,6 +742,7 @@ const emit = ({ full, lanes, rows }) => {
   const lines = [
     ...Object.entries(lanes).map(([k, v]) => `${k}=${v}`),
     `rows=${rows}`,
+    `suite=${suite}`,
     `why=${why.replace(/[\r\n]+/g, " ")}`,
   ]
   if (process.env.GITHUB_OUTPUT) {

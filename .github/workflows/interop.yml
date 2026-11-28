@@ -148,7 +148,7 @@ permissions:
 # the tag's ref and is untouched. ci.yml's `concurrency` comment says why.
 concurrency:
   group: >-
-    interop-${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.run_attempt != '1' || startsWith(github.event.head_commit.message, 'chore(release)') || contains(join(github.event.head_commit.added, ' '), 'changelog/'))) && format('pinned-{0}', github.run_id) || github.ref }}
+    interop-${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:interop' && github.event.label.name != 'ci:full') && format('label-{0}', github.run_id) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.run_attempt != '1' || startsWith(github.event.head_commit.message, 'chore(release)') || contains(join(github.event.head_commit.added, ' '), 'changelog/'))) && format('pinned-{0}', github.run_id) || github.ref }}
   cancel-in-progress: >-
     ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/release/next' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && !startsWith(github.event.head_commit.message, 'chore(release)') && !contains(join(github.event.head_commit.added, ' '), 'changelog/')) }}
 
@@ -208,7 +208,11 @@ jobs:
     # the skip names the ref as well: only a push to main skips. A pull
     # request runs only with the `ci:interop` or `ci:full` label (the top of
     # this file says why); GitHub compares the names without regard to case.
-    if: ${{ (github.event_name != 'push' || github.ref != 'refs/heads/main' || !startsWith(github.event.head_commit.message, 'chore(release)')) && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci:interop') || contains(github.event.pull_request.labels.*.name, 'ci:full')) }}
+    # A `labeled` event for any other label runs nothing, and its concurrency
+    # group is its own, so it cannot cancel a labelled run in flight. A re-run
+    # reads the labels the event carried, so after adding a label, let the
+    # run the label starts do the work rather than re-running an older one.
+    if: ${{ (github.event_name != 'push' || github.ref != 'refs/heads/main' || !startsWith(github.event.head_commit.message, 'chore(release)')) && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci:interop') || contains(github.event.pull_request.labels.*.name, 'ci:full')) && (github.event.action != 'labeled' || github.event.label.name == 'ci:interop' || github.event.label.name == 'ci:full') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
