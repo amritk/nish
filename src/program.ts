@@ -231,15 +231,18 @@ export class FunctionSig {
   restIndex: i32
   /**
    * #2296: for a window guard (`src/window-contract.ts`), the positions of its
-   * buffer, offset and count parameters; for a method that forwards to one,
-   * the call arguments (`this` left out) its guard checks; else empty.
+   * buffer, offset and count parameters; for a method or function that
+   * forwards to one, the call arguments (a method's leave `this` out) its
+   * guard checks, the count -1 when the forward passes a literal; else empty.
    */
   window: i32[]
+  /** #2296: the literal count a forward passes its guard (`window[2]` is then -1), else -1. */
+  windowCount: i32
   /** #2296: a window guard's branch, the part that runs when the window is outside its buffer. */
   windowCheck: Node | null
-  /** #2296: the guard a forwarding method hands its window to, else null (a guard has none). */
+  /** #2296: the guard a forwarding method or function hands its window to, else null (a guard has none). */
   windowGuard: FunctionSig | null
-  /** #2296: the forwarding method's call into its guard. */
+  /** #2296: the forwarding method's or function's call into its guard. */
   windowForward: Node | null
   /**
    * #2296: for a fault guard (`src/fault-contract.ts`), the function whose
@@ -404,6 +407,7 @@ export class FunctionSig {
     this.countedNames = []
     this.restIndex = -1
     this.window = []
+    this.windowCount = -1
     this.windowCheck = null
     this.windowGuard = null
     this.windowForward = null
@@ -1194,6 +1198,43 @@ export class FieldInfo {
   }
 }
 
+/**
+ * WP89 S5a: one field a handle class owns. `close` is the C function its
+ * dispose names on it, or `null` for a field of another handle class, which
+ * its own dispose closes (`child`). Set by `src/handles.ts` once the dispose
+ * is found sound.
+ */
+export class OwnedField {
+  name: string
+  /** The C function that closes the field, or `null` for a handle-class field. */
+  close: FunctionSig | null
+  /** The handle class the field holds, or `null` for a native pointer. */
+  child: StructInfo | null
+  /**
+   * Whether every exit tests the field for `null` before it closes it: the
+   * dispose closes it behind its own `!== null` test (§4b shape 2), or the
+   * field holds a handle class `| null`.
+   */
+  tested: boolean
+  /**
+   * For a handle-class field: the index of the constructor parameter that
+   * `this.<name> = <param>` at the top of the constructor moves into it, or
+   * -1. A fresh handle passed there is owned from then on.
+   */
+  sink: i32
+  /** The statement that moves the parameter in, or `null`. */
+  sinkAt: Node | null
+
+  constructor(name: string) {
+    this.name = name
+    this.close = null
+    this.child = null
+    this.tested = false
+    this.sink = -1
+    this.sinkAt = null
+  }
+}
+
 /** A class or interface: one `%struct.<name>` LLVM type with fixed fields. */
 export class StructInfo {
   /** The source name: what a module looks it up by and what a message prints. */
@@ -1283,25 +1324,20 @@ export class StructInfo {
    */
   jsonTag: string
   /**
-   * WP53 §4a. A class with one `CPtr` field is an owned foreign handle: the
-   * field is the C resource it owns, its `[Symbol.dispose]` closes it, and
-   * `src/handles.ts` keeps every value of the class where that close is the only
-   * one. Set in `declareStruct`, before a field is collected.
+   * WP53 §4a, WP89 S5a. A class that owns a native object is a handle class:
+   * it declares a `CPtr` field or a `[Symbol.dispose]`, its owned fields are
+   * the C resources it holds, its dispose closes each, and `src/handles.ts`
+   * keeps every value of the class where that close is the only one. Set in
+   * `declareStruct`, before a field is collected.
    */
   handle: boolean
-  /** The handle's `CPtr` field, or `""` for any other struct. */
-  handleField: string
   /**
-   * WP53 H1.2: the C function the handle's `[Symbol.dispose]` calls, once
-   * `src/handles.ts` has found it sound; what every exit of a `using` block
-   * calls on the field. `null` for any other struct.
+   * The fields a handle class owns, in declaration order: each `CPtr`,
+   * opaque `declare class`, `HostHandle` and handle-class field. Every exit
+   * of a `using` block closes them in the reverse of this order. Empty for
+   * any other struct.
    */
-  handleClose: FunctionSig | null
-  /**
-   * Whether that dispose calls the close behind its own `!== null` test (§4b
-   * shape 2); shape 1 calls it on the field as it is, `null` included.
-   */
-  handleTested: boolean
+  owned: OwnedField[]
   /**
    * WP27 S4.1: a `declare class`, a C struct layout. Its fields are foreign
    * scalars, `CPtr`s and nested layouts, laid out as clang lays out the C
@@ -1359,9 +1395,7 @@ export class StructInfo {
     this.jsonNumber = false
     this.atomic = false
     this.handle = false
-    this.handleField = ""
-    this.handleClose = null
-    this.handleTested = false
+    this.owned = []
   }
 
   /** The field called `name` on this struct, or `null`. */

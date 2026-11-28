@@ -1,1 +1,1 @@
-Handle class `File`: a handle class declares exactly one `CPtr` or `CPtr | null` field, `readonly` and with no initialiser, so the one point
+reject_ffi_handle_two_fields.ts:13:3: error: The `[Symbol.dispose]` of handle class `File` must take no parameters, return `void` and close `this.log`, then `this.file`, the reverse of their declaration

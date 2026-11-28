@@ -1,7 +1,3 @@
-// Opt-out (`--allow-panics`): it indexes the `BODIES` and `SHOTS` records in
-// module storage, which the checker cannot yet prove in range (client.ts's
-// header has the follow-up).
-//
 // The simulation of examples/wasm-arena (docs/wp50-wasm-host.md §10, W9): a
 // fixed-step arena of bodies, a ship the input steers, and its shots. Every
 // pool is module storage sized from the caps below, so a tick allocates
@@ -64,7 +60,9 @@ export const SHIP = new Float64Array(7)
 // proves an index in range under a test of a parameter's length, not an index
 // into module storage, so each opens with that test or counts to the length.
 // `SHIP` is always 7 long, so those tests never return early. `BODIES` and `SHOTS` hold records,
-// which storage never lends, so they are indexed in place.
+// which storage never lends, so they are indexed in place: a loop to `BODY_CAP` or `SHOT_CAP`
+// is proven in range, and a function handed an index opens with a test of it against the cap,
+// which its callers' loops never fail.
 
 /** The next value of a 32-bit LCG; unsigned arithmetic wraps. */
 const lcg = (s: u32): u32 => s * toU32(1664525) + toU32(1013904223)
@@ -119,6 +117,9 @@ const park = (ship: Float64Array): void => {
 
 /** Keeps `v` off a wall: the position folded back inside, the velocity turned. */
 const bounce = (i: i32): void => {
+  if (i < 0 || i >= BODY_CAP) {
+    return
+  }
   const r: f64 = BODIES[i].r
   if (BODIES[i].x < r) {
     BODIES[i].x = r + (r - BODIES[i].x)
@@ -138,6 +139,9 @@ const bounce = (i: i32): void => {
 
 /** Two overlapping bodies exchange the part of their velocity along the line between them. */
 const collide = (i: i32, j: i32): void => {
+  if (i < 0 || i >= BODY_CAP || j < 0 || j >= BODY_CAP) {
+    return
+  }
   const dx: f64 = BODIES[j].x - BODIES[i].x
   const dy: f64 = BODIES[j].y - BODIES[i].y
   const reach: f64 = BODIES[i].r + BODIES[j].r
@@ -203,7 +207,7 @@ const steer = (ship: Float64Array, input: i32): void => {
 
 /** A live shot moves, and pushes and heats the first body it is inside. */
 const fly = (ship: Float64Array, k: i32): void => {
-  if (ship.length < 7) {
+  if (ship.length < 7 || k < 0 || k >= SHOT_CAP) {
     return
   }
   if (SHOTS[k].life === 0.0) {
@@ -334,5 +338,3 @@ export const simHashLo = (): u32 => {
   const low: u64 = 4294967295
   return toU32(simHash() & low)
 }
-
-// smoke: args --allow-panics

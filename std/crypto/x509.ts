@@ -111,6 +111,7 @@
 import { Secret, secret, wipe } from "nish:secret"
 import { base64StdPadDecode, base64StdPadEncode } from "nish/crypto/base64url"
 import { p256PublicKey, p256SignSha256, p256VerifySha256 } from "nish/crypto/p256"
+import { rsaParsePrivateKey } from "nish/crypto/rsa-sign"
 import { sha256 } from "nish/crypto/sha256"
 
 /** The longest validity `x509MintSelfSigned` writes, in days: WebTransport's two weeks. */
@@ -399,6 +400,28 @@ const x509DerRead = (der: u8[], at: i32, limit: i32): X509DerElement | null => {
 }
 
 /**
+ * `a + b` when neither is negative and the sum is at most `limit`, else `-1`:
+ * an offset past a length the parser has checked. It is summed as differences
+ * of ordered values that are not negative, which src/bounds.ts proves where it
+ * cannot carry `b <= limit - a` into `a + b`; past the first two checks, the
+ * others are always false and only state that order for the proof.
+ */
+const x509Sum = (a: i32, b: i32, limit: i32): i32 => {
+  if (a < 0 || b < 0 || a > limit) {
+    return -1
+  }
+  const room: i32 = limit - a
+  if (b > room) {
+    return -1
+  }
+  const gap: i32 = room - b
+  if (gap < 0 || gap > limit) {
+    return -1
+  }
+  return limit - gap
+}
+
+/**
  * `x509DerRead` into `into`, answering whether it read one: what a loop uses
  * so a pass allocates nothing it leaves behind. `into` is unspecified on `false`.
  */
@@ -417,13 +440,14 @@ const x509DerReadInto = (der: u8[], at: i32, limit: i32, into: X509DerElement): 
   if (length >= 0x80) {
     const count: i32 = length & 0x7f
     // 0x80 alone is BER's indefinite length, which DER forbids.
-    if (count < 1 || count > 4 || count > limit - start) {
+    // `start < der.length` follows from the first check; spelled out because
+    // it is what proves the sum below.
+    if (count < 1 || count > 4 || count > limit - start || start >= toI32(der.length)) {
       return false
     }
-    // Unsigned: `count <= limit - start`, so the sum cannot wrap.
-    const stop: i32 = toI32(toU32(start) + toU32(count))
-    // `start < stop <= limit <= der.length`, spelled out for the same reason.
-    if (stop > toI32(der.length) || start >= toI32(der.length)) {
+    const stop: i32 = x509Sum(start, count, limit)
+    // `stop <= limit <= der.length`, spelled out for the same reason.
+    if (stop < 0 || stop > toI32(der.length)) {
       return false
     }
     if (toI32(der[start]) === 0 || (count === 4 && toI32(der[start]) >= 0x80)) {
@@ -438,15 +462,15 @@ const x509DerReadInto = (der: u8[], at: i32, limit: i32, into: X509DerElement): 
     }
     start = stop
   }
-  // Unsigned: `start <= limit` on both paths, so the difference cannot wrap.
-  if (toU32(length) > toU32(limit) - toU32(start)) {
+  // `-1` for a length past the limit, or one read from four octets as negative.
+  const end: i32 = x509Sum(start, length, limit)
+  if (end < 0) {
     return false
   }
   into.tag = tag
   into.at = at
   into.start = start
-  // Unsigned: `length <= limit - start`, so the sum cannot wrap.
-  into.end = toI32(toU32(start) + toU32(length))
+  into.end = end
   return true
 }
 
@@ -485,8 +509,7 @@ const x509DerSize = (der: u8[], e: X509DerElement): i32 => {
   if (start < 0 || end < start || end > toI32(der.length)) {
     return -1
   }
-  // Unsigned: `start <= end`, so the difference cannot wrap.
-  return toI32(toU32(end) - toU32(start))
+  return end - start
 }
 
 /**
@@ -499,8 +522,7 @@ const x509DerOctet = (der: u8[], e: X509DerElement, k: i32): i32 => {
   if (k < 0 || k >= n) {
     return -1
   }
-  // Unsigned: `k < end - start`, so the sum cannot wrap.
-  const i: i32 = toI32(toU32(e.start) + toU32(k))
+  const i: i32 = x509Sum(e.start, k, toI32(der.length))
   if (i < 0 || i >= toI32(der.length)) {
     return -1
   }
@@ -615,8 +637,13 @@ const x509DerBitStringOctets = (der: u8[], e: X509DerElement): u8[] | null => {
   if (e.tag !== X509_TAG_BIT_STRING || !x509DerBitStringSound(der, e) || x509DerOctet(der, e, 0) !== 0) {
     return null
   }
-  // Unsigned: a sound BIT STRING has an octet at `e.start`, so the sum cannot wrap.
-  return x509DerSlice(der, toI32(toU32(e.start) + 1), e.end)
+  const start: i32 = e.start
+  // A sound BIT STRING has an octet at `start`, so it is below the DER's length;
+  // spelled out because that is what proves `start + 1`.
+  if (start < 0 || start >= toI32(der.length)) {
+    return null
+  }
+  return x509DerSlice(der, start + 1, e.end)
 }
 
 /**
@@ -666,8 +693,13 @@ const x509DerTime = (der: u8[], e: X509DerElement): i64 => {
   if (e.tag === X509_TAG_UTC_TIME && n === 13) {
     year = x509DerDigits(der, e, 0, 2)
     if (year >= 0) {
-      // Unsigned: two digits, so the sum cannot wrap.
-      year = toI32(toU32(year) + (year >= 50 ? 1900 : 2000))
+      // The mask keeps what two digits hold (at most 99) and lets
+      // src/bounds.ts prove the sum.
+      if (year >= 50) {
+        year = (year & 127) + 1900
+      } else {
+        year = (year & 127) + 2000
+      }
     }
     at = 2
   } else if (e.tag === X509_TAG_GENERALIZED_TIME && n === 15) {
@@ -697,14 +729,13 @@ const x509DerTime = (der: u8[], e: X509DerElement): i64 => {
   // itself. 1969 * 365 + 492 - 19 + 4 is the same count for 1970.
   const y: i32 = year - 1
   const years: i32 = 365 * y + y / 4 - y / 100 + y / 400 - 719162
-  // Unsigned: at most 365 days, so the sum cannot wrap.
-  let yday: u32 = toU32(day - 1)
+  // At most 365 days, which the mask keeps: it lets src/bounds.ts prove the
+  // sum, as `years` is bounded by the year's checks above.
+  let yday: i32 = day - 1
   for (let m: i32 = 1; m < month; m++) {
-    yday = yday + toU32(x509DaysInMonth(year, m))
+    yday = (yday & 511) + (x509DaysInMonth(year, m) & 31)
   }
-  // Two's complement: the true sum lies well inside i32 (the year is at most
-  // 9999), so the unsigned add gives it exactly, negative or not.
-  const days: i32 = toI32(toU32(years) + yday)
+  const days: i32 = years + (yday & 511)
   const seconds: i32 = hour * 3600 + minute * 60 + second
   return toI64(days) * 86400000 + toI64(seconds) * 1000
 }
@@ -1165,31 +1196,36 @@ const x509DerTimeAt = (seconds: i64): u8[] => {
   let days: i32 = toI32(seconds / 86400)
   const rest: i32 = toI32(seconds % 86400)
   let year: i32 = 1970
-  while (year < 9999) {
+  // `days >= 0` changes nothing (a negative count is below any length and
+  // stops the loop as before); it is what proves the subtraction.
+  while (year < 9999 && days >= 0) {
     const length: i32 = x509IsLeapYear(year) ? 366 : 365
     if (days < length) {
       break
     }
-    // Unsigned: `days` is at least `length` here, so the difference cannot wrap.
-    days = toI32(toU32(days) - toU32(length))
+    // Not negative (the loop's test) less the year's length, which the mask
+    // keeps: src/bounds.ts proves the difference.
+    days = days - (length & 511)
     year++
   }
   let month: i32 = 1
-  while (month < 12) {
+  while (month < 12 && days >= 0) {
     const length: i32 = x509DaysInMonth(year, month)
     if (days < length) {
       break
     }
-    // Unsigned: `days` is at least `length` here, so the difference cannot wrap.
-    days = toI32(toU32(days) - toU32(length))
+    // Not negative (the loop's test) less the month's length, which the mask
+    // keeps: src/bounds.ts proves the difference.
+    days = days - (length & 31)
     month++
   }
   const text: u8[] = []
   const utc: boolean = year < 2050
   x509PushDigits(text, year, !utc)
   x509PushDigits(text, month, false)
-  // Unsigned: `days` is below its month's length here, so the sum cannot wrap.
-  x509PushDigits(text, toI32(toU32(days) + 1), false)
+  // `days` is below its month's length for any time up to 9999-12-31, which the
+  // mask keeps: it lets src/bounds.ts prove the sum.
+  x509PushDigits(text, (days & 31) + 1, false)
   x509PushDigits(text, rest / 3600, false)
   x509PushDigits(text, (rest / 60) % 60, false)
   x509PushDigits(text, rest % 60, false)
@@ -1326,8 +1362,12 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
     while (lineEnd >= 0 && lineEnd < toI32(pem.length) && toI32(pem.charCodeAt(lineEnd)) !== 10) {
       lineEnd = lineEnd + 1
     }
-    // Unsigned: `lineEnd` is at most the text's length, so the sum cannot wrap.
-    const next: i32 = toI32(toU32(lineEnd) + 1)
+    // Past the newline; at the text's end, the end itself, which stops the loop
+    // just as one past it did.
+    let next: i32 = n
+    if (lineEnd >= 0 && lineEnd < n) {
+      next = lineEnd + 1
+    }
     // `lineEnd` is in the text, said again for the bounds proof.
     if (
       lineEnd > lineStart &&
@@ -1568,6 +1608,80 @@ export const x509ParseP256PrivateKey = (pem: string): Secret<u8[]> | null => {
   return key
 }
 
+/**
+ * The RSA key of a PKCS#8 PrivateKeyInfo (RFC 5208 §5) or OneAsymmetricKey
+ * (RFC 5958 §2): version 0 or 1, the algorithm rsaEncryption with NULL
+ * parameters (RFC 3279 §2.3.1), and a PKCS#1 RSAPrivateKey filling the OCTET
+ * STRING, which `rsaParsePrivateKey` reads and tries. The optional `[0]`
+ * attributes are skipped; anything after them, a version 1 public key
+ * included, is refused, since nothing here would check it against the key.
+ */
+const x509Pkcs8RsaKey = (der: u8[]): Secret<u8[]> | null => {
+  const total: i32 = toI32(der.length)
+  const seq: X509DerElement | null = x509DerExpect(der, 0, total, X509_TAG_SEQUENCE)
+  if (seq === null || seq.end !== total) {
+    return null
+  }
+  const version: X509DerElement | null = x509DerRead(der, seq.start, seq.end)
+  if (version === null) {
+    return null
+  }
+  const v: i32 = x509DerSmallInteger(der, version)
+  if (v !== 0 && v !== 1) {
+    return null
+  }
+  const alg: X509DerElement | null = x509DerRead(der, version.end, seq.end)
+  if (alg === null || !x509DerIsAlgorithmNull(der, alg, x509OidPkcs1(1))) {
+    return null
+  }
+  const key: X509DerElement | null = x509DerExpect(der, alg.end, seq.end, X509_TAG_OCTET_STRING)
+  if (key === null) {
+    return null
+  }
+  let at: i32 = key.end
+  if (x509DerPeek(der, at, seq.end) === 0xa0) {
+    const attributes: X509DerElement | null = x509DerRead(der, at, seq.end)
+    if (attributes === null) {
+      return null
+    }
+    at = attributes.end
+  }
+  if (at !== seq.end) {
+    return null
+  }
+  return rsaParsePrivateKey(der, key.start, key.end)
+}
+
+/**
+ * The RSA private key in `pem`, as the `Secret` `nish/crypto/rsa-sign` signs
+ * with: one `RSA PRIVATE KEY` block (PKCS#1, RFC 8017 §A.1.2) or one `PRIVATE
+ * KEY` block (unencrypted PKCS#8 with rsaEncryption, RFC 5208 or RFC 5958),
+ * and not both. The key must be 2048 to 4096 bits, with an odd modulus and
+ * a private exponent that signs under its modulus (`rsaParsePrivateKey`).
+ * `null` for no such block or more than one, for a smaller or larger key, for
+ * an EC or any other key, and for anything malformed. Every block decoded
+ * from `pem` is wiped before this returns, whichever answer it gives; `pem`
+ * itself is the caller's string, which nothing can wipe (X509-7 in
+ * docs/security/crypto-x509.md).
+ *
+ * @param pem The PEM text holding the key.
+ * @returns The key in `rsaParsePrivateKey`'s layout, in a fresh `Secret` the caller wipes, or `null`.
+ */
+export const x509ParseRsaPrivateKey = (pem: string): Secret<u8[]> | null => {
+  const pkcs1: u8[][] | null = pemToDer(pem, "RSA PRIVATE KEY")
+  const pkcs8: u8[][] | null = pemToDer(pem, "PRIVATE KEY")
+  let key: Secret<u8[]> | null = null
+  if (pkcs1 !== null && pkcs8 === null && toI32(pkcs1.length) === 1) {
+    const der: u8[] = x509FirstBlock(pkcs1)
+    key = rsaParsePrivateKey(der, 0, toI32(der.length))
+  } else if (pkcs8 !== null && pkcs1 === null && toI32(pkcs8.length) === 1) {
+    key = x509Pkcs8RsaKey(x509FirstBlock(pkcs8))
+  }
+  x509WipeBlocks(pkcs1)
+  x509WipeBlocks(pkcs8)
+  return key
+}
+
 // ---------------------------------------------------------------------------
 // Certificates (RFC 5280 §4.1)
 // ---------------------------------------------------------------------------
@@ -1766,8 +1880,13 @@ const x509ReadSubjectAltName = (der: u8[], start: i32, end: i32, out: X509Certif
     } else if (kind === X509_GN_IP && (length === 4 || length === 16)) {
       out.sanIp.push(x509DerSlice(der, name.start, name.end))
     } else if (kind === X509_GN_DIR || kind === X509_GN_OTHER) {
-      // Unsigned: one per name read, fewer than the DER's octets, so the sum cannot wrap.
-      out.sanOther = toI32(toU32(out.sanOther) + 1)
+      const other: i32 = out.sanOther
+      // One per name read, so fewer than the DER's octets: always false, and
+      // what proves the count's step.
+      if (other < 0 || other >= toI32(der.length)) {
+        return false
+      }
+      out.sanOther = other + 1
     } else {
       return false
     }
@@ -1971,8 +2090,10 @@ const x509ReadSubtrees = (
       if (length !== 8 && length !== 32) {
         return false
       }
-      // Unsigned: the half is in the element, so the sum cannot wrap.
-      const half: i32 = toI32(toU32(base.start) + toU32(length / 2))
+      const half: i32 = x509Sum(base.start, length / 2, base.end)
+      if (half < 0) {
+        return false
+      }
       subtree.ip = x509DerSlice(der, base.start, half)
       subtree.mask = x509DerSlice(der, half, base.end)
       if (!x509MaskContiguous(subtree.mask)) {
@@ -2564,12 +2685,15 @@ export const x509MintSelfSigned = (
   if (start < 0 || start > 253402300799) {
     return null
   }
-  // Unsigned: `start` is below 2^38 and `days` at most `X509_MAX_DAYS`, so the sum cannot wrap.
-  const end: i64 = toI64(toU64(start) + toU64(days) * 86400)
+  // In `u64`: `start` is below 2^38 and `days` at most `X509_MAX_DAYS`, so the
+  // sum comes nowhere near 2^64.
+  const stop: u64 = toU64(start) + toU64(days) * toU64(86400)
   // 9999-12-31T23:59:59Z, the last second RFC 5280's times can spell.
-  if (end > 253402300799) {
+  const last: i64 = 253402300799
+  if (stop > toU64(last)) {
     return null
   }
+  const end: i64 = toI64(stop)
   const name: u8[] = x509Bytes(commonName)
   const nameLength: i32 = toI32(name.length)
   if (nameLength < 1 || nameLength > X509_MAX_COMMON_NAME || !x509IsUtf8Name(name)) {

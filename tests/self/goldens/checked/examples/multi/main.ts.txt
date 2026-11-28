@@ -3,7 +3,9 @@
 entry: examples/multi/main.ts examples/multi/math.ts
 import square from "./math" -> function @square
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: square
-  stackSites=0 stackLocals=0
-  callee +0:35 square -> @square
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_write square
+  stackSites=1 stackLocals=1
+  local +0:9 r: Result<i32, i32> (const)
+  callee +0:13 square -> @square

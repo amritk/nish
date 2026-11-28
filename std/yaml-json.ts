@@ -134,7 +134,7 @@ export const YAML_JSON_ERR_NOT_FINITE: i32 = -42
 export const YAML_JSON_ERR_EXPANSION: i32 = -43
 /** Collections nest deeper than `maxDepth`, counting copies. */
 export const YAML_JSON_ERR_DEPTH: i32 = -44
-/** A `0x` or `0o` integer with more than `YAML_JSON_MAX_RADIX_DIGITS` digits. */
+/** A `0x` or `0o` integer with more than `YAML_JSON_MAX_RADIX_DIGITS` digits, or with a byte that is not a digit of its base. */
 export const YAML_JSON_ERR_NUMBER: i32 = -45
 /**
  * A merge key's value is not a mapping or a sequence of mappings; the range is
@@ -156,9 +156,10 @@ export const YAML_JSON_SCAN_KEYS: i32 = 16
 
 /** How many merge keys deep a merged map is searched, as `YAML_ALIAS_HOPS` bounds `pathNode`. */
 const YAML_JSON_MERGE_HOPS: i32 = 100
-
-/** The decimal limb `yamlJsonRadix` works in: four digits, so a limb times 16 plus a carry fits an `i32`. */
-const YAML_JSON_LIMB: i32 = 10000
+/** What a merge key's own pair takes from the load's merge budget. */
+const YAML_JSON_MERGE_PAIR: i32 = 1
+/** A part `plus` adds whole, with no merge adjustment taken off. */
+const YAML_JSON_WHOLE: i32 = 0
 
 const YAML_JSON_PLUS: i32 = 43
 const YAML_JSON_DASH: i32 = 45
@@ -182,9 +183,22 @@ const YAML_JSON_NO_WORD: i32 = 0
  * @returns The code's name without the `YAML_JSON_ERR_` prefix, such as `"DEPTH"`; `""` for any other code.
  */
 export const yamlJsonErrorName = (code: i32): string => {
+  const codes: i32[] = [
+    YAML_JSON_ERR_DOCUMENT,
+    YAML_JSON_ERR_YAML,
+    YAML_JSON_ERR_NOT_FINITE,
+    YAML_JSON_ERR_EXPANSION,
+    YAML_JSON_ERR_DEPTH,
+    YAML_JSON_ERR_NUMBER,
+    YAML_JSON_ERR_MERGE,
+  ]
   const names: string[] = ["DOCUMENT", "YAML", "NOT_FINITE", "EXPANSION", "DEPTH", "NUMBER", "MERGE"]
-  const i: i32 = YAML_JSON_ERR_DOCUMENT - code
-  return i >= 0 && i < toI32(names.length) ? names[i] : ""
+  for (let i: i32 = 0; i < toI32(codes.length) && i < toI32(names.length); i += 1) {
+    if (codes[i] === code) {
+      return names[i]
+    }
+  }
+  return ""
 }
 
 /**
@@ -209,13 +223,15 @@ export class YamlJsonLoader {
   private sizes: i32[]
   /** The nodes the last count set a size on, the first `countedTop` of them: all a count clears. */
   private counted: i32[]
-  private countedTop: i32 = 0
   /** `quickCount`'s sizes, by node; each pass writes every one it reads. */
   private quickSizes: i32[]
   /** The count's own stack of nodes. */
   private pending: i32[]
-  /** The most values the document may hold; a size saturates one past it. */
+  /** How many of `counted` the last count set. */
+  private countedTop: i32 = 0
+  /** The most values the document may hold; a size saturates at `over`, one past it. */
   private cap: i32 = 0
+  private over: i32 = 1
   /** The alias with the largest copy, and its size. */
   private bigAlias: i32 = -1
   private bigSize: i32 = 0
@@ -236,8 +252,13 @@ export class YamlJsonLoader {
   /** Per node, the stamp of the last map it was merged into; and that map's stamp. */
   private mergeMarks: i32[]
   private mergeStamp: i32 = 0
-  /** The merged pairs the load may still visit. */
-  private mergeBudget: i32 = 0
+  /**
+   * The merged pairs the load may still visit: `mergeNodes` more, then
+   * `mergeRoom` more. Two halves, the stream's node count and the values
+   * the document may hold, so that neither sum can overflow.
+   */
+  private mergeNodes: i32 = 0
+  private mergeRoom: i32 = 0
 
   /** A loader that holds collections to `JSON_WRITER_MAX_DEPTH`, so whatever it loads can be written back out. */
   constructor() {
@@ -290,13 +311,22 @@ export class YamlJsonLoader {
       return this.nullAt(at)
     }
     const room: i32 = doc.maxValues < JSON_VALUE_MAX_VALUES ? doc.maxValues : JSON_VALUE_MAX_VALUES
-    if (this.quickCount(this.firstNode(d), root, room) > room && this.count(root, room) > room) {
+    // Never taken: `JSON_VALUE_MAX_VALUES` is 2^22. The literal, under 2^30,
+    // is what the prover reads to bound `room + 1`, the size a count
+    // saturates at; it does not read a constant's value.
+    if (room > 1073741823) {
+      return this.fail(JSON_VALUE_ERR_VALUES, stream.start(root), stream.end(root))
+    }
+    this.cap = room
+    this.over = room + 1
+    if (this.quickCount(this.firstNode(d), root) > room && this.count(root) > room) {
       if (this.bigAlias >= 0) {
         return this.fail(YAML_JSON_ERR_EXPANSION, stream.start(this.bigAlias), stream.end(this.bigAlias))
       }
       return this.fail(JSON_VALUE_ERR_VALUES, stream.start(root), stream.end(root))
     }
-    this.mergeBudget = room + toI32(stream.kinds.length)
+    this.mergeNodes = toI32(stream.kinds.length)
+    this.mergeRoom = room
     return this.build(root, origin)
   }
 
@@ -331,13 +361,13 @@ export class YamlJsonLoader {
   // ---- Counting ------------------------------------------------------------------
 
   /**
-   * How many values node `root` expands to, saturating at `cap + 1`.
+   * How many values node `root` expands to, saturating at `over`, `cap + 1`.
    * Each node is counted once and its count kept, on a stack of its own
    * rather than by recursion, because a chain of aliases can be as long as
    * the text. Sets `bigAlias`. Clears only the sizes the last count set, so a
    * stream of many documents is not cleared whole for each.
    */
-  private count(root: i32, cap: i32): i32 {
+  private count(root: i32): i32 {
     const stream: YamlStream = this.stream
     const nodes: i32 = toI32(stream.kinds.length)
     const sizes: i32[] = this.sizes
@@ -352,13 +382,13 @@ export class YamlJsonLoader {
       }
     }
     this.countedTop = 0
-    this.cap = cap
     this.bigAlias = -1
     this.bigSize = 0
     const pending: i32[] = this.pending
     let top: i32 = 0
     top = this.pushNode(top, root)
-    while (top > 0) {
+    // `top` is never past the stack: `pushNode` answers at most its length.
+    while (top > 0 && top <= toI32(pending.length)) {
       const n: i32 = pending[top - 1]
       // A pushed node is in range; the test proves it to the bounds check.
       if (n < 0 || n >= toI32(sizes.length) || sizes[n] > 0) {
@@ -366,12 +396,15 @@ export class YamlJsonLoader {
       } else if (sizes[n] === 0) {
         // First visit: count the nodes it is made of first.
         sizes[n] = -1
-        if (this.countedTop < toI32(counted.length)) {
-          counted[this.countedTop] = n
+        const c: i32 = this.countedTop
+        if (c >= 0 && c < toI32(counted.length)) {
+          counted[c] = n
+          this.countedTop = c + 1
         } else {
+          // `c` is the length here, never past it: the push makes it `c + 1`.
           counted.push(n)
+          this.countedTop = toI32(counted.length)
         }
-        this.countedTop += 1
         top = this.pushParts(top, n)
       } else {
         const size: i32 = this.sizeOf(n)
@@ -381,22 +414,30 @@ export class YamlJsonLoader {
         top -= 1
       }
     }
-    return sizes[root]
+    // `top` is above 0 here only if the loop left early, which the test above
+    // never does; the count is unfinished then, and counts as too many.
+    if (top > 0) {
+      return this.over
+    }
+    // `sizes` holds every node, so `root` is in it; a root outside counts as too many.
+    return root >= 0 && root < toI32(sizes.length) ? sizes[root] : this.over
   }
 
   /** The first node of document `d`: the one after the last earlier document's root. */
   private firstNode(d: i32): i32 {
-    for (let e: i32 = d - 1; e >= 0; e -= 1) {
-      const root: i32 = this.stream.documentRoot(e)
+    for (let e: i32 = d; e > 0; e -= 1) {
+      const root: i32 = this.stream.documentRoot(e - 1)
       if (root >= 0) {
-        return root + 1
+        // A root is a node, so below the node count; were it not, node 0,
+        // which `quickCount` can always start from, is the answer.
+        return root < toI32(this.stream.kinds.length) ? root + 1 : 0
       }
     }
     return 0
   }
 
   /**
-   * What `count(root, cap)` answers, found in one pass over nodes `lo` to
+   * What `count(root)` answers, found in one pass over nodes `lo` to
    * `root` when that is enough: the parser numbers a node after its parts and
    * an alias after its anchor, so each part's size is known when its node is
    * reached. A part outside that span (a cycle, or a node of another
@@ -404,10 +445,11 @@ export class YamlJsonLoader {
    * `count`, which also finds the alias to blame. Sizes are kept apart from
    * `count`'s, and every one read was written by this pass, so none is cleared.
    */
-  private quickCount(lo: i32, root: i32, cap: i32): i32 {
+  private quickCount(lo: i32, root: i32): i32 {
     const stream: YamlStream = this.stream
     const kinds: u8[] = stream.kinds
-    const over: i32 = cap + 1
+    const cap: i32 = this.cap
+    const over: i32 = this.over
     if (lo < 0 || root < lo || root >= toI32(kinds.length) || root >= stream.top) {
       return over
     }
@@ -415,7 +457,6 @@ export class YamlJsonLoader {
     while (toI32(sizes.length) <= root) {
       sizes.push(0)
     }
-    this.cap = cap
     const firsts: i32[] = stream.firsts
     const counts: i32[] = stream.counts
     const kids: i32[] = stream.kids
@@ -430,9 +471,9 @@ export class YamlJsonLoader {
         const from: i32 = yamlJsonAt(firsts, n)
         const parts: i32 = yamlJsonAt(counts, n)
         for (let i: i32 = 0; i < parts; i += 1) {
-          const child: i32 = yamlJsonAt(kids, from + i)
+          const child: i32 = yamlJsonAtPlus(kids, from, i)
           if (kind === YAML_SEQ) {
-            total = this.plus(total, this.quickPart(child, lo, n))
+            total = this.plus(total, this.quickPart(child, lo, n), YAML_JSON_WHOLE, YAML_JSON_WHOLE)
           } else {
             // As `sizeOf` takes a merge's members in, less the merge itself;
             // read straight, as `stream.value` and `stream.key` read a pair.
@@ -441,11 +482,10 @@ export class YamlJsonLoader {
             const value: i32 = pair ? yamlJsonAt(counts, child) : -1
             const merged: boolean = pair && merging && this.mergeShaped(yamlJsonAt(firsts, child))
             const part: i32 = this.quickPart(value, lo, n)
-            let less: i32 = merged ? 1 : 0
-            if (merged && stream.kind(stream.resolved(value)) === YAML_SEQ) {
-              less += stream.count(stream.resolved(value))
-            }
-            total = part > cap ? over : this.plus(total, part - less)
+            const listed: boolean = merged && stream.kind(stream.resolved(value)) === YAML_SEQ
+            const maps: i32 = listed ? stream.count(stream.resolved(value)) : 0
+            const less: i32 = merged ? 1 : 0
+            total = part > cap ? over : this.plus(total, part, less, maps)
           }
         }
       }
@@ -453,7 +493,8 @@ export class YamlJsonLoader {
         sizes[n] = total
       }
     }
-    return sizes[root]
+    // `sizes` was grown past `root` above; a root outside counts as too many.
+    return root >= 0 && root < toI32(sizes.length) ? sizes[root] : over
   }
 
   /** Part `p`'s size in `quickCount` at node `n`: `1` for a missing node, too many for one outside `[lo, n)`. */
@@ -462,22 +503,26 @@ export class YamlJsonLoader {
       return 1
     }
     if (p < lo || p >= n || p >= toI32(this.quickSizes.length)) {
-      return this.cap + 1
+      return this.over
     }
     return this.quickSizes[p]
   }
 
   /** Pushes node `n` onto the count's stack unless it is counted; answers the new top. */
   private pushNode(top: i32, n: i32): i32 {
-    if (n < 0 || this.sizes[n] !== 0) {
+    const sizes: i32[] = this.sizes
+    // `sizes` holds every node, so a node past it is never pushed: there is none.
+    if (n < 0 || n >= toI32(sizes.length) || sizes[n] !== 0) {
       return top
     }
-    if (top < toI32(this.pending.length)) {
-      this.pending[top] = n
-    } else {
-      this.pending.push(n)
+    const pending: i32[] = this.pending
+    if (top >= 0 && top < toI32(pending.length)) {
+      pending[top] = n
+      return top + 1
     }
-    return top + 1
+    // `top` is the length here, never past it: the push makes it `top + 1`.
+    pending.push(n)
+    return toI32(pending.length)
   }
 
   /** Pushes the nodes node `n`'s count is the sum of. */
@@ -518,7 +563,7 @@ export class YamlJsonLoader {
     let total: i32 = 1
     if (kind === YAML_SEQ) {
       for (let i: i32 = 0; i < stream.count(n); i += 1) {
-        total = this.plus(total, this.partSize(stream.child(n, i)))
+        total = this.plus(total, this.partSize(stream.child(n, i)), YAML_JSON_WHOLE, YAML_JSON_WHOLE)
       }
     } else if (kind === YAML_MAP) {
       for (let i: i32 = 0; i < stream.count(n); i += 1) {
@@ -527,32 +572,40 @@ export class YamlJsonLoader {
         // A merged map's members join this one's; its own value is not one.
         const merged: boolean = this.isMergeKey(stream.key(pair))
         const part: i32 = this.partSize(value)
-        let less: i32 = merged ? 1 : 0
-        if (merged && stream.kind(stream.resolved(value)) === YAML_SEQ) {
-          // A list of maps: the list itself is not one either, nor any map in it.
-          less += stream.count(stream.resolved(value))
-        }
+        // A list of maps: the list itself is not one either, nor any map in it.
+        const listed: boolean = merged && stream.kind(stream.resolved(value)) === YAML_SEQ
+        const maps: i32 = listed ? stream.count(stream.resolved(value)) : 0
+        const less: i32 = merged ? 1 : 0
         // A saturated part stays saturated: taking the adjustment off it
         // would bring a bomb back under the cap.
-        total = part > this.cap ? this.cap + 1 : this.plus(total, part - less)
+        total = part > this.cap ? this.over : this.plus(total, part, less, maps)
       }
     }
     return total
   }
 
-  /** A counted part's size: `1` for a missing node, too many for one still being counted. */
+  /**
+   * A counted part's size: `1` for a missing node, too many for one still
+   * being counted (or past `sizes`, which holds every node).
+   */
   private partSize(n: i32): i32 {
     if (n < 0) {
       return 1
     }
-    const size: i32 = this.sizes[n]
-    return size < 0 ? this.cap + 1 : size
+    const sizes: i32[] = this.sizes
+    const size: i32 = n < toI32(sizes.length) ? sizes[n] : -1
+    return size < 0 ? this.over : size
   }
 
-  /** `a + b`, saturating at `cap + 1`; both are at most that, so the sum fits. */
-  private plus(a: i32, b: i32): i32 {
-    const sum: i32 = a + b
-    return sum > this.cap ? this.cap + 1 : sum
+  /**
+   * `a + b - less - maps`, saturating at `over`: a size plus a part's, less
+   * a merge key's adjustment. Summed in `i64`, where four `i32`s fit. A part
+   * is at least its adjustment, so the sum is never below zero; were it, it
+   * would count as too many.
+   */
+  private plus(a: i32, b: i32, less: i32, maps: i32): i32 {
+    const sum: i64 = toI64(a) + toI64(b) - toI64(less) - toI64(maps)
+    return sum > toI64(this.cap) || sum < 0 ? this.over : toI32(sum)
   }
 
   // ---- Building ------------------------------------------------------------------
@@ -685,7 +738,7 @@ export class YamlJsonLoader {
       return -1
     }
     let i: i32 = from
-    if (toI32(source.charCodeAt(i)) === YAML_JSON_DASH) {
+    if (yamlJsonByte(source, i) === YAML_JSON_DASH) {
       i += 1
     }
     // A sign alone: the byte past it is not this scalar's.
@@ -703,14 +756,14 @@ export class YamlJsonLoader {
     } else {
       return -1
     }
-    if (i < to && toI32(source.charCodeAt(i)) === YAML_JSON_DOT) {
+    if (i < to && yamlJsonByte(source, i) === YAML_JSON_DOT) {
       const fraction: i32 = yamlJsonDigits(source, i + 1, to)
       if (fraction === i + 1) {
         return -1
       }
       i = fraction
     }
-    if (i < to && (toI32(source.charCodeAt(i)) | 32) === 101) {
+    if (i < to && (yamlJsonByte(source, i) | 32) === 101) {
       i += 1
       const sign: i32 = yamlJsonByte(source, i)
       if (i < to && (sign === YAML_JSON_PLUS || sign === YAML_JSON_DASH)) {
@@ -768,13 +821,16 @@ export class YamlJsonLoader {
     const kids: i32[] = stream.kids
     const first: i32 = yamlJsonAt(stream.firsts, at)
     for (let i: i32 = 0; i < n; i += 1) {
-      const c: i32 = yamlJsonAt(kids, first + i)
+      const c: i32 = yamlJsonAtPlus(kids, first, i)
       const v: JsonValue = c < 0 ? this.nullAt(stream.end(at)) : this.build(c, depth)
       if (v < 0) {
         return v
       }
       // `v` was just made, so it is in no container: what `push` would check.
-      doc.append(ax, doc.index(v), YAML_JSON_NO_WORD, YAML_JSON_NO_WORD)
+      const slot: i32 = doc.append(ax, doc.index(v), YAML_JSON_NO_WORD, YAML_JSON_NO_WORD)
+      if (slot < 0) {
+        return this.fail(slot, stream.start(at), stream.end(at))
+      }
     }
     return a
   }
@@ -794,7 +850,7 @@ export class YamlJsonLoader {
     const kids: i32[] = stream.kids
     const first: i32 = yamlJsonAt(stream.firsts, at)
     for (let i: i32 = 0; i < pairs; i += 1) {
-      const key: i32 = stream.key(yamlJsonAt(kids, first + i))
+      const key: i32 = stream.key(yamlJsonAtPlus(kids, first, i))
       if (key < 0) {
         own = false
       } else if (this.mergeShaped(key)) {
@@ -830,15 +886,26 @@ export class YamlJsonLoader {
       return this.fail(o, stream.start(at), stream.end(at))
     }
     const ox: i32 = doc.index(o)
-    doc.reserve(ox, top - base)
-    for (let e: i32 = base; e < top; e += 1) {
-      const pair: i32 = this.entryPairs[e]
-      const valueNode: i32 = this.entryValues[e]
+    if (base >= 0 && top >= base) {
+      doc.reserve(ox, top - base)
+    }
+    const keys: string[] = this.entryKeys
+    const entryPairs: i32[] = this.entryPairs
+    const values: i32[] = this.entryValues
+    // The three arrays grow together and hold every entry below `entryTop`,
+    // so the bounds on `e` past `top` never stop the loop early.
+    for (
+      let e: i32 = base;
+      e >= 0 && e < top && e < toI32(keys.length) && e < toI32(entryPairs.length) && e < toI32(values.length);
+      e += 1
+    ) {
+      const pair: i32 = entryPairs[e]
+      const valueNode: i32 = values[e]
+      const key: string = keys[e]
       const v: JsonValue = valueNode < 0 ? this.nullAt(stream.end(pair)) : this.build(valueNode, depth)
       if (v < 0) {
         return v
       }
-      const key: string = this.entryKeys[e]
       const keyAt: i32 = doc.byteTop
       const keyNode: i32 = stream.key(pair)
       // `key` is `keyText(keyNode)`, which `storeKey` spells from the node without the copy.
@@ -846,6 +913,9 @@ export class YamlJsonLoader {
       const slot: i32 = doc.append(ox, doc.index(v), keyAt, keyLength)
       if (doc.byteTop > this.byteCap) {
         return this.tooMuchText(keyNode < 0 ? pair : keyNode)
+      }
+      if (slot < 0) {
+        return this.fail(slot, stream.start(pair), stream.end(pair))
       }
       const keyStart: i32 = keyNode < 0 ? stream.start(pair) : stream.start(keyNode)
       const keyEnd: i32 = keyNode < 0 ? keyStart : stream.end(keyNode)
@@ -879,7 +949,7 @@ export class YamlJsonLoader {
     const counts: i32[] = stream.counts
     const first: i32 = yamlJsonAt(firsts, at)
     for (let i: i32 = 0; i < pairs; i += 1) {
-      const pair: i32 = yamlJsonAt(kids, first + i)
+      const pair: i32 = yamlJsonAtPlus(kids, first, i)
       const valueNode: i32 = yamlJsonAt(counts, pair)
       const v: JsonValue = valueNode < 0 ? this.nullAt(stream.end(pair)) : this.build(valueNode, depth)
       if (v < 0) {
@@ -890,6 +960,9 @@ export class YamlJsonLoader {
       const slot: i32 = doc.append(ox, doc.index(v), keyAt, this.storeKey(keyNode))
       if (doc.byteTop > this.byteCap) {
         return this.tooMuchText(keyNode)
+      }
+      if (slot < 0) {
+        return this.fail(slot, stream.start(pair), stream.end(pair))
       }
       if (this.keyRange(slot, stream.start(keyNode), stream.end(keyNode)) < 0) {
         return this.failed
@@ -928,8 +1001,7 @@ export class YamlJsonLoader {
           }
         } else if (source >= 0 && stream.kind(source) === YAML_SEQ) {
           // The walk itself is charged, since its items may all be merged already.
-          this.mergeBudget -= stream.count(source)
-          if (this.mergeBudget < 0) {
+          if (!this.spendMerges(stream.count(source))) {
             return this.fail(YAML_JSON_ERR_EXPANSION, stream.start(pair), stream.end(pair))
           }
           for (let j: i32 = 0; j < stream.count(source); j += 1) {
@@ -962,8 +1034,7 @@ export class YamlJsonLoader {
     if (!this.markMerged(m)) {
       return 0
     }
-    this.mergeBudget -= stream.count(m) + 1
-    if (this.mergeBudget < 0) {
+    if (!this.spendMerges(stream.count(m)) || !this.spendMerges(YAML_JSON_MERGE_PAIR)) {
       return this.fail(YAML_JSON_ERR_EXPANSION, stream.start(pair), stream.end(pair))
     }
     for (let i: i32 = 0; i < stream.count(m); i += 1) {
@@ -975,6 +1046,29 @@ export class YamlJsonLoader {
     return this.mergeInto(base, m, hops)
   }
 
+  /**
+   * Takes `n` merged pairs from the load's budget, `mergeNodes` first;
+   * `false`, when the budget does not hold them, is an expansion.
+   */
+  private spendMerges(n: i32): boolean {
+    const nodes: i32 = this.mergeNodes
+    const room: i32 = this.mergeRoom
+    if (n < 0 || nodes < 0 || room < 0) {
+      return false
+    }
+    if (n <= nodes) {
+      this.mergeNodes = nodes - n
+      return true
+    }
+    const rest: i32 = n - nodes
+    if (rest < 0 || rest > room) {
+      return false
+    }
+    this.mergeNodes = 0
+    this.mergeRoom = room - rest
+    return true
+  }
+
   /** Starts a map's merges, so no node is marked as merged into it yet. */
   private newMergeStamp(): void {
     const nodes: i32 = toI32(this.stream.kinds.length)
@@ -982,8 +1076,10 @@ export class YamlJsonLoader {
     while (toI32(marks.length) < nodes) {
       marks.push(0)
     }
-    this.mergeStamp += 1
-    if (this.mergeStamp >= JSON_VALUE_MAX_VALUES) {
+    const stamp: i32 = this.mergeStamp
+    if (stamp < JSON_VALUE_MAX_VALUES && stamp + 1 < JSON_VALUE_MAX_VALUES) {
+      this.mergeStamp = stamp + 1
+    } else {
       // Far past any one load: start the stamps over rather than let them wrap.
       for (let i: i32 = 0; i < toI32(marks.length); i += 1) {
         marks[i] = 0
@@ -1020,21 +1116,30 @@ export class YamlJsonLoader {
         const start: i32 = keyNode < 0 ? stream.start(pair) : stream.start(keyNode)
         return this.fail(JSON_VALUE_ERR_DUPLICATE, start, keyNode < 0 ? start : stream.end(keyNode))
       }
-      this.entryValues[found] = stream.value(pair)
+      // An entry `findEntry` answers is below `entryTop`, so in the array.
+      const values: i32[] = this.entryValues
+      if (found < toI32(values.length)) {
+        values[found] = stream.value(pair)
+      }
       return 0
     }
     const e: i32 = this.entryTop
-    if (e < toI32(this.entryPairs.length)) {
-      this.entryKeys[e] = key
-      this.entryPairs[e] = pair
-      this.entryValues[e] = stream.value(pair)
+    const keys: string[] = this.entryKeys
+    const pairs: i32[] = this.entryPairs
+    const values: i32[] = this.entryValues
+    if (e >= 0 && e < toI32(keys.length) && e < toI32(pairs.length) && e < toI32(values.length)) {
+      keys[e] = key
+      pairs[e] = pair
+      values[e] = stream.value(pair)
+      this.entryTop = e + 1
     } else {
-      this.entryKeys.push(key)
-      this.entryPairs.push(pair)
-      this.entryValues.push(stream.value(pair))
+      // `e` is the arrays' length here, never past it: the pushes make it `e + 1`.
+      keys.push(key)
+      pairs.push(pair)
+      values.push(stream.value(pair))
+      this.entryTop = toI32(pairs.length)
     }
-    this.entryTop = e + 1
-    if (e - base >= YAML_JSON_SCAN_KEYS) {
+    if (toI64(e) - toI64(base) >= toI64(YAML_JSON_SCAN_KEYS)) {
       this.seen.set(key, e)
     }
     return 0
@@ -1046,13 +1151,17 @@ export class YamlJsonLoader {
    */
   private findEntry(base: i32, key: string): i32 {
     const top: i32 = this.entryTop
-    const scanned: i32 = top - base < YAML_JSON_SCAN_KEYS ? top : base + YAML_JSON_SCAN_KEYS
-    for (let e: i32 = base; e < scanned; e += 1) {
-      if (this.entryKeys[e] === key) {
+    // In `i64`, where a difference or sum of two `i32`s fits.
+    const held: i64 = toI64(top) - toI64(base)
+    const scanned: i64 =
+      held < toI64(YAML_JSON_SCAN_KEYS) ? toI64(top) : toI64(base) + toI64(YAML_JSON_SCAN_KEYS)
+    const keys: string[] = this.entryKeys
+    for (let e: i32 = base; toI64(e) < scanned && e >= 0 && e < toI32(keys.length); e += 1) {
+      if (keys[e] === key) {
         return e
       }
     }
-    if (top - base <= YAML_JSON_SCAN_KEYS) {
+    if (held <= toI64(YAML_JSON_SCAN_KEYS)) {
       return -1
     }
     const e: i32 | undefined = this.seen.get(key)
@@ -1084,8 +1193,8 @@ export class YamlJsonLoader {
     const start: i32 = stream.start(key)
     if (
       start < 0 ||
+      start > toI32(stream.source.length) - 2 ||
       stream.end(key) !== start + 2 ||
-      start + 2 > toI32(stream.source.length) ||
       toI32(stream.source.charCodeAt(start)) !== YAML_JSON_LT ||
       toI32(stream.source.charCodeAt(start + 1)) !== YAML_JSON_LT ||
       stream.kind(key) !== YAML_SCALAR ||
@@ -1101,12 +1210,18 @@ export class YamlJsonLoader {
 /** `a[i]`, or `-1` outside it, as `YamlStream`'s accessors read their arrays. */
 const yamlJsonAt = (a: i32[], i: i32): i32 => (i >= 0 && i < toI32(a.length) ? a[i] : -1)
 
+/** `a[from + i]`, or `-1` outside it; the sum is in `i64`, so it cannot overflow. */
+const yamlJsonAtPlus = (a: i32[], from: i32, i: i32): i32 => {
+  const at: i64 = toI64(from) + toI64(i)
+  return at >= 0 && at < toI64(toI32(a.length)) ? yamlJsonAt(a, toI32(at)) : -1
+}
+
 // ---- Numbers ---------------------------------------------------------------------
 
 /**
  * The JSON spelling of a core-schema number's text: `""` for `.inf`, `-.inf`
  * and `.nan`, `"#"` for a `0x` or `0o` integer longer than
- * `YAML_JSON_MAX_RADIX_DIGITS` digits.
+ * `YAML_JSON_MAX_RADIX_DIGITS` digits or with a byte that is not one of its digits.
  */
 const yamlJsonNumber = (text: string): string => {
   const n: i32 = toI32(text.length)
@@ -1134,11 +1249,12 @@ const yamlJsonNumber = (text: string): string => {
     whole += 1
   }
   let lead: i32 = i
-  while (lead + 1 < whole && yamlJsonByte(text, lead) === YAML_JSON_ZERO) {
+  while (lead < whole - 1 && yamlJsonByte(text, lead) === YAML_JSON_ZERO) {
     lead += 1
   }
   const wholeDigits: string = whole === i ? "0" : text.substring(lead, whole)
-  if (whole === n) {
+  // `whole` stops at `n`, so this is `whole === n`.
+  if (whole >= n) {
     return wholeDigits === "0" ? "0" : `${sign}${wholeDigits}`
   }
   let rest: string = text.substring(whole, n)
@@ -1149,25 +1265,35 @@ const yamlJsonNumber = (text: string): string => {
   return `${sign}${wholeDigits}${rest}`
 }
 
-/** `text[from, end)`, digits in `base` 16 or 8, written in decimal: four digits a limb, the lowest first. */
+/**
+ * `text[from, end)`, digits in `base` 16 or 8, written in decimal: four digits
+ * a limb (base 10000), the lowest first; `"#"` if a byte is not a digit of `base`, which the
+ * core schema never resolves as an integer. The limbs are `u32`: each is below
+ * 10000 and a carry below 16, so `limb * base + carry` stays under
+ * 2^18 and no step comes near a wrap.
+ */
 const yamlJsonRadix = (text: string, from: i32, base: i32): string => {
-  const limbs: i32[] = [0]
+  const limbs: u32[] = [0]
   for (let i: i32 = from; i < toI32(text.length); i += 1) {
-    let carry: i32 = yamlJsonHexValue(yamlJsonByte(text, i))
+    const digit: i32 = yamlJsonHexValue(yamlJsonByte(text, i))
+    if (digit < 0 || digit >= base) {
+      return "#"
+    }
+    let carry: u32 = toU32(digit)
     for (let l: i32 = 0; l < toI32(limbs.length); l += 1) {
-      const x: i32 = limbs[l] * base + carry
-      limbs[l] = x % YAML_JSON_LIMB
-      carry = x / YAML_JSON_LIMB
+      const x: u32 = limbs[l] * toU32(base) + carry
+      limbs[l] = x % 10000
+      carry = x / 10000
     }
     if (carry > 0) {
       limbs.push(carry)
     }
   }
-  const top: i32 = toI32(limbs.length) - 1
-  const parts: string[] = [`${limbs[top]}`]
-  for (let l: i32 = top - 1; l >= 0 && l < toI32(limbs.length); l -= 1) {
+  // The highest limb as it is, every lower one padded to four digits.
+  const parts: string[] = []
+  for (let l: i32 = toI32(limbs.length) - 1; l >= 0 && l < toI32(limbs.length); l -= 1) {
     const limb: string = `${limbs[l]}`
-    parts.push(`${"000".substring(0, 4 - toI32(limb.length))}${limb}`)
+    parts.push(parts.length === 0 ? limb : `${"000".substring(0, 4 - toI32(limb.length))}${limb}`)
   }
   return parts.join("")
 }
@@ -1186,10 +1312,16 @@ const yamlJsonDigits = (text: string, from: i32, to: i32): i32 => {
   return i
 }
 
-/** A hex digit's value; the text is the stream's, already checked to be digits of its base. */
+/** A hex digit's value, or `-1` for a byte that is not one. Literals, as the prover reads a literal's value and not a constant's. */
 const yamlJsonHexValue = (c: i32): i32 => {
-  if (c >= YAML_JSON_ZERO && c <= 57) {
-    return c - YAML_JSON_ZERO
+  if (c >= 48 && c <= 57) {
+    return c - 48
   }
-  return (c | 32) - 87
+  if (c >= 97 && c <= 102) {
+    return c - 87
+  }
+  if (c >= 65 && c <= 70) {
+    return c - 55
+  }
+  return -1
 }

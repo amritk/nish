@@ -749,14 +749,28 @@ const httpServerCell = (row: i32, width: i32, col: i32, length: i32): i32 => {
 }
 
 /**
- * The `monotonicNanos` instant `ns` nanoseconds after `at`. Worked in `u64`,
- * whose wrapping sum has the bits of the signed one: an instant is centuries
- * short of 2^63 and every delay a constant or a checked limit, so neither wraps.
+ * The `monotonicNanos` instant `ns` nanoseconds after `at`, or the last `i64`
+ * when the sum would pass it, which no clock reading does: an instant is
+ * centuries short of 2^63 and every delay a constant or a checked limit.
+ * Both are at least 0, so they are summed in `u64`, where two values below
+ * 2^63 cannot wrap, and the sum is turned back only once it is known to fit.
+ * A negative `at` or `ns`, which no caller passes, answers `at`.
  */
-const httpServerAfter = (at: i64, ns: i64): i64 => toI64(toU64(at) + toU64(ns))
+const httpServerAfter = (at: i64, ns: i64): i64 => {
+  if (at < 0 || ns < 0) {
+    return at
+  }
+  const sum: u64 = toU64(at) + toU64(ns)
+  const top: u64 = (toU64(1) << toU64(63)) - toU64(1)
+  return sum > top ? toI64(top) : toI64(sum)
+}
 
-/** `until - now` in nanoseconds, worked in `u64` for the same reason as `httpServerAfter`. */
-const httpServerLeft = (until: i64, now: i64): i64 => toI64(toU64(until) - toU64(now))
+/**
+ * `until - now` in nanoseconds, or 0 once `until` is not after `now`. An
+ * instant is never negative, so the difference of the later and a `now` of
+ * at least 0 fits an `i64`; a negative `now` answers 0 too.
+ */
+const httpServerLeft = (until: i64, now: i64): i64 => (until > now && now >= 0 ? until - now : toI64(0))
 
 /**
  * Whether more than `ns` nanoseconds lie between the `monotonicNanos`
@@ -1568,7 +1582,7 @@ export class HttpServer {
    * QUIC handshake with `key`, closes what is past its timeouts, and answers
    * how many whole requests are waiting for `take`.
    * @param timeoutMs the longest to block, in milliseconds, or -1 to block until something is ready
-   * @param key the certificate's P-256 private key; borrowed for the call, still the caller's to wipe
+   * @param key the certificate's private key, P-256 or RSA as `signatureScheme` says; borrowed for the call, still the caller's to wipe
    * @returns how many whole requests are queued for `take` after this turn
    */
   waitSigned(timeoutMs: i32, key: Secret<u8[]>): i32 {
@@ -1923,8 +1937,19 @@ export class HttpServer {
         // The peer's end or a failure: HTTP/1.1 reads it again and answers it as it does today.
         return this.h1Decided(s, h1)
       }
-      // `netRead` answers at most the bytes it was asked for, so the unsigned sum is at most 24.
-      const end: i32 = toI32(toU32(got) + toU32(n))
+      // `netRead` answers at most the `room` bytes it was asked for, so `gap`
+      // is never negative and `end` is `got + n`, at most the head's 24. A
+      // larger answer would end the head at its last byte.
+      const size: i32 = toI32(head.length)
+      const room: i32 = size - got
+      let end: i32 = size
+      if (room >= 0) {
+        const gap: i32 = room - n
+        if (gap >= 0) {
+          end = size - gap
+        }
+      }
+
       for (let k: i32 = got; k < end && k < toI32(head.length) && k < toI32(want.length); k++) {
         if (toI32(head[k]) !== toI32(want.charCodeAt(k))) {
           s.got = end

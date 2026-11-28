@@ -14,7 +14,7 @@
  *     if (slot >= 0) { pollAdd(loop, tls.fd(slot), 1, slot); }
  *     // when a connection's token comes back:
  *     let wants: i32 = (events & 5) !== 0 ? tls.readable(slot) : tls.writable(slot);
- *     if ((wants & TLS_RECORD_SIGN) !== 0) { wants = tls.signP256(slot, leafKey); }
+ *     if ((wants & TLS_RECORD_SIGN) !== 0) { wants = tls.signKey(slot, leafKey); }
  *     if ((wants & TLS_RECORD_DATA) !== 0) { tls.read(slot, buf, 0, buf.length); ... }
  *     if ((wants & TLS_RECORD_DONE) !== 0) { tls.close(slot); }
  *     else { pollModify(loop, tls.fd(slot), wants & 3, slot); }
@@ -59,10 +59,14 @@
  * the slot's copy of the key is wiped once the ServerHello is written, when the
  * handshake fails, or when the slot is closed.
  *
- *  **Signing is the caller's**, as `TlsServer`'s is: `signP256` signs the
- *  CertificateVerify with a P-256 key the caller holds as a `Secret` and borrows
- *  for the call, and `signatureInput` / `sign` hand the input out and take any
- *  signature back.
+ *  **Signing is the caller's**, as `TlsServer`'s is: `signKey` signs the
+ *  CertificateVerify with the key the caller holds as a `Secret` and borrows
+ *  for the call (P-256 or RSA, as the configuration's `signatureScheme`
+ *  says), and `signatureInput` / `sign` hand the input out and take any
+ *  signature back. Nothing checks that the key, the leaf certificate and
+ *  `signatureScheme` agree: the signer refuses only a key not of its
+ *  scheme's shape, and a key of the right shape that is not the leaf's signs,
+ *  so the client's check of the CertificateVerify is what fails.
  *
  * **Resumption is opt-in, and its keys are the caller's.** After
  * `enableTickets`, a slot whose interest says `TLS_RECORD_TICKET` waits on
@@ -117,7 +121,7 @@ import {
   tcpConnect,
 } from "nish:net"
 import { monotonicNanos, wallClockNanos } from "nish:process"
-import { TlsP256Signer, TlsServer, TlsServerConfig } from "nish/net/tls"
+import { TlsKeySigner, TlsServer, TlsServerConfig } from "nish/net/tls"
 import { TlsClient, TlsClientConfig } from "nish/net/tls/client"
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client"
 import { TlsClientTrust, tlsClientAuthenticate, tlsClientSystemTrust } from "nish/net/tls/verify"
@@ -224,8 +228,11 @@ export class TlsTcpServer {
   private scratch: u8[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
   peer: u8[]
-  /** Signs every slot's CertificateVerify in `signP256`, one for the pool, keeping nothing per signature. */
-  private signer: TlsP256Signer
+  /**
+   * Signs every slot's CertificateVerify in `signKey`, in the configuration's
+   * scheme: one for the pool, keeping nothing per signature.
+   */
+  private signer: TlsKeySigner
   /**
    * Each slot's own copy of its connection's server random: `TlsServer`
    * keeps the array it is given and writes it into the ServerHello only once
@@ -290,7 +297,7 @@ export class TlsTcpServer {
     this.pools = new TlsRecordPools(this.slots)
     this.scratch = new Array<u8>(TLS_MAX_RECORD)
     this.peer = new Array<u8>(TLS_TCP_ADDRESS_SIZE)
-    this.signer = new TlsP256Signer()
+    this.signer = new TlsKeySigner(config.signatureScheme)
   }
 
   /**
@@ -754,17 +761,18 @@ export class TlsTcpServer {
   }
 
   /**
-   * Signs `slot`'s CertificateVerify with the P-256 private key `key` and
-   * hands it over, as `sign` does, through the pool's `TlsP256Signer`, so a
-   * handshake's signature keeps nothing. The key is borrowed: the caller made
-   * the `Secret`, and wipes it. A malformed key fails the connection with
-   * `internal_error`.
+   * Signs `slot`'s CertificateVerify with `key` in the configuration's
+   * `signatureScheme` — a P-256 key for `ecdsa_secp256r1_sha256`, an RSA key
+   * for `rsa_pss_rsae_sha256` — and hands it over, as `sign` does, through
+   * the pool's `TlsKeySigner`, so a handshake's signature keeps nothing. The
+   * key is borrowed: the caller made the `Secret`, and wipes it. A key of the
+   * wrong kind or a malformed one fails the connection with `internal_error`.
    *
    * @param slot The slot whose interest says `TLS_RECORD_SIGN`.
-   * @param key The certificate's P-256 private key; borrowed, still the caller's to wipe.
+   * @param key The certificate's private key; borrowed, still the caller's to wipe.
    * @returns The slot's interest after sending; the current interest when the slot wants no signature.
    */
-  signP256(slot: i32, key: Secret<u8[]>): i32 {
+  signKey(slot: i32, key: Secret<u8[]>): i32 {
     const input: u8[] | null = this.signatureInput(slot)
     if (input === null) {
       return this.interest(slot)
@@ -779,6 +787,18 @@ export class TlsTcpServer {
       return this.flush(slot)
     }
     return this.sign(slot, signature)
+  }
+
+  /**
+   * `signKey`, under the name it had when P-256 was the only scheme: it signs
+   * in whatever scheme the configuration names.
+   *
+   * @param slot The slot whose interest says `TLS_RECORD_SIGN`.
+   * @param key The certificate's private key; borrowed, still the caller's to wipe.
+   * @returns The slot's interest after sending.
+   */
+  signP256(slot: i32, key: Secret<u8[]>): i32 {
+    return this.signKey(slot, key)
   }
 
   /**
@@ -1337,13 +1357,16 @@ export class TlsTcpClient {
     let loop: i32 = -1
     let result: i32 = 0
     while (true) {
-      if (done < len) {
-        // Wrapping sums, exact while they fit: `done` runs from 0 up to `len`,
-        // so the rest is exact, and an `off + done` past `i32` comes out
-        // negative, a window `write` refuses with -22 rather than a panic.
-        const n: i32 = this.write(data, toI32(toU32(off) + toU32(done)), toI32(toU32(len) - toU32(done)))
+      if (len > 0 && done >= 0 && done < len) {
+        // `done` runs from 0 up to `len`, so the rest is exact; an
+        // `off + done` past `i32` is -1, a window `write` refuses with -22.
+        const rest: i32 = len - done
+        const from: i64 = toI64(off) + toI64(done)
+        const n: i32 = this.write(data, from > toI64(2147483647) ? toI32(-1) : toI32(from), rest)
         if (n >= 0) {
-          done = toI32(toU32(done) + toU32(n))
+          // `write` takes at most `rest`; counted down from `len`.
+          const left: i32 = rest >= 0 ? rest - n : 0
+          done = left > 0 ? len - left : len
         } else if (n !== TLS_RECORD_AGAIN) {
           result = n
           break
@@ -1504,20 +1527,36 @@ export class TlsTcpClient {
   }
 }
 
+/** 2^62 - 1, where a deadline stops: centuries past any clock reading. */
+const TLS_TCP_CLOCK_MAX: i64 = 1073741824 * 4294967296 - 1
+
 /**
- * The monotonic clock `timeoutMs` milliseconds from now. Added wrapping:
- * the clock counts up from boot, far below 2^62, and an `i32` of
- * milliseconds is below 2^52 nanoseconds either way, so the sum is exact.
+ * The monotonic clock `timeoutMs` milliseconds from now. The clock counts up
+ * from boot, far below 2^62, and an `i32` of milliseconds is below 2^52
+ * nanoseconds, so the sum is exact; it is taken below `TLS_TCP_CLOCK_MAX`,
+ * which it would stop at. A negative timeout is a deadline already passed: now.
  */
-const tlsTcpDeadline = (timeoutMs: i32): i64 =>
-  toI64(toU64(monotonicNanos()) + toU64(toI64(timeoutMs) * TLS_TCP_NANOS_PER_MS))
+const tlsTcpDeadline = (timeoutMs: i32): i64 => {
+  const now: i64 = monotonicNanos()
+  const span: i64 = toI64(timeoutMs) * TLS_TCP_NANOS_PER_MS
+  if (now < 0 || span < 0) {
+    return now
+  }
+  const room: i64 = TLS_TCP_CLOCK_MAX - now
+  if (room < 0) {
+    return TLS_TCP_CLOCK_MAX
+  }
+  const left: i64 = room - span
+  return left > 0 ? TLS_TCP_CLOCK_MAX - left : TLS_TCP_CLOCK_MAX
+}
 
 /**
  * How many output bytes wait between `start` and `end`, for a loop that runs
- * while `end > start`. Taken unsigned: a record layer's output start is never
- * negative, so the gap is exact and cannot overflow.
+ * while `end > start`. A record layer's output start is never negative; a
+ * pair out of that order has none waiting.
  */
-const tlsTcpPending = (start: i32, end: i32): i32 => toI32(toU32(end) - toU32(start))
+const tlsTcpPending = (start: i32, end: i32): i32 =>
+  start >= 0 && end >= 0 && end >= start ? end - start : 0
 
 /**
  * Opens a TLS 1.3 connection to the server at `addr` (`nish:net`'s 18-byte

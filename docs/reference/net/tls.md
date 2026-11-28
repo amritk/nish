@@ -28,7 +28,9 @@ import {
   TLS_STATE_WAIT_FINISHED,
   TLS_STATE_WAIT_SIGNATURE,
   TLS_STATE_WAIT_TICKET,
+  TlsKeySigner,
   TlsP256Signer,
+  TlsRsaSigner,
   TlsSecretPool,
   TlsServer,
   TlsServerConfig,
@@ -101,9 +103,21 @@ Wipes the bytes a `Secret` holds, for `exposeWith` to run on one secret of a hol
 
 </scalar-card>
 
+<scalar-card title="Tls​Key​Signer" icon="phosphor/regular/cube" href="#tlskeysigner">
+
+The CertificateVerify signer for a configuration's `signatureScheme`: a `TlsP256Signer` for `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`, a `TlsRsaSigner` for `TLS_SIGNATURE_RSA_PSS_RSAE_SHA256`, and for any other scheme none, so every signature answers `null` and the connection fails with `internal_error`.
+
+</scalar-card>
+
 <scalar-card title="Tls​P256​Signer" icon="phosphor/regular/cube" href="#tlsp256signer">
 
 Signs CertificateVerify inputs for `ecdsa_secp256r1_sha256` with nothing kept per signature: `tlsSignEcdsaP256`'s answer, made in a `P256SignScratch` and handed back in one of this signer's own arrays, one per DER length (8 to 72 bytes), since `TlsServer.sign` takes the signature's length from its array and stores what it computes, so a signature it is handed cannot be a temporary.
+
+</scalar-card>
+
+<scalar-card title="Tls​Rsa​Signer" icon="phosphor/regular/cube" href="#tlsrsasigner">
+
+Signs CertificateVerify inputs for `rsa_pss_rsae_sha256` (RFC 8446 §4.2.3) with nothing kept per signature: `rsaSignPssSha256Into` hashes in this signer's scratch, releases what it allocates, and writes the signature into this signer's own array of the key's length, which `TlsServer.sign` stores as it stores a P-256 one.
 
 </scalar-card>
 
@@ -414,6 +428,23 @@ The value to hand back, so a caller can wipe and answer in one expression.
 
 ## Classes
 
+### TlsKeySigner
+
+The CertificateVerify signer for a configuration's `signatureScheme`: a
+`TlsP256Signer` for `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`, a
+`TlsRsaSigner` for `TLS_SIGNATURE_RSA_PSS_RSAE_SHA256`, and for any other
+scheme none, so every signature answers `null` and the connection fails
+with `internal_error`. Only the one the scheme names is made.
+
+```ts
+class TlsKeySigner
+```
+
+| Member | |
+| --- | --- |
+| `new TlsKeySigner(scheme: i32)` | Makes the signer `scheme` names. |
+| `sign(priv: Secret<u8[]>, content: u8[]): u8[] \| null` | `content` signed under `priv` in the scheme this signer was made for, in the inner signer's own array; `null` for a key that is not of that kind, a signature that fails, or a scheme with no signer. |
+
 ### TlsP256Signer
 
 Signs CertificateVerify inputs for `ecdsa_secp256r1_sha256` with nothing
@@ -433,6 +464,25 @@ class TlsP256Signer
 | --- | --- |
 | `new TlsP256Signer()` | Makes the signer's scratch and one signature array per DER length, so a signature keeps nothing: the P-256 step releases what it allocates per call, and the DER is written into one of these arrays. |
 | `sign(priv: Secret<u8[]>, content: u8[]): u8[] \| null` | `tlsSignEcdsaP256(priv, content)`, byte for byte, in the array of this signer's that has its length; `null` for a malformed key. It keeps nothing: the P-256 signature releases what it allocated, and the DER is written in place. The key is borrowed. |
+
+### TlsRsaSigner
+
+Signs CertificateVerify inputs for `rsa_pss_rsae_sha256` (RFC 8446
+§4.2.3) with nothing kept per signature: `rsaSignPssSha256Into` hashes in
+this signer's scratch, releases what it allocates, and writes the
+signature into this signer's own array of the key's length, which
+`TlsServer.sign` stores as it stores a P-256 one. The array is made by the
+first signature with a key of a new length and kept, so a server with one
+key allocates it once. A carrier keeps one signer, not one per slot.
+
+```ts
+class TlsRsaSigner
+```
+
+| Member | |
+| --- | --- |
+| `new TlsRsaSigner()` | Makes the hashers; the signature array waits for the first key. |
+| `sign(priv: Secret<u8[]>, content: u8[]): u8[] \| null` | The `rsa_pss_rsae_sha256` signature of `content` under `priv`, in this signer's own array; `null` for a `Secret` that is not an RSA key from `rsaParsePrivateKey` or `x509ParseRsaPrivateKey`, and for a signature that fails the check against the public exponent. The key is borrowed. |
 
 ### TlsSecretPool
 
@@ -558,7 +608,7 @@ interface TlsServerConfig
 | `extraExtensions: u8[]` | Extensions this module does not interpret, already encoded (each a type, a length and a body), written first in EncryptedExtensions. Empty for none. Not for ALPN, `server_name` or `quic_transport_parameters`, which the server writes itself: a client refuses a repeated extension. A `record_size_limit` here replaces the one the server would write. |
 | `quic: boolean` | Whether the carrier is QUIC, which turns `quic_transport_parameters` on both ways. |
 | `quicTransportParameters: u8[]` | The server's transport parameters, opaque, sent in EncryptedExtensions only when `quic`. |
-| `signatureScheme: i32` | The signature scheme the caller's key signs with, sent in CertificateVerify: `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256` for a P-256 key. A client that does not list it is refused with `handshake_failure`. |
+| `signatureScheme: i32` | The signature scheme the caller's key signs with, sent in CertificateVerify: `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256` for a P-256 key, `TLS_SIGNATURE_RSA_PSS_RSAE_SHA256` for an RSA key of 2048 to 4096 bits (`TlsKeySigner` signs either). A client that does not list it is refused with `handshake_failure`. |
 
 ## Limits
 

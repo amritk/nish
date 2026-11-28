@@ -15,6 +15,7 @@ import {
   rsaParsePublicKey,
   rsaVerifyPkcs1v15,
   rsaVerifyPss,
+  rsaVerifyPssDer,
 } from "nish/crypto/rsa";
 ```
 
@@ -52,6 +53,12 @@ Verifies an RSASSA-PKCS1-v1_5 signature (RFC 8017 §8.2.2) of `msg` under `key`,
 <scalar-card title="rsa​Verify​Pss" icon="phosphor/regular/function" href="#rsaverifypss">
 
 Verifies an RSASSA-PSS signature (RFC 8017 §8.1.2) of `msg` under `key`, with the hash id `hash` for the message and for MGF1, and a salt of exactly `saltLen` bytes.
+
+</scalar-card>
+
+<scalar-card title="rsa​Verify​Pss​Der" icon="phosphor/regular/function" href="#rsaverifypssder">
+
+Verifies an RSASSA-PSS signature under a public key given as its DER, as `rsaVerifyPss` does after `rsaParsePublicKey`: for a caller that holds the key's bytes and no `RsaPublicKey`.
 
 </scalar-card>
 
@@ -260,6 +267,58 @@ The signature, big-endian.
 <scalar-field name="returns" type="boolean">
 
 `true` only when `sig` is `key`'s signature of `msg`.
+
+</scalar-field>
+
+### rsaVerifyPssDer
+
+Verifies an RSASSA-PSS signature under a public key given as its DER, as
+`rsaVerifyPss` does after `rsaParsePublicKey`: for a caller that holds the
+key's bytes and no `RsaPublicKey`.
+
+```ts
+const rsaVerifyPssDer: (
+  der: u8[],
+  hash: i32,
+  saltLen: i32,
+  msg: u8[],
+  sig: u8[],
+) => boolean
+```
+
+<scalar-field name="der" type="u8[]" required>
+
+The key as `rsaParsePublicKey` reads it, whole.
+
+</scalar-field>
+
+<scalar-field name="hash" type="i32" required>
+
+`RSA_HASH_SHA256`, `RSA_HASH_SHA384` or `RSA_HASH_SHA512`.
+
+</scalar-field>
+
+<scalar-field name="saltLen" type="i32" required>
+
+The salt's length in bytes.
+
+</scalar-field>
+
+<scalar-field name="msg" type="u8[]" required>
+
+The message signed, whole.
+
+</scalar-field>
+
+<scalar-field name="sig" type="u8[]" required>
+
+The signature, big-endian.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+`true` only when `der` parses and `sig` is its signature of `msg`.
 
 </scalar-field>
 

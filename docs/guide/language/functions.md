@@ -8,20 +8,18 @@ reference's [Functions](../../reference/language/declarations.md#functions),
 
 ## Declaring a function
 
-Several examples on this page add and index with nothing bounding them, so the
-compiler cannot prove them safe and they build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands and
-testing `i < xs.length` before an index, as the compile error suggests, builds
-them under the default.
+Integer arithmetic is [checked](control-flow.md#checked-arithmetic): by
+default the compiler must prove each `+` and `*` fits its type. It reads the
+arguments every call passes, so `add(2, 3)` proves `a + b`; `double` returns
+an `i64`, which twice any `i32` fits.
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const add = (a: i32, b: i32): i32 => {
   return a + b;
 };
 
-const double = (n: i32): i32 => n * 2;   // a concise body is one `return`
+const double = (n: i32): i64 => toI64(n) * 2;   // a concise body is one `return`
 
 const greet = (name: string): void => {
   console.log(`hello, ${name}`);
@@ -58,11 +56,10 @@ passes. A default is a constant — a number, `true`/`false`, a string, an enum
 member — or the name of an earlier parameter, and the parameter keeps its type
 annotation:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-const scale = (x: i32, by: i32 = 2): i32 => x * by;
-const area = (w: i32, h: i32 = w): i32 => w * h;
+const scale = (x: f64, by: f64 = 2): f64 => x * by;
+const area = (w: f64, h: f64 = w): f64 => w * h;
 
 export const main = (): i32 => {
   console.log(`${scale(3)} ${scale(3, 5)}`);   // 6 15
@@ -74,12 +71,15 @@ export const main = (): i32 => {
 The last parameter may instead be a **rest parameter**, an array that gathers
 every remaining argument. A call with none passes an empty array:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
+// The sum of amounts from 0 to 1000000, or -1 on one outside that range.
 const total = (...xs: i32[]): i32 => {
   let sum = 0;
   for (const x of xs) {
+    if (x < 0 || x > 1000000 || sum > 1000000000) {
+      return -1;
+    }
     sum += x;
   }
   return sum;
@@ -187,15 +187,15 @@ A program starts at `export const main` in the file you compile. It takes no
 parameters and returns either `void` (exit status 0) or an `i32`, which is
 the process's exit status:
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 export const main = (): i32 => {
-  if (process.argv.length < 2) {
+  const args = process.argv;
+  if (args.length < 2) {
     console.error("usage: greet <name>");
     return 2;
   }
-  console.log(`hello, ${process.argv[1]}`);
+  console.log(`hello, ${args[1]}`);
   return 0;
 };
 ```
@@ -222,13 +222,12 @@ holds a [function reference](function-references.md#as-a-function-argument).
 A field or element is refused (`NL2759`): read it into a `const` first, as in
 `const op = ops[0]`, and pass the `const`:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const countWhere = (xs: i32[], keep: (x: i32) => boolean): i32 => {
   let n = 0;
   for (const x of xs) {
-    if (keep(x)) {
+    if (keep(x) && n < xs.length) {   // never more than xs.length, so `n++` fits
       n++;
     }
   }
