@@ -94,21 +94,41 @@ stages:
       - id: s7-optout
         content: Drop http-app's header and smoke args, guide mentions and its tests/run.js ALLOW_PANICS build; http-get-json's header lists what S7b clears
         status: pending
-  - id: s7b-tls-dns
-    title: examples-strict S7b — http-get-json's TLS and DNS path
-    goal: http-get-json builds strict with -o and --link; the crypto/{aes,hkdf,sha512,pki-roots}.ts, base64.ts, net/{dns,dns-config,dns-resolver,dns-message,http1-client-codec}.ts and net/tls/schedule.ts sites it reaches are removed or proved.
+  - id: s7e-entropy
+    title: examples-strict S7e — a crypto entropy builtin that answers instead of exiting
+    goal: A new builtin twin of crypto.getRandomValues (named after the repo's existing answering-twin convention, e.g. crypto.tryGetRandomValues(bytes) returning boolean) fills the bytes or reports that the system could not supply entropy, never exits; src/panics.ts does not count it as an io-exit site, so strict code can call it and return a Result. Added 2026-11-28 (owner) - getRandomValues exits with no twin, which blocked http-get-json and relay.
+    verification: node tests/run.js builtins && node tests/run.js capabilities && node tests/run.js link && WASI_SYSROOT=/usr node tests/run.js wasi && node tests/run.js performance && node tests/run.js c-symbols && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/self/goldens.js && NISH=build/nish bash docs/cookbook/regen.sh --check && node tests/nish-cmp.js
+    todos:
+      - id: s7e-builtin
+        content: The builtin end to end - checker, capabilities, panics (not PANIC_IO_EXIT), native/wasi/wasm32/emit-ts lowering, runtime/nish.d.ts declaration with doc comment; full construct checklist (golden .ll, llvm-as, native round trip including the failure arm, a tests/link negative, LANGUAGE.md rule, cookbook entry, guide page); ioExitAdvice names the twin
+        status: pending
+      - id: s7e-record
+        content: Security record row (docs/security/runtime.md or the record that scopes the entropy source) with the failing check for each property; PR body lists every std call of crypto.getRandomValues and which example reaches it. No std caller changes - the owning stages convert them
+        status: pending
+  - id: s7b-crypto-tls
+    title: examples-strict S7b — http-get-json's crypto and TLS sites
+    goal: The aes, hkdf, sha512, sha256, hmac, pki-roots, base64, buffer-pool, tls/{schedule,record,record-server}, http1-client-codec and fetch.ts sites http-get-json reaches (the list in #2460's body) are removed or proved, except fetch.ts's getRandomValues calls, which S7c converts.
     after: [s7-http]
     verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js net && node tests/run.js crypto && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/self/goldens.js && node tests/nish-cmp.js
     todos:
       - id: s7b-fix
-        content: Clear the sites S7's PR body lists; secret intermediates stay Secret and wiped; rerun vector check and mutate on any spec'd module touched; update the docs/security records whose counts change
+        content: Clear the sites; secret intermediates stay Secret and wiped; rerun vector check and mutate on any spec'd module touched; update the docs/security records whose counts change
         status: pending
-      - id: s7b-optout
+  - id: s7c-dns-entropy
+    title: examples-strict S7c — DNS, fetch's entropy, and http-get-json builds strict
+    goal: http-get-json builds strict with -o and --link. The dns, dns-config, dns-resolver and dns-message sites are removed or proved, and fetch.ts's and dns.ts's getRandomValues calls move to S7e's builtin with a Result the fetch reports.
+    after: [s7e-entropy, s7b-crypto-tls]
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js net && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/self/goldens.js && node tests/nish-cmp.js
+    todos:
+      - id: s7c-fix
+        content: Clear the DNS sites and convert the entropy calls; every new Result arm reached by a test; records whose counts change
+        status: pending
+      - id: s7c-optout
         content: Drop http-get-json's header and smoke args, guide mentions and its tests/run.js ALLOW_PANICS build
         status: pending
   - id: s8b-relay-handoff
     title: examples-strict S8b — the relay sites S8 left
-    goal: The http3-server.ts:906 and hpack.ts:410 sites relay reaches are removed or proved, with their callers.
+    goal: The http3-server.ts:906 and hpack.ts:410 sites relay reaches are removed or proved, with their callers; the entropy calls relay reaches (http3-server.ts:906/1230, webtransport.ts:429, quic) move to S7e's builtin once it merges.
     after: [s8-relay-std, s7-http]
     verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js net && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/self/goldens.js && node tests/nish-cmp.js
     todos:
@@ -135,7 +155,7 @@ stages:
   - id: s10-guard
     title: examples-strict S10 — refuse a new opt-out under examples/
     goal: tests/run.js fails when any file under examples/ (smoke line, build script, README) names --allow-panics, except an allowlist that only shrinks (merge-patch until WP80 S7 lands); the stale opt-out check folds into it.
-    after: [s3-own-small, s4-term, s4b-term-pixels, s5-wasm-arena, s6-break-web, s7-http, s7b-tls-dns, s9-relay]
+    after: [s3-own-small, s4-term, s4b-term-pixels, s5-wasm-arena, s6-break-web, s7-http, s7b-crypto-tls, s7c-dns-entropy, s9-relay]
     verification: node tests/run.js performance && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
     todos:
       - id: s10-guard
@@ -196,14 +216,16 @@ and reviewed, then left green for the owner to merge.
 - **S5** `examples/wasm-arena/**`, `tests/interop/chrome-arena.py`, `tests/runtime-budgets.js` (arena rows), any `std/math.ts` site that surfaces
 - **S6** `examples/break-web/**`, `src/break-*.ts`, `std/raster.ts`, `std/random.ts`, `docs/site/break/**`, `tests/break-web/**`
 - **S7** `std/net/fetch.ts`, `std/net/url.ts`, `std/bytes.ts`, `std/net/http-compress.ts`, `examples/http-get-json.ts`, `examples/http-app/**`, `tests/link/net_http_app/**`, `docs/security/{handler,router,static}.md`, `docs/guide/using-nish/api-server.md`; widened at run time: `std/crypto/{sha256,hmac}.ts`, `std/net/buffer-pool.ts`, `std/compress/{gzip,deflate,zlib,checksum}.ts`, their records, and caller lines a changed signature forces
-- **S7b** `std/crypto/{aes,hkdf,sha512,pki-roots}.ts`, `std/base64.ts`, `std/net/{dns,dns-config,dns-resolver,dns-message,http1-client-codec}.ts`, `std/net/tls/schedule.ts`, `examples/http-get-json.ts`, their records, specs and `tests/link` cases
+- **S7e** the builtin's `src/` files (builtins, capabilities, panics, codegen and emit-ts lowering), `runtime/nish.d.ts` (its declaration), the runtime C that draws entropy, new `tests/cases/*entropy*` and `tests/link/*entropy*`, `docs/LANGUAGE.md` and guide lines for it, its security-record row; no std callers
+- **S7b** `std/crypto/{aes,hkdf,sha512,sha256,hmac,pki-roots}.ts`, `std/base64.ts`, `std/net/buffer-pool.ts`, `std/net/tls/{schedule,record,record-server}.ts`, `std/net/http1-client-codec.ts`, `std/net/fetch.ts` (not its getRandomValues calls), their records, specs and `tests/link` cases
+- **S7c** `std/net/{dns,dns-config,dns-resolver,dns-message}.ts`, fetch.ts's getRandomValues calls and the Result they force, `examples/http-get-json.ts`, `docs/security/dns.md`
 - **S8b** `std/net/http3-server.ts`, `std/net/hpack.ts` and the caller lines their fixes force
 - **S8** `std/net/http3-*.ts`, `std/net/qpack.ts`, `std/net/websocket.ts`, `std/net/webtransport.ts`, `std/crypto/{hmac,sha256,base64url}.ts`, `docs/security/http3.md` and the crypto/websocket records whose counts change, `contracts/**` and `test/spec/**` for those modules; widened in review (owned by no other stage): `std/net/http3.ts`, `std/net/quic.ts`, `std/crypto/p256.ts`, `std/net/buffer-pool.ts`, `std/net/http-server.ts`, their `tests/link` cases, security records and specs. Left to S2's caller-proof rule (S9 rechecks): the constructor config checks at `http3-server.ts` ~831 and `webtransport.ts` ~757; `websocket.ts` ~287 goes to S9
 - **S9** `examples/relay/**`, `tests/link/net_relay*/**`, `docs/guide/using-nish/networking.md`
 - **S10** the stale opt-out block of `tests/run.js` (~6577), `AGENTS.md`
 
 **Waves.** First: S1, S3, S4, S8 (disjoint). Then S2 (after S1), S5 (after
-S1), S4b (after S4), S6 (after S1, S4b), S9 (after S8), S7 (after S2), S7b and S8b (after S7), S10 last. No stage runs on
+S1), S4b (after S4), S6 (after S1, S4b), S9 (after S8), S7 (after S2), S7b and S8b (after S7), S7e (2026-11-28, no deps), S7c (after S7e, S7b), S10 last. S8b starts before S7e merges and takes its entropy sites after. No stage runs on
 Sonnet: each one designs a proof, a Result or a prover rule.
 
 ## Rules (from WP80, binding on every stage)
@@ -221,6 +243,7 @@ Sonnet: each one designs a proof, a Result or a prover rule.
 - add and multi: return a `Result` (the export ABI carries it to C, N-API and wasm); not narrowed inputs, not wrapping, not kept opted out.
 - S4 split (2026-11-27): S4 keeps std/term.ts:729; S4b takes term-probe and the term-pixels/term-io/term-rate/base64 sites. Framebuffer: private fields plus a Result factory, resize returns a Result.
 - Deliberate traps (arrays' `squares(-1)`, relay's four): a `Result` reported on stderr, same exit code, tests re-pin the message.
+- (2026-11-28) Deadline extended 12h to 2026-11-29T02:40Z. `crypto.getRandomValues` gets a new answering builtin twin (S7e) instead of being allowed like OOM or leaving the TLS examples opted out; S7b split into S7b (crypto/TLS) and S7c (DNS + entropy callers).
 
 ## Acceptance criteria
 
