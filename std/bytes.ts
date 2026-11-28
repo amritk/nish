@@ -22,20 +22,15 @@
  * bytes are its IEEE 754 bits (`f64ToBits`). There is no `f32`: the language
  * has no bit cast for one.
  *
- * **Each access is an ordinary index**, so an offset whose bytes do not all lie
- * in the array panics `index`, naming the first byte that does not.
- *
- *  A guard in the caller does not yet remove these checks: in a loop guarded by
- *  `off + 3 < b.length`, the checker proves an index it can see but not one
- *  inside a call, and after `getU32LE` inlines, LLVM keeps the checks on `off +
- *  1` to `off + 3`, because the guard compares the length truncated to `i32` and
- *  the checks compare it unsigned at 64 bits. A loop that needs them gone
- *  indexes the bytes itself.
- *
- *  `getU64BE`, and with it `getI64BE` and `getF64BE`, is the exception: it
- *  checks the whole range once and reads the eight bytes unchecked, which lowers
- *  to one load and a byte swap. An offset outside the range still goes byte by
- *  byte, so it panics as the others do.
+ * **Each function checks its whole window once, first, through `bytesWindow`**,
+ * so an offset whose bytes do not all lie in the array panics before any byte
+ * is read or written, naming the function, the offset and the array's length.
+ * The check is a window contract (docs/LANGUAGE.md, "Panic sites", `window`):
+ * it is recorded at each call, so a caller whose own test holds the window,
+ * such as `off >= 0 && off + 4 <= b.length` before a `getU32LE`, proves it
+ * there, and a `--deny-panics` program that tests its offsets needs no
+ * opt-out. Inside, every byte the window covers is proven, so the eight-byte
+ * reads lower to one load (and, big-endian, a byte swap).
  *
  * **The in-range answers are byte for byte those of the copies `std/` keeps for
  * itself**: `sha256LoadWord` (`std/crypto/sha256.ts`) for `getU32BE`,
@@ -82,97 +77,123 @@
  */
 
 /**
+ * The window guard every fixed-width read and write calls first: it returns
+ * exactly when `b[off]` to `b[off + len - 1]` all lie in `b`, and panics,
+ * naming `what`, otherwise. Its shape is the `window` contract's
+ * (docs/LANGUAGE.md, "Panic sites"), so each function that calls it first
+ * forwards the check to its own callers.
+ */
+const bytesWindow = (what: string, b: readonly u8[], off: i32, len: i32): void => {
+  const size: i32 = toI32(b.length)
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    panic(`${what}: the ${len} bytes at ${off} do not all lie in an array of ${size}`)
+  }
+}
+
+/**
  * The `u16` whose low byte is `b[off]` and high byte `b[off + 1]`.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 1]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 1]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The number read.
  */
-export const getU16LE = (b: u8[], off: i32): u16 => toU16(b[off]) | (toU16(b[off + 1]) << 8)
+export const getU16LE = (b: u8[], off: i32): u16 => {
+  bytesWindow("getU16LE", b, off, 2)
+  return toU16(b[off]) | (toU16(b[off + 1]) << 8)
+}
 
 /**
  * The `u16` whose high byte is `b[off]` and low byte `b[off + 1]`.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 1]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 1]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The number read.
  */
-export const getU16BE = (b: u8[], off: i32): u16 => (toU16(b[off]) << 8) | toU16(b[off + 1])
+export const getU16BE = (b: u8[], off: i32): u16 => {
+  bytesWindow("getU16BE", b, off, 2)
+  return (toU16(b[off]) << 8) | toU16(b[off + 1])
+}
 
 /**
  * The `u32` whose bytes, least significant first, are `b[off]` to `b[off + 3]`.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 3]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The number read.
  */
-export const getU32LE = (b: u8[], off: i32): u32 =>
-  (toU32(b[off]) | (toU32(b[off + 1]) << 8) | (toU32(b[off + 2]) << 16)) +
-  toU32(b[off + 3]) * toU32(0x1000000)
+export const getU32LE = (b: u8[], off: i32): u32 => {
+  bytesWindow("getU32LE", b, off, 4)
+  return (
+    (toU32(b[off]) | (toU32(b[off + 1]) << 8) | (toU32(b[off + 2]) << 16)) +
+    toU32(b[off + 3]) * toU32(0x1000000)
+  )
+}
 
 /**
  * The `u32` whose bytes, most significant first, are `b[off]` to `b[off + 3]`.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 3]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The number read.
  */
-export const getU32BE = (b: u8[], off: i32): u32 =>
-  toU32(b[off]) * toU32(0x1000000) +
-  ((toU32(b[off + 1]) << 16) | (toU32(b[off + 2]) << 8) | toU32(b[off + 3]))
+export const getU32BE = (b: u8[], off: i32): u32 => {
+  bytesWindow("getU32BE", b, off, 4)
+  return (
+    toU32(b[off]) * toU32(0x1000000) +
+    ((toU32(b[off + 1]) << 16) | (toU32(b[off + 2]) << 8) | toU32(b[off + 3]))
+  )
+}
 
 /**
  * The `u64` whose bytes, least significant first, are `b[off]` to `b[off + 7]`.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The number read.
  */
 export const getU64LE = (b: u8[], off: i32): u64 => {
-  let v = toU64(0)
-  for (let i: i32 = 0; i < 8; i++) {
-    v = v | (toU64(b[off + i]) << toU64(i * 8))
-  }
-  return v
-}
-
-/** `getU64BE` a byte at a time, each index checked: the path for an offset whose eight bytes are not all in the array. */
-const getU64BEByByte = (b: u8[], off: i32): u64 => {
-  let v = toU64(0)
-  for (let i: i32 = 0; i < 8; i++) {
-    v = (v << toU64(8)) | toU64(b[off + i])
-  }
-  return v
+  bytesWindow("getU64LE", b, off, 8)
+  return (
+    toU64(b[off]) |
+    (toU64(b[off + 1]) << toU64(8)) |
+    ((toU64(b[off + 2]) << toU64(16)) | (toU64(b[off + 3]) << toU64(24))) |
+    ((toU64(b[off + 4]) << toU64(32)) |
+      (toU64(b[off + 5]) << toU64(40)) |
+      ((toU64(b[off + 6]) << toU64(48)) | (toU64(b[off + 7]) << toU64(56))))
+  )
 }
 
 /**
  * The `u64` whose bytes, most significant first, are `b[off]` to `b[off + 7]`.
- * The fast path's ors are grouped in pairs, which LLVM folds into one load and
- * a `bswap`; a flat chain of eight `or`s stayed byte by byte. The byte loop is
- * its own function so its last load is not merged with the fast path's.
+ * The ors are grouped in pairs, which LLVM folds into one load and a `bswap`;
+ * a flat chain of eight `or`s stayed byte by byte.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The number read.
  */
 export const getU64BE = (b: u8[], off: i32): u64 => {
-  if (off >= 0 && off < 2147483640 && off + 8 <= toI32(b.length)) {
-    return (
-      (toU64(b[off]) << toU64(56)) |
-      (toU64(b[off + 1]) << toU64(48)) |
-      ((toU64(b[off + 2]) << toU64(40)) | (toU64(b[off + 3]) << toU64(32))) |
-      ((toU64(b[off + 4]) << toU64(24)) |
-        (toU64(b[off + 5]) << toU64(16)) |
-        ((toU64(b[off + 6]) << toU64(8)) | toU64(b[off + 7])))
-    )
-  }
-  return getU64BEByByte(b, off)
+  bytesWindow("getU64BE", b, off, 8)
+  return (
+    (toU64(b[off]) << toU64(56)) |
+    (toU64(b[off + 1]) << toU64(48)) |
+    ((toU64(b[off + 2]) << toU64(40)) | (toU64(b[off + 3]) << toU64(32))) |
+    ((toU64(b[off + 4]) << toU64(24)) |
+      (toU64(b[off + 5]) << toU64(16)) |
+      ((toU64(b[off + 6]) << toU64(8)) | toU64(b[off + 7])))
+  )
 }
 
 /**
@@ -180,70 +201,96 @@ export const getU64BE = (b: u8[], off: i32): u64 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 3]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The number read, from -2^31 to 2^31 - 1.
  */
-export const getI32LE = (b: u8[], off: i32): i32 => toI32(getU32LE(b, off))
+export const getI32LE = (b: u8[], off: i32): i32 => {
+  bytesWindow("getI32LE", b, off, 4)
+  return toI32(getU32LE(b, off))
+}
 
 /**
  * `getU32BE`'s bits as a two's-complement `i32`.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 3]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The number read, from -2^31 to 2^31 - 1.
  */
-export const getI32BE = (b: u8[], off: i32): i32 => toI32(getU32BE(b, off))
+export const getI32BE = (b: u8[], off: i32): i32 => {
+  bytesWindow("getI32BE", b, off, 4)
+  return toI32(getU32BE(b, off))
+}
 
 /**
  * `getU64LE`'s bits as a two's-complement `i64`.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The number read, from -2^63 to 2^63 - 1.
  */
-export const getI64LE = (b: u8[], off: i32): i64 => toI64(getU64LE(b, off))
+export const getI64LE = (b: u8[], off: i32): i64 => {
+  bytesWindow("getI64LE", b, off, 8)
+  return toI64(getU64LE(b, off))
+}
 
 /**
  * `getU64BE`'s bits as a two's-complement `i64`.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The number read, from -2^63 to 2^63 - 1.
  */
-export const getI64BE = (b: u8[], off: i32): i64 => toI64(getU64BE(b, off))
+export const getI64BE = (b: u8[], off: i32): i64 => {
+  bytesWindow("getI64BE", b, off, 8)
+  return toI64(getU64BE(b, off))
+}
 
 /**
  * The `f64` whose IEEE 754 bits are `getU64LE`'s.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The double whose bits the eight bytes are.
  */
-export const getF64LE = (b: u8[], off: i32): f64 => bitsToF64(toI64(getU64LE(b, off)))
+export const getF64LE = (b: u8[], off: i32): f64 => {
+  bytesWindow("getF64LE", b, off, 8)
+  return bitsToF64(toI64(getU64LE(b, off)))
+}
 
 /**
  * The `f64` whose IEEE 754 bits are `getU64BE`'s.
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @returns The double whose bits the eight bytes are.
  */
-export const getF64BE = (b: u8[], off: i32): f64 => bitsToF64(toI64(getU64BE(b, off)))
+export const getF64BE = (b: u8[], off: i32): f64 => {
+  bytesWindow("getF64BE", b, off, 8)
+  return bitsToF64(toI64(getU64BE(b, off)))
+}
 
 /**
  * Writes `v` into `b[off]` and `b[off + 1]`, low byte first.
  *
  * @param b The bytes written into; only the two at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 1]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 1]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU16LE = (b: u8[], off: i32, v: u16): void => {
+  bytesWindow("setU16LE", b, off, 2)
   b[off] = toU8(v & 255)
   b[off + 1] = toU8((v >> 8) & 255)
 }
@@ -253,10 +300,12 @@ export const setU16LE = (b: u8[], off: i32, v: u16): void => {
  *
  * @param b The bytes written into; only the two at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 1]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 1]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU16BE = (b: u8[], off: i32, v: u16): void => {
+  bytesWindow("setU16BE", b, off, 2)
   b[off] = toU8((v >> 8) & 255)
   b[off + 1] = toU8(v & 255)
 }
@@ -266,10 +315,12 @@ export const setU16BE = (b: u8[], off: i32, v: u16): void => {
  *
  * @param b The bytes written into; only the four at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 3]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU32LE = (b: u8[], off: i32, v: u32): void => {
+  bytesWindow("setU32LE", b, off, 4)
   b[off] = toU8(v & 255)
   b[off + 1] = toU8((v >> 8) & 255)
   b[off + 2] = toU8((v >> 16) & 255)
@@ -281,10 +332,12 @@ export const setU32LE = (b: u8[], off: i32, v: u32): void => {
  *
  * @param b The bytes written into; only the four at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 3]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU32BE = (b: u8[], off: i32, v: u32): void => {
+  bytesWindow("setU32BE", b, off, 4)
   b[off] = toU8((v >> 24) & 255)
   b[off + 1] = toU8((v >> 16) & 255)
   b[off + 2] = toU8((v >> 8) & 255)
@@ -296,13 +349,20 @@ export const setU32BE = (b: u8[], off: i32, v: u32): void => {
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU64LE = (b: u8[], off: i32, v: u64): void => {
-  for (let i: i32 = 0; i < 8; i++) {
-    b[off + i] = toU8((v >> toU64(i * 8)) & toU64(255))
-  }
+  bytesWindow("setU64LE", b, off, 8)
+  b[off] = toU8(v & toU64(255))
+  b[off + 1] = toU8((v >> toU64(8)) & toU64(255))
+  b[off + 2] = toU8((v >> toU64(16)) & toU64(255))
+  b[off + 3] = toU8((v >> toU64(24)) & toU64(255))
+  b[off + 4] = toU8((v >> toU64(32)) & toU64(255))
+  b[off + 5] = toU8((v >> toU64(40)) & toU64(255))
+  b[off + 6] = toU8((v >> toU64(48)) & toU64(255))
+  b[off + 7] = toU8((v >> toU64(56)) & toU64(255))
 }
 
 /**
@@ -310,13 +370,20 @@ export const setU64LE = (b: u8[], off: i32, v: u64): void => {
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU64BE = (b: u8[], off: i32, v: u64): void => {
-  for (let i: i32 = 0; i < 8; i++) {
-    b[off + i] = toU8((v >> toU64((7 - i) * 8)) & toU64(255))
-  }
+  bytesWindow("setU64BE", b, off, 8)
+  b[off] = toU8((v >> toU64(56)) & toU64(255))
+  b[off + 1] = toU8((v >> toU64(48)) & toU64(255))
+  b[off + 2] = toU8((v >> toU64(40)) & toU64(255))
+  b[off + 3] = toU8((v >> toU64(32)) & toU64(255))
+  b[off + 4] = toU8((v >> toU64(24)) & toU64(255))
+  b[off + 5] = toU8((v >> toU64(16)) & toU64(255))
+  b[off + 6] = toU8((v >> toU64(8)) & toU64(255))
+  b[off + 7] = toU8(v & toU64(255))
 }
 
 /**
@@ -324,64 +391,128 @@ export const setU64BE = (b: u8[], off: i32, v: u64): void => {
  *
  * @param b The bytes written into; only the four at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 3]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The number to store; a negative one is stored as its two's
  *   complement.
  */
-export const setI32LE = (b: u8[], off: i32, v: i32): void => setU32LE(b, off, toU32(v))
+export const setI32LE = (b: u8[], off: i32, v: i32): void => {
+  bytesWindow("setI32LE", b, off, 4)
+  const u: u32 = toU32(v)
+  b[off] = toU8(u & 255)
+  b[off + 1] = toU8((u >> 8) & 255)
+  b[off + 2] = toU8((u >> 16) & 255)
+  b[off + 3] = toU8((u >> 24) & 255)
+}
 
 /**
  * Writes `v`'s two's-complement bits as `setU32BE` does.
  *
  * @param b The bytes written into; only the four at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 3]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 3]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The number to store; a negative one is stored as its two's
  *   complement.
  */
-export const setI32BE = (b: u8[], off: i32, v: i32): void => setU32BE(b, off, toU32(v))
+export const setI32BE = (b: u8[], off: i32, v: i32): void => {
+  bytesWindow("setI32BE", b, off, 4)
+  const u: u32 = toU32(v)
+  b[off] = toU8((u >> 24) & 255)
+  b[off + 1] = toU8((u >> 16) & 255)
+  b[off + 2] = toU8((u >> 8) & 255)
+  b[off + 3] = toU8(u & 255)
+}
 
 /**
  * Writes `v`'s two's-complement bits as `setU64LE` does.
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The number to store; a negative one is stored as its two's
  *   complement.
  */
-export const setI64LE = (b: u8[], off: i32, v: i64): void => setU64LE(b, off, toU64(v))
+export const setI64LE = (b: u8[], off: i32, v: i64): void => {
+  bytesWindow("setI64LE", b, off, 8)
+  const u: u64 = toU64(v)
+  b[off] = toU8(u & toU64(255))
+  b[off + 1] = toU8((u >> toU64(8)) & toU64(255))
+  b[off + 2] = toU8((u >> toU64(16)) & toU64(255))
+  b[off + 3] = toU8((u >> toU64(24)) & toU64(255))
+  b[off + 4] = toU8((u >> toU64(32)) & toU64(255))
+  b[off + 5] = toU8((u >> toU64(40)) & toU64(255))
+  b[off + 6] = toU8((u >> toU64(48)) & toU64(255))
+  b[off + 7] = toU8((u >> toU64(56)) & toU64(255))
+}
 
 /**
  * Writes `v`'s two's-complement bits as `setU64BE` does.
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The number to store; a negative one is stored as its two's
  *   complement.
  */
-export const setI64BE = (b: u8[], off: i32, v: i64): void => setU64BE(b, off, toU64(v))
+export const setI64BE = (b: u8[], off: i32, v: i64): void => {
+  bytesWindow("setI64BE", b, off, 8)
+  const u: u64 = toU64(v)
+  b[off] = toU8((u >> toU64(56)) & toU64(255))
+  b[off + 1] = toU8((u >> toU64(48)) & toU64(255))
+  b[off + 2] = toU8((u >> toU64(40)) & toU64(255))
+  b[off + 3] = toU8((u >> toU64(32)) & toU64(255))
+  b[off + 4] = toU8((u >> toU64(24)) & toU64(255))
+  b[off + 5] = toU8((u >> toU64(16)) & toU64(255))
+  b[off + 6] = toU8((u >> toU64(8)) & toU64(255))
+  b[off + 7] = toU8(u & toU64(255))
+}
 
 /**
  * Writes `v`'s IEEE 754 bits as `setU64LE` does.
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The double to store, as its IEEE 754 bits.
  */
-export const setF64LE = (b: u8[], off: i32, v: f64): void => setU64LE(b, off, toU64(f64ToBits(v)))
+export const setF64LE = (b: u8[], off: i32, v: f64): void => {
+  bytesWindow("setF64LE", b, off, 8)
+  const u: u64 = toU64(f64ToBits(v))
+  b[off] = toU8(u & toU64(255))
+  b[off + 1] = toU8((u >> toU64(8)) & toU64(255))
+  b[off + 2] = toU8((u >> toU64(16)) & toU64(255))
+  b[off + 3] = toU8((u >> toU64(24)) & toU64(255))
+  b[off + 4] = toU8((u >> toU64(32)) & toU64(255))
+  b[off + 5] = toU8((u >> toU64(40)) & toU64(255))
+  b[off + 6] = toU8((u >> toU64(48)) & toU64(255))
+  b[off + 7] = toU8((u >> toU64(56)) & toU64(255))
+}
 
 /**
  * Writes `v`'s IEEE 754 bits as `setU64BE` does.
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and a byte of those outside `b` panics `index`.
+ *   `b[off + 7]`, and an offset whose
+ *   bytes are not all in `b` panics.
  * @param v The double to store, as its IEEE 754 bits.
  */
-export const setF64BE = (b: u8[], off: i32, v: f64): void => setU64BE(b, off, toU64(f64ToBits(v)))
+export const setF64BE = (b: u8[], off: i32, v: f64): void => {
+  bytesWindow("setF64BE", b, off, 8)
+  const u: u64 = toU64(f64ToBits(v))
+  b[off] = toU8((u >> toU64(56)) & toU64(255))
+  b[off + 1] = toU8((u >> toU64(48)) & toU64(255))
+  b[off + 2] = toU8((u >> toU64(40)) & toU64(255))
+  b[off + 3] = toU8((u >> toU64(32)) & toU64(255))
+  b[off + 4] = toU8((u >> toU64(24)) & toU64(255))
+  b[off + 5] = toU8((u >> toU64(16)) & toU64(255))
+  b[off + 6] = toU8((u >> toU64(8)) & toU64(255))
+  b[off + 7] = toU8(u & toU64(255))
+}
 
 // ---- Byte-class runs and the byte copy (WP38 S6a) ----------------------------------------
 
@@ -707,7 +838,7 @@ const copyBytesWalk = (dst: u8[], at: i32, src: readonly u8[], from: i32, count:
 
 /**
  * `getU32LE` that answers an offset whose four bytes do not all lie in `b`
- * as `Err`, where `getU32LE` panics `index`: the form a strict module reads a
+ * as `Err`, where `getU32LE` panics: the form a strict module reads a
  * record it did not size itself with.
  *
  * @param b The bytes the number is read from; they are not changed.
