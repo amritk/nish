@@ -24,7 +24,7 @@ code around the calls builds under the default: it makes the router with
 `routerChecked`, which gives `Err` for a limit outside its range where
 `new Router` panics.
 
-<!-- allow-panics: calls `std/net/http-server.ts` and `std/net/static.ts` code that keeps panic sites, and reaches those of `std/net/http3-server.ts`, `std/net/router.ts` and `std/bytes.ts`, that no proof removes yet -->
+<!-- allow-panics: calls `std/net/http-server.ts` code that keeps panic sites, and `std/net/static.ts` code that reaches them, and reaches those of `std/net/http3-server.ts` and `std/net/router.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HttpServer, HttpServerLimits } from "nish/net/http-server";

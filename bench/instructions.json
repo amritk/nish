@@ -1,5 +1,5 @@
 {
-  "about": "Instructions each benchmark executes, whole process, under `valgrind --tool=cachegrind --cache-sim=no`, built with `--profile speed` and checks on. Sizes (`n` for bench/<name>.ts, `inner` for an AWFY port, `size` and `iterations` for a crypto kernel) are edited by hand; counts are written only by `node bench/run.mjs --instructions --update`, and a pull request that raises one says why (bench/README.md).",
+  "about": "Instructions each benchmark executes, whole process, under `valgrind --tool=cachegrind --cache-sim=no`, built with `--profile speed` and checks on. Sizes (`n` for bench/<name>.ts, `inner` for an AWFY port, `size` and `iterations` for a crypto kernel) are edited by hand; counts are written only by `node bench/run.mjs --instructions --update`, which raises one only when `--raise <row> --why` names it and records it in `raises` ({row, from, to, why, pr}); scripts/instruction-raises.mjs fails a raise with no entry (bench/README.md, Raising a baseline).",
   "tolerance": 0.001,
   "platform": "linux-x64",
   "valgrind": "valgrind-3.22.0",
@@ -66,5 +66,6 @@
     "std-yaml-parse": { "n": 100, "instructions": 148396698, "commit": "ad29ae37", "valgrind": "valgrind-3.26.0" },
     "std-yaml-json": { "n": 150, "instructions": 173405840, "commit": "ad29ae37", "valgrind": "valgrind-3.26.0" },
     "std-json-equal": { "n": 60, "instructions": 169511889, "commit": "e4779207", "valgrind": "valgrind-3.26.0" }
-  }
+  },
+  "raises": []
 }

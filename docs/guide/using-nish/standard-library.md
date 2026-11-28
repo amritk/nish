@@ -2771,27 +2771,37 @@ significant.
 A signed width is the same bytes read as two's complement, and an `f64` is
 its IEEE 754 bits. There is no `f32`.
 
-<!-- allow-panics: calls `std/bytes.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { getU16LE, getU32BE, setU32LE } from "nish/bytes";
 
 export const main = (): i32 => {
   const b: u8[] = [0, 0, 1, 0, 0, 0, 0, 0];
   console.log(`${getU32BE(b, 0)}`); // 256
-  setU32LE(b, 4, toU32(513));
+  const word: u32 = toU32(513);
+  if (b.length < 8) {
+    return 1;
+  }
+  setU32LE(b, 4, word);
   console.log(`${b[4]} ${b[5]}`); // 1 2
+  if (b.length < 6) {
+    return 1;
+  }
   console.log(`${getU16LE(b, 4)}`); // 513
   return 0;
 };
 ```
 
-Every access is an ordinary index, checked inside the module, so a call
-builds only with `--allow-panics` for now. There, an offset whose bytes do
-not all lie in the array panics with `index out of range`, naming the first
-byte that is not there. A guard in your own loop, such as
-`off + 3 < b.length`, does not yet remove these checks, so a hot loop that
-needs them gone indexes the bytes itself.
+Each function first checks that all its bytes lie in the array, and an
+offset whose bytes do not panics there, naming the function and the width
+(`getU32LE: the 4 bytes at the offset do not all lie in the array`). The compiler carries that check to each call, so a call your own
+code has tested builds without `--allow-panics`: test the offset after the
+last call before it, as the `b.length` tests above do, or, for an offset in a
+variable, `if (off < 0 || off > toI32(b.length) - 4)` before a 4-byte read. A
+call whose offset nothing tests keeps its check, and its build needs
+`--allow-panics`. Compute the value to write into a local before the test,
+since any call between the test and the read makes the compiler forget the
+array's length.
 
 Natively every function answers for every value. Under Node the `u16` and
 `u32` functions are expected to answer the same, but the 64-bit ones, the
@@ -3895,7 +3905,7 @@ until it is not `DNS_RESOLVE_PENDING`. Each query goes out on a fresh socket
 with a random ID, and one `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32)
 datagrams, so a flood on the port cannot keep your loop inside the client.
 
-<!-- allow-panics: calls `std/net/dns-config.ts`, `std/net/dns-resolver.ts` and `std/net/dns.ts` code that keeps panic sites no proof removes yet; calls `std/net/dns.ts` code that reaches `std/bytes.ts` panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/dns-config.ts`, `std/net/dns-resolver.ts` and `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DnsClient } from "nish/net/dns";

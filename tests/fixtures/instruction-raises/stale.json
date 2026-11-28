@@ -1,0 +1,14 @@
+{
+  "about": "raised.json with an entry for rises whose counts are another raise's: the comparison still fails it.",
+  "tolerance": 0.001,
+  "programs": {
+    "kept": { "instructions": 100000000 },
+    "rises": { "instructions": 202000000 },
+    "falls": { "instructions": 290000000 },
+    "within": { "instructions": 400200000 },
+    "added": { "instructions": 600000000 }
+  },
+  "raises": [
+    { "row": "rises", "from": 190000000, "to": 200000000, "why": "an earlier raise of the same row", "pr": 1 }
+  ]
+}

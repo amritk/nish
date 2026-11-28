@@ -1,4 +1,4 @@
-// `nish/bytes` out of range: a negative offset panics `index` on its first byte.
+// `nish/bytes` out of range: a negative offset panics in the read's window guard.
 import { getU16BE } from "nish/bytes"
 
 export const main = (): i32 => {

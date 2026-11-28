@@ -1,5 +1,5 @@
 // `nish/bytes` out of range: a big-endian 64-bit read of an empty array
-// panics `index` on its first byte.
+// panics in its window guard.
 import { getU64BE } from "nish/bytes"
 
 export const main = (): i32 => {

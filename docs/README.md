@@ -138,7 +138,9 @@ who write programs in Nish. A page there follows these rules:
   checker reads no guard a reader would write there (a clause ending ` yet`),
   or the language has no guard for the site (a clause ending
   `which nothing proves away`); the docs run fails an opt-out whose own code
-  panics for any other reason, and one that no longer needs the flag. That
+  panics for any other reason, one that no longer needs the flag, and one
+  whose reason leaves out a `std/` file the build reports a panic site in.
+  That
   comment is hidden on the site, so a page whose example builds with
   `--allow-panics` for any reason but showing a panic tells the reader why,
   in one visible sentence before its first such example. Every

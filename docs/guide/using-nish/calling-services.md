@@ -25,7 +25,7 @@ give `Err` for limits they refuse, as [an API server](api-server.md) shows.
 An `Upstream` is a pool of kept-alive connections to one origin, registered on
 the handler's loop. Make it once at start-up, beside the handler:
 
-<!-- allow-panics: calls `std/net/handler.ts` and `std/net/upstream.ts` code that keeps panic sites, and reaches those of `std/net/http-compress.ts` and `std/bytes.ts`, that no proof removes yet -->
+<!-- allow-panics: calls `std/net/upstream.ts` code that keeps panic sites, and `std/net/handler.ts` code that reaches the one in `std/compress/gzip.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HandlerLimits, openHttpHandler } from "nish/net/handler";
