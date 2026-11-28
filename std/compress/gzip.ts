@@ -494,7 +494,8 @@ export class GzipDecompressor {
       if (wantCrc !== got) {
         return GZIP_ERR_CRC
       }
-      if (wantSize !== toI64(toU32(toI32(toI64(outPos) - toI64(op))))) {
+      // ISIZE is the length mod 2^32, and this member's length is under 2^31.
+      if (wantSize !== toI64(outPos) - toI64(op)) {
         return GZIP_ERR_SIZE
       }
       op = outPos
