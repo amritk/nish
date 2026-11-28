@@ -236,7 +236,7 @@ const aesTranspose = (q: u64[]): void => {
  * `p = 2k + (r >> 1)`, which is the four lines in the loop.
  */
 const aesPack = (q: u64[], buf: u8[]): void => {
-  if (toI32(q.length) < 8 || toI32(buf.length) < 64) {
+  if (q.length < 8 || toI32(buf.length) < 64) {
     return
   }
   for (let i: i32 = 0; i < 8; i++) {
@@ -255,7 +255,7 @@ const aesPack = (q: u64[], buf: u8[]): void => {
 
 /** The inverse of `aesPack`: the four blocks of the state into `buf[0 .. 64)`. Spends `q`. */
 const aesUnpack = (buf: u8[], q: u64[]): void => {
-  if (toI32(q.length) < 8 || toI32(buf.length) < 64) {
+  if (q.length < 8 || toI32(buf.length) < 64) {
     return
   }
   aesTranspose(q)
@@ -281,7 +281,7 @@ const aesUnpack = (buf: u8[], q: u64[]): void => {
 const aesSbox = (q: u64[]): void => {
   // Every state is `new Array<u64>(8)`, so this cannot happen; it lets the
   // compiler prove the literal indices below.
-  if (toI32(q.length) < 8) {
+  if (q.length < 8) {
     return
   }
   const x0: u64 = q[7]
@@ -443,7 +443,7 @@ const aesShiftPlane = (x: u64): u64 =>
 const aesShiftRows = (q: u64[]): void => {
   // Every state is `new Array<u64>(8)`, so this cannot happen; it lets the
   // compiler prove the literal indices below.
-  if (toI32(q.length) < 8) {
+  if (q.length < 8) {
     return
   }
   // The last plane first: its checked read proves the other seven.
@@ -476,7 +476,7 @@ const aesRowAfterNext = (x: u64): u64 =>
 const aesMixColumns = (q: u64[]): void => {
   // Every state is `new Array<u64>(8)`, so this cannot happen; it lets the
   // compiler prove the literal indices below.
-  if (toI32(q.length) < 8) {
+  if (q.length < 8) {
     return
   }
   // The last plane first: its checked read proves the other seven.
@@ -517,7 +517,7 @@ const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
   // Every state is `new Array<u64>(8)` and every `at` is a round of the
   // key's own schedule, so this cannot happen; it lets the compiler prove the
   // indices below.
-  if (toI32(q.length) < 8 || base > toI32(rk.length) - 8) {
+  if (q.length < 8 || base > toI32(rk.length) - 8) {
     return
   }
   // The first and last key words and the last plane first: their checked
@@ -581,7 +581,7 @@ const aesEncryptBatch = (rk: u64[], rounds: i32, buf: u8[], q: u64[]): void => {
  * coming out. No table, so the key schedule is as constant-time as a round.
  */
 const aesSubWord = (w: u32, q: u64[]): u32 => {
-  if (toI32(q.length) < 8) {
+  if (q.length < 8) {
     return 0
   }
   for (let b: i32 = 0; b < 8; b++) {
@@ -713,6 +713,20 @@ const aesScheduleInto = (key: u8[], rounds: i32, rk: u64[]): void => {
  */
 const aesLoad64 = (data: u8[], at: i32, end: i32): u64 => {
   const length: i32 = toI32(data.length)
+  // A whole block, which every block but a partial last one is: eight loads
+  // and no per-byte test.
+  if (at >= 0 && end >= 8 && at <= end - 8 && at <= length - 8) {
+    return (
+      (toU64(data[at]) << toU64(56)) |
+      (toU64(data[at + 1]) << toU64(48)) |
+      (toU64(data[at + 2]) << toU64(40)) |
+      (toU64(data[at + 3]) << toU64(32)) |
+      (toU64(data[at + 4]) << toU64(24)) |
+      (toU64(data[at + 5]) << toU64(16)) |
+      (toU64(data[at + 6]) << toU64(8)) |
+      toU64(data[at + 7])
+    )
+  }
   let v: u64 = 0
   for (let i: i32 = 0; i < 8; i++) {
     const from: i32 = at + i
@@ -982,7 +996,7 @@ export const ghashMultiply = (y: u64[], hHi: u64, hLo: u64): void => {
   const low32: u64 = (toU64(1) << toU64(32)) - toU64(1)
   const thirtyTwo: u64 = toU64(32)
   // Every caller's state is two words; a shorter one is left as it was.
-  if (toI32(y.length) < 2) {
+  if (y.length < 2) {
     return
   }
   const a0: u64 = y[1]
@@ -1049,7 +1063,7 @@ export const ghashMultiply = (y: u64[], hHi: u64, hLo: u64): void => {
  * compiler may replace that call with a runtime kernel.
  */
 const ghashBlocksInto = (y: u64[], hHi: u64, hLo: u64, _rk: u64[], data: u8[], length: i32): void => {
-  if (toI32(y.length) < 2 || length < 0) {
+  if (y.length < 2 || length < 0) {
     return
   }
   // Counted in blocks rather than stepped by 16, so no offset is ever formed
@@ -1075,7 +1089,7 @@ const ghashUpdate = (y: u64[], key: AesKey, data: u8[], length: i32): void => {
   const h: u64[] = key.h
   if (
     toI32(h.length) < 2 ||
-    toI32(y.length) < 2 ||
+    y.length < 2 ||
     length < 0 ||
     length > toI32(data.length) ||
     !aesKeyUsable(key)
