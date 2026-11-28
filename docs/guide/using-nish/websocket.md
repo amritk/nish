@@ -140,7 +140,7 @@ The client's side is six steps over a connection you opened:
 
 Over TLS, with `tlsConnect`:
 
-<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; calls `std/net/websocket.ts`, `std/net/tls-tcp.ts` and `std/net/http1-client-codec.ts` code that keeps panic sites, and reaches those of `std/crypto/base64url.ts`, `std/crypto/pki-roots.ts` and `std/crypto/sha256.ts`, that no proof removes yet -->
+<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; calls `std/net/websocket.ts`, `std/net/tls-tcp.ts` and `std/net/http1-client-codec.ts` code that keeps panic sites, and reaches those of `std/crypto/base64url.ts`, `std/crypto/pki-roots.ts`, `std/crypto/sha256.ts` and `std/crypto/sha512.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { netAddress } from "nish:net";

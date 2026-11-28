@@ -25,7 +25,7 @@ the collections code it uses keep panic sites no proof removes yet, and
 they will build under the default once the standard library is made
 panic-free.
 
-<!-- allow-panics: calls `std/crypto/pki-roots.ts` code that keeps panic sites, and `std/crypto/pki.ts` code that reaches those of `std/crypto/sha256.ts`, that no proof removes yet -->
+<!-- allow-panics: calls `std/crypto/pki-roots.ts` code that keeps panic sites, and `std/crypto/pki.ts` code that reaches those of `std/crypto/sha256.ts` and `std/crypto/sha512.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { PkiRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots";
@@ -210,7 +210,7 @@ refused with the `handshake_failure` alert, though TLS 1.3 requires every
 client to support it (RFC 8446 §9.1). The same configuration serves HTTP/1.1, HTTP/2
 and, with `signatureScheme` set on the `QuicServerConfig`, HTTP/3.
 
-<!-- allow-panics: calls `std/crypto/x509.ts` code that reaches `std/crypto/base64url.ts` panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/crypto/x509.ts` code that reaches `std/crypto/base64url.ts` and `std/crypto/rsa-sign.ts` panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Secret } from "nish:secret";
