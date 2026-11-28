@@ -249,8 +249,13 @@ export class QuicCidTable {
     entry.used = true
     // Sequence 0 travels in the long header's SCID, never in a frame.
     entry.announced = sequence === 0
-    // Below `QUIC_MAX_VARINT`, so one more cannot wrap.
-    this.nextLocal = toI64(toU64(sequence) + 1)
+    // Counted down from `QUIC_MAX_VARINT`: `sequence` is below it, so one
+    // more is a sum `src/bounds.ts` proves. The -1 at `QUIC_MAX_VARINT` is
+    // never reached: `addLocal` issues at most `QUIC_CONN_MAX_ISSUED_CIDS`
+    // IDs, far below it, so `retireLocal`'s `sequence >= nextLocal` keeps
+    // its meaning.
+    const left: i64 = QUIC_MAX_VARINT - sequence
+    this.nextLocal = left < 1 ? -1 : QUIC_MAX_VARINT - (left - 1)
     return sequence
   }
 
@@ -531,15 +536,16 @@ export class QuicCidTable {
   }
 
   /**
-   * The ring slot `k` places after `retireHead`, or 0 for an empty ring. Unsigned, because the head and
-   * `k` are each below 2^31, so the sum cannot wrap.
+   * The ring slot `k` places after `retireHead`, or 0 for an empty ring or a negative head or `k`.
+   * Summed in i64, where two i32 values cannot overflow.
    */
   private retireSlot(k: i32): i32 {
-    const size: u32 = toU32(this.retirePending.length)
-    if (size === 0) {
+    const size: i64 = toI64(this.retirePending.length)
+    const head: i32 = this.retireHead
+    if (size <= 0 || head < 0 || k < 0) {
       return 0
     }
-    return toI32((toU32(this.retireHead) + toU32(k)) % size)
+    return toI32((toI64(head) + toI64(k)) % size)
   }
 
   /**

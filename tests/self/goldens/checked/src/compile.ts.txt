@@ -1834,26 +1834,27 @@ function Terminal.present(this: Terminal): void -> @nish.Terminal.present [expor
   callee +7:15 kittyDelete -> @nish.kittyDelete
   callee +9:7 Screen.invalidate -> @nish.Screen.invalidate
   local +12:9 withPixels: boolean (let)
-  local +13:11 fb: Framebuffer (const)
-  callee +15:7 Terminal.fit -> @nish.Terminal.fit
-  local +16:11 src: Framebuffer (let)
-  callee +18:9 scaleFramebuffer -> @nish.scaleFramebuffer
-  callee +22:9 PixelBytes.reset -> @nish.PixelBytes.reset
-  callee +23:9 kittyFrame -> @nish.kittyFrame
-  callee +26:9 PixelBytes.reset -> @nish.PixelBytes.reset
-  callee +27:9 sixelFrame -> @nish.sixelFrame
-  callee +30:9 drawHalfBlocks -> @nish.drawHalfBlocks
-  callee +32:9 drawAscii -> @nish.drawAscii
-  callee +37:15 kittyDelete -> @nish.kittyDelete
-  callee +39:7 Screen.invalidate -> @nish.Screen.invalidate
-  callee +43:7 drawStatsOverlay -> @nish.drawStatsOverlay
-  callee +43:37 Terminal.stats -> @nish.Terminal.stats
-  local +45:11 bytes: i32 (const)
-  callee +45:24 Terminal.send -> @nish.Terminal.send
-  local +46:11 sentAtMs: f64 (const)
-  callee +47:5 Terminal.dropLost -> @nish.Terminal.dropLost
-  callee +50:5 RateController.frameSent -> @nish.RateController.frameSent
-  callee +52:5 Terminal.ackPush -> @nish.Terminal.ackPush
+  local +14:9 skipped: boolean (let)
+  local +15:11 fb: Framebuffer (const)
+  callee +17:7 Terminal.fit -> @nish.Terminal.fit
+  local +18:11 src: Framebuffer (let)
+  callee +20:9 scaleFramebuffer -> @nish.scaleFramebuffer
+  callee +24:9 PixelBytes.reset -> @nish.PixelBytes.reset
+  callee +25:9 kittyFrame -> @nish.kittyFrame
+  callee +29:9 PixelBytes.reset -> @nish.PixelBytes.reset
+  callee +30:9 sixelFrame -> @nish.sixelFrame
+  callee +34:9 drawHalfBlocks -> @nish.drawHalfBlocks
+  callee +36:9 drawAscii -> @nish.drawAscii
+  callee +41:15 kittyDelete -> @nish.kittyDelete
+  callee +43:7 Screen.invalidate -> @nish.Screen.invalidate
+  callee +49:7 drawStatsOverlay -> @nish.drawStatsOverlay
+  callee +49:37 Terminal.stats -> @nish.Terminal.stats
+  local +51:11 bytes: i32 (const)
+  callee +51:24 Terminal.send -> @nish.Terminal.send
+  local +52:11 sentAtMs: f64 (const)
+  callee +53:5 Terminal.dropLost -> @nish.Terminal.dropLost
+  callee +56:5 RateController.frameSent -> @nish.RateController.frameSent
+  callee +58:5 Terminal.ackPush -> @nish.Terminal.ackPush
 function termIoRefusal(): string -> @nish.termIoRefusal
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_is_terminal
@@ -1951,7 +1952,7 @@ function termIoWait(term: Terminal, step: FixedStep, nowMs: f64): i32 -> @nish.t
 function runTerminal<WallRun, wallUpdate, wallRender>(options: TerminalOptions, state: WallRun, update: void, render: void): Result<i32, string> -> @nish.runTerminal$$WallRun$fn.10.wallUpdate$fn.10.wallRender [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: +0:5
-  calls: nish.FixedStep.advance nish.FixedStep.alpha nish.FixedStep.constructor nish.Frame.constructor nish.RateController.mayDraw nish.RateController.tick nish.TermEvent.constructor nish.TermInput.constructor nish.Terminal.checkResize nish.Terminal.close nish.Terminal.present nish.Terminal.readEvents nish.Terminal.stats nish.openTerminal nish.termIoClear nish.termIoNowMs nish.termIoQuits nish.termIoWait nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_overflow wallRender$ wallUpdate$
+  calls: nish.FixedStep.advance nish.FixedStep.alpha nish.FixedStep.constructor nish.Frame.constructor nish.RateController.mayDraw nish.RateController.tick nish.TermEvent.constructor nish.TermInput.constructor nish.Terminal.checkResize nish.Terminal.close nish.Terminal.present nish.Terminal.readEvents nish.Terminal.stats nish.openTerminal nish.termIoClear nish.termIoNowMs nish.termIoQuits nish.termIoWait nish_alloc_struct nish_array_grow nish_monotonic_nanos wallRender$ wallUpdate$
   pointer options: size=64 writesThrough=true captured=true passedTo=nish.openTerminal#0
   pointer state: size=40 writesThrough=true captured=false passedTo=wallUpdate$#0 wallRender$#0
   stackSites=3 stackLocals=3
@@ -2669,10 +2670,10 @@ function RateController.unacked(this: RateController): i32 -> @nish.RateControll
   local +0:11 head: i32 (const)
   local +1:11 length: i32 (const)
 function RateController.mayDraw(this: RateController, nowMs: f64): boolean -> @nish.RateController.mayDraw [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: nowMs
-  calls: nish.FixedStep.advance nish.RateController.unacked nish.rateFinite nish_panic_overflow
+  calls: nish.FixedStep.advance nish.RateController.unacked nish.rateFinite
   pointer this: size=272 writesThrough=true captured=false passedTo=nish.RateController.unacked#0
   stackSites=0 stackLocals=0
   callee -7:10 rateFinite -> @nish.rateFinite
@@ -2680,6 +2681,7 @@ function RateController.mayDraw(this: RateController, nowMs: f64): boolean -> @n
   callee -2:13 FixedStep.advance -> @nish.FixedStep.advance
   callee +1:7 FixedStep.advance -> @nish.FixedStep.advance
   callee +6:9 RateController.unacked -> @nish.RateController.unacked
+  local +8:13 dropped: i32 (const)
 function RateController.frameSent(this: RateController, bytes: i32, costNs: f64, nowMs: f64): void -> @nish.RateController.frameSent [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
@@ -2867,10 +2869,10 @@ function RateController.stepUp(this: RateController): boolean -> @nish.RateContr
   local -2:11 level: i32 (const)
   callee +0:20 RateController.fasterTier -> @nish.RateController.fasterTier
 function RateController.tick(this: RateController, nowMs: f64): void -> @nish.RateController.tick [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: nowMs
-  calls: nish.RateController.ageRate nish.RateController.decide nish.RateController.publish nish.rateFinite nish_panic_overflow
+  calls: nish.RateController.ageRate nish.RateController.decide nish.RateController.publish nish.rateFinite
   pointer this: size=272 writesThrough=true captured=false passedTo=nish.RateController.publish#0 nish.RateController.ageRate#0 nish.RateController.decide#0 nish.RateController.publish#0
   stackSites=0 stackLocals=0
   callee -7:10 rateFinite -> @nish.rateFinite
@@ -2878,9 +2880,11 @@ function RateController.tick(this: RateController, nowMs: f64): void -> @nish.Ra
   local -3:11 wait: f64 (const)
   local +3:11 sent: f64[] (const)
   local +4:9 head: i32 (let)
-  callee +12:5 RateController.ageRate -> @nish.RateController.ageRate
-  callee +14:7 RateController.decide -> @nish.RateController.decide
-  callee +16:5 RateController.publish -> @nish.RateController.publish
+  local +9:13 lost: i32 (const)
+  local +11:13 stale: i32 (const)
+  callee +15:5 RateController.ageRate -> @nish.RateController.ageRate
+  callee +17:7 RateController.decide -> @nish.RateController.decide
+  callee +19:5 RateController.publish -> @nish.RateController.publish
 function RateController.decide(this: RateController, nowMs: f64): void -> @nish.RateController.decide [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -2945,7 +2949,7 @@ function drawStatsOverlay(screen: Screen, stats: TermStats, corner: i32): void -
   callee +14:3 Screen.text -> @nish.Screen.text
   callee +15:3 Screen.text -> @nish.Screen.text
 module std/term-pixels.ts [package nish]
-import base64EncodeInto from "nish/base64" -> function @nish.base64EncodeInto
+import base64EncodeIfFits from "nish/base64" -> function @nish.base64EncodeIfFits
 import COLOR_DEFAULT from "nish/term" -> const COLOR_DEFAULT
 import ATTR_NONE from "nish/term" -> const ATTR_NONE
 import Canvas from "nish/term" -> struct Canvas
@@ -2981,6 +2985,10 @@ struct Framebuffer (class) size=16 align=8 exported
   field pixels: i32[] index=2 offset=8
   constructor -> @nish.Framebuffer.constructor
   method resize -> @nish.Framebuffer.resize
+  method pixelWidth -> @nish.Framebuffer.pixelWidth
+  method pixelHeight -> @nish.Framebuffer.pixelHeight
+  method pixelData -> @nish.Framebuffer.pixelData
+  method tryResize -> @nish.Framebuffer.tryResize
   method set -> @nish.Framebuffer.set
   method get -> @nish.Framebuffer.get
   method fill -> @nish.Framebuffer.fill
@@ -2997,14 +3005,15 @@ struct PixelRect (class) size=32 align=8 exported
 struct PixelBytes (class) size=80 align=8 exported
   field bytes: u8[] index=0 offset=0
   field length: i32 index=1 offset=8
-  field kittyRaw: u8[] index=2 offset=16
-  field sampleXs: i32[] index=3 offset=24
-  field sampleYs: i32[] index=4 offset=32
-  field sixelReg: i32[] index=5 offset=40
-  field sixelUsed: u8[] index=6 offset=48
-  field sixelFirst: i32[] index=7 offset=56
-  field sixelLast: i32[] index=8 offset=64
-  field sixelBits: i32[] index=9 offset=72
+  field full: boolean index=2 offset=12
+  field kittyRaw: u8[] index=3 offset=16
+  field sampleXs: i32[] index=4 offset=24
+  field sampleYs: i32[] index=5 offset=32
+  field sixelReg: i32[] index=6 offset=40
+  field sixelUsed: u8[] index=7 offset=48
+  field sixelFirst: i32[] index=8 offset=56
+  field sixelLast: i32[] index=9 offset=64
+  field sixelBits: i32[] index=10 offset=72
   constructor -> @nish.PixelBytes.constructor
   method reset -> @nish.PixelBytes.reset
   method reserve -> @nish.PixelBytes.reserve
@@ -3026,6 +3035,10 @@ function pixelsArea(who: string, width: i32, height: i32): i32 -> @nish.pixelsAr
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat
   stackSites=0 stackLocals=0
   local +0:9 area: i64 (const)
+function pixelsSizeProblem(who: string, width: i32, height: i32): string -> @nish.pixelsSizeProblem
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
 function pixelsIndex(x: i32, y: i32, width: i32, length: i32): i32 -> @nish.pixelsIndex
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -3047,6 +3060,30 @@ function Framebuffer.resize(this: Framebuffer, width: i32, height: i32): void ->
   stackSites=0 stackLocals=0
   local -2:11 area: i32 (const)
   callee -2:23 pixelsArea -> @nish.pixelsArea
+function Framebuffer.pixelWidth(this: Framebuffer): i32 -> @nish.Framebuffer.pixelWidth [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Framebuffer.pixelHeight(this: Framebuffer): i32 -> @nish.Framebuffer.pixelHeight [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Framebuffer.pixelData(this: Framebuffer): i32[] -> @nish.Framebuffer.pixelData [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Framebuffer.tryResize(this: Framebuffer, width: i32, height: i32): Result<void, string> -> @nish.Framebuffer.tryResize [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  sharedWrite: +0:7
+  escaping: height width
+  calls: nish.pixelsSizeProblem nish_alloc_struct
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -14:11 area: i64 (const)
+  callee -10:18 pixelsSizeProblem -> @nish.pixelsSizeProblem
+  local -8:11 count: i32 (const)
+  callee -4:18 pixelsSizeProblem -> @nish.pixelsSizeProblem
+  local -1:13 length: integer<0, 2147483647> (const)
 function Framebuffer.set(this: Framebuffer, x: i32, y: i32, colour: i32): void -> @nish.Framebuffer.set [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -3076,6 +3113,17 @@ function Framebuffer.clear(this: Framebuffer): void -> @nish.Framebuffer.clear [
   sharedWrite: +0:5
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function tryFramebuffer(width: i32, height: i32): Result<Framebuffer, string> -> @nish.tryFramebuffer [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
+  sharedWrite: via nish.Framebuffer.tryResize
+  escaping: height width
+  calls: nish.Framebuffer.constructor nish.Framebuffer.tryResize nish.pixelsSizeProblem nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local +0:9 fb: Framebuffer (const)
+  callee +0:27 new Framebuffer -> @nish.Framebuffer.constructor
+  local +1:9 sized: Result<void, string> (const)
+  callee +1:39 Framebuffer.tryResize -> @nish.Framebuffer.tryResize
+  callee +3:16 pixelsSizeProblem -> @nish.pixelsSizeProblem
 function scaleFramebuffer(src: Framebuffer, divisor: i32, dst: Framebuffer): void -> @nish.scaleFramebuffer [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -3133,8 +3181,8 @@ function fitFramebuffer(fbW: i32, fbH: i32, cols: i32, rows: i32, cellW: i32, ce
   callee +31:12 new PixelRect -> @nish.PixelRect.constructor
   callee +33:10 new PixelRect -> @nish.PixelRect.constructor
 function PixelBytes.constructor(this: PixelBytes, capacity: i32): void -> @nish.PixelBytes.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: llvm.smax.i32 nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: capacity
   pointer this: size=80 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PixelBytes.reset(this: PixelBytes): void -> @nish.PixelBytes.reset [exported method]
@@ -3143,16 +3191,21 @@ function PixelBytes.reset(this: PixelBytes): void -> @nish.PixelBytes.reset [exp
   pointer this: size=80 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PixelBytes.reserve(this: PixelBytes, n: i32): void -> @nish.PixelBytes.reserve [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: llvm.fptosi.sat.i32.f64 llvm.minimum.f64 nish_panic nish_panic_slice
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: llvm.fptosi.sat.i32.f64 llvm.minimum.f64
   pointer this: size=80 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -14:11 need: f64 (const)
-  local -7:9 size: f64 (let)
-  local -3:11 grown: u8[] (const)
+  local -13:11 had: u8[] (const)
+  local -12:11 have: i32 (const)
+  local -10:11 need: f64 (const)
+  local -6:9 size: f64 (let)
+  local -2:11 room: i32 (const)
+  local +3:11 length: integer<0, 2147483647> (const)
+  local +4:11 grown: u8[] (const)
+  local +6:14 i: i32 (let)
 function PixelBytes.put(this: PixelBytes, b: i32): void -> @nish.PixelBytes.put [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.PixelBytes.reserve
   pointer this: size=80 writesThrough=true captured=false passedTo=nish.PixelBytes.reserve#0
@@ -3161,7 +3214,7 @@ function PixelBytes.put(this: PixelBytes, b: i32): void -> @nish.PixelBytes.put 
   local -4:11 bytes: u8[] (const)
   local -3:11 at: i32 (const)
 function PixelBytes.putText(this: PixelBytes, s: string): void -> @nish.PixelBytes.putText [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.PixelBytes.reserve
   pointer this: size=80 writesThrough=true captured=false passedTo=nish.PixelBytes.reserve#0
@@ -3172,7 +3225,7 @@ function PixelBytes.putText(this: PixelBytes, s: string): void -> @nish.PixelByt
   local -3:9 at: i32 (let)
   local -1:14 i: i32 (let)
 function PixelBytes.putDecimal(this: PixelBytes, v: i32): void -> @nish.PixelBytes.putDecimal [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PixelBytes.putDecimal
   calls: nish.PixelBytes.put nish.PixelBytes.putDecimal
   pointer this: size=80 writesThrough=true captured=false passedTo=nish.PixelBytes.putDecimal#0 nish.PixelBytes.put#0
@@ -3185,12 +3238,13 @@ function PixelBytes.text(this: PixelBytes): string -> @nish.PixelBytes.text [exp
   pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function pixelsSampleMap(n: i32, source: i32): i32[] -> @nish.pixelsSampleMap
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: n source
-  calls: nish.pixelsSampleMapInto nish_panic
+  calls: nish.pixelsSampleMapInto
   stackSites=0 stackLocals=0
-  local +0:9 map: i32[] (const)
-  callee +1:3 pixelsSampleMapInto -> @nish.pixelsSampleMapInto
+  local +0:9 length: integer<0, 2147483647> (const)
+  local +1:9 map: i32[] (const)
+  callee +2:3 pixelsSampleMapInto -> @nish.pixelsSampleMapInto
 function pixelsSampleMapInto(map: i32[], n: i32, source: i32): void -> @nish.pixelsSampleMapInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -3199,16 +3253,18 @@ function pixelsSampleMapInto(map: i32[], n: i32, source: i32): void -> @nish.pix
   stackSites=0 stackLocals=0
   local -1:12 i: i32 (let)
 function pixelsAtLeast(a: i32[], n: i32): i32[] -> @nish.pixelsAtLeast
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a n
-  calls: llvm.fptosi.sat.i32.f64 llvm.minimum.f64 nish_panic
+  calls: llvm.fptosi.sat.i32.f64 llvm.minimum.f64
   pointer a: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 had: i32 (const)
   local +4:9 twice: f64 (const)
-  local +5:9 grown: i32[] (const)
+  local +5:9 size: i32 (const)
+  local +10:9 length: integer<0, 2147483647> (const)
+  local +11:9 grown: i32[] (const)
 function pixelsPutOneBased(out: PixelBytes, v: i32): void -> @nish.pixelsPutOneBased
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PixelBytes.putDecimal
   calls: nish.PixelBytes.putDecimal nish.PixelBytes.putText
   pointer out: size=80 writesThrough=true captured=false passedTo=nish.PixelBytes.putDecimal#0 nish.PixelBytes.putText#0
@@ -3216,7 +3272,7 @@ function pixelsPutOneBased(out: PixelBytes, v: i32): void -> @nish.pixelsPutOneB
   callee +0:5 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
   callee +2:5 PixelBytes.putText -> @nish.PixelBytes.putText
 function pixelsMoveTo(out: PixelBytes, col: i32, row: i32): void -> @nish.pixelsMoveTo
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PixelBytes.put
   escaping: col row
   calls: nish.PixelBytes.put nish.pixelsPutOneBased
@@ -3229,7 +3285,7 @@ function pixelsMoveTo(out: PixelBytes, col: i32, row: i32): void -> @nish.pixels
   callee +4:3 pixelsPutOneBased -> @nish.pixelsPutOneBased
   callee +5:3 PixelBytes.put -> @nish.PixelBytes.put
 function pixelsKittyOpen(out: PixelBytes): void -> @nish.pixelsKittyOpen
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PixelBytes.put
   calls: nish.PixelBytes.put nish.PixelBytes.putText
   pointer out: size=80 writesThrough=true captured=false passedTo=nish.PixelBytes.put#0 nish.PixelBytes.putText#0
@@ -3237,7 +3293,7 @@ function pixelsKittyOpen(out: PixelBytes): void -> @nish.pixelsKittyOpen
   callee +0:3 PixelBytes.put -> @nish.PixelBytes.put
   callee +1:3 PixelBytes.putText -> @nish.PixelBytes.putText
 function pixelsStringEnd(out: PixelBytes): void -> @nish.pixelsStringEnd
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PixelBytes.put
   calls: nish.PixelBytes.put
   pointer out: size=80 writesThrough=true captured=false passedTo=nish.PixelBytes.put#0 nish.PixelBytes.put#0
@@ -3248,7 +3304,7 @@ function kittyFrame(fb: Framebuffer, rect: PixelRect, imageId: i32, out: PixelBy
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: imageId
-  calls: nish.PixelBytes.putDecimal nish.PixelBytes.putText nish.PixelBytes.reserve nish.base64EncodeInto nish.pixelsCheckImageId nish.pixelsKittyOpen nish.pixelsMoveTo nish.pixelsStringEnd nish_panic
+  calls: nish.PixelBytes.putDecimal nish.PixelBytes.putText nish.PixelBytes.reserve nish.base64EncodeIfFits nish.pixelsCheckImageId nish.pixelsKittyOpen nish.pixelsMoveTo nish.pixelsStringEnd nish_panic
   pointer fb: size=16 writesThrough=false captured=false
   pointer rect: size=32 writesThrough=false captured=false
   pointer out: size=80 writesThrough=true captured=false passedTo=nish.pixelsMoveTo#0 nish.pixelsKittyOpen#0 nish.PixelBytes.putText#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.putText#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.putText#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.putText#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.putText#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.putText#0 nish.PixelBytes.putText#0 nish.PixelBytes.putText#0 nish.PixelBytes.reserve#0 nish.pixelsStringEnd#0
@@ -3277,8 +3333,9 @@ function kittyFrame(fb: Framebuffer, rect: PixelRect, imageId: i32, out: PixelBy
   callee +20:5 PixelBytes.putText -> @nish.PixelBytes.putText
   callee +21:5 PixelBytes.putText -> @nish.PixelBytes.putText
   callee +22:5 PixelBytes.reserve -> @nish.PixelBytes.reserve
-  callee +23:18 base64EncodeInto -> @nish.base64EncodeInto
-  callee +24:5 pixelsStringEnd -> @nish.pixelsStringEnd
+  local +24:11 end: i32 (const)
+  callee +24:22 base64EncodeIfFits -> @nish.base64EncodeIfFits
+  callee +30:5 pixelsStringEnd -> @nish.pixelsStringEnd
 function pixelsCheckImageId(who: string, imageId: i32): void -> @nish.pixelsCheckImageId
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat
@@ -3303,7 +3360,7 @@ function pixelsDitherBias(t: i32, levels: i32): i32 -> @nish.pixelsDitherBias
   stackSites=0 stackLocals=0
   local +0:9 q: f64 (const)
 function pixelsSixelRun(out: PixelBytes, bits: i32, count: i32): void -> @nish.pixelsSixelRun
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PixelBytes.put
   escaping: count
   calls: nish.PixelBytes.put nish.PixelBytes.putDecimal
@@ -3316,99 +3373,99 @@ function pixelsSixelRun(out: PixelBytes, bits: i32, count: i32): void -> @nish.p
   callee +5:7 PixelBytes.put -> @nish.PixelBytes.put
 function sixelFrame(fb: Framebuffer, rect: PixelRect, dither: boolean, out: PixelBytes): void -> @nish.sixelFrame [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
-  calls: llvm.fptosi.sat.i32.f64 nish.Framebuffer.get nish.PixelBytes.put nish.PixelBytes.putDecimal nish.PixelBytes.putText nish.pixelsArea nish.pixelsAtLeast nish.pixelsDitherBias nish.pixelsHex nish.pixelsIndex nish.pixelsLevel nish.pixelsMoveTo nish.pixelsSampleMapInto nish.pixelsSixelRegister nish.pixelsSixelRun nish.pixelsStringEnd nish_floor nish_panic
+  sharedWrite: +0:5
+  calls: llvm.fptosi.sat.i32.f64 nish.Framebuffer.get nish.PixelBytes.put nish.PixelBytes.putDecimal nish.PixelBytes.putText nish.pixelsAtLeast nish.pixelsDitherBias nish.pixelsHex nish.pixelsIndex nish.pixelsLevel nish.pixelsMoveTo nish.pixelsSampleMapInto nish.pixelsSixelRegister nish.pixelsSixelRun nish.pixelsStringEnd nish_floor nish_panic
   pointer fb: size=16 writesThrough=false captured=false passedTo=nish.Framebuffer.get#0
   pointer rect: size=32 writesThrough=false captured=false
   pointer out: size=80 writesThrough=true captured=false passedTo=nish.pixelsMoveTo#0 nish.PixelBytes.put#0 nish.PixelBytes.putText#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.put#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.put#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.putText#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.put#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.put#0 nish.PixelBytes.putDecimal#0 nish.PixelBytes.put#0 nish.PixelBytes.put#0 nish.PixelBytes.put#0 nish.PixelBytes.putDecimal#0 nish.pixelsSixelRun#0 nish.pixelsSixelRun#0 nish.pixelsSixelRun#0 nish.pixelsStringEnd#0
   stackSites=0 stackLocals=0
-  local -8:9 w: i32 (const)
-  local -7:9 h: i32 (const)
+  local -12:9 w: i32 (const)
+  local -11:9 h: i32 (const)
+  local -5:9 wideArea: i64 (const)
+  local -4:9 wideBits: i64 (const)
   local -3:9 area: i32 (const)
-  callee -3:21 pixelsArea -> @nish.pixelsArea
   local -2:9 bitsArea: i32 (const)
-  callee -2:25 pixelsArea -> @nish.pixelsArea
-  callee +0:18 pixelsAtLeast -> @nish.pixelsAtLeast
-  callee +1:18 pixelsAtLeast -> @nish.pixelsAtLeast
-  callee +2:18 pixelsAtLeast -> @nish.pixelsAtLeast
-  callee +3:19 pixelsAtLeast -> @nish.pixelsAtLeast
-  local +4:9 xs: i32[] (const)
-  local +5:9 ys: i32[] (const)
-  callee +6:3 pixelsSampleMapInto -> @nish.pixelsSampleMapInto
-  callee +7:3 pixelsSampleMapInto -> @nish.pixelsSampleMapInto
-  local +9:9 reg: i32[] (const)
-  local +10:9 used: u8[] (const)
-  local +14:12 y: i32 (let)
-  local +15:11 sy: i32 (const)
-  local +16:14 x: i32 (let)
-  local +18:13 c: i32 (const)
-  callee +18:22 Framebuffer.get -> @nish.Framebuffer.get
-  local +19:11 br: i32 (let)
-  local +20:11 bg: i32 (let)
-  local +21:11 bb: i32 (let)
-  local +23:15 t: i32 (const)
-  callee +23:24 pixelsHex -> @nish.pixelsHex
-  callee +24:14 pixelsDitherBias -> @nish.pixelsDitherBias
-  callee +25:14 pixelsDitherBias -> @nish.pixelsDitherBias
-  callee +26:14 pixelsDitherBias -> @nish.pixelsDitherBias
-  local +28:13 n: i32 (const)
-  callee +28:22 pixelsSixelRegister -> @nish.pixelsSixelRegister
-  callee +29:9 pixelsLevel -> @nish.pixelsLevel
-  callee +30:9 pixelsLevel -> @nish.pixelsLevel
-  callee +31:9 pixelsLevel -> @nish.pixelsLevel
-  local +35:13 at: i32 (const)
-  callee +35:23 pixelsIndex -> @nish.pixelsIndex
-  callee +46:3 pixelsMoveTo -> @nish.pixelsMoveTo
-  callee +47:3 PixelBytes.put -> @nish.PixelBytes.put
-  callee +48:3 PixelBytes.putText -> @nish.PixelBytes.putText
-  callee +49:3 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  callee +50:3 PixelBytes.put -> @nish.PixelBytes.put
-  callee +51:3 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  local +52:12 n: i32 (let)
-  local +54:13 r: i32 (const)
-  local +55:13 g: i32 (const)
-  local +56:13 b: i32 (const)
-  callee +57:7 PixelBytes.put -> @nish.PixelBytes.put
-  callee +58:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  callee +59:7 PixelBytes.putText -> @nish.PixelBytes.putText
-  callee +60:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  callee +4:18 pixelsAtLeast -> @nish.pixelsAtLeast
+  callee +5:18 pixelsAtLeast -> @nish.pixelsAtLeast
+  callee +6:18 pixelsAtLeast -> @nish.pixelsAtLeast
+  callee +7:19 pixelsAtLeast -> @nish.pixelsAtLeast
+  local +8:9 xs: i32[] (const)
+  local +9:9 ys: i32[] (const)
+  callee +10:3 pixelsSampleMapInto -> @nish.pixelsSampleMapInto
+  callee +11:3 pixelsSampleMapInto -> @nish.pixelsSampleMapInto
+  local +13:9 reg: i32[] (const)
+  local +14:9 used: u8[] (const)
+  local +18:12 y: i32 (let)
+  local +19:11 sy: i32 (const)
+  local +20:14 x: i32 (let)
+  local +22:13 c: i32 (const)
+  callee +22:22 Framebuffer.get -> @nish.Framebuffer.get
+  local +23:11 br: i32 (let)
+  local +24:11 bg: i32 (let)
+  local +25:11 bb: i32 (let)
+  local +27:15 t: i32 (const)
+  callee +27:24 pixelsHex -> @nish.pixelsHex
+  callee +28:14 pixelsDitherBias -> @nish.pixelsDitherBias
+  callee +29:14 pixelsDitherBias -> @nish.pixelsDitherBias
+  callee +30:14 pixelsDitherBias -> @nish.pixelsDitherBias
+  local +32:13 n: i32 (const)
+  callee +32:22 pixelsSixelRegister -> @nish.pixelsSixelRegister
+  callee +33:9 pixelsLevel -> @nish.pixelsLevel
+  callee +34:9 pixelsLevel -> @nish.pixelsLevel
+  callee +35:9 pixelsLevel -> @nish.pixelsLevel
+  local +39:13 at: i32 (const)
+  callee +39:23 pixelsIndex -> @nish.pixelsIndex
+  callee +50:3 pixelsMoveTo -> @nish.pixelsMoveTo
+  callee +51:3 PixelBytes.put -> @nish.PixelBytes.put
+  callee +52:3 PixelBytes.putText -> @nish.PixelBytes.putText
+  callee +53:3 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  callee +54:3 PixelBytes.put -> @nish.PixelBytes.put
+  callee +55:3 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  local +56:12 n: i32 (let)
+  local +58:13 r: i32 (const)
+  local +59:13 g: i32 (const)
+  local +60:13 b: i32 (const)
   callee +61:7 PixelBytes.put -> @nish.PixelBytes.put
   callee +62:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  callee +63:7 PixelBytes.put -> @nish.PixelBytes.put
+  callee +63:7 PixelBytes.putText -> @nish.PixelBytes.putText
   callee +64:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  local +72:9 first: i32[] (const)
-  local +73:9 last: i32[] (const)
-  local +74:9 bits: i32[] (const)
-  local +75:12 top: i32 (let)
-  local +77:11 bottom: i32 (const)
-  local +79:9 nextBit: i32 (let)
-  local +80:14 y: i32 (let)
-  local +81:13 bit: i32 (const)
-  local +83:16 x: i32 (let)
-  local +84:15 at: i32 (const)
-  callee +84:25 pixelsIndex -> @nish.pixelsIndex
-  local +89:15 n: i32 (const)
-  local +91:15 slot: i32 (const)
-  callee +91:27 pixelsIndex -> @nish.pixelsIndex
-  callee +115:7 PixelBytes.put -> @nish.PixelBytes.put
-  local +117:9 firstColour: boolean (let)
-  local +118:14 n: i32 (let)
-  local +120:13 start: i32 (const)
-  local +121:13 end: i32 (const)
-  callee +126:9 PixelBytes.put -> @nish.PixelBytes.put
-  callee +129:7 PixelBytes.put -> @nish.PixelBytes.put
-  callee +130:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
-  callee +132:7 pixelsSixelRun -> @nish.pixelsSixelRun
-  local +134:11 runBits: i32 (let)
-  local +135:11 runStart: i32 (let)
-  local +136:11 next: i32 (let)
-  local +137:16 x: i32 (let)
-  local +139:15 slot: i32 (const)
-  callee +139:27 pixelsIndex -> @nish.pixelsIndex
-  local +144:15 sixel: i32 (const)
-  callee +149:13 pixelsSixelRun -> @nish.pixelsSixelRun
-  callee +156:9 pixelsSixelRun -> @nish.pixelsSixelRun
-  callee +161:3 pixelsStringEnd -> @nish.pixelsStringEnd
+  callee +65:7 PixelBytes.put -> @nish.PixelBytes.put
+  callee +66:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  callee +67:7 PixelBytes.put -> @nish.PixelBytes.put
+  callee +68:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  local +76:9 first: i32[] (const)
+  local +77:9 last: i32[] (const)
+  local +78:9 bits: i32[] (const)
+  local +79:12 top: i32 (let)
+  local +81:11 bottom: i32 (const)
+  local +83:9 nextBit: i32 (let)
+  local +84:14 y: i32 (let)
+  local +85:13 bit: i32 (const)
+  local +87:16 x: i32 (let)
+  local +88:15 at: i32 (const)
+  callee +88:25 pixelsIndex -> @nish.pixelsIndex
+  local +93:15 n: i32 (const)
+  local +95:15 slot: i32 (const)
+  callee +95:27 pixelsIndex -> @nish.pixelsIndex
+  callee +119:7 PixelBytes.put -> @nish.PixelBytes.put
+  local +121:9 firstColour: boolean (let)
+  local +122:14 n: i32 (let)
+  local +124:13 start: i32 (const)
+  local +125:13 end: i32 (const)
+  callee +130:9 PixelBytes.put -> @nish.PixelBytes.put
+  callee +133:7 PixelBytes.put -> @nish.PixelBytes.put
+  callee +134:7 PixelBytes.putDecimal -> @nish.PixelBytes.putDecimal
+  callee +136:7 pixelsSixelRun -> @nish.pixelsSixelRun
+  local +138:11 runBits: i32 (let)
+  local +139:11 runStart: i32 (let)
+  local +140:11 next: i32 (let)
+  local +141:16 x: i32 (let)
+  local +143:15 slot: i32 (const)
+  callee +143:27 pixelsIndex -> @nish.pixelsIndex
+  local +148:15 sixel: i32 (const)
+  callee +153:13 pixelsSixelRun -> @nish.pixelsSixelRun
+  callee +160:9 pixelsSixelRun -> @nish.pixelsSixelRun
+  callee +165:3 pixelsStringEnd -> @nish.pixelsStringEnd
 function drawHalfBlocks(fb: Framebuffer, canvas: Canvas, rect: PixelRect): void -> @nish.drawHalfBlocks [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -3506,6 +3563,22 @@ function base64EncodeInto(src: u8[], off: i32, len: i32, dst: u8[], at: i32): i3
   local -18:9 dstLength: i32 (const)
   local -14:9 need: i32 (const)
   callee -14:21 base64EncodedLength -> @nish.base64EncodedLength
+  local -8:9 abc: string (const)
+  local -7:7 i: i32 (let)
+  local -6:7 o: i32 (let)
+  local -5:7 rest: i32 (let)
+  local -1:11 group: i32 (const)
+  local +13:7 group: i32 (let)
+function base64EncodeIfFits(src: u8[], off: i32, len: i32, dst: u8[], at: i32): i32 -> @nish.base64EncodeIfFits [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at len off
+  pointer src: size=0 writesThrough=false captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -24:9 srcLength: i32 (const)
+  local -23:9 dstLength: i32 (const)
+  local -14:9 need: i32 (const)
   local -8:9 abc: string (const)
   local -7:7 i: i32 (let)
   local -6:7 o: i32 (let)

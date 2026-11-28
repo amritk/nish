@@ -1048,7 +1048,7 @@ module std/crypto/sha256.ts [package nish]
 const SHA256_SIZE: i32 = 32 [exported]
 const SHA256_BLOCK: i32 = 64 [exported]
 struct Sha256 (class) size=40 align=8 exported
-  field total: i64 index=0 offset=0 initialized
+  field total: u64 index=0 offset=0 initialized
   field state: u32[] index=1 offset=8
   field block: u8[] index=2 offset=16
   field schedule: u32[] index=3 offset=24
@@ -1485,7 +1485,6 @@ function Sha256.update(this: Sha256, data: u8[], off: i32, len: i32): void -> @n
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256Compress#2
   stackSites=0 stackLocals=0
   local -7:11 size: i32 (const)
-  local -1:11 count: u64 (const)
   local +1:11 state: u32[] (const)
   local +2:11 schedule: u32[] (const)
   local +3:11 block: u8[] (const)
@@ -1505,7 +1504,6 @@ function Sha256.updateAll(this: Sha256, data: u8[]): void -> @nish.Sha256.update
   local -10:11 n: i32 (const)
   local -6:13 from: i32 (const)
   callee -5:7 Sha256.update -> @nish.Sha256.update
-  local -1:11 count: u64 (const)
   local +1:11 state: u32[] (const)
   local +2:11 schedule: u32[] (const)
   local +3:11 block: u8[] (const)
