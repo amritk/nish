@@ -147,26 +147,30 @@ const binPlain = (seed: i32, n: i32, bins: u32[]): i32 => {
 /**
  * One round's bins, read into plain numbers whichever mode filled them, or
  * why the atomic bins could not be made. Task
- * `t` is seeded with `high | (first + t)`: `first + t` stays below 64, in the
- * six low bits `high` (the shift moved left by six) leaves clear, so the `|`
- * adds it and cannot overflow.
+ * `t` is seeded with `high | (first + t)`: `first` past 60 is refused, so
+ * `first + t` stays below 64, in the six low bits `high` (the shift moved left
+ * by six) leaves clear, and the `|` adds it. Each loop's bound is `TASKS`
+ * written out, a literal the prover reads, so `first + t` is proven to fit.
  */
-const round = (mode: string, high: i32, first: u32): Result<u32[], string> => {
+const round = (mode: string, high: i32, first: i32): Result<u32[], string> => {
+  if (first < 0 || first > 60) {
+    return Err(`seed base ${first} is past 60`)
+  }
   const out: u32[] = []
   if (mode === "--single") {
     for (let b: i32 = 0; b < BINS; b++) {
       out.push(toU32(ZERO))
     }
-    for (let t: u32 = 0; t < toU32(TASKS); t++) {
-      binPlain(high | toI32(first + t), PER_TASK, out)
+    for (let t: i32 = 0; t < 4; t++) {
+      binPlain(high | (first + t), PER_TASK, out)
     }
   } else if (mode === "--lock") {
     const hist = new Mutex<Hist>(new Hist())
     const binned: i32[] = [0, 0, 0, 0]
     {
       using s = scope()
-      for (let t: i32 = 0; t < toI32(binned.length); t++) {
-        const shard = new LockedShard(high | toI32(first + toU32(t)), PER_TASK, hist)
+      for (let t: i32 = 0; t < 4; t++) {
+        const shard = new LockedShard(high | (first + t), PER_TASK, hist)
         // The constructor is a call, and a call forgets what the loop's test
         // proved about `binned`'s length: this test states it again at the
         // spawn, which then keeps no slot check (docs/LANGUAGE.md, "Panic sites").
@@ -191,8 +195,8 @@ const round = (mode: string, high: i32, first: u32): Result<u32[], string> => {
     const perValue = mode === "--per-value"
     {
       using s = scope()
-      for (let t: i32 = 0; t < toI32(binned.length); t++) {
-        const shard = new Shard(high | toI32(first + toU32(t)), PER_TASK, bins)
+      for (let t: i32 = 0; t < 4; t++) {
+        const shard = new Shard(high | (first + t), PER_TASK, bins)
         // Never false, as above: the test states `binned`'s length again at the spawn.
         if (t < toI32(binned.length)) {
           if (perValue) {
@@ -227,10 +231,12 @@ export const main = (): i32 => {
   let total: u32 = 0
   let checksum: u32 = 0
   // Every round seeds its shards afresh and folds its bins into the checksum,
-  // so no round repeats another's work and none of it can be skipped.
-  for (let r: u32 = 0; r < toU32(ROUNDS); r++) {
+  // so no round repeats another's work and none of it can be skipped. The
+  // bound is `ROUNDS` written out, as the shard loops write out `TASKS`: the
+  // prover reads a literal, so `r * TASKS + 1` and `first + t` are proven.
+  for (let r: i32 = 0; r < 4; r++) {
     // `shift << 6` is `shift * 64` that wraps as Node's seed did, never panicking.
-    const made = round(mode, shift << 6, r * toU32(TASKS) + 1)
+    const made = round(mode, shift << 6, r * TASKS + 1)
     if (made.isErr()) {
       console.error(`the bins: ${made.error}`)
       return 1

@@ -12,31 +12,32 @@ and [Template literals](../../reference/language/expressions.md#template-literal
 
 `T[]` (or `Array<T>`) is an array of `T`. A literal's elements must all have
 one type, and an empty literal `[]` needs a type to take from its context.
-Several examples on this page build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): they
-index, pop and add without the guards the compiler reads, and `sort`, `map`
-and `filter` keep checks no proof removes yet. Testing `i < xs.length` before
-an index, `xs.length > 0` before a `pop` and
+By default the compiler refuses a program that may panic, so the examples
+here carry the guards it reads: `i < xs.length` before an index,
+`xs.length > 0` before a `pop`,
 `start >= 0 && start <= end && end <= xs.length` before a `slice` or a
-`String.fromBytes`, and bounding the arithmetic, builds the rest under the
-default; the others will once the standard library is made panic-free:
+`String.fromBytes`, and arithmetic that is bounded or done in a wider type.
+Two build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do) instead:
+the one that shows an index panic, and the module storage one, since no guard
+proves an index into module storage yet:
 
-<!-- allow-panics: pops an array it does not test for empty; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 export const main = (): i32 => {
   const primes = [2, 3, 5, 7];          // i32[]
+  primes[0] = 1;                        // in range: the literal has four elements
+  primes.push(11);
+  if (primes.length > 0) {
+    const last = primes.pop();          // 11
+    console.log(`${primes.length} ${last}`);                  // 4 11
+  }
+  console.log(`${primes.indexOf(5)} ${primes.indexOf(1)}`);   // 2 0
+
   const names: string[] = [];           // [] needs the annotation
   names.push("ada");
   names.push("grace");
-
-  primes.push(11);
-  const last = primes.pop();            // 11
-  primes[0] = 1;
-
-  console.log(`${primes.length} ${last} ${primes[0]}`);   // 4 11 1
-  console.log(`${primes.indexOf(5)} ${primes.indexOf(4)}`); // 2 -1
-  console.log(names.join(", "));                          // ada, grace
+  console.log(names.join(", "));                              // ada, grace
   return 0;
 };
 ```
@@ -60,8 +61,7 @@ how two elements compare: a negative number puts `a` first, a positive one
 puts `b` first, and zero keeps them in the order they had — the sort is
 stable, so the result is exactly the one Node gives.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/sort.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 class Score {
   name: string;
@@ -72,20 +72,18 @@ class Score {
   }
 }
 
-const byPoints = (a: Score, b: Score): number => b.points - a.points;
+// Most points first.
+const byPoints = (a: Score, b: Score): number =>
+  a.points > b.points ? -1 : a.points < b.points ? 1 : 0;
 
 export const main = (): i32 => {
   const xs: i32[] = [5, -2, 9, 0];
-  xs.sort((a, b) => a - b);
-  console.log(`${xs[0]} ${xs[3]}`);                 // -2 9
+  xs.sort((a, b) => (a > b ? 1 : a < b ? -1 : 0));
+  console.log(xs.map((x) => `${x}`).join(" "));     // -2 0 5 9
 
   const board: Score[] = [new Score("ada", 3), new Score("bo", 7), new Score("cy", 3)];
   board.sort(byPoints);
-  const names: string[] = [];
-  for (const s of board) {
-    names.push(s.name);
-  }
-  console.log(names.join(" "));                     // bo ada cy
+  console.log(board.map((s) => s.name).join(" "));  // bo ada cy
   return 0;
 };
 ```
@@ -95,18 +93,18 @@ Nish cannot follow:
 
 - `xs.sort()` with no comparator. JavaScript compares the elements as
   strings, so `[10, 9].sort()` is `[10, 9]`; Nish asks you to write
-  `xs.sort((a, b) => a - b)`.
+  the comparator, `xs.sort((a, b) => (a > b ? 1 : a < b ? -1 : 0))`.
 - Sorting a `readonly T[]`, or `process.argv`.
 - A comparator that reads a `let` of the function it is written in. It may
   read that function's `const` locals and parameters, as any arrow argument
-  may ([Functions](functions.md)): `xs.sort((a, b) => rank[a] - rank[b])` with
-  a `const rank`. Bind a `let` to a `const` before the call.
+  may ([Functions](functions.md)): `xs.sort((a, b) => (a > b ? dir : a < b ? -dir : 0))`
+  with a `const dir`. Bind a `let` to a `const` before the call.
 
-`(a, b) => a - b` is checked `i32` arithmetic: nothing bounds it, so the
-compiler refuses it by default, and under `--allow-panics`, on elements more
-than `2^31 - 1` apart, such as `[2147483647, -1]`, it panics with
-`attempt to subtract with overflow`. When the values may span the whole range,
-compare instead: `(a, b) => (a > b ? 1 : a < b ? -1 : 0)`. An array holding
+The comparator compares rather than subtracts. `(a, b) => a - b`, the usual
+JavaScript one, is checked `i32` arithmetic that nothing bounds: on elements
+more than `2^31 - 1` apart, such as `[2147483647, -1]`, it overflows, so the
+compiler refuses it by default, and under `--allow-panics` it panics with
+`attempt to subtract with overflow`. An array holding
 `NaN`, or a comparator that is not a consistent order, sorts to some
 permutation of its elements, which, as in JavaScript, need not be Node's.
 
@@ -121,16 +119,15 @@ memory.
 which gets the element, or the element and its index, as in TypeScript.
 `slice` copies a range into a new array.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/array.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 export const main = (): i32 => {
   const xs: i32[] = [3, 8, 1, 6];
-  const doubled = xs.map((x) => x * 2);
-  const big = xs.filter((x) => x > 2);
+  const middle = xs.slice(1, 3);                  // [8, 1]
+  const doubled = xs.map((x) => toI64(x) * 2);    // [6, 16, 2, 12]: i64, where twice an i32 fits
+  const big = xs.filter((x) => x > 2);            // [3, 8, 6]
   const labels = xs.map((x, i) => `${i}:${x}`);
-  const middle = xs.slice(1, 3);
-  console.log(`${doubled[1]} ${big.length} ${middle[0]}`);   // 16 3 8
+  console.log(`${middle.length} ${doubled.length} ${big.length}`); // 2 4 3
   console.log(labels.join(" "));                            // 0:3 1:8 2:1 3:6
   console.log(`${xs.some((x) => x > 7)} ${xs.every((x) => x > 0)}`); // true true
   console.log(`${xs.findIndex((x) => x === 1)}`);           // 2
@@ -161,8 +158,7 @@ its own loop that calls it directly. Three things differ from JavaScript:
 `for (const x of xs)` visits each element in order; use an index loop when
 you need the position:
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const sum = (xs: f64[]): f64 => {
   let total: f64 = 0.0;
@@ -172,11 +168,15 @@ const sum = (xs: f64[]): f64 => {
   return total;
 };
 
+// The position of the largest element, or -1 when there is none.
 const largestAt = (xs: i32[]): i32 => {
-  let best = 0;
-  for (let i = 1; i < xs.length; i++) {
-    if (xs[i] > xs[best]) {
+  let best = -1;
+  let max: i32 = 0;
+  for (let i = 0; i < xs.length; i++) {
+    const x = xs[i];
+    if (best < 0 || x > max) {
       best = i;
+      max = x;
     }
   }
   return best;
@@ -198,17 +198,16 @@ function around it. To add up, write the `for...of` loop of `sum` above: a
 `forEach` callback that assigns a total is refused (NL2586), and the message
 says to use `for...of`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 export const main = (): i32 => {
   const xs: i32[] = [3, 8, 1];
-  const seen: i32[] = [];
+  const seen: string[] = [];
   xs.forEach((x, i) => console.log(`${i}:${x}`));   // 0:3 1:8 2:1
   xs.forEach((x) => {
-    seen.push(x * 10);
+    seen.push(`#${x}`);
   });
-  console.log(`${seen[2]}`);                         // 10
+  console.log(seen.join(" "));                       // #3 #8 #1
   return 0;
 };
 ```
@@ -217,13 +216,16 @@ export const main = (): i32 => {
 
 Every `xs[i]` is checked. The compiler must prove the index is in range, as
 in the `i < xs.length` loop above, and by default it refuses the program
-where it cannot; `pop()` needs an `xs.length > 0` test the same way. Under
+where it cannot; `pop()` needs an `xs.length > 0` test the same way. The
+length of a fresh array literal is known, which is why `primes[0] = 1` and
+`xs.slice(1, 3)` above need no test; once a call such as `push` may have
+changed the array, they would. Under
 `--allow-panics` the check is built in instead: an index outside
 `0 … xs.length - 1` — a negative one included — stops the program with
 `index out of range` on stderr and exit status 1, where JavaScript would
 answer `undefined`, and `pop()` on an empty array stops it the same way.
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- allow-panics: shows the panic an index out of range stops with -->
 <!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
@@ -249,16 +251,18 @@ elements are worked out when the program compiles and kept as read-only
 data in the binary: nothing runs to build it, and nothing can write it
 ([Constant tables](../../reference/language/declarations.md#constant-tables)).
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const LIMIT: i32 = 100;
 const SCALE: readonly i32[] = [1, 10, LIMIT, LIMIT * 10];
 
 export const main = (): i32 => {
   let total: i32 = 0;
-  for (let i = 0; i < SCALE.length; i++) {
-    total += SCALE[i];
+  for (const step of SCALE) {
+    if (step < 0 || step > 1000000 || total > 1000000000) {
+      return 1;   // bounds both sides of the `+=`, so it is proven to fit
+    }
+    total += step;
   }
   console.log(`${SCALE.length} ${total}`);   // 4 1111
   return 0;
@@ -295,15 +299,19 @@ keeps its values from one call to the next. It is the one piece of state a
 module keeps, and no code runs to set it up.
 ([Module storage](../../reference/language/declarations.md#module-storage)).
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const SCORES = new Int32Array(4);
 
+// The sum of scores from 0 to 1000000, or -1 on one outside that range.
 const sum = (xs: Int32Array): i32 => {
   let total: i32 = 0;
   for (let i = 0; i < xs.length; i++) {
-    total += xs[i];
+    const x = xs[i];
+    if (x < 0 || x > 1000000 || total > 1000000000) {
+      return -1;
+    }
+    total += x;
   }
   return total;
 };
@@ -339,6 +347,11 @@ export const main = (): i32 => {
 };
 ```
 
+- **Its indexes are checked like a local array's.** Its length never
+  changes, so `SCORES[3]` above needs no guard, and neither does `SCORES[i]`
+  in a loop that stops below `SCORES.length` or below the constant the
+  storage was made with. An index the compiler cannot bound that way needs
+  the same guard as any array's.
 - **It is a place, not a value.** You index it and read its `length`; you do
   not store, return or alias the array itself. The one way to hand it to
   another function is a parameter spelled with a typed-array name, such as
@@ -375,15 +388,16 @@ build them from these, or look in the
 **Lengths and offsets count bytes, not characters.** An ASCII character is
 one byte, but `é` is two and most emoji are four:
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
-<!-- nish:ok-body --allow-panics -->
+<!-- nish:ok-body -->
 ```ts
 const word = "café";
 console.log(`${word.length}`);              // 5
 console.log(word.substring(0, 3));          // caf
-console.log(`${word.charCodeAt(0)}`);       // 99
 console.log(`${word.indexOf("fé")}`);       // 2
 console.log(`${word.startsWith("ca")}`);    // true
+if (word.length > 3) {
+  console.log(`${word.charCodeAt(3)}`);     // 195, the first of é's two bytes
+}
 ```
 
 Since every offset is a byte offset, `substring` can cut a multi-byte
@@ -394,12 +408,11 @@ Bytes become text the other way with `String.fromBytes`: the range of a
 way to turn what a file or a socket handed you into a string, where a
 `String.fromCharCode` per byte joined together allocates once per byte:
 
-<!-- allow-panics: slices with bounds it does not test -->
-<!-- nish:ok-body --allow-panics -->
+<!-- nish:ok-body -->
 ```ts
 const bytes: u8[] = [99, 97, 102, 195, 169];
-console.log(String.fromBytes(bytes, 0, 5));   // café
-console.log(String.fromBytes(bytes, 0, 3));   // caf
+console.log(String.fromBytes(bytes, 0, 3));              // caf
+console.log(String.fromBytes(bytes, 0, bytes.length));   // café
 ```
 
 The range is checked as `slice`'s is, `0 <= start <= end <= bytes.length`. A

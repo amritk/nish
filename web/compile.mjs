@@ -3,7 +3,7 @@
 // tested) without a browser.
 //
 //   build/nish src/compile.ts --link build/nish.wasm --profile wasi
-//   node web/compile.mjs build/nish.wasm examples/add.ts --allow-panics
+//   node web/compile.mjs build/nish.wasm examples/add.ts
 //   node web/compile.mjs build/nish.wasm examples/nbody.ts --number-mode f64
 //
 // The IR goes to stdout and the compiler's diagnostics to stderr, so the exit

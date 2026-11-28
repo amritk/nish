@@ -20,38 +20,28 @@ export interface Point {
   y: i32;
 }
 
-export const distance2 = (a: Point, b: Point): i32 => {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
-};
+export const distance = (a: Point, b: Point): f64 =>
+  Math.hypot(toF64(a.x) - toF64(b.x), toF64(a.y) - toF64(b.y));
 ```
-
-Several examples on this page build with
-[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): most do `i32` arithmetic
-nothing bounds, which bounding the operands would fix, and the `nish/text` one
-calls standard-library code that keeps panic sites no proof removes yet, which
-will build under the default once that code is made panic-free.
 
 Then import what you need by name, with a path that starts with `./` or
 `../`. The `.ts` extension is optional:
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts main.ts
 // main.ts
-import { distance2, Point } from "./geometry";
+import { distance, Point } from "./geometry";
 
 export const main = (): i32 => {
   const a: Point = { x: 0, y: 0 };
   const b: Point = { x: 3, y: 4 };
-  console.log(`${distance2(a, b)}`);
+  console.log(`${distance(a, b)}`);
   return 0;
 };
 ```
 
 Give the compiler the file with `main` and it finds the rest by following the
-imports: `nish run main.ts` prints `25`, and `nish main.ts --link app` builds
+imports: `nish run main.ts` prints `5`, and `nish main.ts --link app` builds
 one executable from both files.
 
 A generic function or class imported from another file works as one declared
@@ -127,18 +117,27 @@ function, of the same name; each file calls its own.
 <!-- nish:ok -->
 ```ts helper.ts
 // helper.ts
-const add = (a: i32, b: i32): i32 => a + b;
+const add = (a: i32, b: i32): i32 => {
+  if (a < 0 || a > 1000000 || b < 0 || b > 1000000) {
+    return -1;
+  }
+  return a + b;
+};
 
 export const sum3 = (a: i32, b: i32, c: i32): i32 => add(add(a, b), c);
 ```
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts main.ts
 // main.ts
 import { sum3 } from "./helper";
 
-const add = (a: i32, b: i32): i32 => a * 10 + b;
+const add = (a: i32, b: i32): i32 => {
+  if (a < 0 || a > 1000 || b < 0 || b > 1000) {
+    return -1;
+  }
+  return a * 10 + b;
+};
 
 export const main = (): i32 => {
   console.log(`${sum3(1, 2, 3)} ${add(1, 2)}`);
@@ -146,7 +145,8 @@ export const main = (): i32 => {
 };
 ```
 
-This prints `6 12`. Each private `add` gets a symbol named after its file
+This prints `6 12`; each `add` tests its operands so the compiler can prove
+what it answers fits an `i32`. Each private `add` gets a symbol named after its file
 (`helper$.add` and `main$.add`), so a native debugger or profiler shows which
 one ran. Exported functions are still unique across the program, and so are
 private ones when you build with `--no-strict-exports`, which keeps every
@@ -169,20 +169,23 @@ local name:
 | `nish:simd` | sixteen-byte vectors and the calls that make, load and store them ([Vectors](simd.md)), available only through the import |
 | `nish:async` | `spawn` and `awaitAll` for `async` functions ([Async functions](async.md)), available only through the import |
 
-<!-- allow-panics: does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { argv } from "nish:process";
 import { write } from "nish:io";
 
 export const main = (): i32 => {
-  write(`called with ${argv.length - 1} argument(s)\n`);
+  const n = argv.length;
+  if (n > 0) {
+    write(`called with ${n - 1} argument(s)\n`);
+  }
   return 0;
 };
 ```
 
 `nish run args.ts one two` prints `called with 2 argument(s)`: the first
-element of `argv` is the program itself.
+element of `argv` is the program itself. The test `n > 0` is what proves
+`n - 1` fits an `i32`.
 
 Except for `nish:secret`, `nish:unsafe`, `nish:simd` and `nish:async`, which exist only as imports, these
 are also globals, like `console.log`, so you can call them without an import.
@@ -199,19 +202,22 @@ and you import it as `nish/` followed by the module's name: `nish/text`,
 and so on. It is compiled into your program like your own code, so a module
 you import but never call costs nothing.
 
-<!-- allow-panics: indexes an array without a guard the checker reads -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { splitWhitespace, trim } from "nish/text";
 
 export const main = (): i32 => {
   const words = splitWhitespace(trim("  the quick  brown fox "));
-  console.log(`${words.length} words, the last is ${words[words.length - 1]}`);
+  const last = words.length - 1;
+  if (last >= 0) {
+    console.log(`${words.length} words, the last is ${words[last]}`);
+  }
   return 0;
 };
 ```
 
-This prints `4 words, the last is fox`. Naming a module the library does not
+This prints `4 words, the last is fox`; testing `last >= 0` proves `words[last]`
+in range. Naming a module the library does not
 have is an error that lists the ones it does. What each module offers is on
 [the standard library](../using-nish/standard-library.md) page. `Map` and
 `Set` need no import at all ([Maps and sets](maps-and-sets.md)).

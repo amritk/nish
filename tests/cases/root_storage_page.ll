@@ -19,7 +19,6 @@ target triple = "wasm32-unknown-unknown"
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_runtime_root_keep(i64 noundef, i8* noundef, i32 noundef) #0
 declare void @nish_runtime_root_reset(i8* noundef, i32 noundef) #0
-declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
@@ -71,7 +70,7 @@ entry:
   ret void
 }
 
-define void @push(i32 noundef %value) #1 {
+define void @push(i32 noundef %value) #0 {
 entry:
   %n.addr = alloca %struct.Node*, align 4
   %0 = call i8* @nish_alloc_struct(i64 8)
@@ -79,39 +78,19 @@ entry:
   call void @Node.constructor(%struct.Node* %1, i32 %value)
   store %struct.Node* %1, %struct.Node** %n.addr, align 4
   %2 = load %struct.Node*, %struct.Node** %n.addr, align 4
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 0
-  %4 = load i64, i64* %3, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %5 = icmp ult i64 0, %4
-  br i1 %5, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %4), !nish.site !{i32 0}
-  unreachable
-
-bounds.ok:
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
-  %7 = load i8*, i8** %6, align 8, !alias.scope !10, !noalias !11, !tbaa !16
-  %8 = bitcast i8* %7 to %struct.Node**
-  %9 = getelementptr inbounds %struct.Node*, %struct.Node** %8, i64 0
-  %10 = load %struct.Node*, %struct.Node** %9, align 4, !alias.scope !11, !noalias !10, !tbaa !18
-  %11 = getelementptr inbounds %struct.Node, %struct.Node* %2, i32 0, i32 1
-  store %struct.Node* %10, %struct.Node** %11, align 4, !tbaa !5
-  %12 = load %struct.Node*, %struct.Node** %n.addr, align 4
-  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 0
-  %14 = load i64, i64* %13, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %15 = icmp ult i64 0, %14
-  br i1 %15, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 0, i64 %14), !nish.site !{i32 1}
-  unreachable
-
-bounds.ok.1:
-  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
-  %17 = load i8*, i8** %16, align 8, !alias.scope !10, !noalias !11, !tbaa !16
-  %18 = bitcast i8* %17 to %struct.Node**
-  %19 = getelementptr inbounds %struct.Node*, %struct.Node** %18, i64 0
-  store %struct.Node* %12, %struct.Node** %19, align 4, !alias.scope !11, !noalias !10, !tbaa !18
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
+  %4 = load i8*, i8** %3, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %5 = bitcast i8* %4 to %struct.Node**
+  %6 = getelementptr inbounds %struct.Node*, %struct.Node** %5, i64 0
+  %7 = load %struct.Node*, %struct.Node** %6, align 4, !alias.scope !11, !noalias !10, !tbaa !17
+  %8 = getelementptr inbounds %struct.Node, %struct.Node* %2, i32 0, i32 1
+  store %struct.Node* %7, %struct.Node** %8, align 4, !tbaa !5
+  %9 = load %struct.Node*, %struct.Node** %n.addr, align 4
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
+  %11 = load i8*, i8** %10, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %12 = bitcast i8* %11 to %struct.Node**
+  %13 = getelementptr inbounds %struct.Node*, %struct.Node** %12, i64 0
+  store %struct.Node* %9, %struct.Node** %13, align 4, !alias.scope !11, !noalias !10, !tbaa !17
   ret void
 }
 
@@ -120,53 +99,43 @@ entry:
   %sum.addr = alloca i32, align 4
   %n.addr = alloca %struct.Node*, align 4
   store i32 0, i32* %sum.addr, align 4
-  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %2 = icmp ult i64 0, %1
-  br i1 %2, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %1), !nish.site !{i32 2}
-  unreachable
-
-bounds.ok:
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
-  %4 = load i8*, i8** %3, align 8, !alias.scope !10, !noalias !11, !tbaa !16
-  %5 = bitcast i8* %4 to %struct.Node**
-  %6 = getelementptr inbounds %struct.Node*, %struct.Node** %5, i64 0
-  %7 = load %struct.Node*, %struct.Node** %6, align 4, !alias.scope !11, !noalias !10, !tbaa !18
-  store %struct.Node* %7, %struct.Node** %n.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
+  %1 = load i8*, i8** %0, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %2 = bitcast i8* %1 to %struct.Node**
+  %3 = getelementptr inbounds %struct.Node*, %struct.Node** %2, i64 0
+  %4 = load %struct.Node*, %struct.Node** %3, align 4, !alias.scope !11, !noalias !10, !tbaa !17
+  store %struct.Node* %4, %struct.Node** %n.addr, align 4
   br label %while.cond
 
 while.cond:
-  %8 = load %struct.Node*, %struct.Node** %n.addr, align 4
-  %9 = icmp ne %struct.Node* %8, null
-  br i1 %9, label %while.body, label %while.end
+  %5 = load %struct.Node*, %struct.Node** %n.addr, align 4
+  %6 = icmp ne %struct.Node* %5, null
+  br i1 %6, label %while.body, label %while.end
 
 while.body:
-  %10 = load i32, i32* %sum.addr, align 4
-  %11 = load %struct.Node*, %struct.Node** %n.addr, align 4
-  %12 = getelementptr inbounds %struct.Node, %struct.Node* %11, i32 0, i32 0
-  %13 = load i32, i32* %12, align 4, !tbaa !6
-  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 %13)
-  %15 = extractvalue { i32, i1 } %14, 0
-  %16 = extractvalue { i32, i1 } %14, 1
-  br i1 %16, label %ovf.fail, label %ovf.ok
+  %7 = load i32, i32* %sum.addr, align 4
+  %8 = load %struct.Node*, %struct.Node** %n.addr, align 4
+  %9 = getelementptr inbounds %struct.Node, %struct.Node* %8, i32 0, i32 0
+  %10 = load i32, i32* %9, align 4, !tbaa !6
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %15, i32* %sum.addr, align 4
-  %17 = load %struct.Node*, %struct.Node** %n.addr, align 4
-  %18 = getelementptr inbounds %struct.Node, %struct.Node* %17, i32 0, i32 1
-  %19 = load %struct.Node*, %struct.Node** %18, align 4, !tbaa !5
-  store %struct.Node* %19, %struct.Node** %n.addr, align 4
+  store i32 %12, i32* %sum.addr, align 4
+  %14 = load %struct.Node*, %struct.Node** %n.addr, align 4
+  %15 = getelementptr inbounds %struct.Node, %struct.Node* %14, i32 0, i32 1
+  %16 = load %struct.Node*, %struct.Node** %15, align 4, !tbaa !5
+  store %struct.Node* %16, %struct.Node** %n.addr, align 4
   br label %while.cond
 
 while.end:
-  %20 = load i32, i32* %sum.addr, align 4
-  ret i32 %20
+  %17 = load i32, i32* %sum.addr, align 4
+  ret i32 %17
 
 ovf.fail:
-  call void @nish_panic_overflow(i32 0), !nish.site !{i32 3}
+  call void @nish_panic_overflow(i32 0), !nish.site !{i32 0}
   unreachable
 }
 
@@ -192,7 +161,6 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!"header i64", !1, i64 0}
 !13 = !{!"header ptr", !1, i64 0}
 !14 = !{!"array header", !12, i64 0, !12, i64 8, !13, i64 16}
-!15 = !{!14, !12, i64 0}
-!16 = !{!14, !13, i64 16}
-!17 = !{!"element ptr", !1, i64 0}
-!18 = !{!17, !17, i64 0}
+!15 = !{!14, !13, i64 16}
+!16 = !{!"element ptr", !1, i64 0}
+!17 = !{!16, !16, i64 0}

@@ -823,8 +823,9 @@ export class JsonDecoder {
     const src: u8[] = tok.src
     // The width between the quotes is in `i64`, where it cannot wrap. The
     // opening quote is a byte of `src`, so the `+ 1` fits, and a byte `at`
-    // past it is in `src` only when `at` is below the bytes left; then the
-    // `u32` sum of two non-negative `i32`s is exact and below the length.
+    // past it is in `src` only when `at` is below the bytes left; then its
+    // index, `from + at`, is spelled as the length less the bytes after it,
+    // differences `src/bounds.ts` proves once each operand's sign is tested.
     if (
       toI64(n) !== toI64(tok.tokEnd) - toI64(start) - toI64(2) ||
       at < 0 ||
@@ -834,13 +835,18 @@ export class JsonDecoder {
     ) {
       return -1
     }
+    const length: i32 = toI32(src.length)
     const from: i32 = start + 1
-    const left: i32 = toI32(src.length) - from
-    if (at >= left) {
+    const left: i32 = length - from
+    if (left < 0 || at >= left) {
       return -1
     }
-    const i: i32 = toI32(toU32(from) + toU32(at))
-    if (i < 0 || i >= toI32(src.length)) {
+    const after: i32 = left - at
+    if (after <= 0) {
+      return -1
+    }
+    const i: i32 = length - after
+    if (i < 0 || i >= length) {
       return -1
     }
     return toI32(src[i])

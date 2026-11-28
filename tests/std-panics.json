@@ -5,7 +5,7 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1049,
+  "total": 1040,
   "explicit": {
     "kept": 360,
     "toFix": 7
@@ -40,15 +40,12 @@
       "panic": 2
     },
     "std/crypto/aes.ts": {
-      "array-length": 2,
+      "array-length": 1,
       "index": 7
     },
     "std/crypto/base64url.ts": {
       "array-length": 2,
       "panic": 7
-    },
-    "std/crypto/chacha20poly1305.ts": {
-      "array-length": 1
     },
     "std/crypto/hkdf.ts": {
       "panic": 14
@@ -272,9 +269,6 @@
     "std/term-rate.ts": {
       "overflow": 3
     },
-    "std/term.ts": {
-      "slice": 1
-    },
     "std/text.ts": {
       "panic": 1,
       "slice": 1
@@ -287,7 +281,7 @@
     },
     "std/yaml-json.ts": {
       "index": 18,
-      "overflow": 39
+      "overflow": 38
     },
     "std/yaml-lines.ts": {
       "overflow": 12
@@ -298,7 +292,7 @@
     "std/yaml.ts": {
       "array-length": 3,
       "index": 12,
-      "overflow": 275,
+      "overflow": 270,
       "panic": 1,
       "slice": 3
     }
@@ -1633,24 +1627,6 @@
         "array-length": 1
       },
       "reason": "new Array(n) with n the plaintext length plus the 16-byte tag, below 2^31 by Seal's guard: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/aes.ts",
-      "function": "aesGcmOpen",
-      "sites": {
-        "array-length": 1
-      },
-      "reason": "new Array(n) with n the sealed length less the tag: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/chacha20poly1305.ts",
-      "function": "chacha20Poly1305Open",
-      "sites": {
-        "array-length": 1
-      },
-      "reason": "new Array(n) with n the sealed length less the tag: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
       "record": "docs/security/crypto-aead.md"
     }
   ]

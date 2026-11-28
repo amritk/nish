@@ -750,7 +750,7 @@ function spaceAfter(type: string): string -> @spaceAfter [exported]
 function guardStem(outFile: string): string -> @guardStem [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: outFile
-  calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText basename nish_panic_index nish_panic_overflow nish_str_concat stripHeaderSuffix
+  calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText basename nish_panic_index nish_str_concat stripHeaderSuffix
   stackSites=1 stackLocals=1
   local +0:9 stem: string (const)
   callee +0:16 stripHeaderSuffix -> @stripHeaderSuffix
@@ -783,9 +783,8 @@ function endsWithFold(text: string, suffix: string): boolean -> @endsWithFold [e
   callee +3:9 foldByte -> @foldByte
   callee +3:51 foldByte -> @foldByte
 function foldByte(c: i32): i32 -> @foldByte
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: c
-  calls: nish_panic_overflow
   stackSites=0 stackLocals=0
 function banner(compilation: Compilation, flag: string, comment: string): string -> @banner [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false

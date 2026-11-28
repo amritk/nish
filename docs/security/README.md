@@ -28,7 +28,7 @@ the record that found it. The notes below the table name each such finding.
 | SHA-256 block kernel | [crypto-sha256-hw.md](crypto-sha256-hw.md) | `runtime/runtime-sha256.c`; its lowering (`isSha256Seam` in `src/kernels.ts`, `emitKernelArm` in `src/emit.ts`) | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | ChaCha20 keystream kernel | [crypto-chacha20-hw.md](crypto-chacha20-hw.md) | `runtime/runtime-chacha20.c`; its lowering (`isChacha20Seam` in `src/kernels.ts`, `emitKernelArm` in `src/emit.ts`) | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, `std/crypto/ed25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
-| RSA signatures | [crypto-rsa.md](crypto-rsa.md) | `std/crypto/rsa.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²³ |
+| RSA signatures | [crypto-rsa.md](crypto-rsa.md) | `std/crypto/rsa.ts`, `std/crypto/rsa-sign.ts`, and `x509ParseRsaPrivateKey` in `std/crypto/x509.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²³ |
 | SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 6 ¹ | 0 / 0 / 0 / 2 |
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 12 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
@@ -53,7 +53,7 @@ the record that found it. The notes below the table name each such finding.
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
 | Static files | [static.md](static.md) | `std/net/static.ts` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 4 ³² |
-| Regular expressions | [regex.md](regex.md) | `std/regex.ts`; the `nish_regex_scan` kernel in `runtime/runtime-simd.c`, its contract in `runtime/nish.h` and its lowering in `src/kernels.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 ¹⁴ |
+| Regular expressions | [regex.md](regex.md) | `std/regex.ts`; the `nish_regex_scan` kernel in `runtime/runtime-simd.c`, its contract in `runtime/nish.h` and its lowering in `src/kernels.ts` | 0 / 0 / 1 / 5 | 0 / 0 / 0 / 0 ¹⁴ |
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
@@ -427,6 +427,10 @@ the record that found it. The notes below the table name each such finding.
     the key-size and exponent caps, and a message over 2^31 − 1 bytes
     panicking in the hash, are accepted, with the reason in their record, and
     are not counted. RSA-2 and RSA-5 are properties checked and found to hold.
+    RSA-S1 to RSA-S6 cover RSA-PSS signing. RSA-S4 (Low), the key's bounds and
+    strict DER, is fixed by design. RSA-S5 (Low), what a wipe cannot reach,
+    is recorded. RSA-S1 to RSA-S3 are properties, and RSA-S6 is a test gap,
+    closed by vectors from NIST, OpenSSL, Go and pyca. None is counted.
 24. PKI-18 (Medium) and PKI-21 to PKI-24 (Low) were found by running the
     module against x509-limbo and are fixed: a root's own constraints, a
     root checked as an issuer, key identifiers, the leaf's server profile and

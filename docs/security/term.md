@@ -170,11 +170,14 @@ inputs, fed whole and in random splits, gave byte-identical events. The fuzzer
 is pinned by no test; the fixed cases in `tests/link/std_term/main.ts` and
 `tests/link/std_term_events/main.ts` are.
 
-**Open.** The one site left is the slice in `termBytesText`
-(the native `String.fromBytes(bytes, 0, end)`). `end` is clamped to the
-buffer's length first, so it cannot fail, but the prover cannot see a slice bound yet (#2208).
-Building the string a byte at a time, as the Node path does, would avoid the slice; that is expected,
-not measured, to slow every frame, so it waits for #2208.
+**Proven (examples-strict S4, #2385).** The one site WP85 left, the slice in
+`termBytesText` (the native `String.fromBytes(bytes, 0, end)`), is proven:
+the `if` that takes the native path restates `end >= 0 && end <= bytes.length`,
+which the clamp above it already makes true, at the slice, where the prover
+reads it. No input takes the other branch, so no output changed.
+`tests/std-panics.json` now holds no site for `std/term.ts`, so
+"std-panics: no std/ module gains its first panic site" fails when the
+restated bound is removed (checked by removing it).
 
 **Open: untested defensive bound.** `termBytesText` clamps a count past its
 buffer to the buffer, and one below 0 to 0. This replaced an explicit panic.
@@ -191,6 +194,7 @@ Tests:
 - `link/std_term_buffers_disagree: exits with 0 and stdout matches expected.out` (WP85 S3)
 - `link/std_term_decoder_bounds: exits with 0 and stdout matches expected.out` (WP85 S5)
 - `std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows (…)` (WP85 S5: fails without `KeyDecoder.keep`'s, `termDecodeKeys`'s or `termDecodeEvents`'s guard)
+- `std-panics: no std/ module gains its first panic site` (examples-strict S4: fails without the bound `termBytesText` restates at its slice)
 - `term_calls: over a pipe readStdin reads the four bytes waiting, waitStdin sees the end, and the terminal questions answer false and -25`
 - `term_calls: over a pipe held open with nothing in it readStdin answers -11 and waitStdin(50) times out after at least 50 ms`
 - `term_import: waitStdin and readStdin drain a thousand piped bytes and stop at the end of the stream`

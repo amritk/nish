@@ -226,7 +226,9 @@ A pattern for `regexCompile`; `text` unchanged when it holds no syntax character
 ### Regex
 
 A compiled pattern: its program, its classes, what the prefilters read and
-the VM's scratch memory. Made by `regexCompile`.
+the VM's scratch memory. Made by `regexCompile`. A subject longer than
+2,146,435,071 bytes never matches: `test` and `exec` give false,
+and `count` gives 0.
 
 ```ts
 class Regex

@@ -127,14 +127,21 @@ who write programs in Nish. A page there follows these rules:
   any CLI flags after them — and `node tests/run.js guide` compiles it. The
   marker is a comment because the site shows a word after a fence's language
   as the block's title; a marker in the fence's own line is refused. A program
-  builds strict, as a reader's would: one that keeps a panic site passes
-  `--allow-panics` and says why on the line above its marker,
-  `<!-- allow-panics: divides by a value it does not test -->`. That
-  comment is hidden on the site, so the page also tells the reader, in one
-  visible sentence before its first such example, why it builds with
-  `--allow-panics` and what fixes it: the guard that proves the site, or
-  that the standard-library code it calls keeps panic sites no proof
-  removes yet. Every
+  builds strict, as a reader's would, and is the code a reader learns to
+  write: a panic site in its own code gets the guard that proves it (a loop
+  below `.length`, an index test, inputs bounded to their real range and a
+  capped total, `toI64` widening), never `--allow-panics`. A program passes
+  `--allow-panics` only for a reason it names on the line above its marker,
+  in `; `-separated clauses: it calls standard-library code that keeps a panic
+  site (`` calls `std/sqlite.ts` code that keeps panic sites no proof removes
+  yet ``), it shows a panic on purpose (a clause starting `shows `), the
+  checker reads no guard a reader would write there (a clause ending ` yet`),
+  or the language has no guard for the site (a clause ending
+  `which nothing proves away`); the docs run fails an opt-out whose own code
+  panics for any other reason, and one that no longer needs the flag. That
+  comment is hidden on the site, so a page whose example builds with
+  `--allow-panics` for any reason but showing a panic tells the reader why,
+  in one visible sentence before its first such example. Every
   page but `installation.md` carries at least one once it is more than a stub
   (its title and one paragraph). A fragment that cannot compile on its own is
   a plain ` ```ts ` block, and short. An example of several files puts each

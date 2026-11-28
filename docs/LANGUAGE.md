@@ -2094,7 +2094,11 @@ export const step = (): void => {
   method and `X.length =` are
   `` Module storage `X` has a fixed length and a fixed place, so `X.m` is not available: index it, and keep a count beside it for the slots in use ``
   (NL2688, `reject_storage_push`, `_pop`, `_sort`, `_length_assign`).
-  `X[i]` and `X.length` are what remain.
+  `X[i]` and `X.length` are what remain. Because the length is fixed, an
+  index into `X` is proven as an index into a local array is: `X[3]` of a
+  storage of 4, or `X[i]` under `i < X.length`, or under `i < N` for the
+  constant `N` it was made with, keeps no check
+  ([panic sites](#panic-sites)).
 - **Its name is a place, not a value.** Binding, returning, storing or
   passing `X` itself is
   `` Module storage `X` is a place, not a value: index it (`X[i]`) or read `X.length`, lend it only to a parameter declared `u8[]`, `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` or to a host function's buffer window, and never alias, return or store the array itself ``
@@ -16773,6 +16777,11 @@ are not all in `[0, length)`; and the second check of a compound store
   `reject_deny_panics_downcount_write`, `reject_deny_panics_downcount_reassign`);
   nothing removes the second check of a compound store, which is made after
   the call however the first was proved (`tests/cases/panics_index_recheck`).
+  An index into [module storage](#module-storage) is proven the same ways,
+  from the length it was made with, which never changes: a constant below it,
+  a loop below the storage's `.length` or below that constant, or a guard on
+  either (`tests/cases/deny_panics_storage_index`); a guard that lets the
+  index reach the length is refused (`tests/link/storage_index_unbounded`).
   A `nish:simd` access is proven exactly where its check is left out (the
   guard on its last lane under
   [`loadI32x4`](#nishsimd-sixteen-byte-vectors)), so a program held

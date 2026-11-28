@@ -13,17 +13,16 @@ function step(i: i32): void -> @step
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: i
-  calls: nish_panic_index nish_panic_overflow
+  calls: nish_panic_overflow
   stackSites=0 stackLocals=0
 function tickOf(i: i32): i32 -> @tickOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
-  calls: nish_panic_index
   stackSites=0 stackLocals=0
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 step tickOf
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 step tickOf
   stackSites=0 stackLocals=0
   callee -3:3 step -> @step
   callee -2:3 step -> @step
