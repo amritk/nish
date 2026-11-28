@@ -25154,10 +25154,10 @@ function http1SpanSet(p: Http1Parser, at: i32, value: i32): void -> @nish.http1S
   escaping: at value
   pointer p: size=232 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -16:11 old: i32[] (const)
-  local -13:11 wide: i64 (const)
-  local -9:11 size: i32 (const)
-  local -5:11 grown: i32[] (const)
+  local -20:11 old: i32[] (const)
+  local -17:11 wide: i64 (const)
+  local -13:11 size: i32 (const)
+  local -9:11 grown: i32[] (const)
   local -4:11 keep: i32 (const)
   local -3:14 k: i32 (let)
   local +2:9 spans: i32[] (const)
