@@ -3699,22 +3699,17 @@ export class Inflater {
     outEnd: i32,
     histStart: i32
   ): i32 {
-    if (ip < 0 || ip > inEnd || inEnd > toI32(src.length)) {
-      panic("Inflater.inflate: an input window outside its array")
+    const r: i32 = this.window(src, ip, inEnd, more, out, op, outEnd, histStart)
+    if (r === DEFLATE_ERR_WINDOW) {
+      panic("Inflater.inflate: a window outside its array")
     }
-    if (histStart < 0 || histStart > op || op > outEnd || outEnd > toI32(out.length)) {
-      panic("Inflater.inflate: an output window outside its array")
-    }
-    return this.run(src, ip, inEnd, more, out, op, outEnd, histStart)
+    return r
   }
 
   /**
    * `inflate` for a whole stream in one call: `more` is false and matches
-   * copy from `op` on, which is what a one-shot decoder passes. Its checks
-   * test the parameters themselves, so a caller that has tested the same
-   * ends proves them away; `inflate`'s `histStart <= op` is one a caller
-   * passing `op` for both cannot prove. A window outside its array is
-   * `DEFLATE_ERR_WINDOW`, with nothing read or written.
+   * copy from `op` on, which is what a one-shot decoder passes. A window
+   * outside its array is `DEFLATE_ERR_WINDOW`, with nothing read or written.
    *
    * @internal Called by the one-shot decoders of std/compress/gzip.ts and
    * std/compress/zlib.ts.
@@ -3729,14 +3724,15 @@ export class Inflater {
    *   `DEFLATE_ERR_WINDOW` for a window outside its array.
    */
   inflateAll(src: u8[], ip: i32, inEnd: i32, out: u8[], op: i32, outEnd: i32): i32 {
-    if (ip < 0 || ip > inEnd || inEnd > toI32(src.length) || op < 0 || op > outEnd || outEnd > toI32(out.length)) {
-      return DEFLATE_ERR_WINDOW
-    }
-    return this.run(src, ip, inEnd, false, out, op, outEnd, op)
+    return this.window(src, ip, inEnd, false, out, op, outEnd, op)
   }
 
-  /** `inflate` and `inflateAll` once their windows are checked. */
-  private run(
+  /**
+   * `inflate` and `inflateAll`: checks both windows, answering
+   * `DEFLATE_ERR_WINDOW` for one outside its array, then runs the state
+   * machine. Its one call of `step` keeps that inlined.
+   */
+  private window(
     src: u8[],
     ip: i32,
     inEnd: i32,
@@ -3746,6 +3742,12 @@ export class Inflater {
     outEnd: i32,
     histStart: i32
   ): i32 {
+    if (ip < 0 || ip > inEnd || inEnd > toI32(src.length)) {
+      return DEFLATE_ERR_WINDOW
+    }
+    if (histStart < 0 || histStart > op || op > outEnd || outEnd > toI32(out.length)) {
+      return DEFLATE_ERR_WINDOW
+    }
     this.inPos = ip
     this.outPos = op
     const r: i32 = this.step(src, inEnd, more, out, outEnd, histStart)
