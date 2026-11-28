@@ -1,7 +1,8 @@
 // `Http3Connection.writeStream` takes a WebTransport stream's bytes as a window `(buf, off, len)` the program
 // chose, so a window that does not lie inside its buffer answers H3_INVALID
-// (-22) rather than reading past it, before anything about the stream or
-// session is asked. Neither call panics, and the program exits 0.
+// (-22) rather than reading past it, before the connection looks the stream
+// up: stream 4 is no stream it holds, which a window inside its buffer
+// answers with H3_CLOSED (-32). Neither call panics, and the program exits 0.
 import { QuicConnection } from "nish/net/quic";
 import { Http3Connection } from "nish/net/http3";
 import { fixedEntropy } from "../net_quic_conn_replay/server";

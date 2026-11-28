@@ -190,22 +190,14 @@ const websocketAdd = (a: i32, b: i32): i32 => toI32(toI64(a) + toI64(b))
 const websocketSub = (a: i32, b: i32): i32 => toI32(toI64(a) - toI64(b))
 
 /**
- * A zeroed array of `n` bytes, or of none when `n` is below zero. Up to
- * 65535 bytes is one allocation; past that the array grows a byte at a time
- * from a 65535-byte start, which an `i32` length cannot make fail.
+ * A zeroed array of `n` bytes, or of none when `n` is below zero: one
+ * allocation, its length proven non-negative by the guard.
  */
 const websocketBytes = (n: i32): u8[] => {
   if (n < 0) {
     return []
   }
-  if (n <= 65535) {
-    return new Array<u8>(toU16(n))
-  }
-  const out: u8[] = new Array<u8>(65535)
-  for (let k: i32 = 65535; k < n; k += 1) {
-    out.push(0)
-  }
-  return out
+  return new Array<u8>(n)
 }
 
 /**

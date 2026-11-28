@@ -446,6 +446,7 @@ const STAGE4_STRING_EXPORTS = [
   "tests/link/net_webtransport_bad_streams_high/main.ts",
   "tests/link/net_webtransport_close_window/main.ts",
   "tests/link/net_webtransport_datagram_window/main.ts",
+  "tests/link/net_webtransport_write_window/main.ts",
   "tests/link/net_webtransport_f64/main.ts",
   "tests/link/net_webtransport_stream_window/main.ts",
   "tests/link/net_webtransport_whole_window/main.ts",
@@ -495,6 +496,11 @@ const declareStringExports = (moved, changelog, why) =>
  * for one release: the reseed that ships a change makes its entries match
  * nothing, the full run says so, and they go.
  */
+// #2457's subject: readHeader's window guard fails the connection.
+const H3_READ_HEADER_FAILS = "Pin the WebTransport H3_INVALID guard and fix http3 record counts"
+// The std/ push-loop audit lands under this PR's subject, which names the
+// one new Array each copy now makes.
+const ONE_NEW_ARRAY = "one new Array"
 const DNS_FALLBACK =
   "A DNS search fallback no longer masks a later NODATA, and resolveHost keeps an answered family at its timeout"
 const dnsFallback = (why, filesByProgram) =>
@@ -1165,6 +1171,10 @@ const TLS_SERVER_MOVED = [
   ],
   [
     "tests/link/net_webtransport_datagram_window/main.ts",
+    "codec.ll http3-server.ll http3.ll main.h main.ll net_http3_peer.ll net_quic_conn_client.ll net_quic_conn_replay_server.ll net_tls_common_client.ll net_tls_common_server.ll net_webtransport_peer.ll quic-listener.ll quic.ll record-server.ll tls-tcp.ll tls.ll webtransport.ll",
+  ],
+  [
+    "tests/link/net_webtransport_write_window/main.ts",
     "codec.ll http3-server.ll http3.ll main.h main.ll net_http3_peer.ll net_quic_conn_client.ll net_quic_conn_replay_server.ll net_tls_common_client.ll net_tls_common_server.ll net_webtransport_peer.ll quic-listener.ll quic.ll record-server.ll tls-tcp.ll tls.ll webtransport.ll",
   ],
   [
@@ -1906,6 +1916,7 @@ const S2_REST_TESTING = [
   "tests/link/net_webtransport_bad_streams_high/main.ts",
   "tests/link/net_webtransport_close_window/main.ts",
   "tests/link/net_webtransport_datagram_window/main.ts",
+  "tests/link/net_webtransport_write_window/main.ts",
   "tests/link/net_webtransport_f64/main.ts",
   "tests/link/net_webtransport_stream_window/main.ts",
   "tests/link/net_webtransport_whole_window/main.ts",
@@ -10455,6 +10466,14 @@ const PROVER_READS_FILES = {
     "qpack.ll",
     "quic-conn-cid.ll",
   ],
+  "tests/link/net_webtransport_write_window/main.ts": [
+    "chacha20poly1305.ll",
+    "gzip.ll",
+    "http3-frame.ll",
+    "keys.ll",
+    "qpack.ll",
+    "quic-conn-cid.ll",
+  ],
   "tests/link/net_webtransport_f64/main.ts": [
     "chacha20poly1305.ll",
     "gzip.ll",
@@ -11079,6 +11098,7 @@ const HASH_MAC_KDF_CT_PROGRAMS = [
   "tests/link/net_webtransport_bad_streams_high/main.ts",
   "tests/link/net_webtransport_close_window/main.ts",
   "tests/link/net_webtransport_datagram_window/main.ts",
+  "tests/link/net_webtransport_write_window/main.ts",
   "tests/link/net_webtransport_f64/main.ts",
   "tests/link/net_webtransport_stream_window/main.ts",
   "tests/link/net_webtransport_whole_window/main.ts",
@@ -11336,6 +11356,7 @@ const HASH_MAC_KDF_MOVES = [
       "tests/link/net_webtransport_bad_streams_high/main.ts",
       "tests/link/net_webtransport_close_window/main.ts",
       "tests/link/net_webtransport_datagram_window/main.ts",
+      "tests/link/net_webtransport_write_window/main.ts",
       "tests/link/net_webtransport_f64/main.ts",
       "tests/link/net_webtransport_stream_window/main.ts",
       "tests/link/net_webtransport_whole_window/main.ts",
@@ -11793,8 +11814,8 @@ const JSON_PUT_STRING = "jsonPutString"
 const HTTP1_TICK = "Http1Server.tick"
 /** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
-/** The changelog words of examples-strict S8: std/net/http3-frame.ts's `h3CheckWindow` takes the window guard's shape and `Http3FrameHeader` gains `read`, so the HTTP/3 windows relay reaches are proven. The change's commit subject carries these words verbatim. */
-const S8_RELAY_STD = "std panic sites relay reaches"
+/** The changelog words of #2457: `Http3Connection.readHeader` answers H3_INVALID for a header block outside its window, so the method writes its connection. The change's commit subject carries these words verbatim. */
+const WEBTRANSPORT_H3_INVALID = "WebTransport H3_INVALID guard"
 /** The changelog words of WP91 S1, which spells the cast wraps in std/compress, src/ and examples/. */
 const WP91_S1 = "compress, src/ and examples, and one check for every file"
 const wp91s1 = byFinding(WP91_S1)
@@ -12390,6 +12411,7 @@ const RSA_PSS_SERVER_DECLARED = [
     ["tests/link/net_webtransport_bad_streams_high/main.ts", "rsa-sign.ll"],
     ["tests/link/net_webtransport_close_window/main.ts", "rsa-sign.ll"],
     ["tests/link/net_webtransport_datagram_window/main.ts", "rsa-sign.ll"],
+    ["tests/link/net_webtransport_write_window/main.ts", "rsa-sign.ll"],
     ["tests/link/net_webtransport_f64/main.ts", "rsa-sign.ll"],
     ["tests/link/net_webtransport_stream_window/main.ts", "rsa-sign.ll"],
     ["tests/link/net_webtransport_whole_window/main.ts", "rsa-sign.ll"],
@@ -14192,6 +14214,10 @@ const DECLARED = [
         "crypto_p256_plain.ll",
         "crypto_x25519_plain.ll",
       ],
+      "tests/link/net_webtransport_write_window/main.ts": [
+        "crypto_p256_plain.ll",
+        "crypto_x25519_plain.ll",
+      ],
       "tests/link/net_webtransport_stream_window/main.ts": ["crypto_p256_plain.ll", "crypto_x25519_plain.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["crypto_p256_plain.ll", "crypto_x25519_plain.ll"],
       "tests/link/net_write2/main.ts": ["main.ll"],
@@ -14557,6 +14583,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
+      "tests/link/net_webtransport_write_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_webtransport_stream_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["pki-roots.ll", "pki.ll", "x509.ll"],
@@ -14870,6 +14897,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts",
       "tests/link/net_webtransport_close_window/main.ts",
       "tests/link/net_webtransport_datagram_window/main.ts",
+      "tests/link/net_webtransport_write_window/main.ts",
       "tests/link/net_webtransport_f64/main.ts",
       "tests/link/net_webtransport_stream_window/main.ts",
       "tests/link/net_webtransport_whole_window/main.ts",
@@ -15177,6 +15205,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts",
       "tests/link/net_webtransport_close_window/main.ts",
       "tests/link/net_webtransport_datagram_window/main.ts",
+      "tests/link/net_webtransport_write_window/main.ts",
       "tests/link/net_webtransport_f64/main.ts",
       "tests/link/net_webtransport_stream_window/main.ts",
       "tests/link/net_webtransport_whole_window/main.ts",
@@ -15433,6 +15462,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts",
       "tests/link/net_webtransport_close_window/main.ts",
       "tests/link/net_webtransport_datagram_window/main.ts",
+      "tests/link/net_webtransport_write_window/main.ts",
       "tests/link/net_webtransport_f64/main.ts",
       "tests/link/net_webtransport_stream_window/main.ts",
       "tests/link/net_webtransport_whole_window/main.ts",
@@ -15945,6 +15975,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["buffer-pool.ll"],
+      "tests/link/net_webtransport_write_window/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_stream_window/main.ts": ["buffer-pool.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["buffer-pool.ll"],
@@ -16609,6 +16640,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
+      "tests/link/net_webtransport_write_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_webtransport_stream_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["quic-conn-ack.ll", "quic-frame.ll"],
@@ -16877,6 +16909,7 @@ const DECLARED = [
     "tests/link/net_webtransport_bad_streams_high/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_webtransport_close_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_webtransport_datagram_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
+    "tests/link/net_webtransport_write_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_webtransport_f64/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_webtransport_stream_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
     "tests/link/net_webtransport_whole_window/main.ts": ["p256.ll", "p384.ll", "rsa.ll"],
@@ -17766,6 +17799,7 @@ const DECLARED = [
     ["tests/link/net_webtransport_bad_streams_high/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_webtransport_close_window/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_webtransport_datagram_window/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_write_window/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_webtransport_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_webtransport_stream_window/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_webtransport_whole_window/main.ts", "hkdf.ll hmac.ll record.ll"],
@@ -18225,6 +18259,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["main.h"],
       "tests/link/net_webtransport_close_window/main.ts": ["main.h"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["main.h"],
+      "tests/link/net_webtransport_write_window/main.ts": ["main.h"],
       "tests/link/net_webtransport_f64/main.ts": ["main.h"],
       "tests/link/net_webtransport_stream_window/main.ts": ["main.h"],
       "tests/link/net_webtransport_whole_window/main.ts": ["main.h"],
@@ -18516,6 +18551,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_write_window/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_stream_window/main.ts": ["http1-server.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["http1-server.ll"],
@@ -19989,6 +20025,21 @@ const DECLARED = [
         "quic.ll",
         "webtransport.ll",
       ],
+      "tests/link/net_webtransport_write_window/main.ts": [
+        "http3-server.ll",
+        "http3.ll",
+        "main.h",
+        "main.ll",
+        "net_http3_peer.ll",
+        "net_quic_conn_client.ll",
+        "net_quic_conn_replay_server.ll",
+        "net_webtransport_peer.ll",
+        "quic-datagram.ll",
+        "quic-listener.ll",
+        "quic-recovery.ll",
+        "quic.ll",
+        "webtransport.ll",
+      ],
       "tests/link/net_webtransport_f64/main.ts": [
         "closing.ll",
         "data.ll",
@@ -20656,6 +20707,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_write_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_webtransport_stream_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
@@ -20762,6 +20814,7 @@ const DECLARED = [
     "tests/link/net_webtransport_bad_streams_high/main.ts",
     "tests/link/net_webtransport_close_window/main.ts",
     "tests/link/net_webtransport_datagram_window/main.ts",
+    "tests/link/net_webtransport_write_window/main.ts",
     "tests/link/net_webtransport_f64/main.ts",
     "tests/link/net_webtransport_stream_window/main.ts",
     "tests/link/net_webtransport_whole_window/main.ts",
@@ -21181,6 +21234,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["exit"],
       "tests/link/net_webtransport_close_window/main.ts": ["exit"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["exit"],
+      "tests/link/net_webtransport_write_window/main.ts": ["exit"],
       "tests/link/net_webtransport_f64/main.ts": ["exit"],
       "tests/link/net_webtransport_stream_window/main.ts": ["exit"],
       "tests/link/net_webtransport_whole_window/main.ts": ["exit"],
@@ -21502,6 +21556,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["main.h", "websocket.ll"],
+      "tests/link/net_webtransport_write_window/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_webtransport_stream_window/main.ts": ["main.h", "websocket.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["main.h", "websocket.ll"],
@@ -21691,6 +21746,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["zlib.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["zlib.ll"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["zlib.ll"],
+      "tests/link/net_webtransport_write_window/main.ts": ["zlib.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["zlib.ll"],
       "tests/link/net_webtransport_stream_window/main.ts": ["zlib.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["zlib.ll"],
@@ -22676,6 +22732,14 @@ const DECLARED = [
         "verify.ll",
         "x509.ll",
       ],
+      "tests/link/net_webtransport_write_window/main.ts": [
+        "main.h",
+        "pki-roots.ll",
+        "pki.ll",
+        "tls-tcp.ll",
+        "verify.ll",
+        "x509.ll",
+      ],
       "tests/link/net_webtransport_f64/main.ts": [
         "main.h",
         "pki-roots.ll",
@@ -22978,6 +23042,7 @@ const DECLARED = [
     "tests/link/net_webtransport_bad_streams_high/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_webtransport_close_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_webtransport_datagram_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_write_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_webtransport_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_webtransport_stream_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_webtransport_whole_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
@@ -23069,6 +23134,7 @@ const DECLARED = [
     "tests/link/net_webtransport_bad_streams_high/main.ts": ["exit"],
     "tests/link/net_webtransport_close_window/main.ts": ["exit"],
     "tests/link/net_webtransport_datagram_window/main.ts": ["exit"],
+    "tests/link/net_webtransport_write_window/main.ts": ["exit"],
     "tests/link/net_webtransport_f64/main.ts": ["exit"],
     "tests/link/net_webtransport_stream_window/main.ts": ["exit"],
     "tests/link/net_webtransport_whole_window/main.ts": ["exit"],
@@ -24437,6 +24503,7 @@ const DECLARED = [
       "tests/link/net_webtransport_bad_streams_high/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_webtransport_close_window/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_webtransport_datagram_window/main.ts": ["bytes.ll", "hpack.ll"],
+      "tests/link/net_webtransport_write_window/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_webtransport_f64/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_webtransport_stream_window/main.ts": ["bytes.ll", "hpack.ll"],
       "tests/link/net_webtransport_whole_window/main.ts": ["bytes.ll", "hpack.ll"],
@@ -25794,41 +25861,42 @@ const DECLARED = [
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
   },
-  // examples-strict S8: std/net/http3-frame.ts's `h3CheckWindow` becomes a window guard, the HTTP/3 writes answer H3_INVALID, and qpack.ts's integer writer cannot panic
-  ...byFinding(S8_RELAY_STD)(
-    "std/net/http3-frame.ts rewrites `h3CheckWindow` in the window guard's shape and has its three readers call it first, std/net/http3.ts's writes answer H3_INVALID for a window outside their buffer and its reads prove their windows, and std/net/qpack.ts's `qpackPushInteger` takes its prefix as a literal mask and a `u64` and no longer panics (the stream-ID check moves to `qpackPushStreamCancellation`), so http3-frame.ll, http3.ll, qpack.ll and the modules that call them move",
+  // #2457: `Http3Connection.readHeader` answers H3_INVALID through `fail`, so its `this` is no longer readonly
+  ...byFinding(WEBTRANSPORT_H3_INVALID)(
+    "std/net/http3.ts has `Http3Connection.readHeader` call `fail(H3_INVALID)` for a header block outside its window, so the method writes its connection: its definition in http3.ll gains the call and loses `readonly` on `this`, which renumbers the rest of the module, and every module that declares it moves by that one attribute",
     {
-      "bench/httparena/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/httparena_entry/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_grpc/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_grpc_interop/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http3_frame_bad_window/main.ts": ["main.ll"],
-      "tests/link/net_http_server_h1_tls/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll", "peer.ll"],
-      "tests/link/net_http_server_h1_tls_slots/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h1_tls_twice/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h1_tls_wait/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h2c_default_refused/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h2c_preface/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h2c_preface_drain/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h2c_preface_ended/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h2c_preface_full/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h2c_preface_h1/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h2c_preface_late/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h2c_preface_partial/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h2c_preface_pri/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_h2c_preface_silent/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_steps/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll", "net_http3_peer.ll"],
-      "tests/link/net_http_server_steps_full/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_steps_split/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_stream/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_trailers_after_end/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_trailers_ended/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_trailers_fields/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_trailers_h1/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_trailers_h3/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll", "net_http3_peer.ll"],
-      "tests/link/net_http_server_trailers_short/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_http_server_trailers_unstarted/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
-      "tests/link/net_static/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll", "net_http3_peer.ll"],
+      "examples/http-app/main.ts": ["http3.ll"],
+      "tests/link/net_grpc/main.ts": ["http3.ll"],
+      "tests/link/net_grpc_interop/main.ts": ["http3.ll"],
+      "tests/link/net_http_app/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h1_tls/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h1_tls_slots/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h1_tls_twice/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h1_tls_wait/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h2c_default_refused/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h2c_preface/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h2c_preface_drain/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h2c_preface_ended/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h2c_preface_full/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h2c_preface_h1/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h2c_preface_late/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h2c_preface_partial/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h2c_preface_pri/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_h2c_preface_silent/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_steps/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_steps_full/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_steps_split/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_stream/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_trailers_h3/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_trailers_short/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["http3.ll"],
+      "tests/link/net_http_server_ws/main.ts": ["client.ll", "http3.ll", "main.ll", "rig.ll", "tls-client.ll"],
+      "tests/link/net_static/main.ts": ["http3.ll"],
+      "tests/link/net_tls_rsa_server/main.ts": ["h3.ll", "http3.ll", "main.ll"],
     }
   ),
   // WP91 S4: std/net's HTTP modules drop their cast wraps for sums under
@@ -26431,6 +26499,50 @@ const DECLARED = [
     why: "the example drops its --allow-panics opt-out now that the handler's body decoder and the fetch, url and HMAC calls it makes cannot panic, so the seed, whose gzip reader still can (std/compress/gzip.ts:97), refuses it as a strict module",
   },
   ...s7HttpAppDeclared(),
+  ...[
+    "examples/http-app/main.ts",
+    "tests/link/net_http_app/main.ts",
+    "tests/link/net_http_server_ws/main.ts",
+    "tests/link/net_tls_rsa_server/main.ts",
+  ].map((program) => ({
+    program,
+    file: "hpack.ll",
+    changelog: ONE_NEW_ARRAY,
+    why: "HpackWork.take makes a class's room with one new Array of a guarded size in place of a 65535-byte start grown by pushes, so hpack.ll gains the size local and loses the push loop",
+  })),
+  ...["tests/link/net_handler_dead_loop/main.ts", "tests/link/net_http_server_ws/main.ts"].flatMap((program) => [
+    {
+      program,
+      file: "handler.ll",
+      changelog: ONE_NEW_ARRAY,
+      why: "handlerInts, handlerFlags and handlerBytes allocate their n elements at once and handlerHead, which capped the first allocation at 65535 for the pushes after it, goes",
+    },
+    {
+      program,
+      file: "http-compress.ll",
+      changelog: ONE_NEW_ARRAY,
+      why: "HttpCompressor's constructor makes its output with one zeroed new Array of compressBound's length in place of a push loop, so http-compress.ll declares memset",
+    },
+  ]),
+  {
+    program: "tests/link/net_tls_rsa_server/main.ts",
+    file: "checks.ll",
+    changelog: ONE_NEW_ARRAY,
+    why: "websocketBytes makes its bytes with one new Array and no push loop, so wsEvent's second lb.peers[index] read after WsDecoder.feed keeps the first read's bounds check and checks.ll drops its own",
+  },
+  ...Object.entries({
+    "examples/http-app/main.ts": ["http3.ll"],
+    "tests/link/net_http_app/main.ts": ["http3.ll"],
+    "tests/link/net_http_server_ws/main.ts": ["client.ll", "http3.ll", "main.ll", "rig.ll", "tls-client.ll"],
+    "tests/link/net_tls_rsa_server/main.ts": ["h3.ll", "http3.ll", "main.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: H3_READ_HEADER_FAILS,
+      why: "Http3Connection.readHeader's never-taken window guard fails the connection instead of answering a zero header, so http3.ll gains the fail call and every module declaring readHeader loses its readonly this",
+    }))
+  ),
 ]
 
 /**

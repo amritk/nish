@@ -1957,7 +1957,7 @@ function expose<u64[], u64[], hmacCopyWords>(s: Secret<u64[]>, f: void): u64[] -
   stackSites=0 stackLocals=0
   callee +0:70 hmacCopyWords -> @nish.hmacCopyWords
 function expose<u8[], u8[], jwtCopy>(s: Secret<u8[]>, f: void): u8[] -> @nish.expose$arr.u8$arr.u8$fn.12.nish.jwtCopy [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.jwtCopy
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -2232,18 +2232,17 @@ function jwtSignatureSize(key: JwtKey): i32 -> @nish.jwtSignatureSize
   callee +3:12 HmacKey.size -> @nish.HmacKey.size
   local +5:9 rsa: RsaPublicKey | null (const)
 function jwtCopy(a: u8[]): u8[] -> @nish.jwtCopy
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 out: u8[] (const)
-  local +1:12 k: i32 (let)
+  local +0:9 n: i32 (const)
+  local +4:9 out: u8[] (const)
 function jwtLength(a: u8[]): i32 -> @nish.jwtLength
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function JwtKey.constructor(this: JwtKey, alg: i32, hmac: HmacKey | null, rsa: RsaPublicKey | null, pub: u8[], priv: Secret<u8[]>, canSign: boolean): void -> @nish.JwtKey.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: alg canSign hmac pub rsa
   calls: nish.expose$arr.u8$arr.u8$fn.12.nish.jwtCopy nish.secret$arr.u8
   pointer this: size=40 writesThrough=true captured=false

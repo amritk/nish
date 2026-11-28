@@ -618,15 +618,9 @@ export class HttpCompressor {
     }
     this.gzip = new GzipCompressor(level)
     this.fixed = new GzipFixedCompressor()
-    // Grown a byte at a time, once: a length the compiler cannot see is not
-    // negative would cost `new Array` a check. No bench/instructions.json row
-    // builds a compressor, so no counted figure includes this loop.
-    const output: u8[] = []
+    // One zeroed allocation, sized once; the guard proves its length.
     const bound: i32 = compressBound(maxLength)
-    while (toI32(output.length) < bound) {
-      output.push(0)
-    }
-    this.output = output
+    this.output = bound > 0 ? new Array<u8>(bound) : []
     this.names = []
     this.values = []
     this.contentEncodingName = httpCompressBytes("content-encoding")
