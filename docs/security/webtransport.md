@@ -220,10 +220,14 @@ past a buffer) and `openStream` with WebTransport off.
 WebTransport over a QUIC connection that takes no datagrams
 (`net_webtransport_bad_datagrams`), and QUIC datagrams advertised with
 WebTransport off (`net_webtransport_bad_datagrams_off`); a `WebTransport` over
-a connection with WebTransport off (`net_webtransport_bad_layer`);
 `maxStreams` of 0 or past 4,096 (`net_webtransport_bad_streams`,
 `_bad_streams_high`); and `maxPending` negative or past 4,096
-(`net_webtransport_bad_pending`, `_bad_pending_high`). A window outside its
+(`net_webtransport_bad_pending`, `_bad_pending_high`). `openWebTransport`
+answers each cap out of range as an `Err` instead, and so a connection with
+WebTransport off, over which the constructor makes a layer of no sessions that
+answers every extended CONNECT 501 (`refusals.ts`: "over a connection with
+WebTransport off, a session is answered 501 and never reaches the program";
+`net_webtransport_bad_layer` prints both `Err`s and the empty layer). A window outside its
 buffer is not a panic: `sendDatagram` and `close`, and the
 `Http3Connection.writeStream` and `writeDataWhole` this layer writes through,
 answer H3_INVALID before anything about the session or stream is asked
@@ -237,8 +241,10 @@ lookup that answers null for an index outside its table, so no touch of a
 session or a stream is an unproven index; a CLOSE capsule's reason is read
 into its own session's buffer, and the code mappings and the waiting room's
 hash are worked in `f64`, which holds their values exactly. The sites left
-are five: the two kept panics, `webtransportCheckCap` and the constructor's
-checks above (entries with their reasons in `tests/std-panics.json`); the
+are four: the kept panic of `webtransportCheckConfig`, the constructor's
+first statement, which a caller proves by running `webtransportConfigFault`
+first, as `openWebTransport` does (its entry and reason in
+`tests/std-panics.json`); the
 salt `WebTransportWaiting` draws with `crypto.getRandomValues`, which exits
 when the system has no entropy; and the two `i64` sums of a clock reading and
 a wait of at most a day in `expire` and `expiresNoSooner`, which overflow

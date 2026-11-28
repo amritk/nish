@@ -122,7 +122,15 @@ would panic building its first connection, and `server.tryConnection(slot)`
 answers null where `server.connection(slot)` would panic
 (`http1ConnectionChecked` is the same twin for one connection);
 `examples/file-server.ts` and `examples/prefork-server.ts` are built this way
-and need no `--allow-panics`.
+and need no `--allow-panics`. HTTP/3 has the same pair:
+`openHttp3Server(quicConfig, config, fd, size, entropy)` answers a slot count
+outside 1 to 65,536, or an `idleTimeout` or `headTimeout` below one
+millisecond, as an `Err`, where `new Http3Server` would panic on the count and
+leave the timeouts to each slot's connection, built at its first Initial.
+`openWebTransport(config, h3)` answers a cap outside its range, or an
+`Http3Connection` with `webtransportSessions` 0, as an `Err`; over such a
+connection `new WebTransport` makes a layer with no sessions, which answers
+every request for one 501.
 [The standard library's `nish/net` section](standard-library.md#nishnet) has
 the details.
 

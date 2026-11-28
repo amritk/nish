@@ -90,6 +90,8 @@ export class WtLimits {
   /** The session clock: milliseconds idle, and datagrams a second. */
   idleTimeout: i32 = 60000;
   maxDatagramsPerSecond: i32 = 1024;
+  /** The server's SETTINGS_ENABLE_CONNECT_PROTOCOL with `sessions` 0, which turns WebTransport off. */
+  extendedConnect: boolean = false;
 }
 
 /** The QUIC configuration of `limits`: `h3`, and DATAGRAM frames up to `datagramFrame`. */
@@ -123,6 +125,7 @@ export const wtH3Config = (limits: WtLimits): Http3Config => {
   const config = new Http3Config();
   config.maxFieldSectionSize = n32(8192);
   config.webtransportSessions = limits.sessions;
+  config.extendedConnect = limits.extendedConnect;
   return config;
 };
 

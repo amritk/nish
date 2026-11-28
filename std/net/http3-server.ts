@@ -821,22 +821,14 @@ export class Http3Server {
    * @param quicConfig The QUIC configuration, kept by reference and shared by the listener and every slot.
    * @param config The HTTP/3 configuration, kept by reference; its `bodyChunk` and `maxFieldSectionSize`
    *   size the shared buffer pools.
+   *   `config`'s timeouts are checked by each slot's connection, built on its first Initial;
+   *   `openHttp3Server` checks them before it builds the server and answers either fault as an `Err`.
    * @param fd The bound UDP socket, kept; the server does not close it.
-   * @param size How many slots, 1 to 65536; any other panics, as does an `idleTimeout` or `headTimeout`
-   *   under 1.
+   * @param size How many slots, 1 to 65536; any other panics, a contract of this constructor.
    * @param listenerEntropy `QUIC_LISTENER_ENTROPY_SIZE` random bytes, copied and then zeroed in this array.
    */
   constructor(quicConfig: QuicServerConfig, config: Http3Config, fd: i32, size: i32, listenerEntropy: u8[]) {
-    if (size < 1 || size > 65536) {
-      panic(`Http3Server: ${size} slots, outside 1 to 65536`)
-    }
-    // Checked here as well as by each slot's connection, which is built only on its first Initial.
-    if (config.idleTimeout < 1) {
-      panic(`Http3Server: idleTimeout of ${config.idleTimeout}, outside 1 to 2147483647`)
-    }
-    if (config.headTimeout < 1) {
-      panic(`Http3Server: headTimeout of ${config.headTimeout}, outside 1 to 2147483647`)
-    }
+    http3ServerCheckSize(size)
     this.quicConfig = quicConfig
     this.config = config
     this.fd = fd
@@ -1798,4 +1790,63 @@ export class Http3Server {
   timeout(now: i64): i32 {
     return this.wheel.next(now)
   }
+}
+
+/** Why `size` cannot be a server's slot count, or `""` when it can. */
+const http3ServerSizeFault = (size: i32): string => {
+  if (size < 1 || size > 65536) {
+    return `Http3Server: ${size} slots, outside 1 to 65536`
+  }
+  return ""
+}
+
+/** Panics unless `size` can be a server's slot count: a count out of range is the program's mistake. */
+const http3ServerCheckSize = (size: i32): void => {
+  const fault: string = http3ServerSizeFault(size)
+  if (fault.length > 0) {
+    panic(fault)
+  }
+}
+
+/** Why `config`'s timeouts cannot serve a connection, or `""` when they can; `Http3Connection` panics on the same. */
+const http3ServerTimeoutFault = (config: Http3Config): string => {
+  if (config.idleTimeout < 1) {
+    return `Http3Server: idleTimeout of ${config.idleTimeout}, outside 1 to 2147483647`
+  }
+  if (config.headTimeout < 1) {
+    return `Http3Server: headTimeout of ${config.headTimeout}, outside 1 to 2147483647`
+  }
+  return ""
+}
+
+/**
+ * A server as `new Http3Server(quicConfig, config, fd, size, listenerEntropy)`
+ * makes one, with a slot count out of range, which that constructor panics
+ * on, and an `idleTimeout` or `headTimeout` under 1, which each slot's
+ * connection would panic on at its first Initial, answered as an `Err`
+ * before anything is built or `listenerEntropy` is touched.
+ * @param quicConfig The QUIC configuration, as the constructor keeps it.
+ * @param config The HTTP/3 configuration, as the constructor keeps it.
+ * @param fd The bound UDP socket, kept; the server does not close it.
+ * @param size How many slots, 1 to 65536.
+ * @param listenerEntropy `QUIC_LISTENER_ENTROPY_SIZE` random bytes, copied and then zeroed in this array
+ *   when the server is built.
+ * @returns `Ok` with the server, or `Err` saying which of `size`, `idleTimeout` and `headTimeout` is out of range.
+ */
+export const openHttp3Server = (
+  quicConfig: QuicServerConfig,
+  config: Http3Config,
+  fd: i32,
+  size: i32,
+  listenerEntropy: u8[]
+): Result<Http3Server, string> => {
+  const timeouts: string = http3ServerTimeoutFault(config)
+  if (timeouts.length > 0) {
+    return Err(timeouts)
+  }
+  const fault: string = http3ServerSizeFault(size)
+  if (fault.length > 0) {
+    return Err(fault)
+  }
+  return Ok(new Http3Server(quicConfig, config, fd, size, listenerEntropy))
 }

@@ -1,1 +1,6 @@
 a layer over WebTransport: 0
+openWebTransport over WebTransport: Ok, 2 free
+a maxStreams of 4097: Err: WebTransport: maxStreams of 4097, outside 1 to 4096
+a maxDatagramsPerSecond of 0: Err: WebTransport: maxDatagramsPerSecond of 0, outside 1 to 1048576
+a layer over WebTransport off has 0 free sessions
+openWebTransport over WebTransport off: Err: WebTransport: the Http3Connection has WebTransport off (webtransportSessions 0)

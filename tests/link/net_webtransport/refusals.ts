@@ -88,6 +88,15 @@ const sessionsRefused = (t: Suite): void => {
   p.send(n64(4), p.connectFrame("/ws", "websocket", "https"), false);
   p.settle();
   t.eqStr("another :protocol is answered 501 (RFC 8441 §4)", p.status(n64(4)), ":status: 501");
+  const offLimits = new WtLimits();
+  offLimits.sessions = n32(0);
+  offLimits.datagramFrame = n64(0);
+  offLimits.extendedConnect = true;
+  const off: WtPeer = wtConnect(offLimits);
+  off.open();
+  off.session(n64(0), "/echo");
+  off.settle();
+  t.ok("over a connection with WebTransport off, a session is answered 501 and never reaches the program", off.status(n64(0)) === ":status: 501" && toI32(off.log.length) === n32(0) && off.wt.sessionsRefused === n32(1));
   p.send(n64(8), p.connectFrame("/plain", "webtransport", "http"), false);
   p.settle();
   t.eqStr("an :scheme other than https is answered 400", p.status(n64(8)), ":status: 400");

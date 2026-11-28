@@ -1054,8 +1054,8 @@
     },
     {
       "module": "std/net/http3-server.ts",
-      "function": "Http3Server.constructor",
-      "reason": "slot count must be 1 to 65536 and idle/head timeouts at least 1; static server configuration"
+      "function": "http3ServerCheckSize",
+      "reason": "slot count must be 1 to 65536; the constructor's fault contract, which openHttp3Server proves by running http3ServerSizeFault and answering an Err"
     },
     {
       "module": "std/net/http3.ts",
@@ -1389,13 +1389,8 @@
     },
     {
       "module": "std/net/webtransport.ts",
-      "function": "WebTransport.constructor",
-      "reason": "The Http3Connection must have webtransportSessions above 0 and caps in range; static setup chosen by the caller"
-    },
-    {
-      "module": "std/net/webtransport.ts",
-      "function": "webtransportCheckCap",
-      "reason": "A WebTransport cap must lie in its documented range; the doc calls it the program's mistake, fixed statically"
+      "function": "webtransportCheckConfig",
+      "reason": "every WebTransport cap must lie in its documented range; the constructor's fault contract, which openWebTransport proves by running webtransportConfigFault and answering an Err"
     },
     {
       "module": "std/random.ts",

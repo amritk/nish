@@ -1,1 +1,4 @@
 one-millisecond timeouts make a server of 4 slots
+Err: Http3Server: idleTimeout of 0, outside 1 to 2147483647
+Err: Http3Server: 0 slots, outside 1 to 65536
+Err: Http3Server: 65537 slots, outside 1 to 65536

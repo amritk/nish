@@ -312,10 +312,32 @@ export const wtCodeFromHttp3 = (code: i64): i64 => {
   return toI64(shifted - Math.floor(shifted / 31.0))
 }
 
-/** Panics unless `value` lies in `[low, high]`: a cap out of range is the program's mistake. */
-const webtransportCheckCap = (what: string, value: i32, low: i32, high: i32): void => {
-  if (value < low || value > high) {
-    panic(`WebTransport: ${what} of ${value}, outside ${low} to ${high}`)
+/** Why `value`, the cap `what`, lies outside `[low, high]`, or `""` when it lies inside. */
+const webtransportCapFault = (what: string, value: i32, low: i32, high: i32): string =>
+  value < low || value > high ? `WebTransport: ${what} of ${value}, outside ${low} to ${high}` : ""
+
+/** Why `config` cannot make a layer, or `""` when it can: the first cap out of range. */
+const webtransportConfigFault = (config: WebTransportConfig): string => {
+  const streams: string = webtransportCapFault("maxStreams", config.maxStreams, 1, WT_MAX_CAP)
+  if (streams.length > 0) {
+    return streams
+  }
+  const pending: string = webtransportCapFault("maxPending", config.maxPending, 0, WT_MAX_CAP)
+  if (pending.length > 0) {
+    return pending
+  }
+  const idle: string = webtransportCapFault("idleTimeout", config.idleTimeout, 1, WT_MAX_IDLE)
+  if (idle.length > 0) {
+    return idle
+  }
+  return webtransportCapFault("maxDatagramsPerSecond", config.maxDatagramsPerSecond, 1, WT_MAX_RATE)
+}
+
+/** Panics unless `config` can make a layer: a cap out of range is the program's mistake. */
+const webtransportCheckConfig = (config: WebTransportConfig): void => {
+  const fault: string = webtransportConfigFault(config)
+  if (fault.length > 0) {
+    panic(fault)
   }
 }
 
@@ -743,23 +765,21 @@ export class WebTransport {
   closedByPeer: boolean = false
 
   /**
-   * The WebTransport layer of `h3`, whose `Http3Config` must have
-   * `webtransportSessions` above 0. A cap out of range panics.
+   * The WebTransport layer of `h3`, one session for each of its `Http3Config`'s
+   * `webtransportSessions`. Over a connection with WebTransport off (0) the
+   * layer has no sessions and answers every request for one 501, as for a
+   * `:protocol` it does not serve; `openWebTransport` answers that as an `Err`.
+   * A cap out of range panics, a contract of this constructor: `openWebTransport`
+   * answers it as an `Err`.
    * @param config The caps: `maxStreams` 1 to 4096, `maxPending` 0 to 4096, `idleTimeout` 1 to
    *   86,400,000 and `maxDatagramsPerSecond` 1 to 1,048,576; kept, not copied.
    * @param h3 The connection this layer reads and writes, kept for the layer's life; its restarts
    *   restart this layer too.
    */
   constructor(config: WebTransportConfig, h3: Http3Connection) {
+    webtransportCheckConfig(config)
+    // `Http3Connection` holds the count to 0 through `H3_MAX_SESSIONS`.
     const sessions: i32 = h3.config.webtransportSessions
-    // `Http3Connection` already holds the count to `H3_MAX_SESSIONS`; what can be wrong here is a connection with WebTransport off.
-    if (sessions < 1) {
-      panic("WebTransport: the Http3Connection has WebTransport off (webtransportSessions 0)")
-    }
-    webtransportCheckCap("maxStreams", config.maxStreams, 1, WT_MAX_CAP)
-    webtransportCheckCap("maxPending", config.maxPending, 0, WT_MAX_CAP)
-    webtransportCheckCap("idleTimeout", config.idleTimeout, 1, WT_MAX_IDLE)
-    webtransportCheckCap("maxDatagramsPerSecond", config.maxDatagramsPerSecond, 1, WT_MAX_RATE)
     this.config = config
     this.h3 = h3
     this.quic = h3.quic
@@ -1205,7 +1225,7 @@ export class WebTransport {
     }
     let status: i32 = 0
     const peer = h3.peer
-    if (!httpFieldIs(f.protocol, "webtransport")) {
+    if (!httpFieldIs(f.protocol, "webtransport") || toI32(this.table.length) === 0) {
       status = 501
     } else if (
       !httpFieldIs(f.scheme, "https") ||
@@ -1987,4 +2007,24 @@ export class WebTransport {
     }
     return result === QUIC_DATAGRAM_ERR_FULL ? H3_AGAIN : H3_TOO_LARGE
   }
+}
+
+/**
+ * A layer as `new WebTransport(config, h3)` makes one, with a cap out of
+ * range, which that constructor panics on, and a connection with WebTransport
+ * off, over which that constructor's layer would refuse every session,
+ * answered as an `Err`.
+ * @param config The caps, as the constructor reads them; kept, not copied.
+ * @param h3 The connection the layer reads and writes, kept for the layer's life.
+ * @returns `Ok` with the layer, or `Err` saying which cap is out of range or that `h3` has WebTransport off.
+ */
+export const openWebTransport = (config: WebTransportConfig, h3: Http3Connection): Result<WebTransport, string> => {
+  if (h3.config.webtransportSessions < 1) {
+    return Err("WebTransport: the Http3Connection has WebTransport off (webtransportSessions 0)")
+  }
+  const fault: string = webtransportConfigFault(config)
+  if (fault.length > 0) {
+    return Err(fault)
+  }
+  return Ok(new WebTransport(config, h3))
 }
