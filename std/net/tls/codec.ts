@@ -1847,11 +1847,10 @@ export const tlsWriteCertificateVerifyContent = (
  * bytes or with a vector its length field cannot hold, gives an empty one, which the writer then leaves empty.
  */
 const tlsZeros = (n: i32): u8[] => {
-  const out: u8[] = []
-  for (let k: i32 = 0; k < n; k++) {
-    out.push(0)
+  if (n <= 0) {
+    return []
   }
-  return out
+  return new Array<u8>(n)
 }
 
 /** The bytes of `name` as a string of one character a byte, which `tlsWriteEncryptedExtensions` writes back as they were. */

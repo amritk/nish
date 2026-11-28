@@ -1457,22 +1457,19 @@ const quicConnAt = (base: i32, k: i32, length: i32): i32 => {
 }
 
 /**
- * A new array of `count` zero bytes: none for a count of 0 or less. A count
- * that fits a `u16` is sized at once; a larger one is pushed byte by byte,
- * so no `i32` length is computed for `new Array`.
+ * A new array of `count` zero bytes: none for a count of 0 or less, or for
+ * one past an `i32`, which no array can hold. One allocation, its length
+ * proven by the guards.
  */
 const quicConnBytes = (count: i64): u8[] => {
-  if (count <= 0) {
+  if (count <= 0 || count > 2147483647) {
     return []
   }
-  if (count <= 65535) {
-    return new Array<u8>(toU16(count))
+  const n: i32 = toI32(count)
+  if (n <= 0) {
+    return []
   }
-  const out: u8[] = []
-  while (toI64(out.length) < count) {
-    out.push(toU8(0))
-  }
-  return out
+  return new Array<u8>(n)
 }
 
 /**
