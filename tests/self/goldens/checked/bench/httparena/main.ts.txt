@@ -4388,8 +4388,8 @@ function jsonValueRoom(a: u8[], n: i32): u8[] -> @nish.jsonValueRoom
   stackSites=0 stackLocals=0
   local +0:9 have: i32 (const)
   local +4:9 target: i32 (const)
-  callee +4:29 jsonValueGrownLength -> @nish.jsonValueGrownLength
-  local +8:9 grown: u8[] (const)
+  callee +4:30 jsonValueGrownLength -> @nish.jsonValueGrownLength
+  local +5:9 grown: u8[] (const)
 function jsonValueRoomI32(a: i32[], n: i32): i32[] -> @nish.jsonValueRoomI32
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a n
@@ -4398,8 +4398,8 @@ function jsonValueRoomI32(a: i32[], n: i32): i32[] -> @nish.jsonValueRoomI32
   stackSites=0 stackLocals=0
   local +0:9 have: i32 (const)
   local +4:9 target: i32 (const)
-  callee +4:29 jsonValueGrownLength -> @nish.jsonValueGrownLength
-  local +8:9 grown: i32[] (const)
+  callee +4:30 jsonValueGrownLength -> @nish.jsonValueGrownLength
+  local +5:9 grown: i32[] (const)
 function jsonValueGrownLength(have: i32, n: i32): u32 -> @nish.jsonValueGrownLength
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -9079,11 +9079,11 @@ function http1Grown(old: u8[], from: i32, live: u32, size: u32): u8[] -> @nish.h
   pointer old: size=0 writesThrough=false captured=false passedTo=nish.http1WindowEnd#0 nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +4:9 buf: u8[] (const)
-  local +7:9 to: i32 (const)
-  callee +7:19 http1WindowEnd -> @nish.http1WindowEnd
-  local +9:11 count: i32 (const)
-  callee +10:5 tryCopyBytes -> @nish.tryCopyBytes
+  local +1:9 buf: u8[] (const)
+  local +4:9 to: i32 (const)
+  callee +4:19 http1WindowEnd -> @nish.http1WindowEnd
+  local +6:11 count: i32 (const)
+  callee +7:5 tryCopyBytes -> @nish.tryCopyBytes
 function http1Fail(p: Http1Parser, status: i32, reason: string): i32 -> @nish.http1Fail
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -9231,9 +9231,9 @@ function http1SpanSet(p: Http1Parser, at: i32, value: i32): void -> @nish.http1S
   escaping: at value
   pointer p: size=232 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -20:11 old: i32[] (const)
-  local -17:11 wide: i64 (const)
-  local -13:11 size: i32 (const)
+  local -18:11 old: i32[] (const)
+  local -11:11 wide: u32 (const)
+  local -10:11 size: i32 (const)
   local -9:11 grown: i32[] (const)
   local -4:11 keep: i32 (const)
   local -3:14 k: i32 (let)

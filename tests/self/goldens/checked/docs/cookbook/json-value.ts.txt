@@ -1442,8 +1442,8 @@ function jsonValueRoom(a: u8[], n: i32): u8[] -> @nish.jsonValueRoom
   stackSites=0 stackLocals=0
   local +0:9 have: i32 (const)
   local +4:9 target: i32 (const)
-  callee +4:29 jsonValueGrownLength -> @nish.jsonValueGrownLength
-  local +8:9 grown: u8[] (const)
+  callee +4:30 jsonValueGrownLength -> @nish.jsonValueGrownLength
+  local +5:9 grown: u8[] (const)
 function jsonValueRoomI32(a: i32[], n: i32): i32[] -> @nish.jsonValueRoomI32
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a n
@@ -1452,8 +1452,8 @@ function jsonValueRoomI32(a: i32[], n: i32): i32[] -> @nish.jsonValueRoomI32
   stackSites=0 stackLocals=0
   local +0:9 have: i32 (const)
   local +4:9 target: i32 (const)
-  callee +4:29 jsonValueGrownLength -> @nish.jsonValueGrownLength
-  local +8:9 grown: i32[] (const)
+  callee +4:30 jsonValueGrownLength -> @nish.jsonValueGrownLength
+  local +5:9 grown: i32[] (const)
 function jsonValueGrownLength(have: i32, n: i32): u32 -> @nish.jsonValueGrownLength
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

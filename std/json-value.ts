@@ -2334,17 +2334,16 @@ const jsonValueSpan = (from: i32, to: i32): i32 => (from < 0 || to < from ? -1 :
  * least twice as long, for the caller to keep in `a`'s place. Doubling is
  * what keeps a run of appends linear, and the old array is left in the arena.
  * The copy is one zeroed allocation and one bulk `set`, not a `push` per
- * element.
+ * element. `jsonValueGrownLength` answers at most `JSON_VALUE_I32_MAX`, so
+ * clearing its top bit (`<< 1 >>> 1`), which is what proves the
+ * allocation's length non-negative, changes nothing.
  */
 const jsonValueRoom = (a: u8[], n: i32): u8[] => {
   const have: i32 = toI32(a.length)
   if (n <= have) {
     return a
   }
-  const target: i32 = toI32(jsonValueGrownLength(have, n))
-  if (target < 0) {
-    return a
-  }
+  const target: i32 = toI32((jsonValueGrownLength(have, n) << toU32(1)) >>> toU32(1))
   const grown: u8[] = new Array<u8>(target)
   // Always true (`target` > `have`); the prover does not carry `grown.length === target` from `new Array`.
   if (toI32(a.length) <= toI32(grown.length)) {
@@ -2359,10 +2358,7 @@ const jsonValueRoomI32 = (a: i32[], n: i32): i32[] => {
   if (n <= have) {
     return a
   }
-  const target: i32 = toI32(jsonValueGrownLength(have, n))
-  if (target < 0) {
-    return a
-  }
+  const target: i32 = toI32((jsonValueGrownLength(have, n) << toU32(1)) >>> toU32(1))
   const grown: i32[] = new Array<i32>(target)
   // Always true (`target` > `have`); the prover does not carry `grown.length === target` from `new Array`.
   if (toI32(a.length) <= toI32(grown.length)) {

@@ -781,7 +781,8 @@ const http1Reserve = (p: Http1Parser, len: i32): boolean => {
  * A buffer of `size` bytes whose first `live` are `old[from ..]`: one zeroed
  * allocation and one bulk copy. The first input buffer, `HTTP1_FIRST_INPUT`
  * bytes, is the common one and copies nothing. Its callers cap `size` below
- * 2^31 (`HTTP1_MOST_INPUT`), so the empty answer past that is never taken.
+ * 2^31 (twice `HTTP1_MOST_INPUT`), so clearing its top bit (`<< 1 >>> 1`),
+ * which is what proves the allocation's length non-negative, changes nothing.
  */
 const http1Grown = (old: u8[], from: i32, live: u32, size: u32): u8[] => {
   if (old.length === 0 && size === toU32(HTTP1_FIRST_INPUT)) {
@@ -790,13 +791,7 @@ const http1Grown = (old: u8[], from: i32, live: u32, size: u32): u8[] => {
   if (old.length === 0 && size === toU32(HTTP1_FIRST_HEAD)) {
     return new Array<u8>(HTTP1_FIRST_HEAD)
   }
-  if (size > toU32(2147483647)) {
-    return []
-  }
-  const n: i32 = toI32(size)
-  if (n <= 0) {
-    return []
-  }
+  const n: i32 = toI32((size << toU32(1)) >>> toU32(1))
   const buf: u8[] = new Array<u8>(n)
   // `live` is the count from `from` to the end of the bytes in `old`, so the
   // window always fits and `to` is its end; -1 copies nothing.
@@ -1245,16 +1240,14 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
 const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
   if (at >= toI32(p.spans.length)) {
     const old: i32[] = p.spans
-    // `at` counts four spans a field, far below 2^30, so the size fits an i32;
-    // the guard is what proves the allocation's length.
-    const wide: i64 = at < HTTP1_FIRST_SPANS ? toI64(HTTP1_FIRST_SPANS) : toI64(at) * toI64(2) + toI64(4)
-    if (wide > toI64(2147483647)) {
-      return // Not reached: a head under 2^30 holds under 2^28 fields, so `at` is under 2^30.
-    }
-    const size: i32 = toI32(wide)
-    if (size <= 0) {
-      return
-    }
+    // `at` counts four spans a field. The head is under `HTTP1_MOST_INPUT`
+    // (2^30) bytes and each field line takes at least four of them, so there
+    // are under 2^28 fields, `at` is under 2^30 and the size under 2^31:
+    // clearing its top bit (`<< 1 >>> 1`), which is what proves the
+    // allocation's length non-negative, changes nothing.
+    // (The caller's own guard is looser: it lets the count reach 2^29 - 1.)
+    const wide: u32 = at < HTTP1_FIRST_SPANS ? toU32(HTTP1_FIRST_SPANS) : toU32(at) * toU32(2) + toU32(4)
+    const size: i32 = toI32((wide << toU32(1)) >>> toU32(1))
     const grown: i32[] = new Array<i32>(size)
     // `new Array` is zero-filled already. The fill stays because
     // `Http1Parser.next` inlines this function, and without the fill it
