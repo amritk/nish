@@ -131,7 +131,8 @@ What an author meets:
 - The entry module exports no handle class and no function that names one
   (NL2827); a library module may.
 - Its `std/<name>.wasm32.ts` twin owns a `HostHandle` where the native file
-  owns a pointer.
+  owns a pointer, each in a `private` field: the pair's public members must
+  match (NL3063).
 
 ## Where to read next
 

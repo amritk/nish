@@ -247,9 +247,9 @@ declare function Err<T, E>(error: E): Result<T, E>;
  * A handle class is a class that owns one or more `readonly` fields, each a
  * `CPtr`, an opaque `declare class`, a `HostHandle` or another handle class
  * (each but a `HostHandle` perhaps `| null`). Its `[Symbol.dispose](): void`
- * closes each native field, as `close(this.file);` or `const p = this.file;
- * if (p !== null) { close(p); }` for a `declare function` `close` of one
- * parameter, and the owned fields close in the reverse of their declaration.
+ * closes each native field, the last declared first, as `close(this.file);`
+ * or `const p = this.file; if (p !== null) { close(p); }` for a `declare
+ * function` `close` of one parameter.
  * `using` of a handle class closes it at every exit of its block, once, in the
  * reverse of the order the declarators opened; a panic and `process.exit` do
  * not close.

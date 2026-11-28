@@ -114,8 +114,8 @@ function.
 **A `std/` resource owns its native handle and closes with `using`.** With
 one owner it holds the object directly, a pointer natively and a `HostHandle`
 on `wasm32`, as a [handle class](docs/LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr):
-one field load per call, and no use after close, proved with no runtime
-check. It holds a table id only for an object that is shared, kept in a
+one field load and the direct call, and no use after close, proved with no
+runtime check. It holds a table id only for an object that is shared, kept in a
 collection or owned by the JS side, as `std/sqlite.ts` does (a use after
 close answers `MISUSE`). A bare `close()` is not the standard for a new
 module (`.claude/architecture.md` → "A `std/` resource").
