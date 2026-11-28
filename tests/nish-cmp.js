@@ -496,6 +496,8 @@ const declareStringExports = (moved, changelog, why) =>
  * for one release: the reseed that ships a change makes its entries match
  * nothing, the full run says so, and they go.
  */
+// #2457's subject: readHeader's window guard fails the connection.
+const H3_READ_HEADER_FAILS = "Pin the WebTransport H3_INVALID guard and fix http3 record counts"
 // The std/ push-loop audit lands under this PR's subject, which names the
 // one new Array each copy now makes.
 const ONE_NEW_ARRAY = "one new Array"
@@ -26307,6 +26309,19 @@ const DECLARED = [
     changelog: ONE_NEW_ARRAY,
     why: "websocketBytes makes its bytes with one new Array and no push loop, so wsEvent's second lb.peers[index] read after WsDecoder.feed keeps the first read's bounds check and checks.ll drops its own",
   },
+  ...Object.entries({
+    "examples/http-app/main.ts": ["http3.ll"],
+    "tests/link/net_http_app/main.ts": ["http3.ll"],
+    "tests/link/net_http_server_ws/main.ts": ["client.ll", "http3.ll", "main.ll", "rig.ll", "tls-client.ll"],
+    "tests/link/net_tls_rsa_server/main.ts": ["h3.ll", "http3.ll", "main.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: H3_READ_HEADER_FAILS,
+      why: "Http3Connection.readHeader's never-taken window guard fails the connection instead of answering a zero header, so http3.ll gains the fail call and every module declaring readHeader loses its readonly this",
+    }))
+  ),
 ]
 
 /**
