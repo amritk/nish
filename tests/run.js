@@ -11772,10 +11772,11 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
     // Printed on a pass too. The baselines were counted under more than one
     // glibc and valgrind, and a runner whose own counts sit lower can pass a
     // real rise that this container fails (#1727, bench/README.md "Which
-    // environment a count is from"). Each runner's table shows its counts.
+    // environment a count is from"). Each runner's table shows its counts, a
+    // new row's (baseline `-`) included: CI's count is the one its baseline takes.
     if (counted.status === 0) {
       for (const line of counted.stdout.split("\n")) {
-        if (/^(instructions: valgrind|program |\S+ +\S+ +[\d,]+ +[\d,]+ )/.test(line)) console.log(`  ${line}`)
+        if (/^(instructions: valgrind|program |\S+ +\S+ +[\d,]+ +(?:[\d,]+|-) )/.test(line)) console.log(`  ${line}`)
       }
     }
   }
