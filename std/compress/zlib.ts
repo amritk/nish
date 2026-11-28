@@ -166,7 +166,14 @@ export class ZlibDecompressor {
    */
   decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 {
     // One test for every argument, so the call's misuse is one panic site.
-    if (off < 0 || len < 0 || off > toI32(src.length) - len || at < 0 || at > toI32(out.length) || limit < 0) {
+    if (
+      off < 0 ||
+      len < 0 ||
+      off > toI32(src.length) - len ||
+      at < 0 ||
+      at > toI32(out.length) ||
+      limit < 0
+    ) {
       panic("ZlibDecompressor.decompress: a window outside its array, or a negative limit")
     }
     return this.decompressRange(src, off, toI32(toI64(off) + toI64(len)), out, at, limit)

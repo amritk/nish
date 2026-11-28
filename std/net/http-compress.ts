@@ -80,7 +80,12 @@
  * output buffer of `compressBound(maxLength)` bytes and
  * the field arrays `addFields` fills, all built once.
  */
-import { DEFLATE_ERR_OUTPUT_LIMIT, DEFLATE_ERR_WINDOW, DEFLATE_FAST, compressBound } from "nish/compress/deflate"
+import {
+  DEFLATE_ERR_OUTPUT_LIMIT,
+  DEFLATE_ERR_WINDOW,
+  DEFLATE_FAST,
+  compressBound,
+} from "nish/compress/deflate"
 import { adler32 } from "nish/compress/checksum"
 import { GzipCompressor, GzipDecompressor, GzipFixedCompressor } from "nish/compress/gzip"
 import { ZlibDecompressor } from "nish/compress/zlib"
