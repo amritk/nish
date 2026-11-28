@@ -53,6 +53,12 @@ const usage = (error: string): i32 => {
   return 2
 }
 
+/** Whether less than `budget` nanoseconds have passed since `start`, a `monotonicNanos` reading. */
+const draining = (start: i64, budget: i64): boolean => {
+  const now: i64 = monotonicNanos()
+  return now >= 0 && start >= 0 && now - start < budget
+}
+
 export const main = (): i32 => {
   const config = configure(process.argv)
   if (config.error !== "") {
@@ -106,12 +112,14 @@ export const main = (): i32 => {
   }
   console.log(`http-app: stopping, draining ${h.connections()} connections`)
   h.drain()
-  // `u64`, which wraps rather than panics, and cannot here: the clock counts
-  // from boot and `--drain-ms` has nine digits at most, so the sum stays
-  // under 2^60.
-  const deadline: i64 = toI64(toU64(monotonicNanos()) + toU64(config.drainMs) * toU64(NANOS_PER_MS))
+  // The drain is timed by what has passed since it began, not by a deadline
+  // summed from the clock: the budget is an `i32` of milliseconds in
+  // nanoseconds, under 2^51, and two clock readings, neither negative,
+  // subtract without overflow, so both are proven to fit.
+  const start: i64 = monotonicNanos()
+  const budget: i64 = config.drainMs < 0 ? 0 : toI64(config.drainMs) * NANOS_PER_MS
   let forced = false
-  while (h.connections() > 0 && monotonicNanos() < deadline && !forced) {
+  while (h.connections() > 0 && draining(start, budget) && !forced) {
     serveTurn(app, DRAIN_TURN_MS)
     if (h.fired(SIGNALS)) {
       readSignal(signals)

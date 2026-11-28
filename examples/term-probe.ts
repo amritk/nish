@@ -59,9 +59,12 @@ const render = (p: Probe, frame: Frame): void => {
   const height: i32 = fb.height
   // The options ask for 320 by 180, so these tests always hold: they are the
   // bounds that prove the band's arithmetic cannot overflow or divide by 0.
+  // The band steps 3 pixels a frame around `span`: the frame count is taken
+  // modulo 65536 first, so `step * 3` is proven to fit rather than wrapped.
   if (width > 20 && height >= 0 && height <= 180) {
     const span: i32 = width - 20
-    const x0: i32 = toI32(p.frames * toU32(3)) % span
+    const step: i32 = toI32(p.frames % toU32(65536))
+    const x0: i32 = step >= 0 && step < 65536 ? (step * 3) % span : 0
     if (x0 >= 0 && x0 < 300) {
       for (let y: i32 = height / 3; y < (height * 2) / 3; y++) {
         for (let x: i32 = x0; x < x0 + 20; x++) {

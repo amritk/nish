@@ -8,6 +8,9 @@
 //   node scripts/wrap-casts.mjs            check the tree (npm run lint)
 //   node scripts/wrap-casts.mjs --update   lower scripts/wrap-casts.txt to the tree's counts;
 //                                          refuses to raise one or add a file
+//   node scripts/wrap-casts.mjs --root D   check the copy at D, its own baseline and files
+//                                          found by walking D rather than git (tests/run.js
+//                                          plants a cast in one and expects exit 1)
 //
 // A cast wrap is a `toI32(...)` call whose argument has a `toU32(...)` result
 // as a direct operand of `+`, `-` or `*`, or the same with `toI64` and
@@ -25,7 +28,33 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
-const root = path.resolve(import.meta.dirname, "..")
+const usage = "the flags are --update and --root D"
+const fail = (message) => {
+  console.error(`wrap-casts: ${message}; ${usage}`)
+  process.exit(2)
+}
+let rootArg
+let update = false
+const args = process.argv.slice(2)
+for (let i = 0; i < args.length; i++) {
+  const a = args[i]
+  if (a === "--root") {
+    const value = args[i + 1]
+    if (value === undefined || value.startsWith("--")) {
+      fail("--root needs a value")
+    }
+    rootArg = value
+    i++
+  } else if (a === "--update") {
+    update = true
+  } else {
+    fail(`unknown argument ${a}`)
+  }
+}
+const root = path.resolve(rootArg ?? path.join(import.meta.dirname, ".."))
+if (!fs.existsSync(path.join(root, "std")) || !fs.statSync(path.join(root, "std")).isDirectory()) {
+  fail(`${root} has no std/ directory`)
+}
 const baselinePath = path.join(root, "scripts", "wrap-casts.txt")
 const scanned = ["std", "src", "examples"]
 const pairs = [
@@ -148,12 +177,28 @@ const header = [
   "# lower them with `node scripts/wrap-casts.mjs --update`, never by hand.",
 ]
 
-const files = execFileSync("git", ["ls-files", "--", ...scanned.map((d) => `${d}/*.ts`)], {
-  cwd: root,
-  encoding: "utf8",
-})
-  .split("\n")
-  .filter((f) => f.endsWith(".ts"))
+/** The `.ts` files under `dir` of `root`, as `/`-separated paths from `root`. */
+const walk = (dir) => {
+  const at = path.join(root, dir)
+  if (!fs.existsSync(at)) {
+    return []
+  }
+  return fs.readdirSync(at, { withFileTypes: true }).flatMap((e) => {
+    if (e.isDirectory()) {
+      return walk(`${dir}/${e.name}`)
+    }
+    return e.name.endsWith(".ts") ? [`${dir}/${e.name}`] : []
+  })
+}
+// The live tree lists what git tracks; a --root copy need not be a repository, so it is walked.
+const files = (
+  rootArg === undefined
+    ? execFileSync("git", ["ls-files", "--", ...scanned.map((d) => `${d}/*.ts`)], {
+        cwd: root,
+        encoding: "utf8",
+      }).split("\n")
+    : scanned.flatMap(walk)
+).filter((f) => f.endsWith(".ts"))
 const found = new Map()
 for (const f of files) {
   const sites = castWraps(fs.readFileSync(path.join(root, f), "utf8"))
@@ -184,7 +229,7 @@ if (rises.length > 0) {
   )
   process.exit(1)
 }
-if (process.argv.includes("--update")) {
+if (update) {
   const lines = [...found].sort(([a], [b]) => (a < b ? -1 : 1)).map(([f, sites]) => `${sites.length} ${f}`)
   fs.writeFileSync(baselinePath, `${[...header, ...lines].join("\n")}\n`)
   const total = [...found.values()].reduce((n, s) => n + s.length, 0)
