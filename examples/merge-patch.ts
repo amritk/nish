@@ -1,10 +1,10 @@
 // Opt-out (`--allow-panics`): this file keeps no panic site of its own. The
 // one site its calls still reach is the lead-byte read in `std/bytes`'s UTF-8
-// walk (`bytesUtf8End`, std/bytes.ts:592:27): its caller's loop tests the
-// index, but a call forgets that test. A guard inside the walk proves it, but
-// moves the std-json-typed bench by +0.45% instructions, over its +0.1%
-// tolerance. Once the read is proven without that cost, build this file
-// without `--allow-panics`.
+// walk (`bytesUtf8End`, std/bytes.ts:700:27): its caller's loop tests the
+// index, but a call forgets that test. Proving the read inside the walk costs
+// +0.436% instructions on the std-json-typed bench, over its +0.1% tolerance,
+// so the walk keeps its check. Once the read is proven without that cost,
+// build this file without `--allow-panics`.
 // smoke: args --allow-panics
 //
 // A JSON Merge Patch (RFC 7396) applied to a typed record, with typed JSON's

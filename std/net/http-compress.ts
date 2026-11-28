@@ -1144,6 +1144,27 @@ export const HTTP_DECODE_BAD_CALL: i32 = -3
 const HTTP_DECODE_FIRST: i32 = 4096
 
 /**
+ * Why `new HttpBodyDecoder(limit)` would panic: a `limit` under 1. A caller
+ * that checks it first, and leaves on a fault, reaches no panic there.
+ * @param limit the limit the decoder would be made with
+ * @returns the fault, or "" when the limit is at least 1
+ */
+export const httpBodyDecoderFault = (limit: i32): string => {
+  if (limit < 1) {
+    return `HttpBodyDecoder: a limit of ${limit} is under 1`
+  }
+  return ""
+}
+
+/** Panics on the fault `httpBodyDecoderFault` names, the decoder's contract. */
+const httpCheckBodyDecoder = (limit: i32): void => {
+  const fault: string = httpBodyDecoderFault(limit)
+  if (fault.length > 0) {
+    panic(fault)
+  }
+}
+
+/**
  * Decodes a request body sent with `Content-Encoding: gzip` or `deflate`
  * under a limit on what it decodes to, so a small body that inflates to
  * gigabytes (a decompression bomb) is refused once `limit` bytes are out,
@@ -1168,13 +1189,11 @@ export class HttpBodyDecoder {
 
   /**
    * A decoder that refuses a body decoding to more than `limit` bytes; a
-   * `limit` under 1 panics.
+   * `limit` under 1 panics, the fault `httpBodyDecoderFault` names first.
    * @param limit the most bytes one body may decode to
    */
   constructor(limit: i32) {
-    if (limit < 1) {
-      panic(`HttpBodyDecoder: a limit of ${limit} is under 1`)
-    }
+    httpCheckBodyDecoder(limit)
     this.limit = limit
     this.output = []
     this.gunzip = new GzipDecompressor()

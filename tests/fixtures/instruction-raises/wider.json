@@ -1,0 +1,12 @@
+{
+  "about": "raised.json with its tolerance widened to 5%: the base's 0.1% still holds, so the comparison fails rises.",
+  "tolerance": 0.05,
+  "programs": {
+    "kept": { "instructions": 100000000 },
+    "rises": { "instructions": 202000000 },
+    "falls": { "instructions": 290000000 },
+    "within": { "instructions": 400200000 },
+    "added": { "instructions": 600000000 }
+  },
+  "raises": []
+}

@@ -213,7 +213,7 @@ that decision the way `TlsTcpClient` does: the signature under the leaf's
 key, then the chain to a root in `trust` for the server's name at `nowMs`,
 and the verdict sent. Use it unless you have your own check.
 
-<!-- allow-panics: calls `std/net/tls/verify.ts` code that reaches `std/crypto/sha256.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/tls/verify.ts` code that reaches `std/crypto/sha256.ts` and `std/crypto/x509.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client";

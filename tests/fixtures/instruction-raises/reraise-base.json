@@ -1,0 +1,14 @@
+{
+  "about": "base.json after an earlier raise of rises to 202000000 was recorded and its count later fell back to 200000000: recorded.json's entry is this file's, so it cannot record the same raise again.",
+  "tolerance": 0.001,
+  "programs": {
+    "kept": { "instructions": 100000000 },
+    "rises": { "instructions": 200000000 },
+    "falls": { "instructions": 300000000 },
+    "within": { "instructions": 400000000 },
+    "removed": { "instructions": 500000000 }
+  },
+  "raises": [
+    { "row": "rises", "from": 200000000, "to": 202000000, "why": "the fixture's earlier raise", "pr": null }
+  ]
+}

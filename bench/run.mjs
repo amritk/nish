@@ -30,7 +30,19 @@
 //                       bench/instructions.json; nothing is timed. With --check,
 //                       fail when one exceeds its baseline by more than the
 //                       tolerance; with --update, rewrite the baseline (a PR that
-//                       does must say why). --runs N repeats each run (default 1)
+//                       refuses a count above its baseline by more than the
+//                       tolerance unless --raise names the row). --runs N
+//                       repeats each run (default 1)
+//     --raise a,b       with --update: the rows allowed to rise; each gets a
+//                       `raises` entry in bench/instructions.json. Needs --why
+//     --why <text>      with --raise: the reason the entries record
+//     --pr <n>          with --raise: the pull request the entries name (left
+//                       null when not given, for the pull request to fill in)
+//     --baseline <file> test hook: read and write this file in place of
+//                       bench/instructions.json
+//     --counts <file>   test hook: take the counts from this JSON object of
+//                       program name to count in place of building and running
+//                       anything, so --update's refusal runs without valgrind
 //
 // The WP32 map programs are the four layout prototypes (bench/map_proto_*.ts)
 // and the three measurements of the global `Map` (map-wordcount, map-presize,
@@ -65,6 +77,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { compileArgv, compilerFrom } from "./compiler.mjs"
+import { programsProblems, raisesProblems } from "../scripts/instruction-raises.mjs"
 import { BAND_EDGE, cgroupCpus, judge, readAcross, spreadOf, times3 } from "./par-reading.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -241,6 +254,11 @@ const opts = {
   instructions: false,
   check: false,
   update: false,
+  raise: new Set(),
+  why: null,
+  pr: null,
+  baseline: null,
+  counts: null,
   rust: true,
   go: true,
   rayon: true,
@@ -285,6 +303,21 @@ for (let i = 2; i < argv.length; i++) {
     opts.check = true
   } else if (a === "--update") {
     opts.update = true
+  } else if (a === "--raise") {
+    for (const name of next().split(",").filter(Boolean)) {
+      opts.raise.add(name)
+    }
+  } else if (a === "--why") {
+    opts.why = next()
+  } else if (a === "--pr") {
+    opts.pr = Number(next())
+    if (!Number.isSafeInteger(opts.pr) || opts.pr < 1) {
+      fail("--pr expects a pull request number")
+    }
+  } else if (a === "--baseline") {
+    opts.baseline = path.resolve(next())
+  } else if (a === "--counts") {
+    opts.counts = path.resolve(next())
   } else if (a === "--no-rust") {
     opts.rust = false
   } else if (a === "--no-go") {
@@ -324,6 +357,15 @@ if ((opts.check || opts.update) && !opts.instructions) {
 }
 if (opts.check && opts.update) {
   fail("--check and --update are exclusive: update the baseline or check it")
+}
+if ((opts.raise.size > 0 || opts.why !== null || opts.pr !== null) && !opts.update) {
+  fail("--raise, --why and --pr belong to --instructions --update")
+}
+if (opts.raise.size > 0 !== (opts.why !== null && opts.why.trim() !== "")) {
+  fail("--raise and --why go together: name the rows that rise and say why")
+}
+if (opts.pr !== null && opts.raise.size === 0) {
+  fail("--pr names the pull request of a --raise")
 }
 // Counting runs only the Nish builds, so the other languages are not looked up.
 if (opts.instructions) {
@@ -572,7 +614,7 @@ const buildAwfy = (dir) => {
   return exe
 }
 
-const BASELINE_FILE = path.join(benchDir, "instructions.json")
+const BASELINE_FILE = opts.baseline ?? path.join(benchDir, "instructions.json")
 
 /**
  * The one environment variable a counted run is given. glibc picks its
@@ -795,10 +837,22 @@ const countInstructions = (valgrind, exe, args, name) => {
  */
 const runInstructions = () => {
   const valgrind = which("valgrind")
-  if (!valgrind) {
+  if (!valgrind && !opts.counts) {
     fail("--instructions needs valgrind on PATH (Linux only; see bench/README.md)")
   }
   const baseline = JSON.parse(fs.readFileSync(BASELINE_FILE, "utf8"))
+  // Every raise a baseline carries is recorded beside it (bench/README.md,
+  // "Raising a baseline"), so a file without the list, or with an entry
+  // scripts/instruction-raises.mjs could not match, is refused, as is a
+  // stored count that is not a positive integer, which would compare as
+  // neither above nor below its tolerance.
+  if (!Array.isArray(baseline.raises)) {
+    fail(`${path.relative(root, BASELINE_FILE)} has no \`raises\` array`)
+  }
+  const malformed = [...programsProblems(baseline.programs), ...raisesProblems(baseline.raises)]
+  if (malformed.length > 0) {
+    fail(`${path.relative(root, BASELINE_FILE)}: ${malformed.join("; ")}`)
+  }
   const host = `${process.platform}-${process.arch}`
   if ((opts.check || opts.update) && host !== baseline.platform) {
     fail(
@@ -827,6 +881,39 @@ const runInstructions = () => {
     }
   }
 
+  for (const name of opts.raise) {
+    if (!names.includes(name)) {
+      fail(`--raise names \`${name}\`, which bench/instructions.json does not list`)
+    }
+  }
+  const runs = opts.runsGiven ? opts.runs : 1
+  const rows = opts.counts
+    ? injectedRows(baseline, names, wanted)
+    : countRows(valgrind, baseline, counted, wanted, runs)
+  return reportInstructions(valgrind, baseline, names, rows, runs)
+}
+
+/**
+ * The rows `--counts` names, as `countRows` would answer them: the test hook
+ * that lets `--update`'s refusal run without valgrind or a build.
+ */
+const injectedRows = (baseline, names, wanted) => {
+  const counts = JSON.parse(fs.readFileSync(opts.counts, "utf8"))
+  const rows = []
+  for (const [name, count] of Object.entries(counts)) {
+    if (!names.includes(name) || !Number.isSafeInteger(count) || count < 1) {
+      fail(`--counts: \`${name}\` is not a listed program with a positive integer count`)
+    }
+    if (wanted(name, "")) {
+      const base = baseline.programs[name].instructions
+      rows.push({ name, size: "-", count, spread: 0, base, change: change(count, base) })
+    }
+  }
+  return rows
+}
+
+/** Builds the wanted programs, runs each under cachegrind and answers one row a program. */
+const countRows = (valgrind, baseline, counted, wanted, runs) => {
   const dir = path.join(outDir, "instructions")
   const src = path.join(dir, "src")
   fs.mkdirSync(src, { recursive: true })
@@ -895,7 +982,6 @@ const runInstructions = () => {
   }
   process.stderr.write(" ok; counting")
 
-  const runs = opts.runsGiven ? opts.runs : 1
   const rows = []
   for (const job of jobs) {
     const counts = []
@@ -909,13 +995,26 @@ const runInstructions = () => {
     process.stderr.write(".")
   }
   process.stderr.write("\n")
+  return rows
+}
 
+/**
+ * Prints the rows against the baseline and, under `--check` or `--update`,
+ * judges or writes them. Answers the exit status.
+ */
+const reportInstructions = (valgrind, baseline, names, rows, runs) => {
+  const rel = (p) => path.relative(root, p)
   const tolerance = baseline.tolerance
   const pct = (x) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(3)}%`
   const num = (x) => x.toLocaleString("en-US")
   // An update reports what it moves; a check reports what it would fail.
   const [above, below, within] = opts.update ? ["raised", "lowered", "kept"] : ["REGRESSED", "below", "ok"]
+  // A row with no stored count yet is new: an update records it, and a check
+  // has nothing to hold it to.
   const status = (r) => {
+    if (r.base === undefined) {
+      return "new"
+    }
     if (r.change > tolerance) {
       return above
     }
@@ -934,14 +1033,15 @@ const runInstructions = () => {
       [base, within],
     ]
     for (const [count, want] of probes) {
-      const got = status({ change: change(count, base) })
+      const got = status({ base, change: change(count, base) })
       if (got !== want) {
         fail(`--check's own comparison is broken: ${count} against ${base} reads ${got}, not ${want}`)
       }
     }
   }
+  const valgrindVersion = valgrind ? version(valgrind) : "valgrind-none (--counts)"
   console.log(
-    `instructions: ${version(valgrind)} cachegrind, whole process, --profile speed; tolerance ${pct(tolerance)}`
+    `instructions: ${valgrindVersion} cachegrind, whole process, --profile speed; tolerance ${pct(tolerance)}`
   )
   const width = Math.max(12, ...rows.map((r) => r.name.length + 2))
   console.log(
@@ -950,16 +1050,36 @@ const runInstructions = () => {
   for (const r of rows) {
     const spread = runs > 1 ? String(r.spread).padStart(8) : ""
     console.log(
-      `${r.name.padEnd(width)}${r.size.padEnd(12)}${num(r.count).padStart(16)}${num(r.base).padStart(16)}${pct(r.change).padStart(10)}${spread}  ${status(r)}`
+      `${r.name.padEnd(width)}${r.size.padEnd(12)}${num(r.count).padStart(16)}${(r.base === undefined ? "-" : num(r.base)).padStart(16)}${(r.base === undefined ? "-" : pct(r.change)).padStart(10)}${spread}  ${status(r)}`
     )
   }
 
   if (opts.update) {
+    // A count only rises when --raise names its row, and each named row has to
+    // rise: the entry it gets records a raise that happened.
+    const unnamed = rows.filter((r) => status(r) === above && !opts.raise.has(r.name))
+    const idle = [...opts.raise].filter((name) => !rows.some((r) => r.name === name && status(r) === above))
+    if (unnamed.length > 0 || idle.length > 0) {
+      for (const r of unnamed) {
+        console.log(
+          `refused: ${r.name} rises ${pct(r.change)} (${r.base} to ${r.count}); name it with --raise ${r.name} --why "..." to record the raise`
+        )
+      }
+      for (const name of idle) {
+        console.log(
+          `refused: --raise names ${name}, which this update does not raise above ${pct(tolerance)}`
+        )
+      }
+      console.log(`instructions: ${rel(BASELINE_FILE)} is left as it was`)
+      return 1
+    }
+    for (const r of rows.filter((x) => status(x) === above)) {
+      baseline.raises.push({ row: r.name, from: r.base, to: r.count, why: opts.why, pr: opts.pr })
+    }
     const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
       cwd: root,
       encoding: "utf8",
     }).trim()
-    const valgrindVersion = version(valgrind)
     // The file's `commit` and `valgrind` say where every count was measured, so
     // only an update of every program restamps them. An `--only` update stamps
     // the programs it counted instead, and a later full update clears those.
@@ -981,7 +1101,7 @@ const runInstructions = () => {
       }
     }
     // One program to a line, so a diff of the file reads as the table above.
-    const { programs: baselinePrograms, ...header } = baseline
+    const { programs: baselinePrograms, raises, ...header } = baseline
     const entry = (p) =>
       `{ ${Object.entries(p)
         .map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`)
@@ -989,12 +1109,16 @@ const runInstructions = () => {
     const body = Object.entries(baselinePrograms).map(
       ([name, p]) => `    ${JSON.stringify(name)}: ${entry(p)}`
     )
+    const raised = raises.length === 0 ? "[]" : `[\n${raises.map((e) => `    ${entry(e)}`).join(",\n")}\n  ]`
     fs.writeFileSync(
       BASELINE_FILE,
-      JSON.stringify(header, null, 2).replace(/\n}$/, `,\n  "programs": {\n${body.join(",\n")}\n  }\n}\n`)
+      JSON.stringify(header, null, 2).replace(
+        /\n}$/,
+        `,\n  "programs": {\n${body.join(",\n")}\n  },\n  "raises": ${raised}\n}\n`
+      )
     )
     console.log(
-      `wrote ${rel(BASELINE_FILE)}: ${rows.length} count(s); say why in the pull request that carries it`
+      `wrote ${rel(BASELINE_FILE)}: ${rows.length} count(s), ${raises.length} raise(s) recorded in all`
     )
     return 0
   }

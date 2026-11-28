@@ -822,183 +822,204 @@ const BYTES_QUOTE: i32 = 34
 const BYTES_BACKSLASH: i32 = 92
 const BYTES_NON_ASCII: i32 = 128
 const BYTES_CONTINUATION_TOP: i32 = 191
+function bytesWindow(what: string, b: readonly u8[], off: i32, len: i32): void -> @nish.bytesWindow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 size: i32 (const)
 function getU16LE(b: u8[], off: i32): u16 -> @nish.getU16LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=false captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU16BE(b: u8[], off: i32): u16 -> @nish.getU16BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=false captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU32LE(b: u8[], off: i32): u32 -> @nish.getU32LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=false captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU32BE(b: u8[], off: i32): u32 -> @nish.getU32BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=false captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU64LE(b: u8[], off: i32): u64 -> @nish.getU64LE [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
-  pointer b: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  local +0:7 v: u64 (let)
-  local +1:12 i: i32 (let)
-function getU64BEByByte(b: u8[], off: i32): u64 -> @nish.getU64BEByByte
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
-  pointer b: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:7 v: u64 (let)
-  local +1:12 i: i32 (let)
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU64BEByByte
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BEByByte#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:10 getU64BEByByte -> @nish.getU64BEByByte
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getI32LE(b: u8[], off: i32): i32 -> @nish.getI32LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU32LE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU32LE#0
+  calls: nish.bytesWindow nish.getU32LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU32LE#0
   stackSites=0 stackLocals=0
-  callee +0:59 getU32LE -> @nish.getU32LE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:16 getU32LE -> @nish.getU32LE
 function getI32BE(b: u8[], off: i32): i32 -> @nish.getI32BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU32BE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU32BE#0
+  calls: nish.bytesWindow nish.getU32BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU32BE#0
   stackSites=0 stackLocals=0
-  callee +0:59 getU32BE -> @nish.getU32BE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:16 getU32BE -> @nish.getU32BE
 function getI64LE(b: u8[], off: i32): i64 -> @nish.getI64LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU64LE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64LE#0
+  calls: nish.bytesWindow nish.getU64LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64LE#0
   stackSites=0 stackLocals=0
-  callee +0:59 getU64LE -> @nish.getU64LE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:16 getU64LE -> @nish.getU64LE
 function getI64BE(b: u8[], off: i32): i64 -> @nish.getI64BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU64BE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BE#0
+  calls: nish.bytesWindow nish.getU64BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64BE#0
   stackSites=0 stackLocals=0
-  callee +0:59 getU64BE -> @nish.getU64BE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:16 getU64BE -> @nish.getU64BE
 function getF64LE(b: u8[], off: i32): f64 -> @nish.getF64LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU64LE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64LE#0
+  calls: nish.bytesWindow nish.getU64LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64LE#0
   stackSites=0 stackLocals=0
-  callee +0:69 getU64LE -> @nish.getU64LE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:26 getU64LE -> @nish.getU64LE
 function getF64BE(b: u8[], off: i32): f64 -> @nish.getF64BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU64BE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BE#0
+  calls: nish.bytesWindow nish.getU64BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64BE#0
   stackSites=0 stackLocals=0
-  callee +0:69 getU64BE -> @nish.getU64BE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:26 getU64BE -> @nish.getU64BE
 function setU16LE(b: u8[], off: i32, v: u16): void -> @nish.setU16LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=true captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU16BE(b: u8[], off: i32, v: u16): void -> @nish.setU16BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=true captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU32LE(b: u8[], off: i32, v: u32): void -> @nish.setU32LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=true captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU32BE(b: u8[], off: i32, v: u32): void -> @nish.setU32BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=true captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU64LE(b: u8[], off: i32, v: u64): void -> @nish.setU64LE [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish_panic_index nish_panic_overflow
-  pointer b: size=0 writesThrough=true captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  local -1:12 i: i32 (let)
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU64BE(b: u8[], off: i32, v: u64): void -> @nish.setU64BE [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish_panic_index nish_panic_overflow
-  pointer b: size=0 writesThrough=true captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  local -1:12 i: i32 (let)
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setI32LE(b: u8[], off: i32, v: i32): void -> @nish.setI32LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU32LE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU32LE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU32LE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU32LE -> @nish.setU32LE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u32 (const)
 function setI32BE(b: u8[], off: i32, v: i32): void -> @nish.setI32BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU32BE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU32BE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU32BE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU32BE -> @nish.setU32BE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u32 (const)
 function setI64LE(b: u8[], off: i32, v: i64): void -> @nish.setI64LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU64LE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU64LE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64LE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU64LE -> @nish.setU64LE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u64 (const)
 function setI64BE(b: u8[], off: i32, v: i64): void -> @nish.setI64BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU64BE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU64BE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64BE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU64BE -> @nish.setU64BE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u64 (const)
 function setF64LE(b: u8[], off: i32, v: f64): void -> @nish.setF64LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU64LE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU64LE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64LE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU64LE -> @nish.setU64LE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u64 (const)
 function setF64BE(b: u8[], off: i32, v: f64): void -> @nish.setF64BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU64BE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU64BE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64BE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU64BE -> @nish.setU64BE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u64 (const)
 function bytesRunEnd(b: u8[], to: i32): i32 -> @nish.bytesRunEnd
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: to
@@ -4113,18 +4134,19 @@ function http1TryWriteChunk(out: u8[], at: i32, data: readonly u8[], off: i32, l
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tryCopyBytes#0 nish.http1PutCrlf#0 nish.http1PutCrlf#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
-  local -29:9 size: i32 (const)
-  local -22:9 digits: i32 (const)
-  callee -22:23 http1HexDigits -> @nish.http1HexDigits
-  local -21:9 outLength: i32 (const)
-  local -19:9 need: u64 (const)
-  local -13:9 end32: u32 (const)
-  local -12:9 headEnd32: u32 (const)
-  local -11:9 end: i32 (const)
-  local -10:9 headEnd: i32 (const)
-  callee -7:8 tryCopyBytes -> @nish.tryCopyBytes
-  local -4:7 v: i32 (let)
-  local -2:12 k: i32 (let)
+  local -31:9 size: i32 (const)
+  local -24:9 digits: i32 (const)
+  callee -24:23 http1HexDigits -> @nish.http1HexDigits
+  local -23:9 outLength: i32 (const)
+  local -21:9 need: u64 (const)
+  local -15:9 end32: u32 (const)
+  local -14:9 headEnd32: u32 (const)
+  local -13:9 end: i32 (const)
+  local -12:9 headEnd: i32 (const)
+  callee -9:8 tryCopyBytes -> @nish.tryCopyBytes
+  local -6:7 v: i32 (let)
+  local -3:9 last32: u32 (const)
+  local -2:12 j: i32 (let)
   local -1:11 d: i32 (const)
   callee +3:3 http1PutCrlf -> @nish.http1PutCrlf
   local +4:9 tail32: u32 (const)
@@ -6557,9 +6579,6 @@ function dnsLookupWith(config: DnsConfig, hosts: DnsHosts | null, name: string, 
   callee +56:5 DnsClient.tick -> @nish.DnsClient.tick
   callee +57:14 DnsClient.result -> @nish.DnsClient.result
 module std/net/dns-message.ts [package nish]
-import getU16BE from "nish/bytes" -> function @nish.getU16BE
-import getU32BE from "nish/bytes" -> function @nish.getU32BE
-import setU16BE from "nish/bytes" -> function @nish.setU16BE
 const DNS_TYPE_A: i32 = 1 [exported]
 const DNS_TYPE_CNAME: i32 = 5 [exported]
 const DNS_TYPE_AAAA: i32 = 28 [exported]
@@ -6619,32 +6638,28 @@ function dnsCheckLength(bytes: u8[], len: i32, who: string): void -> @nish.dnsCh
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function dnsBe16(hi: u8, lo: u8): u16 -> @nish.dnsBe16
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function dnsLower(b: i32): i32 -> @nish.dnsLower
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
   stackSites=0 stackLocals=0
 function dnsBuildQuery(out: u8[], id: i32, name: string, qtype: i32): i32 -> @nish.dnsBuildQuery [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: nish.setU16BE nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.setU16BE#0 nish.setU16BE#0 nish.setU16BE#0 nish.setU16BE#0 nish.setU16BE#0 nish.setU16BE#0 nish.setU16BE#0 nish.setU16BE#0
+  sharedWrite: +0:3
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -40:7 n: i32 (let)
-  local -28:9 total: i32 (const)
-  callee -24:3 setU16BE -> @nish.setU16BE
-  callee -23:3 setU16BE -> @nish.setU16BE
-  callee -22:3 setU16BE -> @nish.setU16BE
-  callee -21:3 setU16BE -> @nish.setU16BE
-  callee -20:3 setU16BE -> @nish.setU16BE
-  callee -19:3 setU16BE -> @nish.setU16BE
-  local -16:7 label: i32 (let)
-  local -15:7 i: i32 (let)
-  local -13:11 b: i32 (const)
-  local -4:13 lengthAt: i32 (const)
-  local +9:13 at: i32 (const)
-  local +17:9 rootAt: i32 (const)
-  callee +22:3 setU16BE -> @nish.setU16BE
-  callee +23:3 setU16BE -> @nish.setU16BE
+  local -18:7 n: i32 (let)
+  local -6:9 total: i32 (const)
+  local +14:7 label: i32 (let)
+  local +15:7 i: i32 (let)
+  local +17:11 b: i32 (const)
+  local +26:13 lengthAt: i32 (const)
+  local +39:13 at: i32 (const)
+  local +47:9 rootAt: i32 (const)
+  local +53:9 typeAt: i32 (const)
 function dnsReadName(msg: u8[], len: i32, off: i32, out: u8[]): i32 -> @nish.dnsReadName
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -6693,10 +6708,9 @@ function dnsCopyName(name: u8[], into: u8[]): void -> @nish.dnsCopyName
   local -6:9 k: i32 (let)
   local -4:13 at: i32 (const)
 function dnsKeepAddress(msg: u8[], at: i32, size: i32, port: i32, ttl: i32, reply: DnsReply): boolean -> @nish.dnsKeepAddress
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: ttl
-  calls: nish.setU16BE
   pointer msg: size=0 writesThrough=false captured=false
   pointer reply: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -6708,60 +6722,54 @@ function dnsKeepAddress(msg: u8[], at: i32, size: i32, port: i32, ttl: i32, repl
   local +3:7 k: i32 (let)
   local +14:11 from: i32 (const)
   local +18:11 to: i32 (const)
-  callee +25:3 setU16BE -> @nish.setU16BE
 function dnsParseReply(msg: u8[], len: i32, query: u8[], queryLen: i32, port: i32, reply: DnsReply): i32 -> @nish.dnsParseReply [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: len port queryLen
-  calls: nish.dnsCheckLength nish.dnsCopyName nish.dnsKeepAddress nish.dnsReadName nish.dnsSameName nish.getU16BE nish.getU32BE nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer msg: size=0 writesThrough=false captured=false passedTo=nish.dnsCheckLength#0 nish.getU16BE#0 nish.getU16BE#0 nish.getU16BE#0 nish.dnsReadName#0 nish.getU16BE#0 nish.getU16BE#0 nish.getU16BE#0 nish.getU16BE#0 nish.getU16BE#0 nish.getU16BE#0 nish.dnsReadName#0 nish.getU16BE#0 nish.getU16BE#0 nish.getU32BE#0 nish.getU16BE#0 nish.dnsReadName#0 nish.dnsKeepAddress#0
-  pointer query: size=0 writesThrough=false captured=false passedTo=nish.dnsCheckLength#0 nish.getU16BE#0 nish.dnsReadName#0 nish.getU16BE#0 nish.getU16BE#0 nish.getU16BE#0
+  calls: nish.dnsBe16 nish.dnsCheckLength nish.dnsCopyName nish.dnsKeepAddress nish.dnsReadName nish.dnsSameName nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  pointer msg: size=0 writesThrough=true captured=false passedTo=nish.dnsCheckLength#0 nish.dnsReadName#0 nish.dnsReadName#0 nish.dnsReadName#0 nish.dnsKeepAddress#0
+  pointer query: size=0 writesThrough=true captured=false passedTo=nish.dnsCheckLength#0 nish.dnsReadName#0
   pointer reply: size=56 writesThrough=true captured=false passedTo=nish.dnsKeepAddress#5
   stackSites=0 stackLocals=0
   callee -5:3 dnsCheckLength -> @nish.dnsCheckLength
   callee -4:3 dnsCheckLength -> @nish.dnsCheckLength
-  local +7:9 flags: i32 (const)
-  callee +7:28 getU16BE -> @nish.getU16BE
-  callee +14:24 getU16BE -> @nish.getU16BE
-  callee +14:45 getU16BE -> @nish.getU16BE
-  callee +17:13 getU16BE -> @nish.getU16BE
-  local +20:9 asked: i32 (const)
-  callee +20:22 dnsReadName -> @nish.dnsReadName
-  local +25:9 named: i32 (const)
-  callee +25:22 dnsReadName -> @nish.dnsReadName
-  callee +34:6 dnsSameName -> @nish.dnsSameName
-  callee +35:5 getU16BE -> @nish.getU16BE
-  callee +35:30 getU16BE -> @nish.getU16BE
-  callee +36:5 getU16BE -> @nish.getU16BE
-  callee +36:34 getU16BE -> @nish.getU16BE
-  local +40:9 qtype: i32 (const)
-  callee +40:28 getU16BE -> @nish.getU16BE
-  local +42:9 rcode: i32 (const)
-  local +52:7 pos: i32 (let)
-  local +53:9 records: i32 (const)
-  callee +53:30 getU16BE -> @nish.getU16BE
-  callee +53:56 getU16BE -> @nish.getU16BE
-  callee +53:82 getU16BE -> @nish.getU16BE
-  local +60:9 answers: i32 (const)
-  callee +60:30 getU16BE -> @nish.getU16BE
-  local +61:7 dropped: i32 (let)
-  local +62:7 i: i32 (let)
-  local +64:11 fixed: i32 (const)
-  callee +64:24 dnsReadName -> @nish.dnsReadName
-  local +71:11 type: i32 (const)
-  callee +71:29 getU16BE -> @nish.getU16BE
-  local +72:11 klass: i32 (const)
-  callee +72:30 getU16BE -> @nish.getU16BE
-  local +73:11 rawTtl: i32 (const)
-  callee +73:31 getU32BE -> @nish.getU32BE
-  local +74:11 size: i32 (const)
-  callee +74:29 getU16BE -> @nish.getU16BE
-  local +75:11 data: i32 (const)
-  callee +83:11 dnsSameName -> @nish.dnsSameName
-  local +85:17 target: i32 (const)
-  callee +85:31 dnsReadName -> @nish.dnsReadName
-  callee +92:11 dnsCopyName -> @nish.dnsCopyName
-  callee +93:39 dnsKeepAddress -> @nish.dnsKeepAddress
+  local +9:9 flags: i32 (const)
+  callee +9:28 dnsBe16 -> @nish.dnsBe16
+  callee +16:52 dnsBe16 -> @nish.dnsBe16
+  callee +16:80 dnsBe16 -> @nish.dnsBe16
+  callee +19:7 dnsBe16 -> @nish.dnsBe16
+  local +22:9 asked: i32 (const)
+  callee +22:22 dnsReadName -> @nish.dnsReadName
+  local +27:9 named: i32 (const)
+  callee +27:22 dnsReadName -> @nish.dnsReadName
+  callee +36:6 dnsSameName -> @nish.dnsSameName
+  local +44:9 qtype: i32 (const)
+  callee +44:28 dnsBe16 -> @nish.dnsBe16
+  local +46:9 rcode: i32 (const)
+  local +56:7 pos: i32 (let)
+  local +57:9 answers: i32 (const)
+  callee +57:30 dnsBe16 -> @nish.dnsBe16
+  local +58:9 records: i32 (const)
+  callee +58:40 dnsBe16 -> @nish.dnsBe16
+  callee +58:73 dnsBe16 -> @nish.dnsBe16
+  local +65:7 dropped: i32 (let)
+  local +66:7 i: i32 (let)
+  local +68:11 fixed: i32 (const)
+  callee +68:24 dnsReadName -> @nish.dnsReadName
+  local +75:11 type: i32 (const)
+  callee +75:29 dnsBe16 -> @nish.dnsBe16
+  local +76:11 klass: i32 (const)
+  callee +76:30 dnsBe16 -> @nish.dnsBe16
+  local +77:11 ttlBits: u32 (const)
+  local +82:11 rawTtl: i32 (const)
+  local +83:11 size: i32 (const)
+  callee +83:29 dnsBe16 -> @nish.dnsBe16
+  local +84:11 data: i32 (const)
+  callee +92:11 dnsSameName -> @nish.dnsSameName
+  local +94:17 target: i32 (const)
+  callee +94:31 dnsReadName -> @nish.dnsReadName
+  callee +101:11 dnsCopyName -> @nish.dnsCopyName
+  callee +102:39 dnsKeepAddress -> @nish.dnsKeepAddress
 module std/net/dns-config.ts [package nish]
 import setU16BE from "nish/bytes" -> function @nish.setU16BE
 import DNS_ADDRESS_BYTES from "nish/net/dns-message" -> const DNS_ADDRESS_BYTES
@@ -6900,7 +6908,9 @@ function dnsParseAddressVia(b: u8[], from: i32, to: i32, out: u8[], at: i32, por
   callee +7:10 dnsParseIpv6 -> @nish.dnsParseIpv6
   local +13:7 p: i32 (let)
   local +14:7 k: i32 (let)
-  callee +20:3 setU16BE -> @nish.setU16BE
+  local +22:9 portAt: i32 (const)
+  local +23:9 portBits: u16 (const)
+  callee +27:3 setU16BE -> @nish.setU16BE
 function dnsWordIs(b: u8[], from: i32, to: i32, word: string): boolean -> @nish.dnsWordIs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from to
@@ -7013,14 +7023,11 @@ function dnsParseResolvConf(b: u8[], off: i32, len: i32, config: DnsConfig): voi
   callee +19:31 dnsCommentCut -> @nish.dnsCommentCut
   callee +26:5 dnsFallbackServers -> @nish.dnsFallbackServers
 function dnsFallbackServers(servers: u8[]): void -> @nish.dnsFallbackServers
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.setU16BE
-  pointer servers: size=0 writesThrough=true captured=false passedTo=nish.setU16BE#0 nish.setU16BE#0
+  pointer servers: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:7 k: i32 (let)
-  callee +8:3 setU16BE -> @nish.setU16BE
-  callee +9:3 setU16BE -> @nish.setU16BE
 function dnsAddHostName(b: u8[], from: i32, to: i32, entry: i32, hosts: DnsHosts): void -> @nish.dnsAddHostName
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -7091,30 +7098,32 @@ function dnsHostsFind(hosts: DnsHosts, name: string, qtype: i32, port: i32, out:
   pointer hosts: size=72 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.setU16BE#0
   stackSites=0 stackLocals=0
-  local -73:7 n: i32 (let)
-  local -69:9 addresses: u8[] (const)
-  local -68:9 names: u8[] (const)
-  local -67:9 starts: i32[] (const)
-  local -66:9 lengths: i32[] (const)
-  local -65:9 entries: i32[] (const)
-  local -64:9 count: i32 (const)
-  local -63:9 wantV4: boolean (const)
-  local -62:7 found: i32 (let)
-  local -61:7 last: i32 (let)
-  local -60:7 i: i32 (let)
-  local -53:11 entry: i32 (const)
-  local -47:13 at: i32 (const)
-  local -46:13 room: i32 (const)
-  local -42:11 p: i32 (let)
-  local -41:11 zeros: i32 (let)
-  local -35:13 v4: boolean (const)
-  local -30:11 same: boolean (let)
-  local -28:15 start: i32 (const)
-  local -24:13 q: i32 (let)
-  local -23:13 k: i32 (let)
-  local -21:17 c: i32 (const)
-  local -9:15 base: i32 (const)
-  local -8:15 outRoom: i32 (const)
+  local -77:7 n: i32 (let)
+  local -73:9 addresses: u8[] (const)
+  local -72:9 names: u8[] (const)
+  local -71:9 starts: i32[] (const)
+  local -70:9 lengths: i32[] (const)
+  local -69:9 entries: i32[] (const)
+  local -68:9 count: i32 (const)
+  local -67:9 wantV4: boolean (const)
+  local -66:7 found: i32 (let)
+  local -65:7 last: i32 (let)
+  local -64:7 i: i32 (let)
+  local -57:11 entry: i32 (const)
+  local -51:13 at: i32 (const)
+  local -50:13 room: i32 (const)
+  local -46:11 p: i32 (let)
+  local -45:11 zeros: i32 (let)
+  local -39:13 v4: boolean (const)
+  local -34:11 same: boolean (let)
+  local -32:15 start: i32 (const)
+  local -28:13 q: i32 (let)
+  local -27:13 k: i32 (let)
+  local -25:17 c: i32 (const)
+  local -13:15 base: i32 (const)
+  local -12:15 outRoom: i32 (const)
+  local -9:15 portAt: i32 (const)
+  local -8:15 portBits: u16 (const)
   local -4:13 q: i32 (let)
   local -3:13 r: i32 (let)
   local -2:13 k: i32 (let)
@@ -7134,7 +7143,6 @@ import DNS_TYPE_AAAA from "nish/net/dns-message" -> const DNS_TYPE_AAAA
 import DnsReply from "nish/net/dns-message" -> struct DnsReply
 import dnsBuildQuery from "nish/net/dns-message" -> function @nish.dnsBuildQuery
 import dnsParseReply from "nish/net/dns-message" -> function @nish.dnsParseReply
-import setU16BE from "nish/bytes" -> function @nish.setU16BE
 import DnsConfig from "nish/net/dns-config" -> struct DnsConfig
 import DnsHosts from "nish/net/dns-config" -> struct DnsHosts
 import dnsHostsFind from "nish/net/dns-config" -> function @nish.dnsHostsFind
@@ -7292,38 +7300,36 @@ function DnsResolver.start(this: DnsResolver, name: string, port: i32, nowNanos:
 function DnsResolver.nextOutgoing(this: DnsResolver, out: u8[], to: u8[], meta: i32[], id: i32): i32 -> @nish.DnsResolver.nextOutgoing [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.dnsResolverCount nish.dnsResolverFirstPending nish.dnsResolverServerAddress nish.setU16BE nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  calls: nish.dnsResolverCount nish.dnsResolverFirstPending nish.dnsResolverServerAddress nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
   pointer this: size=320 writesThrough=true captured=false
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.setU16BE#0
+  pointer out: size=0 writesThrough=true captured=false
   pointer to: size=0 writesThrough=true captured=false passedTo=nish.dnsResolverServerAddress#2
   pointer meta: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -22:11 pending: i32[] (const)
-  local -21:11 n: i32 (const)
-  local -20:11 cursor: i32 (const)
-  local -19:9 q: i32 (let)
-  callee -19:18 dnsResolverFirstPending -> @nish.dnsResolverFirstPending
-  callee -17:11 dnsResolverFirstPending -> @nish.dnsResolverFirstPending
-  local -15:11 queries: u8[][] (const)
-  local -14:11 queryLength: i32[] (const)
-  local -13:11 server: i32[] (const)
+  local -28:11 pending: i32[] (const)
+  local -27:11 n: i32 (const)
+  local -26:11 cursor: i32 (const)
+  local -25:9 q: i32 (let)
+  callee -25:18 dnsResolverFirstPending -> @nish.dnsResolverFirstPending
+  callee -23:11 dnsResolverFirstPending -> @nish.dnsResolverFirstPending
+  local -21:11 queries: u8[][] (const)
+  local -20:11 queryLength: i32[] (const)
+  local -19:11 server: i32[] (const)
+  local -5:11 query: u8[] (const)
   local -1:11 kind: i32 (const)
-  local +7:11 query: u8[] (const)
-  callee +8:5 setU16BE -> @nish.setU16BE
   local +9:11 length: i32 (const)
   local +10:11 skip: i32 (const)
-  callee +12:7 setU16BE -> @nish.setU16BE
-  local +16:9 i: i32 (let)
-  local +17:9 o: i32 (let)
-  callee +24:5 dnsResolverServerAddress -> @nish.dnsResolverServerAddress
-  callee +25:17 dnsResolverCount -> @nish.dnsResolverCount
+  local +17:9 i: i32 (let)
+  local +18:9 o: i32 (let)
+  callee +25:5 dnsResolverServerAddress -> @nish.dnsResolverServerAddress
+  callee +26:17 dnsResolverCount -> @nish.dnsResolverCount
 function DnsResolver.receive(this: DnsResolver, q: i32, buf: u8[], len: i32, from: u8[], nowNanos: i64): void -> @nish.DnsResolver.receive [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: len nowNanos q
   calls: nish.dnsParseReply nish.dnsResolverAnswer nish.dnsResolverCheckQuery nish.dnsResolverCount nish.dnsResolverSameServer nish.dnsResolverSend nish.dnsResolverServerFailed nish_panic
   pointer this: size=320 writesThrough=true captured=false passedTo=nish.dnsResolverCheckQuery#0 nish.dnsResolverServerFailed#0 nish.dnsResolverSend#0 nish.dnsResolverAnswer#0
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.dnsParseReply#0
+  pointer buf: size=0 writesThrough=true captured=false passedTo=nish.dnsParseReply#0
   pointer from: size=0 writesThrough=false captured=false passedTo=nish.dnsResolverSameServer#2
   stackSites=0 stackLocals=0
   callee -24:5 dnsResolverCheckQuery -> @nish.dnsResolverCheckQuery
@@ -7384,7 +7390,7 @@ function DnsResolver.fail(this: DnsResolver, q: i32, nowNanos: i64): void -> @ni
   local +1:11 state: i32[] (const)
   callee +4:7 dnsResolverServerFailed -> @nish.dnsResolverServerFailed
 function DnsResolver.tick(this: DnsResolver, nowNanos: i64): void -> @nish.DnsResolver.tick [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: nowNanos
   calls: nish.dnsResolverCount nish.dnsResolverServerFailed
@@ -7471,14 +7477,11 @@ function dnsResolverIsLocalhost(name: string): boolean -> @nish.dnsResolverIsLoc
   local +14:7 i: i32 (let)
   local +19:9 b: i32 (let)
 function dnsResolverLoopback(out: u8[], port: i32): void -> @nish.dnsResolverLoopback
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.setU16BE
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.setU16BE#0 nish.setU16BE#0
+  pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:7 i: i32 (let)
-  callee +7:3 setU16BE -> @nish.setU16BE
-  callee +9:3 setU16BE -> @nish.setU16BE
 function dnsResolverLiteral(scratch: u8[], name: string, out: u8[], port: i32): boolean -> @nish.dnsResolverLiteral
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -7578,7 +7581,7 @@ function dnsResolverGather(r: DnsResolver, l: i32, v4: i32, v6: i32, fromServer:
   local -3:15 to: i32 (const)
   local -2:15 from: i32 (const)
 function dnsResolverNextCandidate(r: DnsResolver, l: i32, nowNanos: i64): boolean -> @nish.dnsResolverNextCandidate
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: l nowNanos
   calls: nish.dnsResolverBegin nish.dnsResolverCandidate nish.dnsResolverCount
@@ -7624,7 +7627,7 @@ function dnsResolverCandidate(r: DnsResolver, l: i32, suffix: i32, out: u8[]): i
   local +26:15 at: i32 (const)
   local +50:15 at: i32 (const)
 function dnsResolverBegin(r: DnsResolver, q: i32, length: i32, qtype: i32, nowNanos: i64): void -> @nish.dnsResolverBegin
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: length nowNanos q qtype
   calls: nish.dnsResolverAsk
@@ -7640,33 +7643,26 @@ function dnsResolverBegin(r: DnsResolver, q: i32, length: i32, qtype: i32, nowNa
   local +7:11 b: i32 (const)
   callee +11:3 dnsResolverAsk -> @nish.dnsResolverAsk
 function dnsResolverAsk(r: DnsResolver, q: i32, qtype: i32, nowNanos: i64): void -> @nish.dnsResolverAsk
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: nowNanos q
-  calls: nish.dnsResolverSend nish.setU16BE
+  calls: nish.dnsResolverSend
   pointer r: size=320 writesThrough=false captured=false passedTo=nish.dnsResolverSend#0
   stackSites=0 stackLocals=0
-  local -37:9 queries: u8[][] (const)
-  local -36:9 names: u8[][] (const)
-  local -35:9 nameLength: i32[] (const)
-  local -34:9 queryLength: i32[] (const)
-  local -33:9 nxdomain: boolean[] (const)
-  local -32:9 server: i32[] (const)
-  local -31:9 round: i32[] (const)
-  local -17:9 query: u8[] (const)
-  local -16:9 name: u8[] (const)
-  local -15:9 length: i32 (const)
-  callee -9:3 setU16BE -> @nish.setU16BE
-  callee -8:3 setU16BE -> @nish.setU16BE
-  callee -7:3 setU16BE -> @nish.setU16BE
-  callee -6:3 setU16BE -> @nish.setU16BE
-  callee -5:3 setU16BE -> @nish.setU16BE
-  callee -4:3 setU16BE -> @nish.setU16BE
-  local -3:7 i: i32 (let)
-  local -2:7 o: i32 (let)
-  callee +4:3 setU16BE -> @nish.setU16BE
-  callee +5:3 setU16BE -> @nish.setU16BE
-  callee +11:3 dnsResolverSend -> @nish.dnsResolverSend
+  local -30:9 queries: u8[][] (const)
+  local -29:9 names: u8[][] (const)
+  local -28:9 nameLength: i32[] (const)
+  local -27:9 queryLength: i32[] (const)
+  local -26:9 nxdomain: boolean[] (const)
+  local -25:9 server: i32[] (const)
+  local -24:9 round: i32[] (const)
+  local -10:9 query: u8[] (const)
+  local -9:9 name: u8[] (const)
+  local -8:9 length: i32 (const)
+  local +12:7 i: i32 (let)
+  local +13:7 o: i32 (let)
+  local +19:9 typeAt: i32 (const)
+  callee +29:3 dnsResolverSend -> @nish.dnsResolverSend
 function dnsResolverSend(r: DnsResolver, q: i32, how: i32, nowNanos: i64): void -> @nish.dnsResolverSend
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -7685,7 +7681,7 @@ function dnsResolverDeadline(nowNanos: i64, timeout: i32): i64 -> @nish.dnsResol
   escaping: nowNanos
   stackSites=0 stackLocals=0
 function dnsResolverServerFailed(r: DnsResolver, q: i32, nowNanos: i64): void -> @nish.dnsResolverServerFailed
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: nowNanos q
   calls: nish.dnsResolverCount nish.dnsResolverDone nish.dnsResolverSend
@@ -7699,7 +7695,7 @@ function dnsResolverServerFailed(r: DnsResolver, q: i32, nowNanos: i64): void ->
   callee +14:5 dnsResolverDone -> @nish.dnsResolverDone
   callee +17:3 dnsResolverSend -> @nish.dnsResolverSend
 function dnsResolverAnswer(r: DnsResolver, q: i32, status: i32, nowNanos: i64): void -> @nish.dnsResolverAnswer
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: nowNanos q
   calls: nish.dnsResolverAsk nish.dnsResolverCount nish.dnsResolverDone nish.dnsResolverNameLength nish.dnsResolverSameName nish.dnsResolverServerFailed
@@ -7751,7 +7747,7 @@ function dnsResolverSameName(a: u8[], b: u8[]): boolean -> @nish.dnsResolverSame
   callee +0:18 dnsResolverNameLength -> @nish.dnsResolverNameLength
   local +1:7 i: i32 (let)
 function dnsResolverDone(r: DnsResolver, q: i32, outcome: i32, nowNanos: i64): void -> @nish.dnsResolverDone
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: nowNanos outcome q
   calls: nish.dnsResolverCount nish.dnsResolverFinish nish.dnsResolverGather nish.dnsResolverNextCandidate

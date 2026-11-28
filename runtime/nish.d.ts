@@ -241,15 +241,18 @@ declare function Err<T, E>(error: E): Result<T, E>;
  * The disposable protocol `using` reads: declared here so that a program using
  * `nish/threads`'s scope, a `Mutex`'s lock, `arena()` or a handle class needs
  * no `"ESNext.Disposable"` in its `lib`. `nish` takes `using` only for a
- * `scope()`, a `lock()`, an `arena()` or a `new` of a handle class, and any
- * other `using` initialiser is refused.
+ * `scope()`, a `lock()`, an `arena()`, or a handle class's `new` or factory
+ * call, and any other `using` initialiser is refused.
  *
- * A handle class is a class with exactly one `readonly` `CPtr` or `CPtr | null`
- * field: it owns the C resource the pointer names, and its `[Symbol.dispose]():
- * void` is `close(this.file);` or `const p = this.file; if (p !== null) {
- * close(p); }` for a `declare function` `close` of one parameter. `using` of a
- * handle class closes it at every exit of its block, once, in the reverse of
- * the order the declarators opened; a panic and `process.exit` do not close.
+ * A handle class is a class that owns one or more `readonly` fields, each a
+ * `CPtr`, an opaque `declare class`, a `HostHandle` or another handle class
+ * (each but a `HostHandle` perhaps `| null`). Its `[Symbol.dispose](): void`
+ * closes each native field, the last declared first, as `close(this.file);`
+ * or `const p = this.file; if (p !== null) { close(p); }` for a `declare
+ * function` `close` of one parameter.
+ * `using` of a handle class closes it at every exit of its block, once, in the
+ * reverse of the order the declarators opened; a panic and `process.exit` do
+ * not close.
  * `--deny ffi` refuses that `using`. Any other class that declares
  * `[Symbol.dispose]` is refused.
  *

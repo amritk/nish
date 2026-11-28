@@ -1,6 +1,6 @@
-// `nish/bytes` out of range: a read whose bytes run past the end panics
-// `index`, naming the first byte that is not in the array, after the read
-// that ends on the last byte has answered.
+// `nish/bytes` out of range: a read whose bytes run past the end panics in
+// its window guard, naming the read, its offset and the array's length, after
+// the read that ends on the last byte has answered.
 import { getU32LE } from "nish/bytes"
 
 export const main = (): i32 => {

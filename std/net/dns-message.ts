@@ -55,7 +55,6 @@
  *
  * The record of what this module refuses and why is `docs/security/dns.md`.
  */
-import { getU16BE, getU32BE, setU16BE } from "nish/bytes"
 
 /** The record type of an IPv4 address (RFC 1035 §3.2.2). */
 export const DNS_TYPE_A: i32 = 1
@@ -195,6 +194,14 @@ const dnsCheckLength = (bytes: u8[], len: i32, who: string): void => {
   }
 }
 
+/**
+ * The big-endian u16 whose high byte is `hi` and low byte `lo`. The message
+ * reads index their bytes in place, where the checks before them prove them,
+ * rather than call `getU16BE`, whose window check would need a test after
+ * every call before it.
+ */
+const dnsBe16 = (hi: u8, lo: u8): u16 => (toU16(hi) << 8) | toU16(lo)
+
 /** `b` with A to Z read as a to z, and every other byte as it stands. */
 const dnsLower = (b: i32): i32 => (b >= 65 && b <= 90 ? b + 32 : b)
 
@@ -240,15 +247,23 @@ export const dnsBuildQuery = (out: u8[], id: i32, name: string, qtype: i32): i32
     return DNS_ERR_NAME_LONG
   }
   const total: i32 = DNS_HEADER_BYTES + n + 2 + 4
-  if (total > toI32(out.length)) {
+  if (total > toI32(out.length) || toI32(out.length) < DNS_HEADER_BYTES) {
     return DNS_ERR_SPACE
   }
-  setU16BE(out, 0, toU16(id))
-  setU16BE(out, 2, toU16(DNS_FLAG_RD))
-  setU16BE(out, 4, toU16(1))
-  setU16BE(out, 6, toU16(0))
-  setU16BE(out, 8, toU16(0))
-  setU16BE(out, 10, toU16(0))
+  // The header's six big-endian u16s, `total` (at least 19) bytes having been
+  // checked: ID, flags (RD), QDCOUNT 1 and three zero counts.
+  out[0] = toU8(id >> 8)
+  out[1] = toU8(id & 255)
+  out[2] = toU8(DNS_FLAG_RD >> 8)
+  out[3] = toU8(DNS_FLAG_RD & 255)
+  out[4] = toU8(0)
+  out[5] = toU8(1)
+  out[6] = toU8(0)
+  out[7] = toU8(0)
+  out[8] = toU8(0)
+  out[9] = toU8(0)
+  out[10] = toU8(0)
+  out[11] = toU8(0)
   // The bytes of the label being written so far, held at 64 once it is past
   // `DNS_MAX_LABEL_BYTES`: its length byte goes just before them.
   let label: i32 = 0
@@ -289,8 +304,15 @@ export const dnsBuildQuery = (out: u8[], id: i32, name: string, qtype: i32): i32
     return DNS_ERR_SPACE
   }
   out[rootAt] = toU8(0)
-  setU16BE(out, DNS_HEADER_BYTES + n + 2, toU16(qtype))
-  setU16BE(out, DNS_HEADER_BYTES + n + 4, toU16(DNS_CLASS_IN))
+  // QTYPE then QCLASS IN, the question's last four bytes.
+  const typeAt: i32 = rootAt + 1
+  if (typeAt > toI32(out.length) - 4) {
+    return DNS_ERR_SPACE
+  }
+  out[typeAt] = toU8(qtype >> 8)
+  out[typeAt + 1] = toU8(qtype & 255)
+  out[typeAt + 2] = toU8(DNS_CLASS_IN >> 8)
+  out[typeAt + 3] = toU8(DNS_CLASS_IN & 255)
   return total
 }
 
@@ -479,7 +501,9 @@ const dnsKeepAddress = (msg: u8[], at: i32, size: i32, port: i32, ttl: i32, repl
     addresses[to] = msg[from]
     k += 1
   }
-  setU16BE(addresses, base + 16, toU16(port))
+  // The port, big-endian, in the address's last two bytes.
+  addresses[base + 16] = toU8((port >> 8) & 255)
+  addresses[base + 17] = toU8(port & 255)
   reply.count = count + 1
   return true
 }
@@ -534,25 +558,27 @@ export const dnsParseReply = (
   reply.dropped = 0
   reply.rcode = 0
   reply.truncated = false
-  if (len < 12) {
+  // `len` lies in `msg` (checked above), so the second test is never taken: it
+  // is the one the reads below index from.
+  if (len < 12 || toI32(msg.length) < 12) {
     return DNS_ERR_HEADER
   }
-  const flags: i32 = toI32(getU16BE(msg, 2))
+  const flags: i32 = toI32(dnsBe16(msg[2], msg[3]))
   if ((flags & DNS_FLAG_QR) === 0) {
     return DNS_ERR_NOT_REPLY
   }
   if (((flags >> 11) & 15) !== 0) {
     return DNS_ERR_OPCODE
   }
-  if (queryLen < 12 || getU16BE(msg, 0) !== getU16BE(query, 0)) {
+  if (queryLen < 12 || toI32(query.length) < 12 || dnsBe16(msg[0], msg[1]) !== dnsBe16(query[0], query[1])) {
     return DNS_ERR_ID
   }
-  if (toI32(getU16BE(msg, 4)) !== 1) {
+  if (dnsBe16(msg[4], msg[5]) !== toU16(1)) {
     return DNS_ERR_QUESTION
   }
   const asked: i32 = dnsReadName(query, queryLen, DNS_HEADER_BYTES, reply.asked)
   // `DNS_QUERY_MAX_BYTES` (271) holds any query dnsBuildQuery writes.
-  if (asked < 0 || asked > queryLen - 4 || asked > 267) {
+  if (asked < 0 || asked > queryLen - 4 || asked > toI32(query.length) - 4 || asked > 267) {
     panic("dnsParseReply: the query is not one dnsBuildQuery wrote")
   }
   const named: i32 = dnsReadName(msg, len, DNS_HEADER_BYTES, reply.chain)
@@ -560,17 +586,19 @@ export const dnsParseReply = (
     return named
   }
   // dnsReadName reads no name past 65535, the longest a message can be.
-  if (named > len - 4 || named > 65535) {
+  if (named > len - 4 || named > toI32(msg.length) - 4 || named > 65535) {
     return DNS_ERR_SHORT
   }
   if (
     !dnsSameName(reply.chain, reply.asked) ||
-    getU16BE(msg, named) !== getU16BE(query, asked) ||
-    getU16BE(msg, named + 2) !== getU16BE(query, asked + 2)
+    msg[named] !== query[asked] ||
+    msg[named + 1] !== query[asked + 1] ||
+    msg[named + 2] !== query[asked + 2] ||
+    msg[named + 3] !== query[asked + 3]
   ) {
     return DNS_ERR_QUESTION
   }
-  const qtype: i32 = toI32(getU16BE(query, asked))
+  const qtype: i32 = toI32(dnsBe16(query[asked], query[asked + 1]))
   reply.truncated = (flags & DNS_FLAG_TC) !== 0
   const rcode: i32 = flags & 15
   reply.rcode = rcode
@@ -583,14 +611,14 @@ export const dnsParseReply = (
     return rcode
   }
   let pos: i32 = named + 4
-  const records: i32 = toI32(getU16BE(msg, 6)) + toI32(getU16BE(msg, 8)) + toI32(getU16BE(msg, 10))
+  const answers: i32 = toI32(dnsBe16(msg[6], msg[7]))
+  const records: i32 = answers + toI32(dnsBe16(msg[8], msg[9])) + toI32(dnsBe16(msg[10], msg[11]))
   if (records > (len - pos) / DNS_MIN_RECORD_BYTES) {
     return DNS_ERR_COUNT
   }
   if (rcode !== DNS_NOERROR) {
     return rcode
   }
-  const answers: i32 = toI32(getU16BE(msg, 6))
   let dropped: i32 = 0
   let i: i32 = 0
   while (i < answers) {
@@ -598,13 +626,18 @@ export const dnsParseReply = (
     if (fixed < 0) {
       return fixed
     }
-    if (fixed > len - 10 || fixed > 65535) {
+    if (fixed > len - 10 || fixed > toI32(msg.length) - 10 || fixed > 65535) {
       return DNS_ERR_SHORT
     }
-    const type: i32 = toI32(getU16BE(msg, fixed))
-    const klass: i32 = toI32(getU16BE(msg, fixed + 2))
-    const rawTtl: i32 = toI32(getU32BE(msg, fixed + 4))
-    const size: i32 = toI32(getU16BE(msg, fixed + 8))
+    const type: i32 = toI32(dnsBe16(msg[fixed], msg[fixed + 1]))
+    const klass: i32 = toI32(dnsBe16(msg[fixed + 2], msg[fixed + 3]))
+    const ttlBits: u32 =
+      (toU32(msg[fixed + 4]) << 24) |
+      (toU32(msg[fixed + 5]) << 16) |
+      (toU32(msg[fixed + 6]) << 8) |
+      toU32(msg[fixed + 7])
+    const rawTtl: i32 = toI32(ttlBits)
+    const size: i32 = toI32(dnsBe16(msg[fixed + 8], msg[fixed + 9]))
     const data: i32 = fixed + 10
     if (size > len - data) {
       return DNS_ERR_RDATA

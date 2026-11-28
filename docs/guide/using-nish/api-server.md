@@ -24,13 +24,13 @@ limit outside its range where `new Router` panics, and open the handler with
 `openHttpHandler`, which does the same for `new HttpHandler`. A program that
 matches by hand calls `router.tryMatch`, which answers `ROUTER_NOT_FOUND` for
 a range outside its buffer, and `router.tryParamCount`, which answers -1 for a
-route the table does not hold, where `match` and `paramCount` panic. The byte
-copies and the body decoder under the handler keep panic sites no proof
+route the table does not hold, where `match` and `paramCount` panic. The body
+decoder under the handler keeps a panic site in its gzip reader no proof
 removes yet, so the examples still build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do) until they are made
 panic-free.
 
-<!-- allow-panics: calls `std/net/handler.ts` code that reaches `std/bytes.ts` and `std/net/http-compress.ts` panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/handler.ts` code that reaches the `std/compress/gzip.ts` panic site no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HandlerLimits, openHttpHandler } from "nish/net/handler";
@@ -159,7 +159,10 @@ the panic would carry, and `Ok` with what the answer returns. A program held
 to no panics answers through them, opens its handler with
 `openHttpHandler(limits, listener, router)`, which gives `Err` for limits it
 cannot use or a failed `pollCreate`, watches with `h.tryWatch(fd, id)`, and
-takes requests with `h.next()`, which is `null` when none is ready.
+takes requests with `h.next()`, which is `null` when none is ready. A handler
+made with `new HttpHandler` from a loop whose `pollCreate` failed does not
+panic: it watches nothing, and each `h.wait` returns `HANDLER_NO_LOOP` at once
+instead of a count, so stop the loop that calls it.
 
 **A request may be answered later**, after a database answers, say: keep it
 and answer it in a later turn. If its client has gone in the meantime, the
@@ -182,7 +185,7 @@ to `req.route`, lowest id first, then `HANDLER_NEXT` once all have run, or
 on `HANDLER_NEXT`. Once the body has chosen its answer, `h.after(req)` hands
 out the steps that ran, highest id first, before you send it:
 
-<!-- allow-panics: calls `std/net/router.ts` and `std/net/handler.ts` code that keeps or reaches panic sites (in `std/bytes.ts` and `std/net/http-compress.ts`) no proof removes yet -->
+<!-- allow-panics: calls `std/net/router.ts` and `std/net/handler.ts` code that keeps panic sites, and reaches the one in `std/compress/gzip.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HANDLER_ABSENT, HANDLER_NEXT, HandlerLimits, openHttpHandler } from "nish/net/handler";
@@ -343,8 +346,8 @@ answer.
 flags, a log line a request, problems for bad input, and the graceful stop
 above with a deadline. It answers through the `try` calls, so of the handler's own panic sites it
 reaches none; build it with `nish examples/http-app/main.ts --allow-panics
---link http-app` all the same, for the codec, decoder and copy sites its
-header lists, and run `./http-app 8080`. Copy it and change it: logging and
+--link http-app` all the same, for the gzip reader site its header
+lists, and run `./http-app 8080`. Copy it and change it: logging and
 configuration are left to the example because every server wants them a
 little differently.
 

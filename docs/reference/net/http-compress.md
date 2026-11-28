@@ -32,6 +32,7 @@ import {
   HttpBodyDecoder,
   HttpCompressor,
   httpAcceptEncoding,
+  httpBodyDecoderFault,
   httpCompressorDefault,
   httpContentEncoding,
   httpIdentityRefused,
@@ -67,6 +68,12 @@ if (m >= 0) {
 <scalar-card title="http​Accept​Encoding" icon="phosphor/regular/function" href="#httpacceptencoding">
 
 The content coding to send for the `Accept-Encoding` field value `buf[start .. end)` among the codings `offered` (`HTTP_OFFER_GZIP | HTTP_OFFER_DEFLATE`): `HTTP_CODING_GZIP`, `HTTP_CODING_DEFLATE`, `HTTP_CODING_IDENTITY` or `HTTP_CODING_NONE`, by the rules in the module comment.
+
+</scalar-card>
+
+<scalar-card title="http​Body​Decoder​Fault" icon="phosphor/regular/function" href="#httpbodydecoderfault">
+
+Why `new HttpBodyDecoder(limit)` would panic: a `limit` under 1.
 
 </scalar-card>
 
@@ -257,6 +264,27 @@ which codings the program can produce, `HTTP_OFFER_*` bits
 
 the `HTTP_CODING_*` to send the body in, or `HTTP_CODING_NONE`
   when nothing offered is acceptable and identity is refused too
+
+</scalar-field>
+
+### httpBodyDecoderFault
+
+Why `new HttpBodyDecoder(limit)` would panic: a `limit` under 1. A caller
+that checks it first, and leaves on a fault, reaches no panic there.
+
+```ts
+const httpBodyDecoderFault: (limit: i32) => string
+```
+
+<scalar-field name="limit" type="i32" required>
+
+the limit the decoder would be made with
+
+</scalar-field>
+
+<scalar-field name="returns" type="string">
+
+the fault, or "" when the limit is at least 1
 
 </scalar-field>
 
@@ -495,7 +523,7 @@ class HttpBodyDecoder
 
 | Member | |
 | --- | --- |
-| `new HttpBodyDecoder(limit: i32)` | A decoder that refuses a body decoding to more than `limit` bytes; a `limit` under 1 panics. |
+| `new HttpBodyDecoder(limit: i32)` | A decoder that refuses a body decoding to more than `limit` bytes; a `limit` under 1 panics, the fault `httpBodyDecoderFault` names first. |
 | `readonly limit: i32` | The most bytes a body may decode to; one more is `HTTP_DECODE_TOO_LARGE`. |
 | `output: u8[]` | Where `decode` writes, from index 0. A caller may take the array and leave another in its place, which `decode` then writes into, or grows past. |
 | `decode(coding: i32, src: u8[], off: i32, len: i32): i32` | Decodes `src[off .. off + len)`, one body in `coding`, into `output` from index 0. Another coding than `HTTP_CODING_GZIP` or `HTTP_CODING_DEFLATE`, or a window outside `src`, panics; `tryDecode` answers `HTTP_DECODE_BAD_CALL` instead. |

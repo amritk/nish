@@ -1,0 +1,12 @@
+{
+  "about": "rises keeps its row but drops its count, which the next update would record as new: the comparison fails it.",
+  "tolerance": 0.001,
+  "programs": {
+    "kept": { "instructions": 100000000 },
+    "rises": {},
+    "falls": { "instructions": 290000000 },
+    "within": { "instructions": 400200000 },
+    "added": { "instructions": 600000000 }
+  },
+  "raises": []
+}

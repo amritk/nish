@@ -1,6 +1,6 @@
 // `nish/bytes` out of range: a big-endian 64-bit read at a negative offset
-// takes the byte loop, not the fast path, and panics `index` on its first
-// byte, after a read from the array's start has answered.
+// panics in its window guard, naming the offset as written, after a read from
+// the array's start has answered.
 import { getU64BE } from "nish/bytes"
 
 export const main = (): i32 => {
