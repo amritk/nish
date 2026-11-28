@@ -215,7 +215,8 @@ export const outboundFilter = (policy: OutboundPolicy, addresses: u8[], count: i
   // Where the next kept record goes, and where the record checked now starts.
   let keptAt: i32 = 0
   let at: i32 = 0
-  for (let i: i32 = 0; i < count && at <= toI32(addresses.length) - DNS_ADDRESS_BYTES; i += 1) {
+  const n: i32 = toI32(addresses.length)
+  for (let i: i32 = 0; i < count && at <= n - DNS_ADDRESS_BYTES; i += 1) {
     if (outboundAddressAllowed(policy, addresses, at)) {
       // Swap, so the refused record stays in the list for an error to name.
       // Both records fit (`keptAt` is at most `at`), so no copy can refuse.
@@ -229,11 +230,20 @@ export const outboundFilter = (policy: OutboundPolicy, addresses: u8[], count: i
       ) {
         break
       }
-      // At most `at`, which is at most the length less a record: unsigned
-      // arithmetic only so the prover need not relate the two.
-      keptAt = toI32(toU32(keptAt) + toU32(DNS_ADDRESS_BYTES))
+      // `keptAt` is at most `at`, which is at most the length less a record,
+      // so the step always fits; the test restates that for the bounds
+      // proof, with `DNS_ADDRESS_BYTES` (18) spelled as a literal it reads.
+      if (keptAt < 0 || keptAt > n - 18) {
+        break
+      }
+      keptAt = keptAt + 18
     }
-    at = toI32(toU32(at) + toU32(DNS_ADDRESS_BYTES))
+    // The loop test already keeps `at` at most the length less a record;
+    // restated with the literal for the same proof.
+    if (at < 0 || at > n - 18) {
+      break
+    }
+    at = at + 18
   }
   return keptAt / DNS_ADDRESS_BYTES
 }
@@ -354,13 +364,19 @@ const outboundPublic = (a: u8[]): boolean => {
 const outboundPermitted = (policy: OutboundPolicy, a: u8[]): boolean => {
   const p: u8[] = policy.permitted
   const entry: u8[] = new Array<u8>(OUTBOUND_PERMIT_BYTES)
+  const n: i32 = toI32(p.length)
   let at: i32 = 0
-  while (at >= 0 && at <= toI32(p.length) - OUTBOUND_PERMIT_BYTES) {
+  while (at >= 0 && at <= n - OUTBOUND_PERMIT_BYTES) {
     if (tryCopyBytes(entry, 0, p, at, OUTBOUND_PERMIT_BYTES) && outboundPrefixMatch(entry, a)) {
       return true
     }
-    // At most the length less a permit before, so the sum fits.
-    at = toI32(toU32(at) + toU32(OUTBOUND_PERMIT_BYTES))
+    // At most the length less a permit before, so the sum fits; the test
+    // restates that for the bounds proof, with `OUTBOUND_PERMIT_BYTES` (17)
+    // spelled as a literal it reads.
+    if (at > n - 17) {
+      break
+    }
+    at = at + 17
   }
   return false
 }

@@ -1356,7 +1356,9 @@ const faultAdvice = (program: CheckedProgram, table: TypeTable, call: Node): str
  * A call into a window guard, or into a method that forwards to one
  * (`PANIC_WINDOW`), checks `[off, off + len)` of its buffer, and the shapes
  * `provesWindow` in `src/bounds.ts` credits are a count from 0, a literal
- * count, and a count written `end - off` over a range the caller checked.
+ * count, and a count written `end - off` over a range the caller checked. A
+ * forward that passes its guard a literal count leaves the caller only the
+ * offset to bound.
  */
 const windowAdvice = (program: CheckedProgram, call: Node): string => {
   const target = program.nodeCallees[call.id]
@@ -1369,14 +1371,25 @@ const windowAdvice = (program: CheckedProgram, call: Node): string => {
   }
   const buf = argumentName(program, call, at[0], "buf")
   const off = argumentName(program, call, at[1], "off")
-  const len = argumentName(program, call, at[2], "len")
+  // A literal count is the forward's own (`windowCount`), not an argument.
+  const literal = at[2] < 0 && target !== null ? target.windowCount : -1
+  const len = literal >= 0 ? `${literal}` : argumentName(program, call, at[2], "len")
   const args = call.children[1].children
   const start = literalValue(args[at[1]])
-  const count = literalValue(args[at[2]])
+  const count = literal >= 0 ? literal : literalValue(args[at[2]])
   if (start > 0 && count > 0 && toI64(start) + toI64(count) < toI64(2147483647)) {
     return (
       `${what} panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it inside here: ` +
       `guard the call with \`if (${buf}.length >= ${start + count})\`, or pass \`0\` and a count no larger than \`${buf}.length\``
+    )
+  }
+  if (literal >= 0) {
+    // The count is the callee's: only the offset and the buffer are the caller's to bound.
+    const test =
+      start === 0 ? `${buf}.length >= ${literal}` : `${off} >= 0 && ${off} + ${literal} <= ${buf}.length`
+    return (
+      `${what} panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it inside here: ` +
+      `guard the call with \`if (${test})\``
     )
   }
   return (

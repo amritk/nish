@@ -1446,6 +1446,21 @@ const exportedBindings = () =>
     why: "the program imports an opaque `declare class` and the `declare function`s that take it from another module, which the candidate compiles and the reference refuses, because it lets no binding be exported",
   }))
 
+/** The changelog words of WP89 S5a, a class that owns its native handles. */
+const OWNED_HANDLES = "a std class owns its native handles"
+const ownedHandles = () =>
+  [
+    "tests/cases/ffi_handle_host.ts",
+    "tests/cases/ffi_handle_owned.ts",
+    "tests/link/ffi_handle_owned/main.ts",
+    "docs/cookbook/decl-ffi-handle-owned.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: OWNED_HANDLES,
+    why: "the program declares a class that owns a native object and closes it with `[Symbol.dispose]` and `using`, which the candidate compiles and the reference refuses, because it lets only nish/threads' scope and lock and the builtin arena be disposed",
+  }))
+
 /** The changelog words of WP89 S6, a module file chosen by target. */
 const TARGET_FILES = "a module file chosen by target"
 const targetFiles = () => [
@@ -1634,6 +1649,9 @@ const s1PanicFree = byFinding(S1_PANIC_FREE)
 /** The changelog words of WP87 S2, which makes std's math, base64, random, regex, release, sqlite, testing and text modules panic-free. */
 const S2_REST_PANIC_FREE = "the remaining std modules panic-free"
 const s2RestPanicFree = byFinding(S2_REST_PANIC_FREE)
+/** The changelog words of WP86 S1, which makes std's JSON helpers, yaml-lines, yaml-write and yaml-json panic-free. */
+const WP86_S1_PANIC_FREE = "the JSON helpers and the YAML loader and writer panic-free"
+const wp86S1PanicFree = byFinding(WP86_S1_PANIC_FREE)
 /** WP87 S2's programs whose only move is testing.ll: `Suite` stops its tallies at the largest `i32` through `testingCount`. */
 const S2_REST_TESTING = [
   "bench/quic-goodput.ts",
@@ -11769,6 +11787,11 @@ const MULTIPART_BODIES = "multipart/form-data bodies"
 /** The changelog words of examples-strict S2 (#2296): a caller's proof discharges a std callee's leading contract guard. */
 const CALLER_CONTRACT = "a caller's proof discharges a std callee's contract panic"
 
+/** The release-note words of WP80 S10, window contracts forwarded from free functions, arrow consts and literal counts. */
+const WINDOW_FORWARD = "window contracts forward from free functions, arrow consts and literal lengths"
+/** WP91 S4: the cast wraps in std/net's HTTP, HPACK, URL and server modules, spelled. */
+const WP91_S4_NET_HTTP = "std/net HTTP, HPACK, URL and the server stack"
+
 /** The changelog words of examples-strict S1, indexes into module storage. */
 const STORAGE_INDEX = "prove index sites into module storage"
 /** Why each module examples-strict S1 moves writes different IR. */
@@ -12335,6 +12358,445 @@ const checkedConfig = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: CHECKED_CONFIG, why }))
   )
+/** WP91 S5's release-note words: std/net drops its cast wraps. The change's commit subject carries them verbatim. */
+const WRAP_CASTS_NET = "std/net TLS, QUIC, PostgreSQL and DNS"
+/** Why each std/net module WP91 S5 rewrites writes different IR. */
+const WRAP_CASTS_NET_WHY = {
+  "quic-conn-ack.ll":
+    "std/net/quic-conn-ack.ts steps packet numbers by a countdown from 2^62 - 1 instead of a u64 cast wrap, so quic-conn-ack.ll changes",
+  "quic-conn-cid.ll":
+    "std/net/quic-conn-cid.ts counts sequence numbers by a countdown from 2^62 - 1 and indexes its ring through an i64 sum, so quic-conn-cid.ll changes",
+  "quic-datagram.ll":
+    "std/net/quic-datagram.ts indexes its ring through an i64 sum instead of a u32 cast wrap, so quic-datagram.ll changes",
+  "quic-frame.ll":
+    "std/net/quic-frame.ts takes ACK gaps, spans and range counts through checked helpers (`quicAckGap`, `quicAckSpan`, `quicFrameNext`), so quic-frame.ll changes",
+  "quic-recovery.ll":
+    "std/net/quic-recovery.ts saturates its sums, differences and products with nish:unsafe's wrapping operations instead of u64 casts, so quic-recovery.ll changes",
+  "quic-stream.ll":
+    "std/net/quic-stream.ts saturates its offset sums and differences with nish:unsafe's wrapping operations instead of u64 casts, so quic-stream.ll changes",
+  "record.ll":
+    "std/net/tls/record.ts steps its sequence numbers by a countdown from the RFC 8446 §5.3 limit (`tlsNextSequence`) instead of a u64 cast wrap, so record.ll changes",
+  "tls.ll":
+    "std/net/tls.ts takes its ClientHello and record lengths as proven i64 sums (`tlsSum`) instead of i32 casts through u32, so the tls.ll module a program reaching it writes changes",
+}
+/** Each corpus program WP91 S5 moves, with the std/net modules it moves, from a nish-cmp run (plain and --no-sidecars) against the 0.49.1 seed. */
+const WRAP_CASTS_NET_PROGRAMS = [
+  [
+    "bench/httparena/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/httparena_entry/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_grpc/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_grpc_interop/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h1_tls/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_steps/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_steps_full/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_steps_split/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_stream/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_trailers_after_end/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_trailers_ended/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_trailers_fields/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_trailers_h1/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_trailers_h3/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_trailers_short/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_http_server_trailers_unstarted/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  [
+    "tests/link/net_static/main.ts",
+    [
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "tls.ll",
+    ],
+  ],
+  ["tests/link/net_handler_batch_limits/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_handler_bomb/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_handler_open/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_handler_pipelined_stream/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_handler_refused/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_handler_steps/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_handler_steps_split/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_handler_try_answers/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_http1_server_lend_park/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_http_server_h2c_preface_release/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_serve_try/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/std_http1_config_checked/main.ts", ["record.ll", "tls.ll"]],
+  ["tests/link/net_http_server_caps/main.ts", ["quic-datagram.ll", "quic-recovery.ll", "quic-stream.ll"]],
+  ["tests/link/net_http_server_carriers/main.ts", ["quic-datagram.ll", "quic-recovery.ll", "quic-stream.ll"]],
+  [
+    "tests/link/net_http_server_h2_refused/main.ts",
+    ["quic-datagram.ll", "quic-recovery.ll", "quic-stream.ll"],
+  ],
+  [
+    "tests/link/net_http_server_lifecycle/main.ts",
+    ["quic-datagram.ll", "quic-recovery.ll", "quic-stream.ll"],
+  ],
+  ["tests/link/net_http_server_matrix/main.ts", ["quic-datagram.ll", "quic-recovery.ll", "quic-stream.ll"]],
+  ["tests/link/net_http_server_timeouts/main.ts", ["quic-datagram.ll", "quic-recovery.ll", "quic-stream.ll"]],
+]
+
 const DECLARED = [
   ...RSA_PSS_SERVER_DECLARED,
   // WP80 S8: a checked HTTP/1 server config, and the router, handler and
@@ -14593,6 +15055,7 @@ const DECLARED = [
   ...typedBuffers(),
   ...targetFiles(),
   ...exportedBindings(),
+  ...ownedHandles(),
   ...storageIndex(),
   ...arenaStrict(),
   {
@@ -24275,6 +24738,19 @@ const DECLARED = [
       "tests/link/sync_shm_window/main.ts": ["testing.ll"],
     }
   ),
+  ...wp86S1PanicFree(
+    "std/json-value gains `JsonDocument.keys` and drops its array-length panic, std/json-number gains `jsonNumberDifference`, and std/json-equal walks object keys through `keys`, so the JSON helpers' modules move (WP86 S1)",
+    {
+      "bench/std-json-equal.ts": ["json-equal.ll", "json-number.ll", "json-tokenizer.ll", "json-value.ll", "std-json-equal.ll"],
+    }
+  ),
+  ...wp86S1PanicFree(
+    "std/yaml-lines stops its columns at the largest `i32` (returning -1 past it), and std/yaml-json and std/yaml-write prove their counts and indexes, so the yaml modules and the JSON modules they reach move (WP86 S1)",
+    {
+      "bench/std-yaml-json.ts": ["json-tokenizer.ll", "json-value.ll", "std-yaml-json.h", "std-yaml-json.ll", "yaml-json.ll", "yaml-lines.ll", "yaml-write.ll"],
+      "tests/link/std_yaml_json/main.ts": ["yaml-lines.ll"],
+    }
+  ),
   // `jsonPutString` is exported from std/json.ts and its walk is lowered to
   // the runtime's `nish_json_put_string`, so every json.ll a program writes
   // declares the kernel and defines the new function, and the module moves.
@@ -24366,6 +24842,188 @@ const DECLARED = [
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
   },
+  // WP91 S4: std/net's HTTP modules drop their cast wraps for sums under
+  // guards the prover reads, so their IR moves in every program reaching them.
+  ...[
+    "bench/httparena/main.ts",
+    "tests/link/httparena_entry/main.ts",
+    "tests/link/net_grpc/main.ts",
+    "tests/link/net_grpc_interop/main.ts",
+    "tests/link/net_http2_stream/main.ts",
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+    "tests/link/net_http_server_steps/main.ts",
+    "tests/link/net_http_server_steps_full/main.ts",
+    "tests/link/net_http_server_steps_split/main.ts",
+    "tests/link/net_http_server_stream/main.ts",
+    "tests/link/net_http_server_trailers_after_end/main.ts",
+    "tests/link/net_http_server_trailers_ended/main.ts",
+    "tests/link/net_http_server_trailers_fields/main.ts",
+    "tests/link/net_http_server_trailers_h1/main.ts",
+    "tests/link/net_http_server_trailers_h3/main.ts",
+    "tests/link/net_http_server_trailers_short/main.ts",
+    "tests/link/net_http_server_trailers_unstarted/main.ts",
+    "tests/link/net_static/main.ts",
+  ].map((program) => ({
+    program,
+    file: "hpack.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/hpack.ts spells its cast wraps as sums under guards the prover reads, a `wrappingAdd` for the deliberate wrap, or the codec's existing error, so the program's nish/net/hpack module has new compares and fewer conversions; its own module does not move",
+  })),
+  ...[
+    "bench/httparena/main.ts",
+    "tests/link/httparena_entry/main.ts",
+    "tests/link/net_grpc/main.ts",
+    "tests/link/net_grpc_interop/main.ts",
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+    "tests/link/net_http_server_steps/main.ts",
+    "tests/link/net_http_server_steps_full/main.ts",
+    "tests/link/net_http_server_steps_split/main.ts",
+    "tests/link/net_http_server_stream/main.ts",
+    "tests/link/net_http_server_trailers_after_end/main.ts",
+    "tests/link/net_http_server_trailers_ended/main.ts",
+    "tests/link/net_http_server_trailers_fields/main.ts",
+    "tests/link/net_http_server_trailers_h1/main.ts",
+    "tests/link/net_http_server_trailers_h3/main.ts",
+    "tests/link/net_http_server_trailers_short/main.ts",
+    "tests/link/net_http_server_trailers_unstarted/main.ts",
+    "tests/link/net_static/main.ts",
+  ].map((program) => ({
+    program,
+    file: "http2-tls.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/http2-tls.ts writes its held byte count as the plain difference `end - start` under the guard `0 <= start <= end`, so the subtraction gains `nsw`, and the module's declaration of `HttpDate.current`, whose `httpDateWrite` std/net/http-fields.ts rewrites, carries a different attribute group",
+  })),
+  ...[
+    "tests/link/net_grpc/main.ts",
+    "tests/link/net_grpc_interop/main.ts",
+    "tests/link/net_proto_classes/main.ts",
+    "tests/link/net_protobuf/main.ts",
+    "tests/link/net_protobuf_bad_depth/main.ts",
+    "tests/link/net_protobuf_bad_field/main.ts",
+    "tests/link/net_protobuf_bad_group/main.ts",
+    "tests/link/net_protobuf_bad_length/main.ts",
+    "tests/link/net_protobuf_bad_reader_window/main.ts",
+    "tests/link/net_protobuf_bad_varint/main.ts",
+    "tests/link/net_protobuf_bad_writer_window/main.ts",
+    "tests/link/net_protobuf_f64/main.ts",
+  ].map((program) => ({
+    program,
+    file: "protobuf.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/protobuf.ts names the zigzag sign mask of `sint32` and `sint64` as a `u32`/`u64` local that wraps by its type, so the decoders gain a local's alloca, store and load",
+  })),
+  ...[
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_release/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+  ].map((program) => ({
+    program,
+    file: "http-compress.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/http-compress.ts computes its segment count, q-value, kept length and identity head in i32 under guards the prover reads instead of casting them through u32, so the program's nish/net/http-compress module has new compares and fewer conversions",
+  })),
+  ...["tests/link/net_http_server_h1_tls/main.ts"].map((program) => ({
+    program,
+    file: "peer.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/http-fields.ts's `httpDateWrite`, which `HttpDate.current` calls, spells its sums for the prover with this stage, so the module's declaration of `HttpDate.current` carries a different attribute group",
+  })),
+  ...[
+    "tests/link/net_hpack/main.ts",
+    "tests/link/net_hpack_bad_huffman_window/main.ts",
+    "tests/link/net_hpack_bad_indexing/main.ts",
+    "tests/link/net_hpack_bad_prefix_decode/main.ts",
+    "tests/link/net_hpack_bad_prefix_encode/main.ts",
+    "tests/link/net_hpack_bad_window/main.ts",
+    "tests/link/net_hpack_f64/main.ts",
+    "tests/link/net_hpack_malformed/main.ts",
+    "tests/link/net_hpack_negative_list_limit/main.ts",
+    "tests/link/net_hpack_negative_resize/main.ts",
+    "tests/link/net_hpack_negative_settings_limit/main.ts",
+    "tests/link/net_hpack_negative_table_size/main.ts",
+    "tests/link/net_http2_frame/main.ts",
+    "tests/link/net_http2_frame_f64/main.ts",
+    "tests/link/net_http3_malformed/main.ts",
+    "tests/link/net_qpack/main.ts",
+    "tests/link/net_qpack_bad_decoder_stream_window/main.ts",
+    "tests/link/net_qpack_bad_encoder_stream_window/main.ts",
+    "tests/link/net_qpack_bad_field_window/main.ts",
+    "tests/link/net_qpack_bad_limit/main.ts",
+    "tests/link/net_qpack_bad_stream_id/main.ts",
+    "tests/link/net_qpack_bad_value_window/main.ts",
+    "tests/link/net_qpack_bad_window/main.ts",
+    "tests/link/net_qpack_f64/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/hpack.ts keeps `HpackHuffman.baseRank` as a `u32[]`, so its Huffman ranks wrap by their type, and a header that lays out `HpackHuffman` comments the field as `u32[]` where it said `number[]`",
+  })),
+  {
+    program: "bench/std-net-http2-frame.ts",
+    file: "std-net-http2-frame.h",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/hpack.ts keeps `HpackHuffman.baseRank` as a `u32[]`, so its Huffman ranks wrap by their type, and a header that lays out `HpackHuffman` comments the field as `u32[]` where it said `number[]`",
+  },
+  ...[
+    "tests/link/net_http_server_steps/main.ts",
+    "tests/link/net_http_server_trailers_h3/main.ts",
+    "tests/link/net_static/main.ts",
+  ].map((program) => ({
+    program,
+    file: "net_http3_peer.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/http-fields.ts's `httpDateWrite`, which `HttpDate.current` calls, spells its sums for the prover with this stage, so the module's declaration of `HttpDate.current` carries a different attribute group",
+  })),
+  ...Object.entries(WRAP_CASTS_NET_WHY).flatMap(([file, why]) =>
+    byFinding(WRAP_CASTS_NET)(
+      why,
+      Object.fromEntries(
+        WRAP_CASTS_NET_PROGRAMS.filter(([, files]) => files.includes(file)).map(([program]) => [
+          program,
+          [file],
+        ])
+      )
+    )
+  ),
   ...wp91s1(
     "std/compress/deflate.ts's `deflateHash` multiplies with `wrappingMul` from nish:unsafe instead of casting through `u32`, so deflate.ll moves in every program that compresses",
     {
@@ -24608,6 +25266,21 @@ const DECLARED = [
     changelog: CALLER_CONTRACT,
     why: "the case is new with this change: under `--deny-panics` its callers prove the callee's leading guard, which the candidate records as proven, where the reference keeps the guard's `panic` and refuses the program",
   })),
+  ...[
+    "tests/link/window_contract_arrow_literal/main.ts",
+    "tests/link/window_contract_value_forward/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: WINDOW_FORWARD,
+    why: "the case is new with this change: its reader calls a window guard with a literal count, so the candidate proves the reads `b[off]` to `b[off + count - 1]` after the call and drops their bounds checks, which the seed keeps",
+  })),
+  {
+    program: "tests/link/window_contract_guard_facts/main.ts",
+    file: "main.ll",
+    changelog: WINDOW_FORWARD,
+    why: "the case is new with this change: each function calls a window guard as a statement, so the candidate proves the reads inside the guarded window (`b[off]` to `b[off + 3]`, and loops bounded by `len` or `off`) and drops their bounds checks, which the seed keeps",
+  },
 ]
 
 /**

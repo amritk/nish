@@ -118,8 +118,9 @@ const structDefinitions = (compilation: Compilation): string[] => {
     for (const info of unit.checker.program.structList) {
       // A `declare class` is C's own struct, which no exported signature or
       // exported field can name (`checkExportedLayouts`), so the header has
-      // no use for it and does not restate it.
-      if (info.origin === unit.source && !info.layout) {
+      // no use for it and does not restate it. Nor does it name a handle
+      // class (WP89 S5a): no function the header declares takes or gives one.
+      if (info.origin === unit.source && !info.layout && !info.handle) {
         structs.push(info)
         files.push(unit.name)
       }

@@ -52,7 +52,7 @@ import { recordOverloads } from "./overloads"
 import { REGION_STD_SPECIFIER } from "./region"
 import { explainLayout, LayoutModule, LayoutReport } from "./compact-rule"
 import { computeLayout } from "./structs"
-import { handleFindings } from "./handles"
+import { handleDisposes, handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
 import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
 import { analyzeFunctions, AnalysisUnit, FactsTable, FunctionFacts, PointerParamFacts } from "./attributes"
@@ -1683,6 +1683,14 @@ export class Compilation {
     }
     // WP53 §4: the handle rules read the checked tables, so they run once
     // every body, every instance's included, has checked clean.
+    // The first pass settles each class's closes, which the second reads for
+    // a class another module declares.
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const finding of handleDisposes(program, this.table)) {
+        this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
+      }
+    }
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const finding of handleFindings(program, this.table)) {

@@ -7470,7 +7470,10 @@ declare function compress(
 **A class with a `CPtr` or `CPtr | null` field is a handle class: it owns the C
 resource the pointer names, and its `[Symbol.dispose]` names the C function
 that closes it** (`tests/cases/ffi_handle_positions`, `docs/wp53-ffi-buffers-handles.md`
-§4a–§4d).
+§4a–§4d). A class whose field is an opaque `declare class`, a `HostHandle` or
+another handle class is one too, and a handle class may own several such
+fields (WP89 S5a, `ffi_handle_owned`, `ffi_handle_host`,
+`tests/link/ffi_handle_owned`).
 
 ```ts
 declare function fopen(path: string, mode: string): CPtr | null;
@@ -7531,15 +7534,42 @@ through `_exit(1)`, which does not, so bytes written to a `FILE *` with
 `fwrite` and not yet flushed are lost on a bounds panic. Flush (`fflush`)
 before code that may panic when those bytes matter.
 
-- **The class.** Exactly one `CPtr` or `CPtr | null` field, `readonly` and with
-  no initialiser (`reject_ffi_handle_two_fields`, `_field_mutable`,
-  `_field_initialiser`). No type parameters, no `implements`, no `export`
-  (`_generic_class`, `_implements`, `_export`), and no `static readonly json`
-  (`_json`).
-- **The write.** The constructor writes the field once, as
+- **The class.** Each field it owns is a `CPtr`, an opaque `declare class`
+  (declared in its module or imported), a `HostHandle<K>` or another handle
+  class, each but a `HostHandle` perhaps `| null` (a `HostHandle` is a
+  scalar, whose none is `0`, so `Canvas | null` is refused like `i32 | null`:
+  `reject_ffi_handle_host_nullable`), `readonly` and with no initialiser
+  (`reject_ffi_handle_field_mutable`, `_field_initialiser`). A field that is
+  another handle class may not be one that holds this class, directly or
+  through another owner (`_owner_cycle`). No type parameters and no
+  `implements` (`_generic_class`, `_implements`), and no `static readonly
+  json` (`_json`). A handle class may be `export`ed, and an importing module
+  opens, lends, closes and owns it as its own module does: the close is the
+  exporting module's dispose, inlined (`tests/link/ffi_handle_owned`). The
+  entry module is the exception: its exports are C symbols, and a C caller
+  given or lent a handle runs no close, so it exports no handle class and no
+  function whose parameters or result name one: `` Handle
+  class `File` cannot cross an export of the entry module ``
+  (`tests/link/reject_handle_entry_export`). A library module's handle
+  class and the functions that name one link to its importers but stay out
+  of `--emit-header`, `--emit-dts` and `--emit-napi`
+  (`tests/link/ffi_handle_sidecar`).
+- **The write.** The constructor writes a native field once, as
   `this.file = g(...)` at its top level, with `g` a `declare function` and no
   exit before it (`_field_copy`, `_field_copy_twice`, `_field_copy_branch`,
-  `_field_copy_non_foreign`).
+  `_field_copy_non_foreign`). It writes a field that owns another handle class
+  once, as `this.child = c` at its top level, where `c` is a constructor
+  parameter of that type or a handle opened right there (`new Child()` or a
+  factory call), or `null` for a `Child | null` field: `` The field `child` of
+  handle class `Owner` owns a handle and is written only once ``
+  (`tests/link/reject_handle_child_write`, `_walk_ctor_param`). A caller moves
+  a handle into that parameter only by opening it in the argument,
+  `new Owner(new Child())`; a handle it was lent stays the lender's
+  (`_walk_ctor_param`). No later argument of that `new` may leave the
+  function, as `.orReturn()` does, since the handle is open by then and the
+  owner that would close it is never built: `` A `Child` opened as an argument
+  of a `new` that takes ownership of it cannot be followed by an argument that
+  may leave the function `` (`tests/link/reject_handle_sink_leave`).
 - **The read.** The pointer is read only as `this.file` inside a method of the
   class, passed straight to a `declare function` or bound once to a `const`
   (`_field_read_outside`, `_field_other_instance`, `_field_alias_copy`,
@@ -7547,14 +7577,21 @@ before code that may panic when those bytes matter.
   `File` cannot be used here ``.
 - **The close.** `[Symbol.dispose](): void` is `close(this.file);` or
   `const p = this.file; if (p !== null) { close(p); }` for a `declare
-  function` `close` of one parameter (`_no_dispose`, `_dispose_body`,
+  function` `close` of one parameter, once for each native field, the last
+  declared closed first (`_two_fields`). A field that is a handle class is not
+  closed by the dispose: the close walks the owned fields in the reverse of
+  their declaration, and closes a handle-class field in its place there by
+  its own class's closes, so `Stack`, declaring `pair` before `top`, closes
+  its pointer and then the `Pair`'s two (`ffi_handle_owned`); a class that owns only handle-class
+  fields has an empty dispose (`_no_dispose`, `_dispose_body`,
   `_dispose_arity`, `_dispose_arg_type`, `_dispose_unknown`, `_dispose_forms`,
   `_dispose_shapes`). A class declares one, with no modifier
   (`_dispose_twice`, `_dispose_static`). Nothing else may
   call that close on the field, in a method or in the constructor
   (`_close_call`), and `[Symbol.dispose]` is never called by name
   (`_dispose_call`).
-- **Where a `File` may be.** It is opened by `using` (once lowered), called
+- **Where a `File` may be.** It is opened by `using` (once lowered), returned
+  by a factory that opens it, moved into an owning field, called
   (`f.read()`), or lent to a parameter of type `File`, which may lend it on.
   Everything else is `` A `File` cannot be used here `` (`_position`): `new`
   outside a `using` initialiser, `this` leaving the constructor, a copy into
@@ -7562,12 +7599,23 @@ before code that may panic when those bytes matter.
   argument, a comparison (`_new_outside_using`, `_this_escapes`, `_alias`,
   `_array`, `_object_literal`, `_closure_capture`, `_builtin_arg`,
   `_walk_compare`).
-- **Where `File` may be written.** Only as the type of such a parameter. A
-  local's annotation, a field, a return, a `Result` arm, a nullable, a type
-  argument and an exported function's parameter are `` `File` is a handle
-  class, and its name may be written only as the type of a parameter that
-  borrows one `` (`_type_position`, `_field`, `_return`, `_result`,
-  `_nullable`, `_type_argument`, `_exported_param`).
+- **Where `File` may be written.** As the type of such a parameter, an
+  exported function's included; as the type of an owning field of a handle
+  class; and as the result of a factory: a top-level function, or a top-level
+  `const` arrow, whose result is `File`, `File | null` or `Result<File, E>`
+  and whose every `return` is a handle it opens: `new File(...)`, another
+  factory's call, `null`, `Ok(new File(...))` or an `Err`. Nish has no static
+  methods, so a method is never a factory. The caller opens a factory's result
+  with `using`: `using g = openGpu(1).expect("a device")` for a `Result`, and
+  `using p = openPool(2, 64)` for a `Pool | null`, tested against `null`
+  inside the block, which closes it only when it is not `null`
+  (`tests/link/ffi_handle_owned`). A local's
+  annotation, a field of a class that owns no handle, a method's result, a
+  type argument, and the result of a function that returns a handle it was
+  lent are refused: `` `File` is a handle class, and its name may be written
+  only as the type of a parameter that borrows one `` or `` A `File` cannot be
+  used here `` (`_type_position`, `_field`, `_return`, `_result`,
+  `_type_argument`, `_factory`).
 - **Not after its close, and not kept past a lend.** A `using` binding's scope
   is its block, which ends where the close is emitted, so a handle named after
   its block — after it, in the loop's next iteration, in a `do` loop's
@@ -16891,13 +16939,18 @@ not a slot of `dst`, which `spawn` checks before it takes the task
   site at the call is the only one the caller answers for
 
 **`window`**: a call to a *window guard* whose `[off, off + len)` is not inside
-its `buf`, or to a method that hands its own window to one first. A guard is
+its `buf`, or to a method, free function or arrow `const` that hands its own
+window to one first. A guard is
 a free function returning `void` whose body is exactly
 `const size: i32 = toI32(buf.length)` and then
 `if (off < 0 || len < 0 || off > size || len > size - off) { panic(m) }`, with
-`buf` an array parameter and `off` and `len` `i32` ones; a forwarding method's
-first statement is the guard's call on its own parameters, each window
-parameter named once and the others string literals or parameters. Any other
+`buf` an array parameter and `off` and `len` `i32` ones; a forwarder's first
+statement is the guard's call on its own parameters, each window parameter
+named once and the others string literals or parameters, except that `len`
+may be a non-negative integer literal
+(`tests/link/window_contract_free_function`,
+`window_contract_arrow_literal`). A forwarder is a method, or a free
+non-generic function or arrow `const` that is no guard itself. Any other
 shape, the tests reordered (`tests/link/window_contract_not_a_guard`) or a
 statement before the call, is no contract, and its check is followed as any
 call's is
@@ -16905,14 +16958,27 @@ call's is
 - *What proves it away:* what proves `buf.slice(off, off + len)` at the call:
   `off` and `len` literals or the whole `buf.length` behind a length test, or
   `end - off` behind `off >= 0 && off <= end && end <= buf.length`
-  (`tests/link/window_contract_proven`, `window_contract_unproven`); an
+  (`tests/link/window_contract_proven`, `window_contract_unproven`). A
+  forwarder that passes a literal `len` leaves only `off` to its caller:
+  `off >= 0 && off + 4 <= buf.length` proves a count of 4
+  (`window_contract_arrow_literal`, `window_contract_literal_unproven`); an
   assignment between the test and the call undoes it
-  (`window_contract_guard_then_mutate`). A forwarding method's own call is
-  proven, because each of its callers holds the window
+  (`window_contract_guard_then_mutate`). A forwarder's own call is proven,
+  because each of its callers holds the window
   (`window_contract_late_forward` is a method that writes first and forwards
-  nothing). A guard passed as a value is judged in each instance it is
-  passed into, whose call is to the guard itself
-  (`window_contract_unnamed`). A call is judged in any function, one with
+  nothing). After a guard's call returns, an index inside the window it
+  checked is proven: `buf[off]` to `buf[off + 3]` after a count of 4, and
+  neither `buf[off + 4]` nor `buf[off - 1]`; after any other count, `off`
+  is known to be at least 0, and `off` and `len` at most `buf.length`; an
+  assignment to `off` after the call undoes both
+  (`window_contract_guard_facts`). A forwarder's call records nothing, since
+  its body may change `buf` after its guard returns. A guard or forwarder
+  passed as a value is judged in each instance it is passed into, whose call
+  is to it (`window_contract_unnamed`); one a function is handed through a
+  value parameter is never proven by that function's callers, whatever they
+  pass (`window_contract_value_forward`). A forwarder a host can call is
+  refused under `--deny-panics` as a guard is
+  (`window_contract_host_called`, `window_contract_host_forward`). A call is judged in any function, one with
   nothing else to prove included. A window read from an object's fields is
   never proven (`window_kept_field`), and neither is one a statement or a
   later argument between the test and the call shortens or rebinds
