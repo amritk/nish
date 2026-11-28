@@ -524,10 +524,10 @@ export class Sha256 {
    * @param len How many bytes to absorb; 0 absorbs nothing.
    */
   update(data: u8[], off: i32, len: i32): void {
+    if (this.finished) {
+      panic("Sha256: update after digest")
+    }
     if (!sha256Absorb(this, data, off, len)) {
-      if (this.finished) {
-        panic("Sha256: update after digest")
-      }
       panic("Sha256: the window is outside the buffer")
     }
   }
@@ -629,7 +629,10 @@ export class Sha256 {
       const room: i32 = toI32(block.length)
       const fill: i32 = this.fill
       for (let i: i32 = fill; i >= 0 && i < room; i += 1) {
-        block[i] = i === fill ? 0x80 : 0
+        block[i] = 0
+      }
+      if (fill >= 0 && fill < room) {
+        block[fill] = 0x80
       }
       if (fill >= 56) {
         sha256Compress(state, schedule, block, 0)
@@ -659,15 +662,14 @@ export class Sha256 {
 }
 
 /**
- * The body of `Sha256.update`, after its checks: absorbs `data[off .. off + len)`
- * into `h`. Every caller has checked that `h` is not finished and that the
- * window lies inside `data`; each loop's own condition still bounds its
- * indices, so a window that did not would hash a short read, never read out
- * of range.
+ * The body of `Sha256.update`, after its finished check: absorbs
+ * `data[off .. off + len)` into `h`, or absorbs nothing and returns false
+ * when that window lies outside `data`. Each loop's own condition still
+ * bounds its indices; the window check is what makes them hold.
  */
 const sha256Absorb = (h: Sha256, data: u8[], off: i32, len: i32): boolean => {
   const size: i32 = toI32(data.length)
-  if (h.finished || off < 0 || len < 0 || off > size || len > size - off) {
+  if (off < 0 || len < 0 || off > size || len > size - off) {
     return false
   }
   // §5.1.1 appends the length modulo 2^64, so the count wraps as a `u64`.
@@ -681,7 +683,7 @@ const sha256Absorb = (h: Sha256, data: u8[], off: i32, len: i32): boolean => {
   let fill: i32 = h.fill
   // Top up a partly filled block first, so that the loop below only ever
   // starts at a block boundary. Each loop's condition beyond its count is
-  // what proves its indices in range; the caller's window check makes it hold.
+  // what proves its indices in range; the window check above makes it hold.
   if (fill > 0) {
     while (left > 0 && fill >= 0 && fill < SHA256_BLOCK && fill < room && at >= 0 && at < size) {
       block[fill] = data[at]
