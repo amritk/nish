@@ -39,14 +39,14 @@
 // `main` runs the whole of X25519 on the copies, on RFC 7748's vectors, and
 // ct_asm_x25519.out requires every answer.
 
-import { uncheckedGet, uncheckedSet } from "nish:unsafe";
+import { uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
 
 // ---- The copies ---------------------------------------------------------------
 
-/** `f25519Add64`, `f25519Sub64` and `f25519Mul64`: limb arithmetic in `u64`, read back as `i64`. */
-const fieldAdd64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
-const fieldSub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
-const fieldMul64 = (a: i64, b: i64): i64 => toI64(toU64(a) * toU64(b))
+/** `f25519Add64`, `f25519Sub64` and `f25519Mul64`: limb arithmetic through `nish:unsafe`'s wrapping calls. */
+const fieldAdd64 = (a: i64, b: i64): i64 => wrappingAdd(a, b)
+const fieldSub64 = (a: i64, b: i64): i64 => wrappingSub(a, b)
+const fieldMul64 = (a: i64, b: i64): i64 => wrappingMul(a, b)
 
 /** `f25519Width`: 26 bits for an even limb, 25 for an odd one. */
 const fieldWidth = (i: i32): i64 => {

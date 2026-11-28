@@ -60,7 +60,7 @@
  */
 
 import { realpathSync, statMtimeSync } from "nish:fs"
-import { copyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import { HANDLER_SENT, HttpHandler, HttpRequest } from "nish/net/handler"
 import { HTTP_DATE_SIZE, httpDateWrite, httpFieldBytes } from "nish/net/http-fields"
 import { HttpServer, HttpServerRequest } from "nish/net/http-server"
@@ -1380,7 +1380,10 @@ export class StaticFiles {
     ) {
       return
     }
-    copyBytes(keys[at], 0, path, 0, m)
+    // A key shorter than the path leaves the entry unset, so the file streams.
+    if (!tryCopyBytes(keys[at], 0, path, 0, m)) {
+      return
+    }
     keyLength[at] = m
     keyCoding[at] = this.coding
     sizes[at] = this.size
@@ -1446,8 +1449,9 @@ export class StaticFiles {
       // A size below 2^31 (`STATIC_MAX_FILE`) has 10 digits, which
       // `scratch` holds; -1 would send the 416 without the field, which
       // RFC 9110 §15.5.17 only recommends.
-      const at: i32 = staticDigits(scratch, 8, this.size, 10)
-      copyBytes(scratch, 0, httpFieldBytes("bytes */"), 0, 8)
+      const at: i32 = tryCopyBytes(scratch, 0, httpFieldBytes("bytes */"), 0, 8)
+        ? staticDigits(scratch, 8, this.size, 10)
+        : -1
       if (at >= 0) {
         names.push(httpFieldBytes("content-range"))
         values.push(staticCut(scratch, at))
@@ -1488,11 +1492,12 @@ export class StaticFiles {
       values.push(httpFieldBytes(this.coding === STATIC_BR ? "br" : "gzip"))
     }
     if (status === 206) {
-      copyBytes(scratch, 0, httpFieldBytes("bytes "), 0, 6)
       // Three numbers below 2^31 (`STATIC_MAX_FILE`) and the words around
       // them, 38 bytes at most, fit `scratch`'s 64, so the field is never
       // dropped: a 206 without it would break RFC 9110 §15.3.7.
-      let at: i32 = staticDigits(scratch, 6, this.from, 10)
+      let at: i32 = tryCopyBytes(scratch, 0, httpFieldBytes("bytes "), 0, 6)
+        ? staticDigits(scratch, 6, this.from, 10)
+        : -1
       at = staticPut(scratch, at, 45)
       at = staticDigits(scratch, at, staticSub64(this.to, 1), 10)
       at = staticPut(scratch, at, 47)

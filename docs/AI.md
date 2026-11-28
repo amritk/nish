@@ -1819,7 +1819,10 @@ export const main = (): i32 => {
   (`using g = openGpu().expect("gpu")`). `new` of one appears only as a
   `using` initialiser, a factory's result or an owning argument. A panic or `process.exit` does not close it, so
   `fflush` a written `FILE *` before code that may panic. The rules:
-  `LANGUAGE.md` → "A handle class".
+  `LANGUAGE.md` → "A handle class". A resource with one owner is shaped
+  this way (a `HostHandle` field on `wasm32`); keep an id into a table, as
+  `nish/sqlite` does, only for an object that is shared, kept in a
+  collection or owned by the JS side.
 - **It costs the caller its attributes.** Nothing about a body the compiler
   cannot see is provable, so a function that calls C loses `readnone` and
   `willreturn`, and so does everything above it in the call graph. A program

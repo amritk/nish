@@ -6990,18 +6990,27 @@ if (dealtHere("stdPanics")) {
       same.status === 0 && planted.status === 1 && planted.stderr.includes("std/compress/deflate.ts"),
       `${shown(same)}\n${shown(planted)}`
     )
-    let dropped = ""
-    const removed = onCopy("removed", (dir) => {
+    // The baseline may hold no line at all, so the copy brings its own: a
+    // file with one cast wrap and the line that allows it, which must pass,
+    // and the same file without that line, which must fail.
+    const plantedFile = "std/compress/wrap-casts-baselined.ts"
+    const plantedLine = `1 ${plantedFile}`
+    const withLine = (keep) => (dir) => {
+      fs.writeFileSync(
+        path.join(dir, plantedFile),
+        "export const baselinedWrap = (a: u32, b: u32): i32 => toI32(toU32(a) + toU32(b))\n"
+      )
       const file = path.join(dir, "scripts", "wrap-casts.txt")
-      const lines = fs.readFileSync(file, "utf8").split("\n")
-      const at = lines.findIndex((l) => /^\d+ \S+$/.test(l))
-      dropped = lines[at] ?? ""
-      fs.writeFileSync(file, lines.filter((_, k) => k !== at).join("\n"))
-    })
+      if (keep) {
+        fs.appendFileSync(file, `${plantedLine}\n`)
+      }
+    }
+    const kept = onCopy("kept", withLine(true))
+    const removed = onCopy("removed", withLine(false))
     check(
-      `std-panics: scripts/wrap-casts.mjs --root fails on a baseline with a line removed (${dropped || "none found"})`,
-      dropped !== "" && removed.status === 1,
-      shown(removed)
+      `std-panics: scripts/wrap-casts.mjs --root fails on a baseline with a line removed (${plantedLine}), and passes it with the line`,
+      kept.status === 0 && removed.status === 1 && removed.stderr.includes(plantedFile),
+      `${shown(kept)}\n${shown(removed)}`
     )
   }
   const baselineName = "tests/std-panics.json"
