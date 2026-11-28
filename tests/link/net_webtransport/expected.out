@@ -235,4 +235,4 @@ PASS  five connections, one after another, through one slot
 PASS  each with its session, which the layer forgot at the restart
 PASS  resetting the slot keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, a session, datagrams, streams, a close
-webtransport: 236 passed, 0 failed, 0 skipped
+webtransport: 237 passed, 0 failed, 0 skipped
