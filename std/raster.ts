@@ -686,7 +686,12 @@ export class RasterTrail {
    * @param capacity - the points it remembers, at least one
    */
   constructor(capacity: i32) {
-    const n: i32 = Math.max(capacity, 1)
+    // Written as a test, not `Math.max`, so the prover sees `n` is
+    // positive at each `new Array` below.
+    let n: i32 = 1
+    if (capacity > 1) {
+      n = capacity
+    }
     this.xs = new Array<f64>(n)
     this.xs.fill(0.0)
     this.ys = new Array<f64>(n)
@@ -840,7 +845,12 @@ export class RasterParticles {
    * @param capacity - the particles it holds at once, at least one
    */
   constructor(capacity: i32) {
-    const n: i32 = Math.max(capacity, 1)
+    // Written as a test, not `Math.max`, so the prover sees `n` is
+    // positive at each `new Array` below.
+    let n: i32 = 1
+    if (capacity > 1) {
+      n = capacity
+    }
     this.xs = new Array<f64>(n)
     this.xs.fill(0.0)
     this.ys = new Array<f64>(n)

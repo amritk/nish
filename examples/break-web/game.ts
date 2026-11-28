@@ -177,7 +177,7 @@ const startHelp = (): string => {
   for (let i: i32 = 1; i <= n; i++) {
     bytes.push(toU8(BREAK_HELP_IN[i] & 255))
   }
-  return String.fromBytes(bytes, 0, n)
+  return String.fromBytes(bytes, 0, toI32(bytes.length))
 }
 
 /** Start a run, with the page's saved settings when it wrote some. */
@@ -328,9 +328,10 @@ export const draw = (alpha: f64, frameMs: f64): void => {
   const w: i32 = fb.width
   const h: i32 = fb.height
   if (!turn) {
-    // `pixels` holds the frame's `w * h`.
+    // `pixels` holds the frame's `w * h`, which the frame's size keeps within
+    // GAME_FRAME; the second test only says so to the prover.
     const n: i32 = toI32(fb.pixels.length)
-    for (let i: i32 = 0; i < n; i++) {
+    for (let i: i32 = 0; i < n && i < GAME_FRAME.length; i++) {
       GAME_FRAME[i] = fb.pixels[i]
     }
     gameSetSize(w, h)
@@ -343,7 +344,12 @@ export const draw = (alpha: f64, frameMs: f64): void => {
     for (let y: i32 = 0; y < h; y++) {
       const column: f64 = toF64(h) - 1.0 - toF64(y)
       for (let x: i32 = 0; x < w && src < toI32(pixels.length); x++) {
-        GAME_FRAME[toI32(toF64(x) * toF64(h) + column)] = pixels[src]
+        // The shown frame is `h × w`, as GAME_FRAME holds, so `at` is always
+        // inside it; the test only says so to the prover.
+        const at: i32 = toI32(toF64(x) * toF64(h) + column)
+        if (at >= 0 && at < GAME_FRAME.length) {
+          GAME_FRAME[at] = pixels[src]
+        }
         src = src + 1
       }
     }

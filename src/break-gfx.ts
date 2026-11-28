@@ -120,6 +120,24 @@ export const viewFor = (view: View, fb: Framebuffer, shakeX: f64, shakeY: f64): 
   view.bottom = rasterPixel(baseY + WORLD_H * scale + 0.5)
 }
 
+/**
+ * A pixel sum or difference, worked in `i64` and held to the `i32` range.
+ * `rasterPixel` keeps every coordinate here within ±1000000, half a text
+ * width is under 2^30 and a shadow's drop at most 1024, so no sum this file
+ * takes leaves the range and the hold never moves a pixel. (A drop can only be
+ * very negative for a scale under 1, which draws nothing.) It is here because
+ * the prover cannot read the clamp through `rasterPixel`'s `i32`.
+ */
+const pixelSum = (v: i64): i32 => {
+  if (v < -2147483648) {
+    return -2147483648
+  }
+  if (v > 2147483647) {
+    return 2147483647
+  }
+  return toI32(v)
+}
+
 /** The pixel column of world `x`, as an `f64` so a caller can keep its fraction. */
 export const pixelX = (view: View, x: f64): f64 => view.offsetX + x * view.scale
 
@@ -254,8 +272,8 @@ export const bevelBrick = (view: View, x: f64, y: f64, w: f64, h: f64, face: i32
   const y0: i32 = rasterPixel(pixelY(view, y) + 0.5)
   const x1: i32 = rasterPixel(pixelX(view, x + w) + 0.5)
   const y1: i32 = rasterPixel(pixelY(view, y + h) + 0.5)
-  const pw: i32 = x1 - x0
-  const ph: i32 = y1 - y0
+  const pw: i32 = pixelSum(toI64(x1) - toI64(x0))
+  const ph: i32 = pixelSum(toI64(y1) - toI64(y0))
   if (pw < 3 || ph < 3) {
     solidRect(fb, x0, y0, x1, y1, face)
     return
@@ -263,11 +281,15 @@ export const bevelBrick = (view: View, x: f64, y: f64, w: f64, h: f64, face: i32
   const edge: i32 = Math.max(1, Math.min(rasterPixel(view.scale + 0.5), Math.min(pw, ph) / 3))
   const light: i32 = rasterMix(face, 0xffffff, 0.45)
   const dark: i32 = rasterMix(face, 0x000000, 0.45)
-  solidRect(fb, x0, y0, x1, y0 + edge, light)
-  solidRect(fb, x0, y0 + edge, x0 + edge, y1, light)
-  solidRect(fb, x0 + edge, y1 - edge, x1, y1, dark)
-  solidRect(fb, x1 - edge, y0 + edge, x1, y1 - edge, dark)
-  solidRect(fb, x0 + edge, y0 + edge, x1 - edge, y1 - edge, face)
+  const left: i32 = pixelSum(toI64(x0) + toI64(edge))
+  const top: i32 = pixelSum(toI64(y0) + toI64(edge))
+  const right: i32 = pixelSum(toI64(x1) - toI64(edge))
+  const bottom: i32 = pixelSum(toI64(y1) - toI64(edge))
+  solidRect(fb, x0, y0, x1, top, light)
+  solidRect(fb, x0, top, left, y1, light)
+  solidRect(fb, left, bottom, x1, y1, dark)
+  solidRect(fb, right, top, x1, bottom, dark)
+  solidRect(fb, left, top, right, bottom, face)
 }
 
 /** A solid disc of radius `r` at `cx`, `cy`, its edge anti-aliased: a ball, a light. */
@@ -367,7 +389,16 @@ export const drawTextShadow = (
   const px: i32 = rasterPixel(pixelX(view, x) + 0.5)
   const py: i32 = rasterPixel(pixelY(view, y) + 0.5)
   const drop: i32 = Math.min(scale, RASTER_MAX_TEXT_SCALE)
-  rasterText(rasterFrame(fb.pixels), fb.width, fb.height, px + drop, py + drop, scale, text, shadow)
+  rasterText(
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
+    pixelSum(toI64(px) + toI64(drop)),
+    pixelSum(toI64(py) + toI64(drop)),
+    scale,
+    text,
+    shadow
+  )
   rasterText(rasterFrame(fb.pixels), fb.width, fb.height, px, py, scale, text, colour)
 }
 
@@ -382,11 +413,20 @@ export const drawTextCentred = (
   shadow: i32
 ): void => {
   const fb: Framebuffer = view.fb
-  const px: i32 = rasterPixel(pixelX(view, cx) + 0.5) - rasterTextWidth(text, scale) / 2
+  const px: i32 = pixelSum(toI64(rasterPixel(pixelX(view, cx) + 0.5)) - toI64(rasterTextWidth(text, scale) / 2))
   const py: i32 = rasterPixel(pixelY(view, y) + 0.5)
   if (shadow !== NO_SHADOW) {
     const drop: i32 = Math.min(scale, RASTER_MAX_TEXT_SCALE)
-    rasterText(rasterFrame(fb.pixels), fb.width, fb.height, px + drop, py + drop, scale, text, shadow)
+    rasterText(
+      rasterFrame(fb.pixels),
+      fb.width,
+      fb.height,
+      pixelSum(toI64(px) + toI64(drop)),
+      pixelSum(toI64(py) + toI64(drop)),
+      scale,
+      text,
+      shadow
+    )
   }
   rasterText(rasterFrame(fb.pixels), fb.width, fb.height, px, py, scale, text, colour)
 }

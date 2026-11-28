@@ -55,6 +55,7 @@ import {
   KEY_F9,
   TermEvent,
 } from "nish/term"
+import { wrappingAdd } from "nish:unsafe"
 import { StepInput } from "../std/input"
 import {
   Framebuffer,
@@ -121,6 +122,28 @@ const DIRECTOR_AUTO_LINES: i32 = 1080
 const DIRECTOR_SLOW_NS: i64 = 1500000000
 const DIRECTOR_SETTLE_NS: i64 = 2000000000
 
+/**
+ * The `settledAt` of a director that has never stepped: a step that long
+ * before clock 0 settles no reading from 0 on, as a deadline of 0 did.
+ */
+const DIRECTOR_NEVER_SETTLED: i64 = -2000000000
+
+/**
+ * Whether `now - since` has reached `DIRECTOR_SETTLE_NS` (`settle`) or
+ * `DIRECTOR_SLOW_NS`, answered for every pair of clock readings without
+ * forming a difference that leaves `i64`: readings of one sign subtract
+ * safely, and against a negative `since` the sum with the span does.
+ */
+const clockPassed = (now: i64, since: i64, settle: boolean): boolean => {
+  if (since < 0) {
+    return now >= (settle ? since + DIRECTOR_SETTLE_NS : since + DIRECTOR_SLOW_NS)
+  }
+  if (now < 0) {
+    return false
+  }
+  return now - since >= (settle ? DIRECTOR_SETTLE_NS : DIRECTOR_SLOW_NS)
+}
+
 /** A round trip under this many milliseconds leaves the frames' size, not the link, to blame for a low rate. */
 const DIRECTOR_FAST_RTT_MS: f64 = 20.0
 
@@ -146,9 +169,9 @@ export class BreakDirector {
   quiet: i32[]
   /** What `keptSettings` fills, made once. */
   kept: BreakSettings
-  /** When the rate fell under 60, 0 while it is not; and the earliest auto resolution may step again. */
+  /** When the rate fell under 60, 0 while it is not; and when auto resolution last stepped, which it waits `DIRECTOR_SETTLE_NS` after. */
   slowSince: i64
-  settleUntil: i64
+  settledAt: i64
   scene: i32
   /** The level the game in play started at, which the menu after it offers again. */
   startLevel: i32
@@ -212,7 +235,7 @@ export class BreakDirector {
     this.kept = new BreakSettings()
     this.autoLines = DIRECTOR_AUTO_LINES
     this.slowSince = toI64(0)
-    this.settleUntil = toI64(0)
+    this.settledAt = DIRECTOR_NEVER_SETTLED
   }
 }
 
@@ -253,8 +276,11 @@ const directorSoundChanged = (d: BreakDirector): void => {
   toastBreak(d, d.settings.sound ? "sound on" : "sound off")
   d.soundChanged = true
   d.soundToastWanted = true
-  if (d.settings.sound) {
-    d.soundTurnedOn = d.soundTurnedOn + 1
+  // A turn on is at most one for each key press of the step, so the count never
+  // reaches the cap; the test is what shows the sum fits.
+  const turnedOn: i32 = d.soundTurnedOn
+  if (d.settings.sound && turnedOn < 2147483647) {
+    d.soundTurnedOn = turnedOn + 1
   }
 }
 
@@ -307,19 +333,33 @@ export const breakTerminalOpened = (d: BreakDirector): void => {
 /** Whether `e` is a press of one of the director's keys, F3 to F9. */
 const directorHotkey = (e: TermEvent): boolean => e.type === EVENT_KEY && e.key >= KEY_F3 && e.key <= KEY_F9
 
-/** The settings row director key `key` steps: F4 to F8 are the first five in order, F3 stats, F9 sound. */
+/**
+ * The settings row director key `key` steps: F4 to F8 are the first five in
+ * order, F3 stats, F9 sound. Each key is named, not counted from F4, so the
+ * row needs no subtraction that a key outside F3 to F9 could overflow.
+ */
 const directorKeyRow = (key: i32): i32 => {
   if (key === KEY_F3) {
     return DIRECTOR_ROW_STATS
+  } else if (key === KEY_F4) {
+    return 0
+  } else if (key === KEY_F5) {
+    return 1
+  } else if (key === KEY_F6) {
+    return 2
+  } else if (key === KEY_F7) {
+    return 3
+  } else if (key === KEY_F8) {
+    return 4
   }
-  return key === KEY_F9 ? DIRECTOR_ROW_SOUND : key - KEY_F4
+  return DIRECTOR_ROW_SOUND
 }
 
 /** Auto resolution from the top again, as when it is chosen afresh. */
 const directorResetAuto = (d: BreakDirector): void => {
   d.autoLines = DIRECTOR_AUTO_LINES
   d.slowSince = toI64(0)
-  d.settleUntil = toI64(0)
+  d.settledAt = DIRECTOR_NEVER_SETTLED
 }
 
 /** What the resolution setting says in a toast. */
@@ -381,28 +421,34 @@ const directorTakeHotkeys = (d: BreakDirector, events: TermEvent[]): void => {
       }
       continue
     }
-    if (kept !== i && kept >= 0 && kept < events.length) {
-      events[kept] = e
+    // `kept` is at most `i`, so the test always holds; it is what shows the
+    // store and the count stay inside the array.
+    if (kept >= 0 && kept < events.length) {
+      if (kept !== i) {
+        events[kept] = e
+      }
+      kept++
     }
-    kept++
   }
-  while (toI32(events.length) > kept) {
+  while (events.length > 0 && toI32(events.length) > kept) {
     events.pop()
   }
 }
 
 /** Start a game at `level`, the menu's answer. */
 const directorStartGame = (d: BreakDirector, level: i32): void => {
-  d.games = d.games + 1
+  // The count only varies the seed, so it wraps rather than run out, and the
+  // seed it offsets wraps with it: any `i64` is a seed.
+  d.games = wrappingAdd(d.games, 1)
   d.startLevel = level
-  d.game = newBreakGame(level, d.seed + toI64(d.games))
+  d.game = newBreakGame(level, wrappingAdd(d.seed, toI64(d.games)))
   d.game.effects = d.settings.effects
   d.scene = SCENE_GAME
 }
 
 /** Back to the title card, offering the level the last game started at, with the same settings. */
 const directorBackToMenu = (d: BreakDirector): void => {
-  d.menu = newBreakMenuWith(d.startLevel, d.seed + toI64(d.games), d.settings)
+  d.menu = newBreakMenuWith(d.startLevel, wrappingAdd(d.seed, toI64(d.games)), d.settings)
   d.menu.terminal = d.terminal
   d.scene = SCENE_MENU
 }
@@ -507,8 +553,9 @@ export const stepBreakDirector = (d: BreakDirector, input: StepInput): boolean =
   // What the hotkeys left, so a change the menu makes below is told apart from theirs.
   const resolution: i32 = d.settings.resolution
   const sound: boolean = d.settings.sound
-  if (d.toastSteps > 0) {
-    d.toastSteps = d.toastSteps - 1
+  const toastSteps: i32 = d.toastSteps
+  if (toastSteps > 0) {
+    d.toastSteps = toastSteps - 1
   }
   if (d.reopen) {
     return false
@@ -566,7 +613,7 @@ const directorStepDown = (lines: i32): i32 => {
  * @param now The host's clock, in nanoseconds; only differences are read.
  */
 export const adaptBreakResolution = (d: BreakDirector, fps: i32, rttMs: f64, height: i32, now: i64): void => {
-  if (resolutionChoice(d.settings.resolution) !== 0 || height <= 270 || now < d.settleUntil) {
+  if (resolutionChoice(d.settings.resolution) !== 0 || height <= 270 || !clockPassed(now, d.settledAt, true)) {
     return
   }
   if (fps >= 60 || rttMs >= DIRECTOR_FAST_RTT_MS) {
@@ -577,10 +624,10 @@ export const adaptBreakResolution = (d: BreakDirector, fps: i32, rttMs: f64, hei
     d.slowSince = now
     return
   }
-  if (now - d.slowSince >= DIRECTOR_SLOW_NS) {
+  if (clockPassed(now, d.slowSince, false)) {
     d.autoLines = directorStepDown(Math.min(d.autoLines, height))
     d.slowSince = toI64(0)
-    d.settleUntil = now + DIRECTOR_SETTLE_NS
+    d.settledAt = now
   }
 }
 
@@ -597,8 +644,14 @@ export const adaptBreakResolution = (d: BreakDirector, fps: i32, rttMs: f64, hei
 export const sizeBreakFramebuffer = (d: BreakDirector, fb: Framebuffer, roomW: i32, roomH: i32): void => {
   const chosen: i32 = resolutionChoice(d.settings.resolution)
   let h: i32 = Math.min(roomH, chosen === 0 ? d.autoLines : chosen)
+  // A host with no room, or more lines than a 16:9 width holds in an `i32`,
+  // has no frame to size, so the one there stays. Auto resolution and every
+  // choice are at most 1080 lines, so only a negative room reaches this.
+  if (h < 0 || h > 134217727 || roomW < 0) {
+    return
+  }
   let w: i32 = (h * 16) / 9
-  if (w > roomW) {
+  if (roomW < w) {
     w = roomW
     h = (w * 9) / 16
   }
