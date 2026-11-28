@@ -6952,65 +6952,45 @@ if (dealtHere("stdPanics")) {
   // CLAUDE.md's "A wrap is spelled, never cast": scripts/wrap-casts.mjs (in
   // `npm run lint`) finds each `toI32(...)` with a `toU32(...)` operand of
   // `+`, `-` or `*` (and the `toI64`/`toU64` form) in every std/, src/ and
-  // examples/ file, against scripts/wrap-casts.txt, whose counts only fall.
-  // WP84 S3 and WP91 S1 took std/compress, src/ and examples/ to none. This
-  // runs the script on the tree, then on a copy with one cast planted in
-  // std/compress/deflate.ts and on a copy whose baseline lost a line: each
-  // copy must fail, by the script's exit status, or the check is no guard.
+  // examples/ file and fails on any, with no baseline: WP91 took every file
+  // to none. This runs the script on the tree, then on copies with one cast
+  // planted in std/compress/deflate.ts, src/ or examples/: each copy must
+  // fail, by the script's exit status, or the check is no guard. A baseline
+  // file, or an `--update` that writes one, must not come back.
   {
     const wrapCasts = path.join(root, "scripts", "wrap-casts.mjs")
     const live = spawnSync(process.execPath, [wrapCasts], { cwd: root, encoding: "utf8" })
+    check("std-panics: scripts/wrap-casts.mjs passes the tree, with no cast wrap in std/, src/ or examples/", live.status === 0, shown(live))
+    const update = spawnSync(process.execPath, [wrapCasts, "--update"], { cwd: root, encoding: "utf8" })
     check(
-      "std-panics: scripts/wrap-casts.mjs passes the tree, with no cast wrap in std/compress, src/ or examples/",
-      live.status === 0 &&
-        !/^\d+ (std\/compress\/|src\/|examples\/)/m.test(fs.readFileSync(path.join(root, "scripts", "wrap-casts.txt"), "utf8")),
-      shown(live)
+      "std-panics: scripts/wrap-casts.mjs refuses the count-lowering flag it dropped, and no count file sits beside it",
+      update.status === 2 && !fs.existsSync(path.join(root, "scripts", "wrap-casts.txt")),
+      shown(update)
     )
-    /** A copy of the scanned tree and its baseline under build/, `edit`ed, and the script's run on it. */
+    /** A copy of the scanned tree under build/, `edit`ed, and the script's run on it. */
     const onCopy = (name, edit) => {
       const dir = path.join(buildDir, "wrap_casts", name)
       fs.rmSync(dir, { recursive: true, force: true })
       for (const d of ["std", "src", "examples"]) {
         fs.cpSync(path.join(root, d), path.join(dir, d), { recursive: true })
       }
-      fs.mkdirSync(path.join(dir, "scripts"), { recursive: true })
-      fs.copyFileSync(path.join(root, "scripts", "wrap-casts.txt"), path.join(dir, "scripts", "wrap-casts.txt"))
       edit(dir)
       return spawnSync(process.execPath, [wrapCasts, "--root", dir], { cwd: root, encoding: "utf8" })
     }
     const same = onCopy("same", () => {})
-    const planted = onCopy("planted", (dir) =>
-      fs.appendFileSync(
-        path.join(dir, "std", "compress", "deflate.ts"),
-        "\nexport const plantedWrap = (a: u32, b: u32): i32 =>\n  toI32(toU32(a) +\n    toU32(b))\n"
+    const plantedIn = ["std/compress/deflate.ts", "src/wrap-casts-planted.ts", "examples/wrap-casts-planted.ts"]
+    const planted = plantedIn.map((file, at) =>
+      onCopy(`planted${at}`, (dir) =>
+        fs.appendFileSync(
+          path.join(dir, file),
+          "\nexport const plantedWrap = (a: u32, b: u32): i32 =>\n  toI32(toU32(a) +\n    toU32(b))\n"
+        )
       )
     )
     check(
-      "std-panics: scripts/wrap-casts.mjs --root fails on a cast wrap planted in std/compress/deflate.ts, and passes the unplanted copy",
-      same.status === 0 && planted.status === 1 && planted.stderr.includes("std/compress/deflate.ts"),
-      `${shown(same)}\n${shown(planted)}`
-    )
-    // The baseline may hold no line at all, so the copy brings its own: a
-    // file with one cast wrap and the line that allows it, which must pass,
-    // and the same file without that line, which must fail.
-    const plantedFile = "std/compress/wrap-casts-baselined.ts"
-    const plantedLine = `1 ${plantedFile}`
-    const withLine = (keep) => (dir) => {
-      fs.writeFileSync(
-        path.join(dir, plantedFile),
-        "export const baselinedWrap = (a: u32, b: u32): i32 => toI32(toU32(a) + toU32(b))\n"
-      )
-      const file = path.join(dir, "scripts", "wrap-casts.txt")
-      if (keep) {
-        fs.appendFileSync(file, `${plantedLine}\n`)
-      }
-    }
-    const kept = onCopy("kept", withLine(true))
-    const removed = onCopy("removed", withLine(false))
-    check(
-      `std-panics: scripts/wrap-casts.mjs --root fails on a baseline with a line removed (${plantedLine}), and passes it with the line`,
-      kept.status === 0 && removed.status === 1 && removed.stderr.includes(plantedFile),
-      `${shown(kept)}\n${shown(removed)}`
+      `std-panics: scripts/wrap-casts.mjs --root fails on a cast wrap planted in ${plantedIn.join(", ")}, and passes the unplanted copy`,
+      same.status === 0 && planted.every((r, at) => r.status === 1 && r.stderr.includes(plantedIn[at])),
+      [same, ...planted].map(shown).join("\n")
     )
   }
   const baselineName = "tests/std-panics.json"

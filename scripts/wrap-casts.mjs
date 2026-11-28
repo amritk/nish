@@ -1,16 +1,14 @@
 #!/usr/bin/env node
-// No new wrap spelled as a cast: `toI32(toU32(a) + toU32(b))` and its `i64`
+// No wrap spelled as a cast: `toI32(toU32(a) + toU32(b))` and its `i64`
 // form make signed arithmetic wrap without the compiler proving it fits, so a
 // wrap stands in for a panic and nobody can tell it was meant. CLAUDE.md, "A
 // wrap is spelled, never cast", has the rule: prove the sum, return a Result,
 // or write `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe`.
 //
 //   node scripts/wrap-casts.mjs            check the tree (npm run lint)
-//   node scripts/wrap-casts.mjs --update   lower scripts/wrap-casts.txt to the tree's counts;
-//                                          refuses to raise one or add a file
-//   node scripts/wrap-casts.mjs --root D   check the copy at D, its own baseline and files
-//                                          found by walking D rather than git (tests/run.js
-//                                          plants a cast in one and expects exit 1)
+//   node scripts/wrap-casts.mjs --root D   check the copy at D, its files found by walking D
+//                                          rather than git (tests/run.js plants a cast in
+//                                          one and expects exit 1)
 //
 // A cast wrap is a `toI32(...)` call whose argument has a `toU32(...)` result
 // as a direct operand of `+`, `-` or `*`, or the same with `toI64` and
@@ -19,22 +17,18 @@
 // parentheses or under a `/`, and a u32 local summed first and cast later, are
 // not found, so a pass is not a proof that a file wraps nowhere.
 //
-// scripts/wrap-casts.txt holds the count per file of the casts that predate
-// the rule, and the counts only fall. A file whose count rises, or that has
-// one and is not listed, fails and names every cast in it; a count that falls
-// fails until --update writes it back, so a removed cast cannot be traded for
-// a new one.
+// Every cast wrap found fails, naming its file and line: WP91 took every
+// scanned file to none, so none is allowed.
 import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
-const usage = "the flags are --update and --root D"
+const usage = "the only flag is --root D"
 const fail = (message) => {
   console.error(`wrap-casts: ${message}; ${usage}`)
   process.exit(2)
 }
 let rootArg
-let update = false
 const args = process.argv.slice(2)
 for (let i = 0; i < args.length; i++) {
   const a = args[i]
@@ -45,8 +39,6 @@ for (let i = 0; i < args.length; i++) {
     }
     rootArg = value
     i++
-  } else if (a === "--update") {
-    update = true
   } else {
     fail(`unknown argument ${a}`)
   }
@@ -55,7 +47,6 @@ const root = path.resolve(rootArg ?? path.join(import.meta.dirname, ".."))
 if (!fs.existsSync(path.join(root, "std")) || !fs.statSync(path.join(root, "std")).isDirectory()) {
   fail(`${root} has no std/ directory`)
 }
-const baselinePath = path.join(root, "scripts", "wrap-casts.txt")
 const scanned = ["std", "src", "examples"]
 const pairs = [
   { outer: "toI32", inner: "toU32" },
@@ -153,30 +144,6 @@ if (plantedFound.join("\n") !== plantedWant.join("\n")) {
   process.exit(1)
 }
 
-/** The baseline's counts by file. Lines are `<count> <path>`; `#` starts a comment line. */
-const readBaseline = () => {
-  const counts = new Map()
-  for (const raw of fs.readFileSync(baselinePath, "utf8").split("\n")) {
-    const line = raw.trim()
-    if (line === "" || line.startsWith("#")) {
-      continue
-    }
-    const m = /^(\d+) (\S+)$/.exec(line)
-    if (m === null) {
-      console.error(`wrap-casts: scripts/wrap-casts.txt: not \`<count> <path>\`: ${line}`)
-      process.exit(2)
-    }
-    counts.set(m[2], Number(m[1]))
-  }
-  return counts
-}
-
-const header = [
-  "# The cast wraps (`toI32(toU32(a) + toU32(b))`, and toI64/toU64) that predate",
-  '# CLAUDE.md\'s "A wrap is spelled, never cast", per file. Counts only fall:',
-  "# lower them with `node scripts/wrap-casts.mjs --update`, never by hand.",
-]
-
 /** The `.ts` files under `dir` of `root`, as `/`-separated paths from `root`. */
 const walk = (dir) => {
   const at = path.join(root, dir)
@@ -206,37 +173,10 @@ for (const f of files) {
     found.set(f, sites)
   }
 }
-const baseline = readBaseline()
-const rises = []
-const falls = []
-for (const [f, sites] of found) {
-  const allowed = baseline.get(f) ?? 0
-  if (sites.length > allowed) {
-    rises.push(
-      `${f}: ${sites.length} cast wraps, ${allowed} allowed; prove the sum, return a Result, or call wrappingAdd/wrappingSub/wrappingMul from nish:unsafe:\n${sites.map((s) => `  ${f}:${s.line}: ${s.text}`).join("\n")}`
-    )
-  }
-}
-for (const [f, allowed] of baseline) {
-  const n = found.get(f)?.length ?? 0
-  if (n < allowed) {
-    falls.push(`${f}: ${n} cast wraps, scripts/wrap-casts.txt says ${allowed}`)
-  }
-}
-if (rises.length > 0) {
+if (found.size > 0) {
+  const sites = [...found].flatMap(([f, ss]) => ss.map((x) => `  ${f}:${x.line}: ${x.text}`))
   console.error(
-    `wrap-casts: a cast wrap was added (CLAUDE.md, "A wrap is spelled, never cast")\n${rises.join("\n")}`
-  )
-  process.exit(1)
-}
-if (update) {
-  const lines = [...found].sort(([a], [b]) => (a < b ? -1 : 1)).map(([f, sites]) => `${sites.length} ${f}`)
-  fs.writeFileSync(baselinePath, `${[...header, ...lines].join("\n")}\n`)
-  const total = [...found.values()].reduce((n, s) => n + s.length, 0)
-  console.log(`wrap-casts: wrote ${found.size} files, ${total} cast wraps`)
-} else if (falls.length > 0) {
-  console.error(
-    `wrap-casts: a count fell; lower it with \`node scripts/wrap-casts.mjs --update\`\n${falls.join("\n")}`
+    `wrap-casts: a cast wrap (CLAUDE.md, "A wrap is spelled, never cast"); prove the sum, return a Result, or call wrappingAdd/wrappingSub/wrappingMul from nish:unsafe:\n${sites.join("\n")}`
   )
   process.exit(1)
 }

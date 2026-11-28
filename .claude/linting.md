@@ -17,7 +17,7 @@ shellcheck, and every rule is an `error`: a finding fails the pull request.
 | `scripts/check-filenames.mjs` | every path `git ls-files` prints | the constants at its top |
 | `scripts/check-install-scripts.mjs` | `package-lock.json`: no dependency has an install script (SC-30, `docs/security/supply-chain.md`) | none |
 | `scripts/rfc-specs.mjs` | `std/**/*.ts`, `contracts/*.json`, `specs/*.md`, `test/spec/*.ts`: every RFC a module cites is covered by a vector spec of that module, or listed | `scripts/rfc-unspecified.txt`; its pre-rule lines are pinned by `PRE_RULE_SHA256` and only shrink |
-| `scripts/wrap-casts.mjs` | the git-tracked `.ts` files of `std/`, `src/` and `examples/`: no new `toI32(toU32(a) + toU32(b))` (or `toI64`/`toU64`) wrap (CLAUDE.md, "A wrap is spelled, never cast") | `scripts/wrap-casts.txt`, per-file counts that only fall (`--update` lowers them) |
+| `scripts/wrap-casts.mjs` | the git-tracked `.ts` files of `std/`, `src/` and `examples/`: no `toI32(toU32(a) + toU32(b))` (or `toI64`/`toU64`) wrap (CLAUDE.md, "A wrap is spelled, never cast") | none: any cast wrap fails |
 | tsc (`npm run check`) | `src/`, `std/`, `tests/nish/` | `tsconfig.json` |
 | knip (`npm run lint:dead`) | the same files as Biome, from the entry points in its config | `knip.json` |
 | shellcheck (`-S warning`) | `scripts/*.sh`, `docs/cookbook/regen.sh`, `install.sh`, `.github/*.sh`, `.claude/hooks/*.sh` | the CI step |
