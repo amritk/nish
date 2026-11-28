@@ -2229,8 +2229,8 @@ function parseBreakSettings(text: string): BreakSettings -> @parseBreakSettings 
   callee +0:28 new BreakSettings -> @BreakSettings.constructor
   local +1:7 start: i32 (let)
   local +2:12 i: i32 (let)
-  callee +4:7 applySettingLine -> @applySettingLine
-  callee +8:3 applySettingLine -> @applySettingLine
+  callee +5:7 applySettingLine -> @applySettingLine
+  callee +9:3 applySettingLine -> @applySettingLine
 function regrowSpread(): integer<0, 240> -> @regrowSpread
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

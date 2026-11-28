@@ -16,9 +16,9 @@
     "src/break-director.ts": "7c2ccd4cde3a3fbfc4101bf22225c76ab1b31c300f01a8568c0a28890ce8d76d",
     "src/break-game.ts": "36971b080637b8c5ac82a4ef7ba4886b8646db50f5bcfe231b464172f0b11d3a",
     "src/break-gfx.ts": "65392dd02176bdecf72bcf3630b9dc05f8f03f2d445f0bd5259789c4a433c120",
-    "src/break-intro.ts": "58fd5459081f9bd30d34e3a46ff484b04af24f4465684afcdb79b91a88cb579b",
+    "src/break-intro.ts": "fe02a36a14ab48e4a8a609e02808f6b170b6d9462c4433f0f353e75259f868a0",
     "src/break-levels.ts": "81f2265c096b32d3b912c9219f0487b0eb7f8756a27bf8ba05b7c4358bf882ce",
-    "src/break-menu.ts": "103f1bb28640ef61bef3118121a1757ca3edf11cb09ed00b3790d46e8b6c2db4",
+    "src/break-menu.ts": "ff2ad24107c463874b5b2f1c82ffb8289207d07b3724f4ba78f0454155ae0184",
     "src/break-voices.ts": "5b13de360edc5fc9622d8c94f843005a2e6dace993fb5fbcfa6fbbb4cebc4b26",
     "std/base64.ts": "6a771a5f581ea035b8ac6e1d1b2dbffbf088983e7ccd80abeee8e631fa2ae098",
     "std/host/game.ts": "7ca4568fb21913554e15e79cdbd59f467efc4226d6a4412740e12cb333ef32a4",
@@ -32,7 +32,7 @@
     "std/term.ts": "d676c66ab1c2c7e2205af5d7268b4b061238a64fc1e619cbb82511747eae0229"
   },
   "outputs": {
-    "game.wasm": "85acbd0491a46225a16d4b2b2d89afc75a85907cf7f99d453507ab948182134d",
+    "game.wasm": "18fcdaca574321f1a34fcef074fd849e7c2b829f09de79466d075a16794126f7",
     "game.mjs": "0aa59ad63060e422a82d67088b8e21328cf1bf93ac2a6d4e79f457a7e8030e23",
     "break.mjs": "30b71116a94aced439fd9b8ee25e6a17f2d848e9180bc762495a087ed09bfcba",
     "shell.mjs": "9237a8a4aad34f5d01df662342a575693b75e1de51b06bb9c32f03e7f586323f",
