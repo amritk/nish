@@ -58,6 +58,16 @@ lanes `bounds.ts` proves in range is recorded as a proven index site and an
 unguarded one as unproven (`src/attributes.ts`), so `std/` code a
 `--deny-panics` caller can reach uses only guarded ones.
 
+**Removing a panic site raises no instruction count.** A change that removes
+or proves a `std/` panic site may not raise any count in
+`bench/instructions.json`. Where the proof needs a slower form, teach the
+prover instead, as #2303 did for `new Array` lengths and slice ranges; only
+where that cannot be done, record the raise in the file's `raises` with a
+measured reason (`node bench/run.mjs --instructions --update --raise <row>
+--why "..."`; `bench/README.md` → "Raising a baseline"). CI's `lint` job runs
+`scripts/instruction-raises.mjs` against the merge-base's file and fails on a
+raise `raises` does not record.
+
 **A wrap is spelled, never cast.** Nish code here (`std/`, `src/`,
 `examples/`) never makes `i32` or `i64` arithmetic wrap by casting it through
 `u32` or `u64` (`toI32(toU32(a) + toU32(b))`). Where the wrap would hide an

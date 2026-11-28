@@ -45649,10 +45649,18 @@ if (selects("ci.yml", "ci-verdict", "release.yml")) {
     (l) =>
       l ===
       "if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && hashFiles('build/cache/link-results/*.json') != '' && steps.suite.outputs.suite != 'false' }}",
+    // The lint job's instruction-count step picks its base by event: a pull
+    // request's merge-base, any other run's parent commit. A dispatched
+    // `release/next` run and the tag's run both take the parent, and the
+    // Release PR does not touch bench/instructions.json, so both compare the
+    // same counts.
+    (l) => l === "EVENT: ${{ github.event_name }}",
+    (l) => l === "PR_BASE: ${{ github.event.pull_request.base.sha }}",
+    (l) => l === "PR_HEAD: ${{ github.event.pull_request.head.sha }}",
   ]
   const unknownRefReads = refReads.filter((l) => !knownRefReads.some((known) => known(l)))
   check(
-    "ci.yml: only the concurrency group, the `runner` job, the gate, the dispatch status, the scope job and the link results' restore read the ref or event",
+    "ci.yml: only the concurrency group, the `runner` job, the gate, the dispatch status, the scope job, the link results' restore and the instruction-count base read the ref or event",
     unknownRefReads.length === 0 && refReads.length === knownRefReads.length,
     `reads: ${refReads.length} of ${knownRefReads.length} expected\nunknown: ${unknownRefReads.join("\n") || "none"}`
   )
