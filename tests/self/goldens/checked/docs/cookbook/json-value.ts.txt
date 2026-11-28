@@ -1178,7 +1178,7 @@ function JsonDocument.adoptable(this: JsonDocument, c: i32, v: i32): i32 -> @nis
   local +6:9 p: i32 (let)
   callee +11:11 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.append(this: JsonDocument, c: i32, v: i32, keyAt: i32, keyLength: i32): i32 -> @nish.JsonDocument.append [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: c keyAt keyLength v
   calls: nish.JsonDocument.moveSlots nish.jsonValueEnd nish.jsonValueGet nish.jsonValuePut nish.jsonValueRoomI32
@@ -1213,7 +1213,7 @@ function JsonDocument.append(this: JsonDocument, c: i32, v: i32, keyAt: i32, key
   callee +13:5 jsonValuePut -> @nish.jsonValuePut
   callee +14:5 jsonValuePut -> @nish.jsonValuePut
 function JsonDocument.reserve(this: JsonDocument, c: i32, n: i32): void -> @nish.JsonDocument.reserve [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: c n
   calls: nish.jsonValueEnd nish.jsonValueGet nish.jsonValuePut nish.jsonValueRoomI32
@@ -1435,27 +1435,25 @@ function jsonValueSpan(from: i32, to: i32): i32 -> @nish.jsonValueSpan
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function jsonValueRoom(a: u8[], n: i32): u8[] -> @nish.jsonValueRoom
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a n
-  calls: nish.jsonValueGrownLength nish_array_grow
+  calls: nish.jsonValueGrownLength
   pointer a: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 have: i32 (const)
-  local +4:9 target: u32 (const)
-  callee +4:23 jsonValueGrownLength -> @nish.jsonValueGrownLength
-  local +5:9 grown: u8[] (const)
-  local +6:12 i: i32 (let)
+  local +4:9 target: i32 (const)
+  callee +4:29 jsonValueGrownLength -> @nish.jsonValueGrownLength
+  local +8:9 grown: u8[] (const)
 function jsonValueRoomI32(a: i32[], n: i32): i32[] -> @nish.jsonValueRoomI32
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a n
-  calls: nish.jsonValueGrownLength nish_array_grow
+  calls: nish.jsonValueGrownLength
   pointer a: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 have: i32 (const)
-  local +4:9 target: u32 (const)
-  callee +4:23 jsonValueGrownLength -> @nish.jsonValueGrownLength
-  local +5:9 grown: i32[] (const)
-  local +6:12 i: i32 (let)
+  local +4:9 target: i32 (const)
+  callee +4:29 jsonValueGrownLength -> @nish.jsonValueGrownLength
+  local +8:9 grown: i32[] (const)
 function jsonValueGrownLength(have: i32, n: i32): u32 -> @nish.jsonValueGrownLength
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

@@ -753,7 +753,7 @@ function bytesRangeError(off: i32, width: i32, b: u8[]): string -> @nish.bytesRa
 module std/net/hpack.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 unsafe import 82:10 wrappingAdd from "nish:unsafe"
-unsafe call 1536:26 wrappingAdd (node 5881)
+unsafe call 1537:26 wrappingAdd (node 5875)
 const HPACK_OK: i32 = 0 [exported]
 const HPACK_LIST_TOO_LARGE: i32 = 1 [exported]
 const HPACK_ERR_TRUNCATED: i32 = -1 [exported]
@@ -1278,10 +1278,10 @@ function HpackWork.pool(this: HpackWork, j: i32): u8[][] -> @nish.HpackWork.pool
   local +2:11 n: i32 (const)
   local +7:11 fresh: u8[][] (const)
 function HpackWork.take(this: HpackWork, length: i32): u8[] -> @nish.HpackWork.take [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: length
-  calls: nish.HpackWork.classOf nish.HpackWork.pool nish.hpackEmpty nish_array_grow
+  calls: nish.HpackWork.classOf nish.HpackWork.pool nish.hpackEmpty
   pointer this: size=32 writesThrough=false captured=false passedTo=nish.HpackWork.classOf#0 nish.HpackWork.pool#0
   stackSites=0 stackLocals=0
   local -5:11 j: i32 (const)
@@ -1291,8 +1291,9 @@ function HpackWork.take(this: HpackWork, length: i32): u8[] -> @nish.HpackWork.t
   local -3:11 kept: i32 (const)
   local -1:13 out: u8[] (const)
   local +4:11 room: u32 (const)
-  local +6:11 made: u8[] (const)
-  callee +10:5 hpackEmpty -> @nish.hpackEmpty
+  local +6:11 size: i32 (const)
+  local +10:11 made: u8[] (const)
+  callee +11:5 hpackEmpty -> @nish.hpackEmpty
 function HpackDecoder.constructor(this: HpackDecoder, settingsLimit: i32, maxHeaderListSize: i32): void -> @nish.HpackDecoder.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: maxHeaderListSize settingsLimit

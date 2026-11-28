@@ -4103,7 +4103,7 @@ function JsonDocument.adoptable(this: JsonDocument, c: i32, v: i32): i32 -> @nis
   local +6:9 p: i32 (let)
   callee +11:11 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.append(this: JsonDocument, c: i32, v: i32, keyAt: i32, keyLength: i32): i32 -> @nish.JsonDocument.append [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: c keyAt keyLength v
   calls: nish.JsonDocument.moveSlots nish.jsonValueEnd nish.jsonValueGet nish.jsonValuePut nish.jsonValueRoomI32
@@ -4138,7 +4138,7 @@ function JsonDocument.append(this: JsonDocument, c: i32, v: i32, keyAt: i32, key
   callee +13:5 jsonValuePut -> @nish.jsonValuePut
   callee +14:5 jsonValuePut -> @nish.jsonValuePut
 function JsonDocument.reserve(this: JsonDocument, c: i32, n: i32): void -> @nish.JsonDocument.reserve [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: c n
   calls: nish.jsonValueEnd nish.jsonValueGet nish.jsonValuePut nish.jsonValueRoomI32
@@ -4360,27 +4360,25 @@ function jsonValueSpan(from: i32, to: i32): i32 -> @nish.jsonValueSpan
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function jsonValueRoom(a: u8[], n: i32): u8[] -> @nish.jsonValueRoom
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a n
-  calls: nish.jsonValueGrownLength nish_array_grow
+  calls: nish.jsonValueGrownLength
   pointer a: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 have: i32 (const)
-  local +4:9 target: u32 (const)
-  callee +4:23 jsonValueGrownLength -> @nish.jsonValueGrownLength
-  local +5:9 grown: u8[] (const)
-  local +6:12 i: i32 (let)
+  local +4:9 target: i32 (const)
+  callee +4:29 jsonValueGrownLength -> @nish.jsonValueGrownLength
+  local +8:9 grown: u8[] (const)
 function jsonValueRoomI32(a: i32[], n: i32): i32[] -> @nish.jsonValueRoomI32
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a n
-  calls: nish.jsonValueGrownLength nish_array_grow
+  calls: nish.jsonValueGrownLength
   pointer a: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 have: i32 (const)
-  local +4:9 target: u32 (const)
-  callee +4:23 jsonValueGrownLength -> @nish.jsonValueGrownLength
-  local +5:9 grown: i32[] (const)
-  local +6:12 i: i32 (let)
+  local +4:9 target: i32 (const)
+  callee +4:29 jsonValueGrownLength -> @nish.jsonValueGrownLength
+  local +8:9 grown: i32[] (const)
 function jsonValueGrownLength(have: i32, n: i32): u32 -> @nish.jsonValueGrownLength
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -8118,33 +8116,19 @@ function handlerAllowAppend(value: u8[], bytes: u8[], start: i32, end: i32): voi
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +3:12 k: i32 (let)
-function handlerHead(n: i32): u16 -> @nish.handlerHead
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
 function handlerInts(n: i32, fill: i32): i32[] -> @nish.handlerInts
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: fill n
-  calls: nish.handlerHead nish_array_grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
   stackSites=0 stackLocals=0
   local +0:9 out: i32[] (const)
-  callee +0:37 handlerHead -> @nish.handlerHead
-  local +4:12 k: i32 (let)
 function handlerFlags(n: i32): boolean[] -> @nish.handlerFlags
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: n
-  calls: nish.handlerHead nish_array_grow
   stackSites=0 stackLocals=0
-  local +0:9 out: boolean[] (const)
-  callee +0:45 handlerHead -> @nish.handlerHead
-  local +1:12 k: i32 (let)
 function handlerBytes(n: i32): u8[] -> @nish.handlerBytes
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: n
-  calls: nish.handlerHead nish_array_grow
   stackSites=0 stackLocals=0
-  local +0:9 out: u8[] (const)
-  callee +0:35 handlerHead -> @nish.handlerHead
-  local +1:12 k: i32 (let)
 function handlerProbeLength(maxParams: i32): i32 -> @nish.handlerProbeLength
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -8984,14 +8968,15 @@ function Http1Parser.buffered(this: Http1Parser): i32 -> @nish.Http1Parser.buffe
   local +1:11 to: i32 (const)
   local +2:9 held: i32 (let)
 function Http1Parser.upgradeBytes(this: Http1Parser): u8[] -> @nish.Http1Parser.upgradeBytes [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.tryCopyBytes
   pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 buf: u8[] (const)
+  local +0:11 from: i32 (const)
   local +1:11 to: i32 (const)
-  local +3:11 out: u8[] (const)
-  local +4:14 k: i32 (let)
+  local +5:11 count: i32 (const)
+  local +9:11 out: u8[] (const)
+  callee +10:5 tryCopyBytes -> @nish.tryCopyBytes
 function Http1Parser.restart(this: Http1Parser): void -> @nish.Http1Parser.restart [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -9050,18 +9035,17 @@ function http1Reserve(p: Http1Parser, len: i32): boolean -> @nish.http1Reserve
   callee +5:15 http1Less -> @nish.http1Less
   callee +6:12 http1Less -> @nish.http1Less
 function http1Grown(old: u8[], from: i32, live: u32, size: u32): u8[] -> @nish.http1Grown
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from
-  calls: nish.http1WindowEnd nish_array_grow
-  pointer old: size=0 writesThrough=false captured=false passedTo=nish.http1WindowEnd#0
+  calls: nish.http1WindowEnd nish.tryCopyBytes
+  pointer old: size=0 writesThrough=false captured=false passedTo=nish.http1WindowEnd#0 nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
-  local +0:9 to: i32 (const)
-  callee +0:19 http1WindowEnd -> @nish.http1WindowEnd
-  local +3:11 sized: u8[] (const)
-  local +4:9 at: i32 (let)
-  local +5:14 k: i32 (let)
-  local +11:9 buf: u8[] (const)
-  local +12:12 k: i32 (let)
+  local +0:9 n: i32 (const)
+  local +4:9 buf: u8[] (const)
+  local +7:9 to: i32 (const)
+  callee +7:19 http1WindowEnd -> @nish.http1WindowEnd
+  local +9:11 count: i32 (const)
+  callee +10:5 tryCopyBytes -> @nish.tryCopyBytes
 function http1Fail(p: Http1Parser, status: i32, reason: string): i32 -> @nish.http1Fail
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -9204,16 +9188,15 @@ function http1HeadAppend(p: Http1Parser, from: i32, to: i32): i32 -> @nish.http1
   callee +12:24 http1WindowEnd -> @nish.http1WindowEnd
   callee +14:5 http1Fail -> @nish.http1Fail
 function http1SpanSet(p: Http1Parser, at: i32, value: i32): void -> @nish.http1SpanSet
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at value
-  calls: nish_array_grow
   pointer p: size=232 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -11:11 old: i32[] (const)
-  local -8:11 size: u32 (const)
-  local -7:11 grown: i32[] (const)
-  local -6:14 k: i32 (let)
+  local -16:11 old: i32[] (const)
+  local -13:11 wide: i64 (const)
+  local -9:11 size: i32 (const)
+  local -5:11 grown: i32[] (const)
   local +2:9 spans: i32[] (const)
 function http1TallyRun(tally: Http1ListTally, head: u8[], from: i32, to: i32, word: string): void -> @nish.http1TallyRun
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -12839,8 +12822,8 @@ import GzipFixedCompressor from "nish/compress/gzip" -> struct GzipFixedCompress
 import ZlibDecompressor from "nish/compress/zlib" -> struct ZlibDecompressor
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 unsafe import 87:10 wrappingAdd from "nish:unsafe"
-unsafe call 715:26 wrappingAdd (node 2466)
-unsafe call 800:24 wrappingAdd (node 2798)
+unsafe call 709:26 wrappingAdd (node 2453)
+unsafe call 794:24 wrappingAdd (node 2785)
 const HTTP_CODING_IDENTITY: i32 = 0 [exported]
 const HTTP_CODING_GZIP: i32 = 1 [exported]
 const HTTP_CODING_DEFLATE: i32 = 2 [exported]
@@ -13036,21 +13019,20 @@ function httpGzipToZlib(out: u8[], n: i32, level: i32, src: u8[], off: i32, len:
   local +5:9 a: u32 (const)
   callee +5:18 adler32 -> @nish.adler32
 function HttpCompressor.constructor(this: HttpCompressor, level: i32, minLength: i32, maxLength: i32): void -> @nish.HttpCompressor.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: level maxLength minLength
-  calls: nish.GzipCompressor.constructor nish.GzipFixedCompressor.constructor nish.compressBound nish.httpCompressBytes nish_alloc_struct nish_array_grow nish_panic
+  calls: nish.GzipCompressor.constructor nish.GzipFixedCompressor.constructor nish.compressBound nish.httpCompressBytes nish_alloc_struct nish_panic
   pointer this: size=136 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:17 new GzipCompressor -> @nish.GzipCompressor.constructor
   callee +1:18 new GzipFixedCompressor -> @nish.GzipFixedCompressor.constructor
-  local +5:11 output: u8[] (const)
-  local +6:11 bound: i32 (const)
-  callee +6:24 compressBound -> @nish.compressBound
+  local +3:11 bound: i32 (const)
+  callee +3:24 compressBound -> @nish.compressBound
+  callee +7:32 httpCompressBytes -> @nish.httpCompressBytes
+  callee +8:22 httpCompressBytes -> @nish.httpCompressBytes
+  callee +9:25 httpCompressBytes -> @nish.httpCompressBytes
+  callee +12:21 httpCompressBytes -> @nish.httpCompressBytes
   callee +13:32 httpCompressBytes -> @nish.httpCompressBytes
-  callee +14:22 httpCompressBytes -> @nish.httpCompressBytes
-  callee +15:25 httpCompressBytes -> @nish.httpCompressBytes
-  callee +18:21 httpCompressBytes -> @nish.httpCompressBytes
-  callee +19:32 httpCompressBytes -> @nish.httpCompressBytes
 function HttpCompressor.compress(this: HttpCompressor, coding: i32, body: u8[], off: i32, len: i32): i32 -> @nish.HttpCompressor.compress [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpCompressor.tryCompress
@@ -14165,11 +14147,9 @@ function websocketSub(a: i32, b: i32): i32 -> @nish.websocketSub
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function websocketBytes(n: i32): u8[] -> @nish.websocketBytes
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
   stackSites=0 stackLocals=0
-  local +0:9 out: u8[] (const)
-  local +1:12 k: i32 (let)
 function websocketUtf8Run(state: WsUtf8, buf: u8[], off: i32, len: i32): boolean -> @nish.websocketUtf8Run
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -15485,15 +15465,15 @@ function Http1ResponseParser.buffered(this: Http1ResponseParser): i32 -> @nish.H
   local +1:11 end: i32 (const)
   local +2:9 count: i32 (let)
 function Http1ResponseParser.tunnelBytes(this: Http1ResponseParser): u8[] -> @nish.Http1ResponseParser.tunnelBytes [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.tryCopyBytes
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 from: i32 (const)
   local +1:11 to: i32 (const)
-  local +6:11 buf: u8[] (const)
-  local +7:11 out: u8[] (const)
-  local +8:14 k: i32 (let)
+  local +6:11 count: i32 (const)
+  local +10:11 out: u8[] (const)
+  callee +11:5 tryCopyBytes -> @nish.tryCopyBytes
 function http1ClientReserve(p: Http1ResponseParser, len: i32): boolean -> @nish.http1ClientReserve
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -48568,7 +48548,7 @@ function Http2Connection.goaway(this: Http2Connection): i32 -> @nish.Http2Connec
 module std/net/hpack.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 unsafe import 82:10 wrappingAdd from "nish:unsafe"
-unsafe call 1536:26 wrappingAdd (node 5881)
+unsafe call 1537:26 wrappingAdd (node 5875)
 const HPACK_OK: i32 = 0 [exported]
 const HPACK_LIST_TOO_LARGE: i32 = 1 [exported]
 const HPACK_ERR_TRUNCATED: i32 = -1 [exported]
@@ -49093,10 +49073,10 @@ function HpackWork.pool(this: HpackWork, j: i32): u8[][] -> @nish.HpackWork.pool
   local +2:11 n: i32 (const)
   local +7:11 fresh: u8[][] (const)
 function HpackWork.take(this: HpackWork, length: i32): u8[] -> @nish.HpackWork.take [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: length
-  calls: nish.HpackWork.classOf nish.HpackWork.pool nish.hpackEmpty nish_array_grow
+  calls: nish.HpackWork.classOf nish.HpackWork.pool nish.hpackEmpty
   pointer this: size=32 writesThrough=false captured=false passedTo=nish.HpackWork.classOf#0 nish.HpackWork.pool#0
   stackSites=0 stackLocals=0
   local -5:11 j: i32 (const)
@@ -49106,8 +49086,9 @@ function HpackWork.take(this: HpackWork, length: i32): u8[] -> @nish.HpackWork.t
   local -3:11 kept: i32 (const)
   local -1:13 out: u8[] (const)
   local +4:11 room: u32 (const)
-  local +6:11 made: u8[] (const)
-  callee +10:5 hpackEmpty -> @nish.hpackEmpty
+  local +6:11 size: i32 (const)
+  local +10:11 made: u8[] (const)
+  callee +11:5 hpackEmpty -> @nish.hpackEmpty
 function HpackDecoder.constructor(this: HpackDecoder, settingsLimit: i32, maxHeaderListSize: i32): void -> @nish.HpackDecoder.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: maxHeaderListSize settingsLimit
@@ -53482,7 +53463,7 @@ import secret from "nish:secret" -> generic function secret
 import wipe from "nish:secret" -> generic function wipe
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 unsafe import 365:10 wrappingAdd from "nish:unsafe"
-unsafe call 1487:20 wrappingAdd (node 4216)
+unsafe call 1484:20 wrappingAdd (node 4198)
 const QUIC_CONN_CID_LENGTH: i32 = 8 [exported]
 const QUIC_WORKER_MAX: i32 = 255 [exported]
 const QUIC_CONN_DATAGRAM_SIZE: i32 = 1200 [exported]
@@ -54231,10 +54212,9 @@ function quicConnAt(base: i32, k: i32, length: i32): i32 -> @nish.quicConnAt
   stackSites=0 stackLocals=0
   local +0:9 at: i64 (const)
 function quicConnBytes(count: i64): u8[] -> @nish.quicConnBytes
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local +0:9 out: u8[] (const)
+  local +0:9 n: i32 (const)
 function quicConnSum(a: i64, b: i64): i64 -> @nish.quicConnSum
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
