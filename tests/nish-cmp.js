@@ -1649,6 +1649,9 @@ const s1PanicFree = byFinding(S1_PANIC_FREE)
 /** The changelog words of WP87 S2, which makes std's math, base64, random, regex, release, sqlite, testing and text modules panic-free. */
 const S2_REST_PANIC_FREE = "the remaining std modules panic-free"
 const s2RestPanicFree = byFinding(S2_REST_PANIC_FREE)
+/** The changelog words of WP86 S1, which makes std's JSON helpers, yaml-lines, yaml-write and yaml-json panic-free. */
+const WP86_S1_PANIC_FREE = "the JSON helpers and the YAML loader and writer panic-free"
+const wp86S1PanicFree = byFinding(WP86_S1_PANIC_FREE)
 /** WP87 S2's programs whose only move is testing.ll: `Suite` stops its tallies at the largest `i32` through `testingCount`. */
 const S2_REST_TESTING = [
   "bench/quic-goodput.ts",
@@ -24729,6 +24732,19 @@ const DECLARED = [
       "tests/link/sync_ring_inplace_partial/main.ts": ["testing.ll"],
       "tests/link/sync_shm/main.ts": ["testing.ll"],
       "tests/link/sync_shm_window/main.ts": ["testing.ll"],
+    }
+  ),
+  ...wp86S1PanicFree(
+    "std/json-value gains `JsonDocument.keys` and drops its array-length panic, std/json-number gains `jsonNumberDifference`, and std/json-equal walks object keys through `keys`, so the JSON helpers' modules move (WP86 S1)",
+    {
+      "bench/std-json-equal.ts": ["json-equal.ll", "json-number.ll", "json-tokenizer.ll", "json-value.ll", "std-json-equal.ll"],
+    }
+  ),
+  ...wp86S1PanicFree(
+    "std/yaml-lines stops its columns at the largest `i32` (returning -1 past it), and std/yaml-json and std/yaml-write prove their counts and indexes, so the yaml modules and the JSON modules they reach move (WP86 S1)",
+    {
+      "bench/std-yaml-json.ts": ["json-tokenizer.ll", "json-value.ll", "std-yaml-json.h", "std-yaml-json.ll", "yaml-json.ll", "yaml-lines.ll", "yaml-write.ll"],
+      "tests/link/std_yaml_json/main.ts": ["yaml-lines.ll"],
     }
   ),
   // `jsonPutString` is exported from std/json.ts and its walk is lowered to
