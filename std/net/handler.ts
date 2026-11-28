@@ -155,6 +155,12 @@ export const HANDLER_NEXT: i32 = -22
 export const HANDLER_ANSWERED: i32 = -23
 /** The most fields `field` adds to one answer. */
 export const HANDLER_MAX_ADDED: i32 = 16
+/**
+ * `wait`: the handler has no readiness loop, because its constructor was
+ * given a failed `pollCreate`, so no socket can ever be ready. Stop calling
+ * `wait`; a loop that keeps calling it only spins.
+ */
+export const HANDLER_NO_LOOP: i32 = -25
 
 /** The most descriptors `watch` takes beside the handler's own. */
 export const HANDLER_MAX_WATCHED: i32 = 16
@@ -926,9 +932,11 @@ export class HttpHandler {
    * @param router the routes, which the handler keeps and consults at each request head
    * @param loop a readiness loop from `pollCreate` for the handler to own, or
    *   -1 (the default) to make one here; any other negative is a failed
-   *   `pollCreate` passed through. Panics on limits below their least and on
-   *   a failed loop, each a contract of this constructor: use
-   *   `openHttpHandler` for a `Result`.
+   *   `pollCreate` passed through. A failed loop, passed in or made here,
+   *   leaves the handler dead: it watches nothing and each `wait` answers
+   *   `HANDLER_NO_LOOP` at once. Panics on limits below their least, a
+   *   contract of this constructor: use `openHttpHandler` for a `Result`,
+   *   which also answers a failed `pollCreate` as an `Err`.
    */
   constructor(limits: HandlerLimits, listener: i32, router: Router, loop: i32 = -1) {
     handlerCheckLimits(limits)
@@ -968,10 +976,10 @@ export class HttpHandler {
     this.namesBy = []
     this.valuesBy = []
     this.loop = loop === -1 ? pollCreate() : loop
-    if (this.loop < 0) {
-      panic(`HttpHandler: pollCreate failed: ${this.loop}`)
+    // A failed loop leaves the handler dead, and `wait` says so.
+    if (this.loop >= 0) {
+      pollAdd(this.loop, listener, H1_WANT_READ, HANDLER_LISTENER)
     }
-    pollAdd(this.loop, listener, H1_WANT_READ, HANDLER_LISTENER)
   }
 
   // ---- The loop -------------------------------------------------------------------
@@ -1022,9 +1030,14 @@ export class HttpHandler {
    * connections past their timeouts, and answers how many whole requests
    * are waiting for `take`.
    * @param timeoutMs the longest to block, in milliseconds, or -1 to block until something is ready
-   * @returns how many whole requests are queued for `take` after this turn
+   * @returns how many whole requests are queued for `take` after this turn,
+   *   or `HANDLER_NO_LOOP` at once, without blocking, from a handler whose
+   *   constructor was given a failed `pollCreate`
    */
   wait(timeoutMs: i32): i32 {
+    if (this.loop < 0) {
+      return HANDLER_NO_LOOP
+    }
     this.flush()
     const fired: boolean[] = this.watchedFired
     for (let id: i32 = 0; id < HANDLER_MAX_WATCHED && id < toI32(fired.length); id++) {

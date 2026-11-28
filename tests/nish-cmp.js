@@ -12218,6 +12218,14 @@ const decoderLimit = (why, filesByProgram) =>
   )
 const DECLARED = [
   ...RSA_PSS_SERVER_DECLARED,
+  // WP80 S9: a handler given a failed pollCreate answers HANDLER_NO_LOOP from
+  // wait, a constant the reference's std does not export.
+  {
+    program: "tests/link/net_handler_dead_loop/main.ts",
+    file: "exit",
+    changelog: DECODER_LIMIT,
+    why: "the case imports HANDLER_NO_LOOP, which nish/net/handler exports only from this change, so the reference refuses it",
+  },
   // WP80 S9: HttpBodyDecoder's limit has a fault contract the handler checks
   // first, and the handler decodes through tryDecode.
   ...decoderLimit(

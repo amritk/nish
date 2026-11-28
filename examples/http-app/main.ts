@@ -2,12 +2,9 @@
 // `nish/net/handler`, `nish/net/serve` and `nish/net/static`, routes through
 // `routerChecked` and `Router.tryMatch`, and still reaches: the window panic
 // of the `std/compress` gzip reader (std/compress/gzip.ts:97:5), through the
-// body decoder behind every `try` answer; and `HttpHandler`'s panic on a
-// failed `pollCreate` (std/net/handler.ts:972:7), through `openHttpHandler`,
-// which a constructor's single fault guard, its limits check, cannot carry.
-// Neither is discharged by a caller's proof (docs/LANGUAGE.md, "Panic
-// sites", #2296). Once they are gone, build this program without
-// `--allow-panics`.
+// body decoder behind every `try` answer, which no caller's proof discharges
+// (docs/LANGUAGE.md, "Panic sites", #2296). Once it is gone, build this
+// program without `--allow-panics`.
 //
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
