@@ -9,20 +9,22 @@
  * natively and under Node, because the kitty and Sixel output is ASCII and the
  * cell drawers go through `Screen`, which already is.
  *
- *     import { Framebuffer, fitFramebuffer, GRAPHICS_KITTY, kittyFrame, PixelBytes } from "nish/term-pixels"
+ *     import { fitFramebuffer, GRAPHICS_KITTY, kittyFrame, PixelBytes, tryFramebuffer } from "nish/term-pixels"
  *
- *     const fb = new Framebuffer(160, 90)
+ *     const fb = tryFramebuffer(160, 90).expect("a 160 × 90 framebuffer")
  *     fb.fill(0x000020)
  *     fb.set(80, 45, 0xffcc00)
- *     const rect = fitFramebuffer(fb.width, fb.height, 80, 24, 0, 0, GRAPHICS_KITTY)
+ *     const rect = fitFramebuffer(fb.pixelWidth(), fb.pixelHeight(), 80, 24, 0, 0, GRAPHICS_KITTY)
  *     const out = new PixelBytes(1 << 16)
  *     kittyFrame(fb, rect, 1, out)
  *     // out.text() is the frame's bytes, for one write
  *
  * - `Framebuffer(width, height)` holds the pixels, with `set`, `get`, `fill`,
- *   `clear` and `resize`. `scaleFramebuffer(src, divisor, dst)` shrinks one by
- *   an integer divisor, nearest-neighbour, for the refresh controller's
- *   resolution downgrade.
+ *   `clear` and `resize`, and `pixelWidth`, `pixelHeight` and `pixelData` to
+ *   read its size and array. `tryFramebuffer(width, height)` and `tryResize`
+ *   answer an `Err` for a size the constructor and `resize` panic on.
+ *   `scaleFramebuffer(src, divisor, dst)` shrinks one by an integer divisor,
+ *   nearest-neighbour, for the refresh controller's resolution downgrade.
  * - `GRAPHICS_ASCII`, `GRAPHICS_HALFBLOCK`, `GRAPHICS_SIXEL` and
  *   `GRAPHICS_KITTY` name the backends, numbered from worst to best so that a
  *   capability and a cap combine with `Math.min`.
@@ -52,7 +54,7 @@
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
-import { base64EncodeInto } from "nish/base64"
+import { base64EncodeIfFits } from "nish/base64"
 import { COLOR_DEFAULT, ATTR_NONE, Canvas, Screen } from "nish/term"
 
 /** Text cells, one luminance character each: the Linux console's backend. */
@@ -163,6 +165,17 @@ const pixelsArea = (who: string, width: i32, height: i32): i32 => {
   return toI32(area)
 }
 
+/** Why `width × height`, asked of `who`, is not a size an array of pixels can have, or "" when it is. */
+const pixelsSizeProblem = (who: string, width: i32, height: i32): string => {
+  if (width < 0 || height < 0) {
+    return `${who}: a negative size, ${width} × ${height}`
+  }
+  if (toI64(width) * toI64(height) > toI64(2147483647)) {
+    return `${who}: ${width} × ${height} is more than 2^31 - 1 pixels`
+  }
+  return ""
+}
+
 /** `y * width + x` as an index below `length`, or -1 when it is not one. */
 const pixelsIndex = (x: i32, y: i32, width: i32, length: i32): i32 => {
   const wide: i64 = toI64(y) * toI64(width) + toI64(x)
@@ -206,6 +219,66 @@ export class Framebuffer {
       this.pixels = new Array<i32>(area)
     }
     this.pixels.fill(0)
+  }
+
+  /**
+   * Pixels across, as the `width` field holds it.
+   *
+   * @returns The width, 0 or more.
+   */
+  pixelWidth(): i32 {
+    return this.width
+  }
+
+  /**
+   * Pixels down, as the `height` field holds it.
+   *
+   * @returns The height, 0 or more.
+   */
+  pixelHeight(): i32 {
+    return this.height
+  }
+
+  /**
+   * The pixels, one `0xRRGGBB` colour each at `y * pixelWidth() + x`, for `rasterFrame` to draw
+   * into, as the `pixels` field holds them.
+   *
+   * @returns The framebuffer's own array, not a copy.
+   */
+  pixelData(): i32[] {
+    return this.pixels
+  }
+
+  /**
+   * `resize` for a caller with an answer to a size it cannot have: make the framebuffer
+   * `width × height` and black, replacing the array only when the size changes, or leave it as
+   * it was and answer `Err`.
+   *
+   * @param width The new pixels across, 0 or more.
+   * @param height The new pixels down, 0 or more.
+   * @returns `Ok`, or `Err` naming the problem for a negative size or more than 2^31 - 1 pixels.
+   */
+  tryResize(width: i32, height: i32): Result<void, string> {
+    const area: i64 = toI64(width) * toI64(height)
+    // `area < 0` follows from a negative side; it is written out because it is
+    // what proves `length` below in range.
+    if (width < 0 || height < 0 || area < toI64(0) || area > toI64(2147483647)) {
+      return Err(pixelsSizeProblem("Framebuffer.tryResize", width, height))
+    }
+    const count: i32 = toI32(area)
+    // Never taken: the check above keeps `area` in range. It is written out
+    // because it is what proves `length` below.
+    if (count < 0) {
+      return Err(pixelsSizeProblem("Framebuffer.tryResize", width, height))
+    }
+    if (width !== this.width || height !== this.height) {
+      const length: integer<0, 2147483647> = count
+      this.width = width
+      this.height = height
+      this.pixels = new Array<i32>(length)
+    }
+    this.pixels.fill(0)
+    return Ok()
   }
 
   /**
@@ -268,6 +341,26 @@ export class Framebuffer {
   clear(): void {
     this.pixels.fill(0)
   }
+}
+
+/**
+ * The `Framebuffer` constructor for a caller with an answer to a size it cannot have: a black
+ * framebuffer of `width × height`, or `Err`. It builds an empty framebuffer and sizes it with
+ * `tryResize`, so a call still reaches the size checks of the constructor, which panic only on a
+ * size an empty one never has; `--deny-panics` reports them at the call.
+ *
+ * @param width Pixels across, 0 or more.
+ * @param height Pixels down, 0 or more.
+ * @returns The framebuffer, or `Err` naming the problem for a negative size or more than
+ * 2^31 - 1 pixels.
+ */
+export const tryFramebuffer = (width: i32, height: i32): Result<Framebuffer, string> => {
+  const fb: Framebuffer = new Framebuffer(0, 0)
+  const sized: Result<void, string> = fb.tryResize(width, height)
+  if (sized.isErr()) {
+    return Err(pixelsSizeProblem("tryFramebuffer", width, height))
+  }
+  return Ok(fb)
 }
 
 /**
@@ -450,6 +543,13 @@ export class PixelBytes {
   /** How many bytes are written. */
   length: i32
   /**
+   * True once a frame asked for more than one buffer holds: a `put` past
+   * 2^31 - 1 bytes, which was dropped, or a `sixelFrame` rect whose working
+   * arrays would pass 2^31 - 1 entries. `text()` is then not the whole escape
+   * and is not to be written. `reset()` clears it.
+   */
+  full: boolean
+  /**
    * One kitty chunk's RGB bytes.
    * @internal Used by `kittyFrame`.
    */
@@ -490,9 +590,10 @@ export class PixelBytes {
    * @param capacity The bytes to make room for at the start; a frame's worth saves growing.
    */
   constructor(capacity: i32) {
-    this.bytes = new Array<u8>(Math.max(capacity, 16))
+    this.bytes = capacity > 16 ? new Array<u8>(capacity) : new Array<u8>(16)
     this.bytes.fill(0)
     this.length = 0
+    this.full = false
     this.kittyRaw = new Array<u8>(PIXELS_KITTY_RAW)
     this.kittyRaw.fill(0)
     this.sampleXs = []
@@ -510,29 +611,38 @@ export class PixelBytes {
   /** Forget what was written. */
   reset(): void {
     this.length = 0
+    this.full = false
   }
 
   /**
    * Make room for `n` more bytes, doubling the array as often as that takes.
+   * Room past 2^31 - 1 bytes is not made: the buffer is marked `full` instead.
    *
    * @param n How many bytes the caller is about to `put`.
    */
   reserve(n: i32): void {
+    const had: u8[] = this.bytes
+    const have: i32 = toI32(had.length)
     // Summed and doubled in f64, which cannot overflow.
     const need: f64 = toF64(this.length) + toF64(n)
-    if (need <= toF64(this.bytes.length)) {
+    if (need <= toF64(have)) {
       return
     }
-    if (need > 2147483647.0) {
-      panic("PixelBytes.reserve: more than 2^31 - 1 bytes")
-    }
-    let size: f64 = toF64(this.bytes.length)
+    let size: f64 = toF64(have)
     while (size < need) {
       size = size * 2.0
     }
-    const grown: u8[] = new Array<u8>(toI32(Math.min(size, 2147483647.0)))
+    const room: i32 = need <= 2147483647.0 ? toI32(Math.min(size, 2147483647.0)) : -1
+    if (room < 0 || room < have) {
+      this.full = true
+      return
+    }
+    const length: integer<0, 2147483647> = room
+    const grown: u8[] = new Array<u8>(length)
     grown.fill(0)
-    grown.set(this.bytes, 0)
+    for (let i: i32 = 0; i < toI32(had.length) && i < toI32(grown.length); i++) {
+      grown[i] = had[i]
+    }
     this.bytes = grown
   }
 
@@ -598,7 +708,11 @@ export class PixelBytes {
  * computed once per frame rather than once per pixel.
  */
 const pixelsSampleMap = (n: i32, source: i32): i32[] => {
-  const map: i32[] = new Array<i32>(n)
+  if (n <= 0) {
+    return []
+  }
+  const length: integer<0, 2147483647> = n
+  const map: i32[] = new Array<i32>(length)
   pixelsSampleMapInto(map, n, source)
   return map
 }
@@ -621,7 +735,13 @@ const pixelsAtLeast = (a: i32[], n: i32): i32[] => {
     return a
   }
   const twice: f64 = Math.min(toF64(had) * 2.0, 2147483647.0)
-  const grown: i32[] = new Array<i32>(twice > toF64(n) ? toI32(twice) : n)
+  const size: i32 = twice > toF64(n) ? toI32(twice) : n
+  // Never taken: `n` is past `had`, which is 0 or more; it proves the length.
+  if (size < 0) {
+    return a
+  }
+  const length: integer<0, 2147483647> = size
+  const grown: i32[] = new Array<i32>(length)
   grown.fill(0)
   return grown
 }
@@ -684,7 +804,8 @@ const pixelsStringEnd = (out: PixelBytes): void => {
  *
  * `imageId` is 1 to 2^31 - 1, since 0 is the protocol's "no id"; anything
  * else panics. So does a framebuffer whose `pixels` does not hold
- * `width × height`. An empty framebuffer or rect writes nothing.
+ * `width × height`. An empty framebuffer or rect writes nothing. A frame that
+ * would grow `out` past 2^31 - 1 bytes stops where it is and sets `out.full`.
  *
  * @param fb The frame's pixels, at its own size.
  * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_KITTY`.
@@ -737,7 +858,13 @@ export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: 
     out.putText("q=2,")
     out.putText(pixel < count ? "m=1;" : "m=0;")
     out.reserve(PIXELS_KITTY_CHUNK)
-    out.length = base64EncodeInto(raw, 0, n, out.bytes, out.length)
+    // -1 only when `reserve` could not grow the buffer, which has set `full`.
+    const end: i32 = base64EncodeIfFits(raw, 0, n, out.bytes, out.length)
+    if (end < 0) {
+      out.full = true
+      return
+    }
+    out.length = end
     pixelsStringEnd(out)
   }
 }
@@ -836,7 +963,8 @@ const pixelsSixelRun = (out: PixelBytes, bits: i32, count: i32): void => {
  * With `dither`, each pixel's components are offset by the 4×4 Bayer
  * matrix's threshold before they are quantised (ordered dithering), so a
  * gradient becomes a fine, stable pattern rather than steps. An empty rect
- * writes nothing.
+ * writes nothing; a rect wider than 2^31 - 1 / 252 pixels, or of more than
+ * 2^31 - 1, is more than one buffer holds and marks `out` `full` instead.
  *
  * @param fb The frame's pixels; shrunk or grown to the rect by nearest neighbour.
  * @param rect Where to draw it, from `fitFramebuffer` with `GRAPHICS_SIXEL`.
@@ -849,8 +977,16 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   if (w <= 0 || h <= 0 || fb.width <= 0 || fb.height <= 0) {
     return
   }
-  const area: i32 = pixelsArea("sixelFrame", w, h)
-  const bitsArea: i32 = pixelsArea("sixelFrame", w, SIXEL_REGISTERS)
+  // A rect whose working arrays would pass 2^31 - 1 entries is not a frame one
+  // buffer can hold, as one whose bytes would not be.
+  const wideArea: i64 = toI64(w) * toI64(h)
+  const wideBits: i64 = toI64(w) * toI64(SIXEL_REGISTERS)
+  const area: i32 = wideArea <= toI64(2147483647) ? toI32(wideArea) : -1
+  const bitsArea: i32 = wideBits <= toI64(2147483647) ? toI32(wideBits) : -1
+  if (area < 0 || bitsArea < 0) {
+    out.full = true
+    return
+  }
   // The working arrays live on `out`, grown once to the largest frame.
   out.sampleXs = pixelsAtLeast(out.sampleXs, w)
   out.sampleYs = pixelsAtLeast(out.sampleYs, h)
