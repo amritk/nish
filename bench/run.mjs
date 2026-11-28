@@ -34,7 +34,8 @@
 //                       tolerance unless --raise names the row). --runs N
 //                       repeats each run (default 1)
 //     --entries         print the counted programs' entry files as JSON
-//                       ([{ name, entry }], in bench/instructions.json's order)
+//                       ([{ name, entry, args }], in bench/instructions.json's order,
+//                       args the compiler flags the counted run builds it with)
 //                       and exit; tests/run.js's instruction-coverage check reads it
 //     --raise a,b       with --update: the rows allowed to rise; each gets a
 //                       `raises` entry in bench/instructions.json. Needs --why
@@ -800,17 +801,23 @@ const STD_COUNTED = [
  * build compiles: `bench/<name>.ts` for most, the one AWFY harness for the AWFY
  * rows and a family's `main.ts` for the crypto kernels.
  */
-const countedEntries = () => [
-  ...BENCHMARKS.filter((b) => b.counted !== false).map((b) => ({
-    name: b.name,
-    entry: `bench/${b.name}.ts`,
-  })),
-  ...MAPS.map((b) => ({ name: b.name, entry: `bench/${b.name}.ts` })),
-  ...MAP_MEASURES.map((b) => ({ name: b.name, entry: `bench/${b.name}.ts` })),
-  ...AWFY.map((b) => ({ name: b.name, entry: "bench/awfy/main.ts" })),
-  ...CRYPTO_COUNTED.map((b) => ({ name: b.name, entry: `bench/${b.main ?? `crypto/${b.family}/main.ts`}` })),
-  ...STD_COUNTED.map((b) => ({ name: b.name, entry: `bench/${b.name}.ts` })),
-]
+const countedEntries = () => {
+  // A program built from `bench/<name>.ts` takes its `.args` sidecar, as
+  // runInstructions compiles it; the awfy harness and the crypto families take none.
+  const own = (b) => ({ name: b.name, entry: `bench/${b.name}.ts`, args: sourceArgs(b.name) })
+  return [
+    ...BENCHMARKS.filter((b) => b.counted !== false).map(own),
+    ...MAPS.map(own),
+    ...MAP_MEASURES.map(own),
+    ...AWFY.map((b) => ({ name: b.name, entry: "bench/awfy/main.ts", args: [] })),
+    ...CRYPTO_COUNTED.map((b) => ({
+      name: b.name,
+      entry: `bench/${b.main ?? `crypto/${b.family}/main.ts`}`,
+      args: [],
+    })),
+    ...STD_COUNTED.map(own),
+  ]
+}
 
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
 const change = (count, base) => (count - base) / base
