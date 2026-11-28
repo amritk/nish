@@ -1,0 +1,1 @@
+The field `slot` of handle class `Holder` owns a handle and is written only once, by `this.slot = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there: any other write would drop a handle the object owns or own one twice

@@ -1446,6 +1446,21 @@ const exportedBindings = () =>
     why: "the program imports an opaque `declare class` and the `declare function`s that take it from another module, which the candidate compiles and the reference refuses, because it lets no binding be exported",
   }))
 
+/** The changelog words of WP89 S5a, a class that owns its native handles. */
+const OWNED_HANDLES = "a std class owns its native handles"
+const ownedHandles = () =>
+  [
+    "tests/cases/ffi_handle_host.ts",
+    "tests/cases/ffi_handle_owned.ts",
+    "tests/link/ffi_handle_owned/main.ts",
+    "docs/cookbook/decl-ffi-handle-owned.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: OWNED_HANDLES,
+    why: "the program declares a class that owns a native object and closes it with `[Symbol.dispose]` and `using`, which the candidate compiles and the reference refuses, because it lets only nish/threads' scope and lock and the builtin arena be disposed",
+  }))
+
 /** The changelog words of WP89 S6, a module file chosen by target. */
 const TARGET_FILES = "a module file chosen by target"
 const targetFiles = () => [
@@ -15030,6 +15045,7 @@ const DECLARED = [
   ...typedBuffers(),
   ...targetFiles(),
   ...exportedBindings(),
+  ...ownedHandles(),
   ...storageIndex(),
   ...arenaStrict(),
   {
