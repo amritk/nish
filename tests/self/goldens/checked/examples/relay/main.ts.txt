@@ -25647,18 +25647,19 @@ function http1TryWriteChunk(out: u8[], at: i32, data: readonly u8[], off: i32, l
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tryCopyBytes#0 nish.http1PutCrlf#0 nish.http1PutCrlf#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
-  local -29:9 size: i32 (const)
-  local -22:9 digits: i32 (const)
-  callee -22:23 http1HexDigits -> @nish.http1HexDigits
-  local -21:9 outLength: i32 (const)
-  local -19:9 need: u64 (const)
-  local -13:9 end32: u32 (const)
-  local -12:9 headEnd32: u32 (const)
-  local -11:9 end: i32 (const)
-  local -10:9 headEnd: i32 (const)
-  callee -7:8 tryCopyBytes -> @nish.tryCopyBytes
-  local -4:7 v: i32 (let)
-  local -2:12 k: i32 (let)
+  local -31:9 size: i32 (const)
+  local -24:9 digits: i32 (const)
+  callee -24:23 http1HexDigits -> @nish.http1HexDigits
+  local -23:9 outLength: i32 (const)
+  local -21:9 need: u64 (const)
+  local -15:9 end32: u32 (const)
+  local -14:9 headEnd32: u32 (const)
+  local -13:9 end: i32 (const)
+  local -12:9 headEnd: i32 (const)
+  callee -9:8 tryCopyBytes -> @nish.tryCopyBytes
+  local -6:7 v: i32 (let)
+  local -3:9 last32: u32 (const)
+  local -2:12 j: i32 (let)
   local -1:11 d: i32 (const)
   callee +3:3 http1PutCrlf -> @nish.http1PutCrlf
   local +4:9 tail32: u32 (const)
@@ -33110,14 +33111,26 @@ function httpTryContentEncoding(buf: u8[], start: i32, end: i32): i32 -> @nish.h
   callee +23:7 httpCodingIs -> @nish.httpCodingIs
   callee +26:16 httpCodingIs -> @nish.httpCodingIs
   callee +28:16 httpCodingIs -> @nish.httpCodingIs
+function httpBodyDecoderFault(limit: i32): string -> @nish.httpBodyDecoderFault [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function httpCheckBodyDecoder(limit: i32): void -> @nish.httpCheckBodyDecoder
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: limit
+  calls: nish.httpBodyDecoderFault nish_arena_mark nish_arena_release nish_panic
+  stackSites=0 stackLocals=0
+  local +0:9 fault: string (const)
+  callee +0:25 httpBodyDecoderFault -> @nish.httpBodyDecoderFault
 function HttpBodyDecoder.constructor(this: HttpBodyDecoder, limit: i32): void -> @nish.HttpBodyDecoder.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: limit
-  calls: nish.GzipDecompressor.constructor nish.ZlibDecompressor.constructor nish_alloc_struct nish_panic nish_str_concat nish_str_from_i32
+  calls: nish.GzipDecompressor.constructor nish.ZlibDecompressor.constructor nish.httpCheckBodyDecoder nish_alloc_struct
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee +0:19 new GzipDecompressor -> @nish.GzipDecompressor.constructor
-  callee +1:19 new ZlibDecompressor -> @nish.ZlibDecompressor.constructor
+  callee +0:5 httpCheckBodyDecoder -> @nish.httpCheckBodyDecoder
+  callee +3:19 new GzipDecompressor -> @nish.GzipDecompressor.constructor
+  callee +4:19 new ZlibDecompressor -> @nish.ZlibDecompressor.constructor
 function HttpBodyDecoder.decode(this: HttpBodyDecoder, coding: i32, src: u8[], off: i32, len: i32): i32 -> @nish.HttpBodyDecoder.decode [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpBodyDecoder.tryDecode
