@@ -415,7 +415,9 @@ export class ProtoReader {
    */
   sint64(): i64 {
     const v: u64 = this.uint64()
-    return toI64((v >> toU64(1)) ^ (toU64(0) - (v & toU64(1))))
+    // All ones when the low bit is set and none when it is clear: the subtraction wraps by its `u64` type.
+    const sign: u64 = toU64(0) - (v & toU64(1))
+    return toI64((v >> toU64(1)) ^ sign)
   }
 
   /**
@@ -426,7 +428,9 @@ export class ProtoReader {
    */
   sint32(): i32 {
     const v: u32 = toU32(this.uint64())
-    return toI32((v >> toU32(1)) ^ (toU32(0) - (v & toU32(1))))
+    // All ones when the low bit is set and none when it is clear: the subtraction wraps by its `u32` type.
+    const sign: u32 = toU32(0) - (v & toU32(1))
+    return toI32((v >> toU32(1)) ^ sign)
   }
 
   /**
