@@ -76,6 +76,10 @@ export const typeCheckProject = (config, cwd) => {
   return resultOf(ts, diagnosticsOf(ts, parsed.fileNames, parsed.options, host, configErrors), host)
 }
 
+// A `/// <reference no-default-lib="true" />` directive, as tsc's scanner
+// accepts it: only whitespace before the slashes on its line.
+const NO_DEFAULT_LIB = /^[ \t]*\/\/\/[ \t]*<reference[ \t]+no-default-lib[ \t]*=/m
+
 /**
  * Whether a declaration file's answer from tsc can depend on nothing but its own
  * text and the global scope every program here starts with.
@@ -92,6 +96,10 @@ export const typeCheckProject = (config, cwd) => {
  * - a triple-slash `path`, `types` or `lib` reference, or `no-default-lib`,
  *   each of which changes the file set or the libraries for the whole program.
  *
+ * `no-default-lib` is also matched in the text: TypeScript 6 ignores the
+ * directive and no longer sets `hasNoDefaultLib`, and an older one honours it,
+ * so the text is the answer that holds under both.
+ *
  * Any doubt answers `false`, which costs a second lib check and nothing else.
  */
 export const standsAlone = (fileName, text) => {
@@ -100,6 +108,7 @@ export const standsAlone = (fileName, text) => {
   if (
     !ts.isExternalModule(sf) ||
     sf.hasNoDefaultLib ||
+    NO_DEFAULT_LIB.test(text) ||
     sf.referencedFiles.length > 0 ||
     sf.typeReferenceDirectives.length > 0 ||
     sf.libReferenceDirectives.length > 0
