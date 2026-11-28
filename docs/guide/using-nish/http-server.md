@@ -587,7 +587,9 @@ still handed over, so answer what `take` gives you until `connections()` is
 0.
 
 A WebSocket stays open through a drain until you close it, so close each one
-you hold with `closeWebSocket` once you drain.
+you hold with `closeWebSocket` once you drain. A draining server upgrades no
+new request: `acceptWebSocket` answers `H1_INVALID`, and you answer the
+request with a status, after which its connection closes.
 
 `HttpServer` decides this for its own connections. A program that carries
 its own HTTP/1.1 bytes drives an `Http1Connection` from

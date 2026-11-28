@@ -3954,21 +3954,21 @@ export class HttpServer {
    * room after `sendFrame` answered `H1_AGAIN` (`writable`), or the WebSocket
    * is over (`closed`). Only an HTTP/1.1 request upgrades: one on HTTP/2 or
    * HTTP/3 answers `H1_INVALID` (HTTP/2's extended CONNECT is not served).
-   * On anything but 0, `r` is as it was: a held request is still unanswered,
-   * answered as any other: 400, or 426 for a wrong `Sec-WebSocket-Version`.
-   * The slot's `idleTimeout` (`Http1Config`) closes a WebSocket nothing moves
-   * on; `bodyTimeout` does not apply. A draining server leaves a WebSocket
-   * open until the program closes it. Panics on another server's request;
-   * answers `H1_INVALID` for one that is not taken and unanswered.
+   * On anything but 0, `r` is as it was, the program's to answer as any other
+   * request: 400, or 426 for a wrong `Sec-WebSocket-Version`. The slot's
+   * `idleTimeout` (`Http1Config`) closes a WebSocket nothing moves on, and not
+   * `bodyTimeout`. A draining server upgrades no request, and leaves an open
+   * WebSocket open until the program closes it. Panics on another server's
+   * request; answers `H1_INVALID` for one that is not taken and unanswered.
    * @param r a request `take` handed over and the program has not answered
    * @param protocol the subprotocol to name in `Sec-WebSocket-Protocol`, one the client offered, or "" for none
    * @returns 0 once the 101 is queued; `H1_INVALID` for a request that is not
-   *   held, not a valid HTTP/1.1 opening handshake, or a `protocol` not a token;
+   *   held, not a valid HTTP/1.1 opening handshake, a `protocol` not a token, or on a draining server;
    *   `H1_AGAIN` when the output has no room yet; `H1_CLOSED` when the connection closed
    */
   acceptWebSocket(r: HttpServerRequest, protocol: string): i32 {
     this.own(r, "acceptWebSocket")
-    if (r.state !== HTTP_SERVER_HELD || r.kind !== HTTP_SERVER_H1) {
+    if (r.state !== HTTP_SERVER_HELD || r.kind !== HTTP_SERVER_H1 || this.draining) {
       return H1_INVALID
     }
     const conn: Http1Connection | null = this.h1ConnOf(r)

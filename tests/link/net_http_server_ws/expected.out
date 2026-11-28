@@ -35,6 +35,15 @@ PASS  a GET with no Upgrade: acceptWebSocket answers H1_INVALID
 PASS  and the program answers it 400
 PASS  so do sendFrame and closeWebSocket on a request not upgraded
 PASS  no request was upgraded
+PASS  a handshake with no Sec-WebSocket-Key: acceptWebSocket answers H1_INVALID
+PASS  and the program answers it 400
+PASS  a handshake for version 8: acceptWebSocket answers H1_INVALID
+PASS  and the program answers it 400
+PASS  neither became a WebSocket
+PASS  during a drain: acceptWebSocket answers H1_INVALID
+PASS  and the program answers it 400
+PASS  then the server closes the connection
+PASS  no request was upgraded during the drain
 PASS  bodyTimeout 1: a WebSocket quiet for 1.5 s is still open
 PASS  and still echoes
 PASS  idleTimeout 300: a quiet WebSocket's connection is closed
@@ -47,4 +56,4 @@ PASS  TLS: a close from the client is answered with 1000
 PASS  TLS: then the server closes the connection
 PASS  TLS: and the server holds no connection
 PASS  TLS: the program saw it closed with the client's 1000
-net_http_server_ws: 49 passed, 0 failed, 0 skipped
+net_http_server_ws: 58 passed, 0 failed, 0 skipped

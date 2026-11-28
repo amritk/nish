@@ -124,12 +124,16 @@ export class WsClient {
 
   /** The response head once it is whole, turning the server's loop until then; "" when none came. What follows it goes to the decoder. */
   head(): string {
-    for (let turn: i32 = 0; turn < TURNS && !this.peer.closed; turn++) {
+    for (let turn: i32 = 0; turn < TURNS; turn++) {
       const end: i32 = this.headEnd()
       if (end > 0) {
         const head: string = textAt(this.peer.got, 0, end)
         this.feed(end)
         return head
+      }
+      // Asked only once `got` is looked at: the turn that reads a head can also read the peer's end.
+      if (this.peer.closed) {
+        return ""
       }
       this.peer.turn()
     }

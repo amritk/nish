@@ -48,6 +48,8 @@ export class Rig {
   outside: i32 = 0
   /** Whether a 3-byte text message starting `b` has the program close the WebSocket with 1000. */
   bye: boolean = true
+  /** Whether the program calls `drain` on a new request before it tries to upgrade it. */
+  drainFirst: boolean = false
 
   /** A server under `limits` with `slots` connections on each listener, its HTTP/1.1 one under `config` on `port` (0 for any). */
   constructor(limits: HttpServerLimits, slots: i32, config: Http1Config, port: i32) {
@@ -112,6 +114,9 @@ export class Rig {
   /** A new request: upgraded, or answered 400 when it cannot be. */
   private upgrade(r: HttpServerRequest): void {
     const h: HttpServer = this.h
+    if (this.drainFirst) {
+      h.drain()
+    }
     this.accepted = h.acceptWebSocket(r, "")
     if (this.accepted !== 0) {
       const none: u8[] = []

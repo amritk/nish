@@ -245,6 +245,35 @@ const refused = (t: Suite): void => {
   t.ok("and the program answers it 400", head.startsWith("HTTP/1.1 400 "))
   t.eqI32("so do sendFrame and closeWebSocket on a request not upgraded", rig.misused, 2)
   t.eqI32("no request was upgraded", rig.upgrades, 0)
+
+  const keyless = new WsClient(rig)
+  const noKey: string = keyless.request(
+    rig.port,
+    ascii("GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\n\r\n"),
+  )
+  t.eqI32("a handshake with no Sec-WebSocket-Key: acceptWebSocket answers H1_INVALID", rig.accepted, H1_INVALID)
+  t.ok("and the program answers it 400", noKey.startsWith("HTTP/1.1 400 "))
+  rig.accepted = 1
+  const old = new WsClient(rig)
+  const version: string = old.request(
+    rig.port,
+    ascii("GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 8\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"),
+  )
+  t.eqI32("a handshake for version 8: acceptWebSocket answers H1_INVALID", rig.accepted, H1_INVALID)
+  t.ok("and the program answers it 400", version.startsWith("HTTP/1.1 400 "))
+  t.eqI32("neither became a WebSocket", rig.upgrades, 0)
+}
+
+/** A draining server upgrades no request: a handshake it is handed during the drain is answered, and its connection closes. */
+const drained = (t: Suite): void => {
+  const rig = new Rig(rigLimits(4, 30000), 4, new Http1Config(), 0)
+  rig.drainFirst = true
+  const c = new WsClient(rig)
+  const head: string = c.open(rig.port, "/ws")
+  t.eqI32("during a drain: acceptWebSocket answers H1_INVALID", rig.accepted, H1_INVALID)
+  t.ok("and the program answers it 400", head.startsWith("HTTP/1.1 400 "))
+  t.ok("then the server closes the connection", c.peer.awaitClose(TURNS))
+  t.eqI32("no request was upgraded during the drain", rig.upgrades, 0)
 }
 
 /** `bodyTimeout` does not apply to a WebSocket: one quiet for longer still echoes. */
@@ -315,6 +344,7 @@ export const main = (): i32 => {
   reused(t)
   flat(t)
   refused(t)
+  drained(t)
   quiet(t)
   idle(t)
   overTls(t)
