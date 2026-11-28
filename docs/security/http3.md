@@ -400,7 +400,7 @@ without the sites the prover discharges:
 | `std/net/http3-frame.ts` | 21 | 4 | `h3CheckWindow`: a window outside the caller's buffer, and the three exported readers' calls of it (`h3ReadFrameHeader`, `h3ReadSettings`, `h3ReadIdPayload`), which each pass the window on to their caller; `std/net/http3.ts` and `std/net/webtransport.ts` prove theirs |
 | `std/net/qpack.ts` | 38 | 3 | `qpackCheckWindow`, `qpackPushStreamCancellation`'s stream ID, `QpackDecoder`'s construction limit |
 | `std/net/http3.ts` | 248 | 4 | `http3CheckCap` and three checks of `Http3Connection`'s configuration |
-| `std/net/http3-server.ts` | 153 | 8 | three checks of `Http3Server`'s configuration; three `udpSendTo`/`udpRecvFrom` buffer range checks; two runtime exits when `crypto.getRandomValues` fails |
+| `std/net/http3-server.ts` | 153 | 3 | the constructor's fault contract, `http3ServerCheckSize(size)`, which `openHttp3Server` proves by running `http3ServerSizeFault` and answering an `Err`; two runtime exits when `crypto.getRandomValues` fails |
 
 Every `panic` left checks an argument the program passes: a window, a cap or a
 configuration. None is reached by a byte a peer sends. The compiler counts
@@ -444,8 +444,10 @@ handle, so they answer H3_INVALID and count no site
 prints -32 for a window inside its buffer and -22 for one outside it, and
 -32 for both once the guard is removed). `http3-server.ts`'s
 receive now hands `udpRecvFrom` the whole of `rx`, and its guard refuses a
-length past `rx`'s 65,536 bytes, so its range is proven and the server counts
-three `slice` sites, not four.
+length past `rx`'s 65,536 bytes, so its range is proven; `send` hands
+`udpSendTo` only `buf[0 .. len)`, `len` checked against `buf`, and windows of it
+its datagram loop keeps inside that range, so those are proven too and the server
+counts no `slice` site, where it counted four.
 
 Where a guard cannot fail, a comment says why: the index is below a length
 read on the line before, or the slot is one the connection numbered. Where

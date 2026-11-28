@@ -13,6 +13,7 @@ import {
   Http3CidIndex,
   Http3Server,
   Http3Wheel,
+  openHttp3Server,
 } from "nish/net/http3-server";
 ```
 
@@ -64,6 +65,12 @@ const run = (quicConfig: QuicServerConfig, privateKey: u8[], rounds: i32): void 
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="open​Http3​Server" icon="phosphor/regular/function" href="#openhttp3server">
+
+A server as `new Http3Server(quicConfig, config, fd, size, listenerEntropy)` makes one, with a slot count out of range, which that constructor panics on, and an `idleTimeout` or `headTimeout` under 1, which each slot's connection would panic on at its first Initial, answered as an `Err` before anything is built or `listenerEntropy` is touched.
+
+</scalar-card>
 
 <scalar-card title="Http3​Cid​Index" icon="phosphor/regular/cube" href="#http3cidindex">
 
@@ -184,6 +191,63 @@ a test that compares bytes.
 Written from RFC 9114 §3 and RFC 9000 §5.2, not ported from another
 implementation. Private names carry the `http3Server` prefix
 (`docs/wp26-stdlib.md` §3e).
+
+## Functions
+
+### openHttp3Server
+
+A server as `new Http3Server(quicConfig, config, fd, size, listenerEntropy)`
+makes one, with a slot count out of range, which that constructor panics
+on, and an `idleTimeout` or `headTimeout` under 1, which each slot's
+connection would panic on at its first Initial, answered as an `Err`
+before anything is built or `listenerEntropy` is touched.
+
+```ts
+const openHttp3Server: (
+  quicConfig: QuicServerConfig,
+  config: Http3Config,
+  fd: i32,
+  size: i32,
+  listenerEntropy: u8[],
+) => Result<Http3Server, string>
+```
+
+<scalar-field name="quicConfig" type="QuicServerConfig" required>
+
+The QUIC configuration, as the constructor keeps it.
+
+</scalar-field>
+
+<scalar-field name="config" type="Http3Config" required>
+
+The HTTP/3 configuration, as the constructor keeps it.
+
+</scalar-field>
+
+<scalar-field name="fd" type="i32" required>
+
+The bound UDP socket, kept; the server does not close it.
+
+</scalar-field>
+
+<scalar-field name="size" type="i32" required>
+
+How many slots, 1 to 65536.
+
+</scalar-field>
+
+<scalar-field name="listenerEntropy" type="u8[]" required>
+
+`QUIC_LISTENER_ENTROPY_SIZE` random bytes, copied and then zeroed in this array
+  when the server is built.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;Http3Server, string&gt;">
+
+`Ok` with the server, or `Err` saying which of `size`, `idleTimeout` and `headTimeout` is out of range.
+
+</scalar-field>
 
 ## Classes
 

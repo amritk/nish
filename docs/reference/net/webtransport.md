@@ -26,6 +26,7 @@ import {
   WebTransport,
   WebTransportConfig,
   WebTransportWaiting,
+  openWebTransport,
   wtCodeFromHttp3,
   wtCodeToHttp3,
 } from "nish/net/webtransport";
@@ -56,6 +57,12 @@ const serve = (h3: Http3Connection): void => {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="open​Web​Transport" icon="phosphor/regular/function" href="#openwebtransport">
+
+A layer as `new WebTransport(config, h3)` makes one, with a cap out of range, which that constructor panics on, and a connection with WebTransport off, over which that constructor's layer would refuse every session, answered as an `Err`.
+
+</scalar-card>
 
 <scalar-card title="wt​Code​From​Http3" icon="phosphor/regular/function" href="#wtcodefromhttp3">
 
@@ -231,6 +238,38 @@ code is ported from either.
 
 ## Functions
 
+### openWebTransport
+
+A layer as `new WebTransport(config, h3)` makes one, with a cap out of
+range, which that constructor panics on, and a connection with WebTransport
+off, over which that constructor's layer would refuse every session,
+answered as an `Err`.
+
+```ts
+const openWebTransport: (
+  config: WebTransportConfig,
+  h3: Http3Connection,
+) => Result<WebTransport, string>
+```
+
+<scalar-field name="config" type="WebTransportConfig" required>
+
+The caps, as the constructor reads them; kept, not copied.
+
+</scalar-field>
+
+<scalar-field name="h3" type="Http3Connection" required>
+
+The connection the layer reads and writes, kept for the layer's life.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;WebTransport, string&gt;">
+
+`Ok` with the layer, or `Err` saying which cap is out of range or that `h3` has WebTransport off.
+
+</scalar-field>
+
 ### wtCodeFromHttp3
 
 The application code an HTTP/3 `code` carries, or -1 when it is outside the range, or one of its greased
@@ -290,7 +329,7 @@ class WebTransport
 
 | Member | |
 | --- | --- |
-| `new WebTransport(config: WebTransportConfig, h3: Http3Connection)` | The WebTransport layer of `h3`, whose `Http3Config` must have `webtransportSessions` above 0. A cap out of range panics. |
+| `new WebTransport(config: WebTransportConfig, h3: Http3Connection)` | The WebTransport layer of `h3`, one session for each of its `Http3Config`'s `webtransportSessions`. Over a connection with WebTransport off (0) the layer has no sessions and answers every request for one 501, as for a `:protocol` it does not serve; `openWebTransport` answers that as an `Err`. A cap out of range panics, a contract of this constructor: `openWebTransport` answers it as an `Err`. |
 | `appCode: i64` | The WebTransport code `errorCode` maps to (`wtCodeFromHttp3`), or -1 when it maps to none; for WT_CLOSED, `errorCode` itself. |
 | `bidirectional: boolean` | WT_STREAM's kind, and whether WT_CLOSED came from the client. |
 | `closedByPeer: boolean` | Whether the last WT_CLOSED came from the client: its CLOSE capsule, its FIN, or a reset the client sent; false when this side ended the session, including when it reset the stream for a malformed capsule or a FIN inside one. |

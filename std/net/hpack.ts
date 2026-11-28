@@ -426,20 +426,20 @@ const hpackWindowEnd = (buf: u8[], off: i32, len: i32): i32 => {
 }
 
 /**
- * Panics unless `buf[off, off + len)` lies inside `buf`: a window past its buffer is the caller's mistake.
- * A window guard, so a caller that proves the window in range removes the panic site.
+ * The panic of a window outside `buf`, `hpackCheckedWindowEnd`'s, kept apart from its test so that the
+ * test stays small enough to inline; the window is the caller's.
  */
 const hpackCheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
-  const size: i32 = toI32(buf.length)
-  if (off < 0 || len < 0 || off > size || len > size - off) {
-    panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${size} bytes`)
-  }
+  panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${toI32(buf.length)} bytes`)
 }
 
 /** Panics unless `[off, off + len)` lies inside `buf`, and answers the window's end, `off + len`. */
 const hpackCheckedWindowEnd = (what: string, buf: u8[], off: i32, len: i32): i32 => {
-  hpackCheckWindow(what, buf, off, len)
-  return hpackWindowEnd(buf, off, len)
+  const end: i32 = hpackWindowEnd(buf, off, len)
+  if (end < 0) {
+    hpackCheckWindow(what, buf, off, len)
+  }
+  return end
 }
 
 /**
@@ -581,7 +581,7 @@ export class HpackHuffman {
  *   internal fields).
  */
 export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i32): i32 => {
-  hpackCheckWindow("hpackHuffmanLength", src, off, len)
+  hpackCheckedWindowEnd("hpackHuffmanLength", src, off, len)
   // Unsigned: at most 30 bits for each of fewer than 2^31 octets, far below 2^64.
   let bits: u64 = 0
   // Widened, so `off + len` cannot wrap. The window check has already proved
@@ -618,7 +618,7 @@ export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i3
  * @param out Where the coded bytes go: appended after what it holds, `hpackHuffmanLength` of them.
  */
 export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): void => {
-  hpackCheckWindow("hpackHuffmanEncode", src, off, len)
+  hpackCheckedWindowEnd("hpackHuffmanEncode", src, off, len)
   let acc: u64 = 0
   // Unsigned: fewer than eight waiting bits plus one code of at most 31, so it never wraps.
   let bits: u32 = 0
@@ -665,7 +665,7 @@ export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i3
  *   which only a table cut short (by writing its internal fields) allows.
  */
 export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): i32 => {
-  hpackCheckWindow("hpackHuffmanDecode", src, off, len)
+  hpackCheckedWindowEnd("hpackHuffmanDecode", src, off, len)
   // Unsigned, and `bits` never passes 30: the code is complete, so thirty bits always end a symbol,
   // and the row test below gives up before a 31st.
   let code: u32 = 0

@@ -241,17 +241,17 @@ lookup that answers null for an index outside its table, so no touch of a
 session or a stream is an unproven index; a CLOSE capsule's reason is read
 into its own session's buffer, and the code mappings and the waiting room's
 hash are worked in `f64`, which holds their values exactly. The sites left
-are four: the kept panic of `webtransportCheckConfig`, the constructor's
-first statement, which a caller proves by running `webtransportConfigFault`
-first, as `openWebTransport` does (its entry and reason in
-`tests/std-panics.json`); the
+are four: the constructor's fault contract, its first statement
+`webtransportCheckConfig(config)`, which a caller proves by running
+`webtransportConfigFault` first, as `openWebTransport` does, and which is
+counted as a `fault` site at every caller that does not; the
 salt `WebTransportWaiting` draws with `crypto.getRandomValues`, which exits
 when the system has no entropy; and the two `i64` sums of a clock reading and
 a wait of at most a day in `expire` and `expiresNoSooner`, which overflow
 only for a clock reading within a day of 2^63. A new site
 fails
 `std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows`
-and a kept one that goes fails `std-panics: every kept panic in tests/std-panics.json`.
+and a count that falls without its entry lowered fails `std-panics: tests/std-panics.json is lowered wherever a count fell`.
 
 **Nothing allocates per datagram, stream or session** (`arena.ts`, every
 server call measured on its own with `Arena.used()`): 200 rounds on a warm
