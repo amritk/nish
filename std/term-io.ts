@@ -746,7 +746,7 @@ export class Terminal {
     let ended: boolean = false
     let decoded: boolean = false
     if (waitStdin(waitMs)) {
-      const n: i32 = readStdin(this.readBuf, 0, TERM_IO_READ)
+      const n: i32 = readStdin(this.readBuf, 0, toI32(this.readBuf.length))
       const nowMs: f64 = termIoNowMs()
       const only: i32 = this.decoder.waiting() ? -1 : termIoOnlyAcks(this.readBuf, n)
       if (only > 0) {
@@ -853,6 +853,8 @@ export class Terminal {
       this.backend = backend
     }
     let withPixels: boolean = false
+    // A frame past what one buffer holds is not sent: the last one stays, and so does `pixelsShown`.
+    let skipped: boolean = false
     const fb: Framebuffer = this.framebuffer
     if (fb.width > 0) {
       this.fit(backend)
@@ -864,11 +866,13 @@ export class Terminal {
       if (backend === GRAPHICS_KITTY) {
         this.pixels.reset()
         kittyFrame(src, this.rect, TERM_IO_IMAGE_ID, this.pixels)
-        withPixels = true
+        skipped = this.pixels.full
+        withPixels = !skipped
       } else if (backend === GRAPHICS_SIXEL) {
         this.pixels.reset()
         sixelFrame(src, this.rect, true, this.pixels)
-        withPixels = true
+        skipped = this.pixels.full
+        withPixels = !skipped
       } else if (backend === GRAPHICS_HALFBLOCK) {
         drawHalfBlocks(src, this.canvas, this.rect)
       } else {
@@ -881,7 +885,9 @@ export class Terminal {
       }
       this.screen.invalidate()
     }
-    this.pixelsShown = withPixels
+    if (!skipped) {
+      this.pixelsShown = withPixels
+    }
     if (this.options.overlay >= 0) {
       drawStatsOverlay(this.screen, this.stats(), this.options.overlay)
     }
@@ -943,7 +949,7 @@ export const openTerminal = (options: TerminalOptions): Result<Terminal, string>
     }
     const left: i32 = toI32(Math.ceil(probe.sentAtMs + probe.timeoutMs - nowMs))
     if (waitStdin(left > 0 ? left : 0)) {
-      const n: i32 = readStdin(buf, 0, TERM_IO_READ)
+      const n: i32 = readStdin(buf, 0, toI32(buf.length))
       if (n > 0) {
         probe.feed(buf, n, termIoNowMs())
       } else if (n !== -11) {
@@ -1116,7 +1122,7 @@ export const runTerminal = <G>(
       frame.framebuffer = term.framebuffer
       render(state, frame)
     }
-    term.workNs = term.workNs + toF64(monotonicNanos() - work)
+    term.workNs = term.workNs + (toF64(monotonicNanos()) - toF64(work))
     if (draw && !quit) {
       term.present()
     }

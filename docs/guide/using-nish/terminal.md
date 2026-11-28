@@ -27,12 +27,13 @@ The first example builds with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): the `nish/term` code
 it reaches keeps panic sites no proof removes yet, and it negates a step read
 from a field, whose lower bound the checker does not read from a guard yet.
-`nish/term-probe` keeps none; `nish/term-rate` keeps only its frame counters,
-which overflow past 2^31 - 1 frames; `nish/term-io` keeps only the
-slices that copy what stdin read, and `nish/term-pixels` only the panics a
-negative or too large size, a zero scale, a bad image id or a framebuffer
-whose `pixels` no longer holds `width × height` trips, its arrays sized by a
-count and its slices. The rest of its code bounds each position before it
+`nish/term-probe`, `nish/term-rate` and `nish/term-io` keep none of their
+own: what is left is in `nish/term-pixels`, the panics a negative or too large
+size, a zero scale, a bad image id or a framebuffer whose `pixels` no longer
+holds `width × height` trips, the slice that turns its bytes into text and a
+check of the Sixel register array it sizes itself. `tryFramebuffer` and
+`tryResize` answer a bad size with an `Err` instead; the rest wait for
+`Framebuffer`'s fields to become private in a later release. The rest of its code bounds each position before it
 moves or draws one, and the size example tests `size.length` before it reads
 a pair; the library calls build under the default once the standard library
 is made panic-free.
