@@ -24,14 +24,12 @@ limit outside its range where `new Router` panics, and open the handler with
 `openHttpHandler`, which does the same for `new HttpHandler`. A program that
 matches by hand calls `router.tryMatch`, which answers `ROUTER_NOT_FOUND` for
 a range outside its buffer, and `router.tryParamCount`, which answers -1 for a
-route the table does not hold, where `match` and `paramCount` panic. The body
-decoder under the handler keeps a panic site in its gzip reader no proof
-removes yet, so the examples still build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do) until they are made
-panic-free.
+route the table does not hold, where `match` and `paramCount` panic. The first
+example builds with no panic site; the router example further down still
+builds with [`--allow-panics`](cli.md#asking-what-a-program-can-do), because
+the router and handler code it calls keeps panic sites no proof removes yet.
 
-<!-- allow-panics: calls `std/net/handler.ts` code that reaches the `std/compress/gzip.ts` panic site no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { HandlerLimits, openHttpHandler } from "nish/net/handler";
 import { RouterLimits, routerChecked } from "nish/net/router";

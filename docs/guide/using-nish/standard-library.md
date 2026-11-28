@@ -3638,8 +3638,7 @@ written, so `http://a.com./` (a trailing dot) and `http://[0::1]/` are
 different origins from `http://a.com/` and `http://[::1]/`: an equal string is
 the same origin, and a split errs toward "different".
 
-<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
 

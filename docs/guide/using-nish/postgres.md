@@ -20,7 +20,7 @@ and every request gets its rows, or word that there were none. The connection
 asks for nothing a round trip does not need: the statement is prepared, bound
 and executed in one write.
 
-The examples on this page build with
+The examples on this page that connect build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do).
 `nish/net/postgres` keeps panic sites no proof removes yet, so a call to it is
 refused by default until the standard library is made panic-free;
@@ -432,8 +432,7 @@ nothing. When `failure` is `PG_TARGET_OK`, a `unix` target is
 `netAddress(addr, target.host, target.port)` and `tcpConnect(addr)`. Either
 way the connection is the same `PgConnection`.
 
-<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { PG_TARGET_OK, pgTargetUrl } from "nish/net/postgres";
 import { netAddress, tcpConnect, unixConnect } from "nish:net";

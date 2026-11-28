@@ -28,7 +28,7 @@ then verify each request's token. The examples on this page build with
 the modules it uses keep panic sites no proof removes yet, so a call to them
 is refused by default until the standard library is made panic-free:
 
-<!-- allow-panics: calls `std/crypto/jwt.ts`, `std/net/oidc.ts`, `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/crypto/jwt.ts`, `std/net/oidc.ts`, `std/net/url.ts` code that keeps panic sites, and reaches those of `std/net/http1-client-codec.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import {
@@ -226,7 +226,7 @@ key set you already hold, for a test or for a set you fetch yourself.
 A provider running on your own machine over plain http (Keycloak in a
 container, say) is refused unless you allow it:
 
-<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites, and reaches those of `std/net/http1-client-codec.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { OidcMetadata, OidcOptions, oidcDiscover } from "nish/net/oidc";
