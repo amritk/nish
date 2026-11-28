@@ -29,14 +29,14 @@ function faultIsLiteral(node: Node): boolean -> @faultIsLiteral
 function argumentAt(sig: FunctionSig, name: string): i32 -> @argumentAt
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow nish_str_eq
-  pointer sig: size=312 writesThrough=false captured=false
+  pointer sig: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 skip: i32 (const)
   local +1:7 k: i32 (let)
 function defaultsAreLiterals(sig: FunctionSig): boolean -> @defaultsAreLiterals
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: faultIsLiteral
-  pointer sig: size=312 writesThrough=false captured=false
+  pointer sig: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 value: FieldInfo | null (const)
   local +2:13 init: Node | null (const)
@@ -126,7 +126,7 @@ function isFaultPure(program: CheckedProgram, sig: FunctionSig, open: FunctionSi
   escaping: sig
   calls: FunctionSig.body FunctionSig.definedIn collectLocals defaultsAreLiterals faultReadsOnly nish_array_grow nish_panic_index
   pointer program: size=928 writesThrough=false captured=false passedTo=faultReadsOnly#0
-  pointer sig: size=312 writesThrough=true captured=true passedTo=FunctionSig.definedIn#0 defaultsAreLiterals#0 FunctionSig.body#0
+  pointer sig: size=328 writesThrough=true captured=true passedTo=FunctionSig.definedIn#0 defaultsAreLiterals#0 FunctionSig.body#0
   pointer open: size=0 writesThrough=true captured=false passedTo=faultReadsOnly#3
   stackSites=1 stackLocals=1
   callee -21:6 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -171,7 +171,7 @@ function noteFaultGuard(program: CheckedProgram, sig: FunctionSig): void -> @not
   sharedWrite: +0:3
   calls: FunctionSig.body FunctionSig.definedIn defaultsAreLiterals faultBinding faultFunctionNamed faultIsName isFaultPure isFaultTest isPanicOf nish_panic_index nish_str_eq
   pointer program: size=928 writesThrough=true captured=false passedTo=isPanicOf#0 faultFunctionNamed#0 isFaultPure#0
-  pointer sig: size=312 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0 defaultsAreLiterals#0 FunctionSig.body#0
+  pointer sig: size=328 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0 defaultsAreLiterals#0 FunctionSig.body#0
   stackSites=1 stackLocals=1
   callee -36:6 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee -33:6 defaultsAreLiterals -> @defaultsAreLiterals
@@ -189,7 +189,7 @@ function noteFaultGuard(program: CheckedProgram, sig: FunctionSig): void -> @not
   callee -4:6 isFaultPure -> @isFaultPure
 function isFaultGuard(sig: FunctionSig): boolean -> @isFaultGuard [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer sig: size=312 writesThrough=false captured=false
+  pointer sig: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function faultGuardNamed(program: CheckedProgram, name: string): FunctionSig | null -> @faultGuardNamed
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -203,7 +203,7 @@ function faultGuardNamed(program: CheckedProgram, name: string): FunctionSig | n
 function fieldsStartAtLiterals(sig: FunctionSig): boolean -> @fieldsStartAtLiterals
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: faultIsLiteral
-  pointer sig: size=312 writesThrough=false captured=false
+  pointer sig: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
   local +4:14 field: FieldInfo (const)
@@ -214,7 +214,7 @@ function noteFaultForward(program: CheckedProgram, sig: FunctionSig): void -> @n
   sharedWrite: +0:3
   calls: FunctionSig.body FunctionSig.definedIn argumentAt assigns defaultsAreLiterals faultGuardNamed faultRedeclares fieldsStartAtLiterals nish_panic_index
   pointer program: size=928 writesThrough=false captured=false passedTo=faultGuardNamed#0
-  pointer sig: size=312 writesThrough=true captured=false passedTo=fieldsStartAtLiterals#0 FunctionSig.definedIn#0 defaultsAreLiterals#0 FunctionSig.body#0 argumentAt#0 argumentAt#0 argumentAt#0
+  pointer sig: size=328 writesThrough=true captured=false passedTo=fieldsStartAtLiterals#0 FunctionSig.definedIn#0 defaultsAreLiterals#0 FunctionSig.body#0 argumentAt#0 argumentAt#0 argumentAt#0
   stackSites=0 stackLocals=0
   local -37:9 method: boolean (const)
   local -35:9 ctor: boolean (const)
@@ -342,7 +342,7 @@ function isSteady(caller: FunctionSig, body: Node, name: string): boolean -> @is
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: argumentAt assigns declarations isConstLocal nish_str_eq
-  pointer caller: size=312 writesThrough=false captured=false passedTo=argumentAt#0
+  pointer caller: size=328 writesThrough=false captured=false passedTo=argumentAt#0
   pointer body: size=40 writesThrough=false captured=false passedTo=assigns#0 declarations#0 isConstLocal#0
   stackSites=0 stackLocals=0
   callee +0:7 assigns -> @assigns
@@ -365,9 +365,9 @@ function faultProven(program: CheckedProgram, caller: FunctionSig, call: Node, t
   sharedWrite: via faultPathTo
   calls: FunctionSig.body checkedBefore faultArgumentsOf faultIsLiteral faultPathTo isQuiet isSteady nish_arena_release nish_array_grow nish_panic_index repeats
   pointer program: size=928 writesThrough=true captured=false passedTo=isQuiet#0 checkedBefore#0
-  pointer caller: size=312 writesThrough=false captured=false passedTo=FunctionSig.body#0 isSteady#0
+  pointer caller: size=328 writesThrough=false captured=false passedTo=FunctionSig.body#0 isSteady#0
   pointer call: size=40 writesThrough=false captured=false passedTo=faultArgumentsOf#0 faultPathTo#1
-  pointer target: size=312 writesThrough=false captured=false
+  pointer target: size=328 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local +0:9 fault: FunctionSig | null (const)
   local +1:9 args: Node[] (const)
@@ -396,7 +396,7 @@ function checkedBefore(program: CheckedProgram, block: Node, at: i32, fault: Fun
   calls: faultBinding faultIsName isFaultTest isQuiet isQuietExit leaves nish_arena_mark nish_arena_release nish_panic_index
   pointer program: size=928 writesThrough=true captured=false passedTo=leaves#0 isQuiet#0 isQuietExit#0
   pointer block: size=40 writesThrough=false captured=false
-  pointer fault: size=312 writesThrough=false captured=false
+  pointer fault: size=328 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 none: Node[] (const)
   local +1:7 k: i32 (let)

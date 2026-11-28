@@ -10,7 +10,7 @@ function emitShmWindowBody(emitter: Emitter, sig: FunctionSig, role: i32): void 
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emit IRFunction.emitValue nish_panic_index nish_str_concat paramValue
   pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
-  pointer sig: size=312 writesThrough=false captured=false
+  pointer sig: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   local +1:9 h: string (const)

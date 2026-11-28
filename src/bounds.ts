@@ -144,6 +144,7 @@ import {
   ATOM_NEGATIVE,
   ATOM_PAST_END,
   ATOM_PAST_REST,
+  ATOM_PRODUCT_OVER,
   ATOM_WIDTH,
   isCallerContract,
 } from "./caller-contract"
@@ -201,6 +202,7 @@ const FACT_MIN_LENGTH: i32 = 4
 const FACT_MIN_VALUE: i32 = 5
 const FACT_EXCLUDES: i32 = 6
 const FACT_ORDERED: i32 = 7
+const FACT_PRODUCT: i32 = 8
 
 /**
  * One fact. `v` is the index variable for every kind but `minLength`, whose `v`
@@ -211,7 +213,8 @@ const FACT_ORDERED: i32 = 7
  * every rule that forgets an array's length facts forgets it too; `n`
  * is the literal of the three constant families, and the reach of a `below`:
  * `v + n < w.length`, 0 for the plain `v < w.length`. An `ordered` fact is
- * `v <= w` between two index locals, and its `n` is 0.
+ * `v <= w` between two index locals, and its `n` is 0. A `product` fact is
+ * `toI64(v) * toI64(w) <= n` between two index locals (`productFacts`).
  */
 class Fact {
   kind: i32
@@ -283,6 +286,14 @@ export class State {
    */
   orderedLow: Local[]
   orderedHigh: Local[]
+  /**
+   * `toI64(v) * toI64(w) <= n`, recorded by a guard (`productFacts`): what a
+   * caller contract's product test needs of its two factors
+   * (`ATOM_PRODUCT_OVER`). Any write to either factor drops it.
+   */
+  productLeft: Local[]
+  productRight: Local[]
+  productCap: i32[]
 
   constructor(table: TypeTable) {
     this.table = table
@@ -302,6 +313,9 @@ export class State {
     this.excludedValue = []
     this.orderedLow = []
     this.orderedHigh = []
+    this.productLeft = []
+    this.productRight = []
+    this.productCap = []
   }
 }
 
@@ -353,6 +367,13 @@ const cloneState = (s: State): State => {
     out.orderedHigh.push(s.orderedHigh[k])
     k = k + 1
   }
+  k = 0
+  while (k < s.productLeft.length) {
+    out.productLeft.push(s.productLeft[k])
+    out.productRight.push(s.productRight[k])
+    out.productCap.push(s.productCap[k])
+    k = k + 1
+  }
   return out
 }
 
@@ -379,6 +400,9 @@ const copyInto = (into: State, from: State): void => {
   into.excludedValue = from.excludedValue
   into.orderedLow = from.orderedLow
   into.orderedHigh = from.orderedHigh
+  into.productLeft = from.productLeft
+  into.productRight = from.productRight
+  into.productCap = from.productCap
 }
 
 // ---- Reading the state ------------------------------------------------------------
@@ -556,7 +580,37 @@ const knownOrdered = (state: State, low: Local, high: Local): boolean => {
   return false
 }
 
+/** The least `n` with `toI64(v) * toI64(w) <= n` a `product` fact holds, in either order; -1 for none. */
+const knownProductCap = (state: State, v: Local, w: Local): i32 => {
+  let best = -1
+  let k = 0
+  while (k < state.productLeft.length) {
+    const left = state.productLeft[k]
+    const right = state.productRight[k]
+    if (
+      ((left === v && right === w) || (left === w && right === v)) &&
+      (best < 0 || state.productCap[k] < best)
+    ) {
+      best = state.productCap[k]
+    }
+    k = k + 1
+  }
+  return best
+}
+
 const addFact = (state: State, fact: Fact): void => {
+  if (fact.kind === FACT_PRODUCT) {
+    const right = fact.w
+    if (right !== null) {
+      const known = knownProductCap(state, fact.v, right)
+      if (known < 0 || fact.n < known) {
+        state.productLeft.push(fact.v)
+        state.productRight.push(right)
+        state.productCap.push(fact.n)
+      }
+    }
+    return
+  }
   if (fact.kind === FACT_ORDERED) {
     const high = fact.w
     if (high !== null && !knownOrdered(state, fact.v, high)) {
@@ -681,7 +735,41 @@ const mentions = (state: State, v: Local): boolean => {
       return true
     }
   }
-  return mentionsOrdered(state, v)
+  return mentionsOrdered(state, v) || mentionsProduct(state, v)
+}
+
+/** Whether a `product` fact names `v` as either factor. */
+const mentionsProduct = (state: State, v: Local): boolean => {
+  for (const x of state.productLeft) {
+    if (x === v) {
+      return true
+    }
+  }
+  for (const x of state.productRight) {
+    if (x === v) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Drop every `product` fact with `v` as a factor: a step either way may grow the product. */
+const forgetProduct = (state: State, v: Local): void => {
+  const lefts: Local[] = []
+  const rights: Local[] = []
+  const caps: i32[] = []
+  let k = 0
+  while (k < state.productLeft.length) {
+    if (state.productLeft[k] !== v && state.productRight[k] !== v) {
+      lefts.push(state.productLeft[k])
+      rights.push(state.productRight[k])
+      caps.push(state.productCap[k])
+    }
+    k = k + 1
+  }
+  state.productLeft = lefts
+  state.productRight = rights
+  state.productCap = caps
 }
 
 /** Whether an `ordered` fact names `v` at either end. */
@@ -777,6 +865,7 @@ const forgetUpperBounds = (state: State, v: Local): void => {
   state.maxIndexValue = maxValue
   forgetExcluded(state, v)
   forgetOrdered(state, v, true)
+  forgetProduct(state, v)
 }
 
 /**
@@ -878,6 +967,7 @@ const forgetLowerBounds = (state: State, v: Local): void => {
   state.minValueValue = floorValue
   forgetExcluded(state, v)
   forgetOrdered(state, v, false)
+  forgetProduct(state, v)
 }
 
 /**
@@ -1003,6 +1093,17 @@ const intersect = (a: State, b: State): State => {
     if (knownOrdered(b, a.orderedLow[k], a.orderedHigh[k])) {
       out.orderedLow.push(a.orderedLow[k])
       out.orderedHigh.push(a.orderedHigh[k])
+    }
+    k = k + 1
+  }
+  // A product bound holds after the join where both sides hold one, at the larger cap.
+  k = 0
+  while (k < a.productLeft.length) {
+    const other = knownProductCap(b, a.productLeft[k], a.productRight[k])
+    if (other >= 0) {
+      out.productLeft.push(a.productLeft[k])
+      out.productRight.push(a.productRight[k])
+      out.productCap.push(other > a.productCap[k] ? other : a.productCap[k])
     }
     k = k + 1
   }
@@ -1860,6 +1961,53 @@ const squareRootFloor = (n: i32): i32 => {
  * What `lo < hi` (or `lo <= hi`) proves. Four shapes carry a bound worth
  * recording; everything else says nothing this domain can hold.
  */
+/** The two index locals of `toI64(a) * toI64(b)`, the product a caller contract tests (`ATOM_PRODUCT_OVER`); null for any other shape. */
+const productFactors = (walk: BoundsWalk, expr: Node): Local[] | null => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== NodeKind.Binary || e.text !== "*") {
+    return null
+  }
+  const a = widenedLocal(walk, e.children[0])
+  const b = widenedLocal(walk, e.children[1])
+  return a === null || b === null ? null : [a, b]
+}
+
+/** The index local `v` of `toI64(v)`, or null. */
+const widenedLocal = (walk: BoundsWalk, expr: Node): Local | null => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== NodeKind.Call || !isBuiltinConversion(walk.ctx.program, e, "toI64")) {
+    return null
+  }
+  return indexLocal(walk.ctx, e.children[1].children[0])
+}
+
+/**
+ * The value of a decimal literal in `[0, 2^31 - 1]`, written `C` or
+ * `toI64(C)`; -1 for anything else. Not `literalValue`, which leaves out
+ * `2^31 - 1` itself: that is the cap a pixel count is written against.
+ */
+const productCapOf = (walk: BoundsWalk, expr: Node): i32 => {
+  const e = unwrapBoundsParens(expr)
+  const literal =
+    e.kind === NodeKind.Call && isBuiltinConversion(walk.ctx.program, e, "toI64")
+      ? e.children[1].children[0]
+      : e
+  if (literal.kind !== NodeKind.Number || literal.text.length === 0 || literal.text.length > 10) {
+    return -1
+  }
+  let value: i64 = toI64(0)
+  let k = 0
+  while (k < literal.text.length) {
+    const digit = literal.text.charCodeAt(k) - 48
+    if (digit < 0 || digit > 9) {
+      return -1
+    }
+    value = value * toI64(10) + toI64(digit)
+    k = k + 1
+  }
+  return value > I32_MAX ? -1 : toI32(value)
+}
+
 const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: boolean): Fact[] => {
   const ctx = walk.ctx
   const out: Fact[] = []
@@ -1926,6 +2074,12 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   // range check with both ends locals needs between them (`provesRange`).
   if (loVar !== null && hiVar !== null && loVar !== hiVar && sameBase(ctx, loVar, hiVar)) {
     out.push(new Fact(FACT_ORDERED, loVar, hiVar, 0))
+  }
+  // `toI64(a) * toI64(b) <= C` for two index locals and a literal cap.
+  const factors = productFactors(walk, lo)
+  const cap = productCapOf(walk, hi)
+  if (factors !== null && cap >= 0 && (!strict || cap >= 1)) {
+    out.push(new Fact(FACT_PRODUCT, factors[0], factors[1], strict ? cap - 1 : cap))
   }
   // `i < n` / `i <= n`.
   if (loVar !== null && hiConst >= 0) {
@@ -2201,6 +2355,11 @@ const factsOf = (state: State): Fact[] => {
   k = 0
   while (k < state.orderedLow.length) {
     out.push(new Fact(FACT_ORDERED, state.orderedLow[k], state.orderedHigh[k], 0))
+    k = k + 1
+  }
+  k = 0
+  while (k < state.productLeft.length) {
+    out.push(new Fact(FACT_PRODUCT, state.productLeft[k], state.productRight[k], state.productCap[k]))
     k = k + 1
   }
   return out
@@ -3405,15 +3564,33 @@ const provesWindow = (walk: BoundsWalk, state: State, w: Local, off: Node, len: 
 }
 
 /** Whether no argument of `call` from `first` on may change what the check compares (`changesAnything`). */
-const quietFrom = (program: CheckedProgram, call: Node, first: i32): boolean => {
+const quietFrom = (program: CheckedProgram, call: Node, first: i32): boolean =>
+  quietArguments(program, call.children[1], first)
+
+/** Whether no argument of `list` from `first` on may change what the check compares (`changesAnything`). */
+const quietArguments = (program: CheckedProgram, list: Node, first: i32): boolean => {
   let k = 0
-  for (const arg of call.children[1].children) {
+  for (const arg of list.children) {
     if (k >= first && changesAnything(program, arg)) {
       return false
     }
     k = k + 1
   }
   return true
+}
+
+/** Whether `p` and `q` are index locals whose product a `product` fact bounds by `cap` or less. */
+const provesProduct = (walk: BoundsWalk, state: State, p: Node | null, q: Node | null, cap: i32): boolean => {
+  if (p === null || q === null || !isQuietBound(walk, p) || !isQuietBound(walk, q)) {
+    return false
+  }
+  const v = indexLocal(walk.ctx, p)
+  const w = indexLocal(walk.ctx, q)
+  if (v === null || w === null) {
+    return false
+  }
+  const known = knownProductCap(state, v, w)
+  return known >= 0 && known <= cap
 }
 
 /**
@@ -3429,8 +3606,20 @@ const provesPrecondition = (walk: BoundsWalk, state: State, target: FunctionSig,
   while (k + ATOM_WIDTH <= atoms.length) {
     const p = contractArg(args, atoms[k + 1], shift)
     const q = contractArg(args, atoms[k + 2], shift)
-    const b = contractArg(args, atoms[k + 3], shift)
     const shape = atoms[k]
+    if (shape === ATOM_PRODUCT_OVER) {
+      // Both factors constants whose product is at most the cap, held in the
+      // `b` slot, or two locals a guard bounded the product of (`FACT_PRODUCT`).
+      const a = p === null ? -1 : constantValue(walk, p)
+      const c = q === null ? -1 : constantValue(walk, q)
+      const constants = a >= 0 && c >= 0 && toI64(a) * toI64(c) <= toI64(atoms[k + 3])
+      if (!constants && !provesProduct(walk, state, p, q, atoms[k + 3])) {
+        return false
+      }
+      k = k + ATOM_WIDTH
+      continue
+    }
+    const b = contractArg(args, atoms[k + 3], shift)
     if (p === null || !isQuietBound(walk, p) || (q !== null && !isQuietBound(walk, q))) {
       return false
     }
@@ -4538,6 +4727,16 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
       at = at + 1
     }
     judgeArrayLength(walk, state, e)
+    // A constructor's caller contract (#2296, `src/caller-contract.ts`), its arguments past `this`.
+    if (
+      walk.tables === null &&
+      target !== null &&
+      isCallerContract(target) &&
+      quietArguments(ctx.program, e.children[2], 0) &&
+      provesPrecondition(walk, state, target, e.children[2].children)
+    ) {
+      noteProof(walk, e)
+    }
     applyCallEffects(walk, state, e) // a constructor body is a callee like any other
     return
   }

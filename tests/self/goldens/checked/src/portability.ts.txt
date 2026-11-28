@@ -49,7 +49,7 @@ function PortabilityWalk.constructor(this: PortabilityWalk, program: CheckedProg
   pointer table: size=168 writesThrough=true captured=true
   pointer opts: size=256 writesThrough=true captured=true
   pointer parents: size=8 writesThrough=true captured=true
-  pointer sig: size=312 writesThrough=true captured=true
+  pointer sig: size=328 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   pointer bound: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0

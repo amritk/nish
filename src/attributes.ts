@@ -3737,6 +3737,13 @@ class FactCollector {
       const ctor = made.ctor
       if (ctor !== null) {
         this.addComposedCallee(ctor.name, site)
+        // A caller contract a field's `new` reaches (#2296): no proof reads an
+        // initializer's arguments, so its tests are an unproven `contract`
+        // site there, and the constructor is not held.
+        if (isCallerContract(ctor)) {
+          this.noteSite(init, PANIC_CONTRACT, false, "")
+          this.noteSite(init, PANIC_CALL, false, ctor.name)
+        }
       } else {
         this.noteInitializers(made, site)
       }

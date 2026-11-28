@@ -269,6 +269,14 @@ export class FunctionSig {
    */
   preconditionAtoms: i32[]
   /**
+   * #2296: the call that ends `precondition`'s run by forwarding into another
+   * caller contract, whose comparisons `preconditionAtoms` holds mapped onto
+   * this signature's parameters; else null.
+   */
+  preconditionForward: Node | null
+  /** #2296: the caller contract `preconditionForward` calls; else null. */
+  preconditionTarget: FunctionSig | null
+  /**
    * WP28 `overloads`: the bodiless signatures written before this
    * implementation under `--compat`, each collected as a signature of its
    * own (`src/overloads.ts`). Empty for every other function. A call is
@@ -427,6 +435,8 @@ export class FunctionSig {
     this.faultForward = null
     this.precondition = []
     this.preconditionAtoms = []
+    this.preconditionForward = null
+    this.preconditionTarget = null
     this.overloads = []
   }
 }

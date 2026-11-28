@@ -431,14 +431,31 @@ export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable, stri
  * callee lists them as proven and a call's route through it passes over them.
  * One call nothing proves keeps them the callee's: that call reaches its
  * `panic` as any call does, and its own unproven `contract` site is dropped,
- * so a contract never adds a site to a program. Never held for a function a
- * host calls by its symbol, one taken as a value or dispatched to, or one some
- * function reaches with no call of its own that names it (a routed `nish/map`
- * method).
+ * so a contract never adds a site to a program. A forward's own call into
+ * the contract it forwards to (`preconditionForward`) is proven exactly when
+ * its holder is held, and the target is held only while every holder of a
+ * forward into it is. Never held for a function a host calls by its symbol,
+ * or one some function reaches with no call of its own that names it (a
+ * routed `nish/map` method). A function taken as a value needs no clause of
+ * its own: the dispatcher that calls it names it with arguments no guard
+ * bounds, an unproven `contract` site, so it is in `unproven`.
  */
 const holdCallerContracts = (units: AnalysisUnit[], facts: FactsTable, strictExports: boolean): void => {
+  // The functions whose run ends in a forward into another caller contract.
+  const holders: FunctionSig[] = []
+  for (const unit of units) {
+    for (const sig of unit.program.functions) {
+      if (sig.preconditionForward !== null && sig.preconditionTarget !== null) {
+        holders.push(sig)
+      }
+    }
+  }
   const unnamed = new StringSet()
   const unproven = new StringSet()
+  // A forward's unproven `contract` site, its function's facts, and the holder.
+  const forwardSites: PanicSite[] = []
+  const forwardFacts: FunctionFacts[] = []
+  const forwardHolders: FunctionSig[] = []
   for (const f of facts.list) {
     let c = 0
     while (c < f.callees.size()) {
@@ -451,39 +468,113 @@ const holdCallerContracts = (units: AnalysisUnit[], facts: FactsTable, strictExp
     const kept: PanicSite[] = []
     for (const site of f.panicSites) {
       if (site.kind === PANIC_CONTRACT && !site.proven) {
-        unproven.add(calleeAt(f.panicSites, site.node))
+        const callee = calleeAt(f.panicSites, site.node)
+        const holder = forwardHolder(holders, site.node, callee)
+        if (holder === null) {
+          unproven.add(callee)
+        } else {
+          // Proven exactly when every call into its holder is: decided below.
+          forwardSites.push(site)
+          forwardFacts.push(f)
+          forwardHolders.push(holder)
+          kept.push(site)
+        }
       } else {
         kept.push(site)
       }
     }
     f.panicSites = kept
   }
+  const held: FunctionSig[] = []
   for (const unit of units) {
     const program = unit.program
     for (const sig of program.functions) {
       if (
-        !isCallerContract(sig) ||
-        !sig.definedIn(program.source) ||
-        sig.refTag !== 0 ||
-        sig.refHidden ||
-        sig.dispatcher ||
-        unnamed.has(sig.name) ||
-        unproven.has(sig.name) ||
-        hostCalls(program, strictExports, sig)
+        isCallerContract(sig) &&
+        // Once, from the module that defines it, not once per module listing it.
+        sig.definedIn(program.source) &&
+        !unnamed.has(sig.name) &&
+        !unproven.has(sig.name) &&
+        !hostCalls(program, strictExports, sig) &&
+        facts.get(sig.name) !== null
       ) {
-        continue
+        held.push(sig)
       }
-      const f = facts.get(sig.name)
-      if (f === null) {
-        continue
+    }
+  }
+  // A forward's target is held only while its holder is: drop targets to the greatest set where that holds.
+  const alive: boolean[] = []
+  while (alive.length < held.length) {
+    alive.push(true)
+  }
+  let changed = true
+  while (changed) {
+    changed = false
+    let k = 0
+    while (k < forwardHolders.length) {
+      const holder = forwardHolders[k]
+      const target = holder.preconditionTarget
+      const at = target === null ? -1 : heldAt(held, alive, target)
+      if (at >= 0 && heldAt(held, alive, holder) < 0) {
+        alive[at] = false
+        changed = true
       }
+      k = k + 1
+    }
+  }
+  let k = 0
+  while (k < forwardSites.length) {
+    if (heldAt(held, alive, forwardHolders[k]) >= 0) {
+      forwardSites[k].proven = true
+    } else {
+      const f = forwardFacts[k]
+      const kept: PanicSite[] = []
+      for (const site of f.panicSites) {
+        if (site !== forwardSites[k]) {
+          kept.push(site)
+        }
+      }
+      f.panicSites = kept
+    }
+    k = k + 1
+  }
+  k = 0
+  while (k < held.length) {
+    const sig = held[k]
+    const f = facts.get(sig.name)
+    if (alive[k] && f !== null) {
       for (const site of f.panicSites) {
         if (!site.proven && !isCallSite(site) && heldBy(sig, site.node)) {
           site.proven = true
         }
       }
     }
+    k = k + 1
   }
+}
+
+/** The function whose forward is the call at `node` into `callee` (`preconditionForward`), or null. */
+const forwardHolder = (holders: FunctionSig[], node: Node, callee: string): FunctionSig | null => {
+  for (const sig of holders) {
+    const forward = sig.preconditionForward
+    const target = sig.preconditionTarget
+    if (forward !== null && forward === node && target !== null && target.name === callee) {
+      return sig
+    }
+  }
+  return null
+}
+
+/** The position of `sig` among the `held` signatures still `alive`, or -1. */
+const heldAt = (held: FunctionSig[], alive: boolean[], sig: FunctionSig): i32 => {
+  let k = 0
+  while (k < held.length && k < alive.length) {
+    if (alive[k] && held[k] === sig) {
+      return k
+    }
+    k = k + 1
+  }
+  return -1
 }
 
 /** The callee of the plain call `noteCall` lists at `node` beside its `contract` site. */

@@ -93,7 +93,7 @@ function writtenName(name: string): string -> @writtenName
 function functionKey(sig: FunctionSig): string -> @functionKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat writtenName
-  pointer sig: size=312 writesThrough=false captured=false
+  pointer sig: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 origin: SourceFile | null (const)
   local +1:9 name: string (const)

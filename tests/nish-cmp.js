@@ -24521,6 +24521,93 @@ const DECLARED = [
     changelog: CALLER_CONTRACT,
     why: "the case is new with this change: every call into `sum` and `Span.width` proves the callee's leading guard, which the candidate records as proven, where the reference keeps each guard's `panic` and refuses the program",
   },
+  ...Object.entries({
+    "src/caller-contract.ts": [
+      "bounds.ll",
+      "constants.ll",
+      "emit-async.ll",
+      "expressions.ll",
+      "lexer.ll",
+      "map.ll",
+      "types.ll",
+    ],
+    "src/fault-contract.ts": ["constants.ll", "emit-async.ll", "expressions.ll", "map.ll", "types.ll"],
+    "src/window-contract.ts": ["constants.ll", "emit-async.ll", "expressions.ll", "map.ll", "types.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: CALLER_CONTRACT,
+      why: `the program compiles src/program.ts and src/bounds.ts, which this change edits to carry and prove caller contracts, so the ${file} module it writes drops the array-length and overflow checks the prover now discharges and renumbers its strings and attribute groups`,
+    }))
+  ),
+  ...Object.entries({
+    "bench/httparena/main.ts": ["buffer-pool.ll", "bytes.ll", "client.ll"],
+    "tests/link/httparena_entry/main.ts": [
+      "buffer-pool.ll",
+      "client.ll",
+      "net_tls_record_common_bytes.ll",
+      "std_bytes.ll",
+    ],
+  }).flatMap(([program, files]) =>
+    [
+      ...files,
+      "ct.ll",
+      "hkdf.ll",
+      "hpack.ll",
+      "http3-frame.ll",
+      "http3.ll",
+      "p384.ll",
+      "qpack.ll",
+      "quic-conn-ack.ll",
+      "quic-conn-cid.ll",
+      "quic-datagram.ll",
+      "quic-frame.ll",
+      "quic-recovery.ll",
+      "quic-stream.ll",
+      "record.ll",
+      "scram.ll",
+    ].map((file) => ({
+      program,
+      file,
+      changelog: CALLER_CONTRACT,
+      why: `the server's calls into std/bytes.ts, std/crypto and std/net prove the ranges their callees guard (copyBytes and the array-length checks), which src/bounds.ts now reads, so ${file} drops those guards' panic strings and renumbers its strings and attribute groups`,
+    }))
+  ),
+  ...Object.entries({
+    "tests/link/net_handler_pipelined_stream/main.ts": [
+      "buffer-pool.ll",
+      "client.ll",
+      "ct.ll",
+      "hkdf.ll",
+      "net_tls_record_common_bytes.ll",
+      "p384.ll",
+      "record.ll",
+      "std_bytes.ll",
+    ],
+    "tests/link/std_compress_checked_sums/main.ts": ["bytes.ll"],
+    "tests/link/std_compress_sweep/main.ts": ["bytes.ll", "main.ll"],
+    "tests/link/std_term_decoder_bounds/main.ts": ["main.h", "main.ll", "testing.ll"],
+    "tests/link/window_near_other_array/main.ts": ["sink.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: CALLER_CONTRACT,
+      why: `the program's calls prove the ranges their std callees guard, or index and size what an initializer or a guard bounds, which src/bounds.ts now reads, so ${file} drops those index, overflow and contract checks and renumbers its strings, types and attribute groups`,
+    }))
+  ),
+  ...[
+    "caller_contract_forward",
+    "caller_contract_forward_import",
+    "caller_contract_method_guard",
+    "caller_contract_shapes",
+  ].map((name) => ({
+    program: `tests/link/${name}/main.ts`,
+    file: "exit",
+    changelog: CALLER_CONTRACT,
+    why: "the case is new with this change: under `--deny-panics` its callers prove the callee's leading guard, which the candidate records as proven, where the reference keeps the guard's `panic` and refuses the program",
+  })),
 ]
 
 /**

@@ -72,30 +72,30 @@ function isPanicBlock(program: CheckedProgram, node: Node): boolean -> @window_c
 function namesParam(sig: FunctionSig, name: string): boolean -> @namesParam
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer sig: size=312 writesThrough=false captured=false
+  pointer sig: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 param: string (const)
-function paramAt(table: TypeTable, sig: FunctionSig, name: string, type: i32): i32 -> @paramAt
+function paramAt(table: TypeTable, sig: FunctionSig, name: string, type: i32): i32 -> @window_contract$.paramAt
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray nish_str_eq
   pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isArray#0
-  pointer sig: size=312 writesThrough=false captured=false
+  pointer sig: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 k: i32 (let)
   local +3:13 fits: boolean (const)
   callee +3:31 TypeTable.isArray -> @TypeTable.isArray
 function takesArgumentsAsWritten(sig: FunctionSig): boolean -> @window_contract$.takesArgumentsAsWritten
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer sig: size=312 writesThrough=false captured=false
+  pointer sig: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 value: FieldInfo | null (const)
 function noteWindowGuard(program: CheckedProgram, table: TypeTable, sig: FunctionSig): void -> @noteWindowGuard
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: FunctionSig.body FunctionSig.definedIn isLengthOf isWindowTest namesParam nish_panic_index nish_str_eq paramAt window_contract$.isPanicBlock window_contract$.takesArgumentsAsWritten
+  calls: FunctionSig.body FunctionSig.definedIn isLengthOf isWindowTest namesParam nish_panic_index nish_str_eq window_contract$.isPanicBlock window_contract$.paramAt window_contract$.takesArgumentsAsWritten
   pointer program: size=928 writesThrough=true captured=false passedTo=window_contract$.isPanicBlock#0 isLengthOf#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=paramAt#0 paramAt#0 paramAt#0
-  pointer sig: size=312 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0 window_contract$.takesArgumentsAsWritten#0 FunctionSig.body#0 namesParam#0 paramAt#1 paramAt#1 paramAt#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=window_contract$.paramAt#0 window_contract$.paramAt#0 window_contract$.paramAt#0
+  pointer sig: size=328 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0 window_contract$.takesArgumentsAsWritten#0 FunctionSig.body#0 namesParam#0 window_contract$.paramAt#1 window_contract$.paramAt#1 window_contract$.paramAt#1
   stackSites=0 stackLocals=0
   callee -78:6 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee -75:6 takesArgumentsAsWritten -> @window_contract$.takesArgumentsAsWritten
@@ -120,14 +120,14 @@ function noteWindowGuard(program: CheckedProgram, table: TypeTable, sig: Functio
   callee -11:6 isLengthOf -> @isLengthOf
   callee -10:6 isWindowTest -> @isWindowTest
   local -6:9 b: i32 (const)
-  callee -6:13 paramAt -> @paramAt
+  callee -6:13 paramAt -> @window_contract$.paramAt
   local -5:9 o: i32 (const)
-  callee -5:13 paramAt -> @paramAt
+  callee -5:13 paramAt -> @window_contract$.paramAt
   local -4:9 l: i32 (const)
-  callee -4:13 paramAt -> @paramAt
+  callee -4:13 paramAt -> @window_contract$.paramAt
 function isWindowGuard(sig: FunctionSig): boolean -> @isWindowGuard [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer sig: size=312 writesThrough=false captured=false
+  pointer sig: size=328 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function windowGuardNamed(program: CheckedProgram, name: string): FunctionSig | null -> @windowGuardNamed
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -140,10 +140,10 @@ function windowGuardNamed(program: CheckedProgram, name: string): FunctionSig | 
 function noteWindowForward(program: CheckedProgram, table: TypeTable, sig: FunctionSig): void -> @noteWindowForward
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: FunctionSig.body FunctionSig.definedIn namesParam nish_array_grow nish_panic_index nish_str_eq paramAt windowGuardNamed window_contract$.takesArgumentsAsWritten
+  calls: FunctionSig.body FunctionSig.definedIn namesParam nish_array_grow nish_panic_index nish_str_eq windowGuardNamed window_contract$.paramAt window_contract$.takesArgumentsAsWritten
   pointer program: size=928 writesThrough=false captured=false passedTo=windowGuardNamed#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=paramAt#0
-  pointer sig: size=312 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0 window_contract$.takesArgumentsAsWritten#0 FunctionSig.body#0 namesParam#0 paramAt#1 namesParam#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=window_contract$.paramAt#0
+  pointer sig: size=328 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0 window_contract$.takesArgumentsAsWritten#0 FunctionSig.body#0 namesParam#0 window_contract$.paramAt#1 namesParam#0
   stackSites=0 stackLocals=0
   callee -61:6 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee -54:6 takesArgumentsAsWritten -> @window_contract$.takesArgumentsAsWritten
@@ -160,7 +160,7 @@ function noteWindowForward(program: CheckedProgram, table: TypeTable, sig: Funct
   local -28:14 k: i32 (const)
   local -24:11 arg: Node (const)
   local -19:11 at: i32 (const)
-  callee -19:16 paramAt -> @paramAt
+  callee -19:16 paramAt -> @window_contract$.paramAt
   local -15:16 seen: i32 (const)
   local -8:14 arg: Node (const)
   callee -4:41 namesParam -> @namesParam
