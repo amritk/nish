@@ -1,1 +1,1 @@
-index out of range: 0 >= 0
+getU64BE: the 8 bytes at 0 do not all lie in an array of 0

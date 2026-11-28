@@ -1,1 +1,1 @@
-index out of range: 4 >= 4
+setU32BE: the 4 bytes at 2 do not all lie in an array of 4
