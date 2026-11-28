@@ -24450,7 +24450,6 @@ const DECLARED = [
   },
   ...[
     "tests/link/window_contract_arrow_literal/main.ts",
-    "tests/link/window_contract_statement_forward/main.ts",
     "tests/link/window_contract_value_forward/main.ts",
   ].map((program) => ({
     program,
@@ -24458,6 +24457,12 @@ const DECLARED = [
     changelog: WINDOW_FORWARD,
     why: "the case is new with this change: its reader calls a window guard with a literal count, so the candidate proves the reads `b[off]` to `b[off + count - 1]` after the call and drops their bounds checks, which the seed keeps",
   })),
+  {
+    program: "tests/link/window_contract_guard_facts/main.ts",
+    file: "main.ll",
+    changelog: WINDOW_FORWARD,
+    why: "the case is new with this change: each function calls a window guard as a statement, so the candidate proves the reads inside the guarded window (`b[off]` to `b[off + 3]`, and loops bounded by `len` or `off`) and drops their bounds checks, which the seed keeps",
+  },
 ]
 
 /**
