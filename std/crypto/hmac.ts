@@ -280,7 +280,7 @@ export class HmacSha256 {
    */
   digest(): u8[] {
     const tag: u8[] = new Array<u8>(SHA256_SIZE)
-    this.finishInto(tag, HMAC_FROM)
+    this.tagInto(tag, HMAC_FROM)
     return tag
   }
 
@@ -297,7 +297,7 @@ export class HmacSha256 {
     if (!hmacWindowFits(toI32(out.length), at, SHA256_SIZE)) {
       panic("HmacSha256: the tag window is outside its array")
     }
-    this.finishInto(out, at)
+    this.tagInto(out, at)
   }
 
   /**
@@ -308,7 +308,7 @@ export class HmacSha256 {
    * @param out The array the tag is written into, with 32 bytes free at `at`.
    * @param at Where the 32 tag bytes start in `out`.
    */
-  private finishInto(out: u8[], at: i32): void {
+  private tagInto(out: u8[], at: i32): void {
     this.inner.digestInto(this.innerDigest, HMAC_FROM)
     this.outer.update(this.innerDigest, HMAC_FROM, SHA256_SIZE)
     wipe(this.innerDigest)
