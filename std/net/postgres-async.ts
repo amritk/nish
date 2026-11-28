@@ -172,7 +172,7 @@ import {
 } from "nish:net"
 import { monotonicNanos } from "nish:process"
 import { Secret } from "nish:secret"
-import { getI32BE, getU16BE, tryCopyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import {
   PG_ERR_CLOSED,
   PG_ERR_ENCODING,
@@ -2765,7 +2765,13 @@ const pgAsyncRead = async (
         return pgAsyncLost(result, PG_ERR_FRAME, 0)
       }
       const type: i32 = toI32(buf[start])
-      const length: i32 = getI32BE(buf, start + 1)
+      // Read here rather than with `getI32BE`, whose window the prover would
+      // need tested again after the calls before it.
+      const length: i32 =
+        (toI32(buf[start + 1]) << 24) |
+        (toI32(buf[start + 2]) << 16) |
+        (toI32(buf[start + 3]) << 8) |
+        toI32(buf[start + 4])
       if (length < 4) {
         return pgAsyncLost(result, PG_ERR_FRAME, 0)
       }
@@ -2797,10 +2803,12 @@ const pgAsyncRead = async (
         }
         if (type === 68) {
           // 'D': DataRow, a count then each column's length (-1 for NULL) and bytes.
-          if (size < 2) {
+          // The body lies in `buf`, so the second test is never taken: it is
+          // the one the count's two bytes are read under.
+          if (size < 2 || body < 0 || body > toI32(buf.length) - 2) {
             return pgAsyncLost(result, PG_ERR_FRAME, 0)
           }
-          const columns: i32 = toI32(getU16BE(buf, body))
+          const columns: i32 = toI32((toU16(buf[body]) << 8) | toU16(buf[body + 1]))
           if (columns > maxColumns) {
             return pgAsyncLost(result, PG_ERR_TOO_BIG, 0)
           }
@@ -2895,7 +2903,12 @@ const pgAsyncRead = async (
       const held: i32 = end - start
       want = toI32(5) - held
       if (held >= 5 && start < toI32(buf.length) - 5) {
-        const length: i32 = getI32BE(buf, start + 1)
+        // Read here rather than with `getI32BE`, as above.
+        const length: i32 =
+          (toI32(buf[start + 1]) << 24) |
+          (toI32(buf[start + 2]) << 16) |
+          (toI32(buf[start + 3]) << 8) |
+          toI32(buf[start + 4])
         // A length past `maxMessage` was failed before this read.
         if (length < 4) {
           return pgAsyncLost(result, PG_ERR_FRAME, 0)

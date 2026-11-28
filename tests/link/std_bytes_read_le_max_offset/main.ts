@@ -1,5 +1,6 @@
 // `nish/bytes` out of range: a little-endian read at the largest `i32`
-// offset, where `off + 1` would overflow, panics `index` on its first byte.
+// offset, where `off + 1` would overflow, panics in its window guard, which
+// computes no offset past `off`.
 import { getU32LE } from "nish/bytes"
 
 export const main = (): i32 => {

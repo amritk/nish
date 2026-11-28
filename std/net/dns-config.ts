@@ -445,7 +445,14 @@ const dnsParseAddressVia = (
     p += 1
     k += 1
   }
-  setU16BE(out, at + 16, toU16(port))
+  // Never taken (`at <= out.length - 18` was checked above): the port's window is
+  // tested again here, after the last call, because that is where `setU16BE` proves it from.
+  const portAt: i32 = at + 16
+  const portBits: u16 = toU16(port)
+  if (portAt < 0 || portAt > toI32(out.length) - 2) {
+    return false
+  }
+  setU16BE(out, portAt, portBits)
   return true
 }
 
@@ -736,9 +743,11 @@ const dnsFallbackServers = (servers: u8[]): void => {
   servers[11] = toU8(255)
   servers[12] = toU8(127)
   servers[15] = toU8(1)
+  servers[16] = toU8(DNS_PORT >> 8)
+  servers[17] = toU8(DNS_PORT & 255)
   servers[33] = toU8(1)
-  setU16BE(servers, 16, toU16(DNS_PORT))
-  setU16BE(servers, DNS_ADDRESS_BYTES + 16, toU16(DNS_PORT))
+  servers[34] = toU8(DNS_PORT >> 8)
+  servers[35] = toU8(DNS_PORT & 255)
 }
 
 /** Adds `b[from, to)` as a name of entry `entry`, lowercase, one trailing dot dropped, or counts it dropped. */
@@ -988,7 +997,11 @@ export const dnsHostsFind = (
         }
         const base: i32 = found * DNS_ADDRESS_BYTES
         const outRoom: i32 = toI32(out.length) - DNS_ADDRESS_BYTES
-        if (base > outRoom) {
+        // The port's two bytes, `out[base + 16, base + 18)`, tested as the window
+        // `setU16BE` proves from: nothing between here and that call calls anything.
+        const portAt: i32 = base + 16
+        const portBits: u16 = toU16(port)
+        if (base > outRoom || portAt > toI32(out.length) - 2) {
           panic("dnsHostsFind: out has no room for max addresses")
         }
         let q: i32 = base
@@ -1000,7 +1013,7 @@ export const dnsHostsFind = (
           r += 1
           k += 1
         }
-        setU16BE(out, base + 16, toU16(port))
+        setU16BE(out, portAt, portBits)
         found += 1
         last = entry
       }

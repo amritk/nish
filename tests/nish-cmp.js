@@ -11787,6 +11787,8 @@ const MULTIPART_BODIES = "multipart/form-data bodies"
 
 /** The release-note words of WP80 S10, window contracts forwarded from free functions, arrow consts and literal counts. */
 const WINDOW_FORWARD = "window contracts forward from free functions, arrow consts and literal lengths"
+/** The changelog words of WP80 S7: std/bytes.ts's fixed-width getters and setters check their window through the `bytesWindow` guard, so a caller that tests its window discharges the check. The change's commit subject carries these words verbatim. */
+const WP80_BYTES_WINDOW = "byte getters check their window"
 /** WP91 S4: the cast wraps in std/net's HTTP, HPACK, URL and server modules, spelled. */
 const WP91_S4_NET_HTTP = "std/net HTTP, HPACK, URL and the server stack"
 
@@ -25971,6 +25973,88 @@ const DECLARED = [
     file: "main.ll",
     changelog: WINDOW_FORWARD,
     why: "the case is new with this change: each function calls a window guard as a statement, so the candidate proves the reads inside the guarded window (`b[off]` to `b[off + 3]`, and loops bounded by `len` or `off`) and drops their bounds checks, which the seed keeps",
+  },
+  // WP80 S7: std/bytes.ts's fixed-width getters and setters check their
+  // window through one guard, so bytes.ll moves in every program reaching them.
+  ...[
+    "bench/httparena/main.ts",
+    "bench/postgres/main.ts",
+    "bench/std-json-equal.ts",
+    "bench/std-yaml-json.ts",
+    "docs/cookbook/json-union.ts",
+    "examples/prefork-jobs.ts",
+    "tests/link/compact_json/main.ts",
+    "tests/link/json_tagged_union/main.ts",
+    "tests/link/net_handler_batch_limits/main.ts",
+    "tests/link/net_http1_server_lend_park/main.ts",
+    "tests/link/net_http1_wire_refusals/main.ts",
+    "tests/link/net_http2_stream/main.ts",
+    "tests/link/net_serve_idle_record/main.ts",
+    "tests/link/net_serve_rss_flat/main.ts",
+    "tests/link/net_serve_try/main.ts",
+    "tests/link/std_bytes_window_unproven/main.ts",
+    "tests/link/std_compress_checked_sums/main.ts",
+    "tests/link/std_compress_gzip_errors/main.ts",
+    "tests/link/std_compress_sweep/main.ts",
+    "tests/link/std_http1_config_checked/main.ts",
+    "tests/link/sync_ring/main.ts",
+    "tests/link/sync_ring_inplace_memmove/main.ts",
+    "tests/link/sync_shm_window/main.ts",
+  ].map((program) => ({
+    program,
+    file: "bytes.ll",
+    changelog: WP80_BYTES_WINDOW,
+    why: "std/bytes.ts's fixed-width getters and setters call the `bytesWindow` window guard in place of their per-byte bounds checks, so the guard's panic replaces the index panics in bytes.ll",
+  })),
+  ...[
+    "tests/link/httparena_entry/main.ts",
+    "tests/link/net_grpc/main.ts",
+    "tests/link/net_grpc_interop/main.ts",
+    "tests/link/net_handler_bomb/main.ts",
+    "tests/link/net_handler_open/main.ts",
+    "tests/link/net_handler_pipelined_stream/main.ts",
+    "tests/link/net_handler_refused/main.ts",
+    "tests/link/net_handler_steps/main.ts",
+    "tests/link/net_handler_steps_split/main.ts",
+    "tests/link/net_handler_try_answers/main.ts",
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_release/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+    "tests/link/net_http_server_steps/main.ts",
+    "tests/link/net_http_server_steps_full/main.ts",
+    "tests/link/net_http_server_steps_split/main.ts",
+    "tests/link/net_http_server_stream/main.ts",
+    "tests/link/net_http_server_trailers_after_end/main.ts",
+    "tests/link/net_http_server_trailers_ended/main.ts",
+    "tests/link/net_http_server_trailers_fields/main.ts",
+    "tests/link/net_http_server_trailers_h1/main.ts",
+    "tests/link/net_http_server_trailers_h3/main.ts",
+    "tests/link/net_http_server_trailers_short/main.ts",
+    "tests/link/net_http_server_trailers_unstarted/main.ts",
+    "tests/link/net_static/main.ts",
+  ].map((program) => ({
+    program,
+    file: "std_bytes.ll",
+    changelog: WP80_BYTES_WINDOW,
+    why: "std/bytes.ts's fixed-width getters and setters call the `bytesWindow` window guard in place of their per-byte bounds checks, so the guard's panic replaces the index panics in std_bytes.ll",
+  })),
+  {
+    program: "tests/link/std_bytes_window_proved/main.ts",
+    file: "exit",
+    changelog: WP80_BYTES_WINDOW,
+    why: "the case is new with this change and builds under --deny-panics because its caller's window test discharges getU32BE's guard; the seed's std/bytes.ts keeps per-byte index panics no caller test reaches, so the reference refuses it",
   },
 ]
 
