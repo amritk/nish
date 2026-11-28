@@ -77,7 +77,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { compileArgv, compilerFrom } from "./compiler.mjs"
-import { raisesProblems } from "../scripts/instruction-raises.mjs"
+import { programsProblems, raisesProblems } from "../scripts/instruction-raises.mjs"
 import { BAND_EDGE, cgroupCpus, judge, readAcross, spreadOf, times3 } from "./par-reading.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -843,11 +843,13 @@ const runInstructions = () => {
   const baseline = JSON.parse(fs.readFileSync(BASELINE_FILE, "utf8"))
   // Every raise a baseline carries is recorded beside it (bench/README.md,
   // "Raising a baseline"), so a file without the list, or with an entry
-  // scripts/instruction-raises.mjs could not match, is refused.
+  // scripts/instruction-raises.mjs could not match, is refused, as is a
+  // stored count that is not a positive integer, which would compare as
+  // neither above nor below its tolerance.
   if (!Array.isArray(baseline.raises)) {
     fail(`${path.relative(root, BASELINE_FILE)} has no \`raises\` array`)
   }
-  const malformed = raisesProblems(baseline.raises)
+  const malformed = [...programsProblems(baseline.programs), ...raisesProblems(baseline.raises)]
   if (malformed.length > 0) {
     fail(`${path.relative(root, BASELINE_FILE)}: ${malformed.join("; ")}`)
   }

@@ -573,10 +573,16 @@ entry to the file's `raises`, one per line, like this made-up one:
 An entry with `"pr": null` is filled in once the pull request has a number.
 `bench/run.mjs` refuses a file whose `raises` is missing or holds an entry that
 is not that shape: `to` above `from`, a reason that is not blank, and `pr` a
-number or null. The pull request still shows the table `--update` printed and
+number or null. It also refuses a stored count that is not a positive integer. The pull request still shows the table `--update` printed and
 says in its body what the compiler now does that it did not, and why that is
 worth the instructions. Resizing a program changes its count as well, so a
 resize that raises one is a named raise of its own.
+
+The comparison looks for one entry from the base's count to the head's. Two
+updates in one pull request that raise the same row write two entries, A to B
+and then B to C, and neither is A to C. Restore the file from the base
+(`git checkout origin/main -- bench/instructions.json`) and run the update
+once more, so it writes a single entry from the base's count.
 
 `scripts/instruction-raises.mjs` holds a change to the file to that rule:
 
@@ -587,11 +593,17 @@ node scripts/instruction-raises.mjs <base.json> <head.json>
 It prints each row's base count, head count and change as a Markdown table, to
 stdout and to `$GITHUB_STEP_SUMMARY` when that is set. It exits 1 when a row
 rose by more than the tolerance and the head's `raises` has no entry with that
-row and those exact `from` and `to` counts. An entry for an earlier raise of
-the same row does not cover a new one. The tolerance is the smaller of the two
-files', so a change cannot widen its own band. A fall, a change within the
-tolerance, a new row and a removed row are listed and pass. A file it cannot
-read, or one with a malformed `raises`, exits 2. `tests/run.js`'s
+row and those exact `from` and `to` counts beyond the ones the base's `raises`
+already holds. An entry for an earlier raise of the same row does not cover a
+new one, even one between the same two counts after the row fell back: the
+update that raises it again appends a second entry. It also
+exits 1 when the head keeps a row but drops its count, which would let the
+count come back later as a new row. The tolerance is the smaller of the two
+files', so a change cannot widen its own band, and a head that widens it gets a
+line saying so. A fall, a change within the tolerance, a new row and a removed
+row are listed and pass. A file it cannot read, or one whose `tolerance`,
+`programs` or `raises` is malformed, exits 2. That includes a count that is not
+a positive integer. `tests/run.js`'s
 `instruction-raises` checks run it on the fixture pairs in
 `tests/fixtures/instruction-raises/`. They run `--update` on a temporary copy
 of this file through two test hooks: `--baseline <file>` reads and writes the
