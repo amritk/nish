@@ -1,0 +1,53 @@
+# The std/ modules no program `node bench/run.mjs --instructions` counts reaches,
+# one a line, as `std/<module>.ts: <reason>`. tests/run.js's instruction-coverage
+# check fails on a git-tracked std module that a counted program does not reach
+# and this file does not list, on a line without a real reason, and on a line
+# whose module a counted program now reaches. The file only shrinks: a counted
+# program that reaches a module takes its line out, and the check pins the count.
+#
+# A counted run is one process under cachegrind with no peer, no terminal, no
+# GPU and no network, and it must count the same on every run. Most lines below
+# are modules that need one of those; the rest are pure code no counted program
+# calls yet, and say so.
+std/cli-flags.ts: pure flag parsing a program does once at start; no counted program declares a FlagTable
+std/crypto/bcrypt-batch.ts: runs its batches on std/threads tasks, one per core, so its count depends on the scheduler
+std/crypto/bcrypt.ts: pure password hashing, but no counted crypto family in bench/crypto runs a bcrypt kernel
+std/crypto/x509-random.ts: draws its key and serial from the operating system's CSPRNG, so no two runs count the same
+std/gpu/sys.ts: generated declarations of the runtime/gfx GPU binding, which needs a GPU device to run
+std/json-format.ts: pure JSON Schema format predicates; no counted program validates a schema's formats
+std/json-pointer.ts: pure RFC 6901 pointer resolution; no counted program resolves a pointer against a JsonDocument
+std/net/dns-config.ts: pure resolv.conf and hosts parsing; no counted program reads either file's bytes
+std/net/dns-resolver.ts: a sans-IO stub resolver whose answers need a DNS server's replies; no counted program replays them
+std/net/dns.ts: drives the resolver over nish:net sockets, so a run needs a reachable DNS server
+std/net/fetch.ts: an HTTP/1.1 client that dials a server, so a run needs a live peer on the network
+std/net/grpc.ts: gRPC calls on http-server's HTTP/2 listeners, so a run needs a listening socket and a client
+std/net/http-server.ts: accepts connections on listening sockets, so a run needs clients connecting to it
+std/net/http2-cleartext.ts: a pool of HTTP/2 connections on accepted TCP sockets, so a run needs a connecting client
+std/net/http2-tls.ts: HTTP/2 beside each slot of a TlsTcpServer, so a run needs a TLS client connecting
+std/net/http2.ts: an HTTP/2 server connection state machine; no counted program feeds it a client's frames
+std/net/http3-frame.ts: pure HTTP/3 frame codec; no counted program reads or writes HTTP/3 frames
+std/net/http3-server.ts: HTTP/3 over QUIC on a UDP socket, so a run needs a QUIC client sending datagrams
+std/net/http3.ts: the HTTP/3 connection on a QuicConnection's streams; no counted program drives a QUIC handshake
+std/net/multipart.ts: pure multipart/form-data reading; no counted program parses a form body
+std/net/oidc.ts: fetches an issuer's discovery document and key set over the network, so a run needs the issuer
+std/net/outbound.ts: the URL policy a fetching program applies before it dials; no counted program fetches
+std/net/postgres-async.ts: queries a PostgreSQL server from async tasks, so a run needs a database server
+std/net/prefork.ts: forks one worker process per core and supervises them; a counted run follows one process only
+std/net/protobuf.ts: pure protobuf wire reading and writing; no counted program encodes or decodes a message
+std/net/qpack.ts: pure QPACK field compression for HTTP/3; no counted program encodes or decodes a field section
+std/net/quic-listener.ts: answers datagrams no QUIC connection owns; no counted program sends it a client's Initial
+std/net/serve.ts: an HTTP/1.1 server for async programs, so a run needs clients connecting to its socket
+std/net/static.ts: serves files under a directory through an HTTP server, so a run needs a client and a file tree
+std/net/upstream.ts: keep-alive connections to an origin server, so a run needs that server listening
+std/net/webtransport.ts: WebTransport sessions over HTTP/3, so a run needs a browser-like client connecting
+std/pair.ts: a two-field value type with no loop of its own; no counted program imports it
+std/random.ts: a seeded generator whose answers are fixed; no counted program draws from an Rng
+std/region.ts: the source of the nish:region builtin module; no counted program imports nish:region
+std/release.ts: asks a project's GitHub releases page for its newest release, so a run needs the network
+std/sort.ts: loaded only by a `.sort(cmp)` call, and no counted program sorts an array with a comparator
+std/sqlite.ts: drives the native SQLite library on a database file, which no counted program opens
+std/term-io.ts: opens the controlling terminal and reads its events, so a run needs a terminal attached
+std/term-pixels.ts: draws a framebuffer with the backend the terminal answers it has, so a run needs a terminal
+std/term-probe.ts: asks the attached terminal what it can do and reads its reply, so a run needs a terminal
+std/term-rate.ts: measures frames a terminal acknowledges, so a run needs a terminal answering in real time
+std/testing.ts: the runner of Nish test suites, whose count is the suites it runs, not its own code

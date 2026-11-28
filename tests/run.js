@@ -1815,7 +1815,8 @@ const DEALT_SECTIONS = {
       "json-compare",
       "yaml-compare",
       "instructions",
-      "instruction-raises"
+      "instruction-raises",
+      "instruction-coverage"
     ),
   },
   runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
@@ -11738,7 +11739,7 @@ if (dealtHere("bench") && (!only || "yaml-compare".includes(only) || "bench".inc
 // noise is bigger than that. An instruction count is exact, so every program
 // bench/instructions.json lists (bench/*.ts, the four WP32 map layout prototypes,
 // the three `Map` measurements, the seven AWFY ports, the crypto kernels of
-// bench/crypto/ and the three std/ module programs) is built as the timing mode builds it and run once under cachegrind, and a count above
+// bench/crypto/ and the std/ module programs) is built as the timing mode builds it and run once under cachegrind, and a count above
 // bench/instructions.json by more than its tolerance fails. The counts are x86-64
 // Linux's, so anywhere else, or without valgrind, the check is a counted skip.
 // bench/README.md ("Instruction counts") has the determinism measurements and
@@ -12083,6 +12084,203 @@ if (dealtHere("bench") && (!only || "instruction-raises".includes(only))) {
   )
   fs.rmSync(work, { recursive: true, force: true })
   fs.rmSync(path.dirname(summary), { recursive: true, force: true })
+}
+
+// ---- Instruction coverage -------------------------------------------------------------
+// A std/ module no counted program reaches has no instruction count, so a change
+// that slows it, a panic site's fix included, moves no row of
+// bench/instructions.json. Each program `bench/run.mjs --instructions` counts
+// (its `--entries`) is compiled with its `.args`, and the std/ files its
+// `--emit-panics` report names are what it reaches: the compiler's own list, so
+// a module only an implicit load brings in (nish/collections for a `Map`,
+// nish/array for an array method) counts, and transitive imports with it. Every
+// git-tracked std module is either reached or listed in
+// bench/instructions-exempt.txt with its reason. The list only shrinks: its
+// length is pinned, and a listed module a counted program now reaches fails
+// until its line goes. The fixtures below reach each verdict on a made-up tree.
+if (dealtHere("bench") && (!only || "instruction-coverage".includes(only))) {
+  // The modules a counted program must reach itself, never by an exemption.
+  const COVERAGE_REQUIRED = ["std/regex.ts", "std/collections.ts"]
+  // bench/instructions-exempt.txt's length: lower it with each line taken out.
+  const EXEMPT_LINES = 42
+  /**
+   * The std/ files the compiler loads for `entry`, from its `--emit-panics`
+   * report, or `{ error }` when the program does not compile.
+   */
+  const compiledReach = (entry) => {
+    const sidecar = path.join(root, entry.replace(/\.ts$/, ".args"))
+    const args = fs.existsSync(sidecar) ? fs.readFileSync(sidecar, "utf8").trim().split(/\s+/).filter(Boolean) : []
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "nish-coverage-"))
+    try {
+      const report = path.join(out, "panics.json")
+      const r = spawnSync(
+        NISH,
+        [path.join(root, entry), ...args, ...(args.includes("--allow-panics") ? [] : ["--allow-panics"]), "--emit-panics", report, "-o", `${out}${path.sep}`],
+        { cwd: root, encoding: "utf8" }
+      )
+      if (r.status !== 0 || !fs.existsSync(report)) {
+        return { error: `does not compile: ${r.stderr.split("\n").filter((l) => / error: /.test(l)).slice(0, 3).join("; ")}` }
+      }
+      return new Set(fs.readFileSync(report, "utf8").match(/\bstd\/[\w./-]+?\.ts\b/g) ?? [])
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  }
+  /**
+   * What fails the coverage rule: each entry `reach` (an entry's std/ files, or
+   * `{ error }`) cannot answer, each of `modules` that `entries` do not reach
+   * and `exempt` (the exemption file's text) does not list, each malformed,
+   * repeated, unknown or stale exemption line, and each `required` module that
+   * is not reached. Empty when the rule holds.
+   */
+  const coverageProblems = ({ modules, entries, exempt, reach, required }) => {
+    const reached = new Set()
+    const problems = []
+    for (const entry of entries) {
+      const got = reach(entry)
+      if (got instanceof Set) {
+        for (const m of got) {
+          reached.add(m)
+        }
+      } else {
+        problems.push(`${entry}: a counted program's entry ${got.error}`)
+      }
+    }
+    const known = new Set(modules)
+    const listed = new Map()
+    exempt.split("\n").forEach((line, i) => {
+      if (line.trim() === "" || line.startsWith("#")) {
+        return
+      }
+      const at = `bench/instructions-exempt.txt:${i + 1}`
+      const m = /^(std\/[\w./-]+\.ts): (\S.*)$/.exec(line)
+      if (m === null) {
+        problems.push(`${at}: not \`std/<module>.ts: <reason>\`: ${line}`)
+      } else if (/^(?:todo|tbd|fixme|xxx|n\/a|none|-)\b/i.test(m[2]) || m[2].trim().split(/\s+/).length < 4) {
+        problems.push(`${at}: ${m[1]} needs a real reason, not \`${m[2]}\``)
+      } else if (listed.has(m[1])) {
+        problems.push(`${at}: ${m[1]} is listed twice`)
+      } else if (!known.has(m[1])) {
+        problems.push(`${at}: ${m[1]} is no tracked std module`)
+      } else if (reached.has(m[1])) {
+        problems.push(`${at}: ${m[1]} is reached by a counted program; take its line out`)
+      } else {
+        listed.set(m[1], m[2])
+      }
+    })
+    for (const module of required) {
+      if (!reached.has(module)) {
+        problems.push(`${module}: no counted program reaches it, and an exemption does not stand in for one`)
+      }
+    }
+    for (const module of modules) {
+      if (!reached.has(module) && !listed.has(module) && !required.includes(module)) {
+        problems.push(`${module}: no counted program reaches it, and bench/instructions-exempt.txt does not list it`)
+      }
+    }
+    return problems
+  }
+
+  // The fixtures: bench/p.ts reaches std/a.ts, std/regex.ts and
+  // std/collections.ts; std/b.ts and std/c.ts are reached by nothing, and
+  // bench/gone.ts does not compile.
+  const fixtureReach = {
+    "bench/p.ts": new Set(["std/a.ts", "std/regex.ts", "std/collections.ts"]),
+    "bench/gone.ts": { error: "does not compile: no such file" },
+  }
+  const fixture = (exempt, entries = ["bench/p.ts"]) =>
+    coverageProblems({
+      modules: ["std/a.ts", "std/b.ts", "std/c.ts", "std/regex.ts", "std/collections.ts"],
+      entries,
+      exempt,
+      reach: (entry) => fixtureReach[entry],
+      required: COVERAGE_REQUIRED,
+    })
+  const reason = "reached only by a fixture that is never counted"
+  const unreached = fixture("")
+  check(
+    "instruction-coverage: a std module no counted program reaches and no exemption lists fails, named",
+    unreached.length === 2 &&
+      unreached.some((p) => p.startsWith("std/b.ts: no counted program")) &&
+      unreached.some((p) => p.startsWith("std/c.ts: no counted program")),
+    unreached.join("\n")
+  )
+  const exempted = fixture(`# comment\n\nstd/b.ts: ${reason}\nstd/c.ts: ${reason}\n`)
+  check(
+    "instruction-coverage: an exempted module passes, and a reached one passes",
+    exempted.length === 0,
+    exempted.join("\n")
+  )
+  for (const [what, line] of [
+    ["no colon", `std/b.ts ${reason}`],
+    ["a TODO reason", "std/b.ts: TODO"],
+    ["a reason of one word", "std/b.ts: slow"],
+    ["a path outside std/", `bench/p.ts: ${reason}`],
+    ["an untracked module", `std/nope.ts: ${reason}`],
+    ["a module listed twice", `std/b.ts: ${reason}\nstd/b.ts: ${reason}`],
+    ["a module a counted program reaches", `std/a.ts: ${reason}`],
+  ]) {
+    const malformed = fixture(`${line}\nstd/c.ts: ${reason}\n`)
+    check(
+      `instruction-coverage: an exemption line with ${what} fails`,
+      malformed.some((p) => p.startsWith("bench/instructions-exempt.txt:")),
+      malformed.join("\n")
+    )
+  }
+  const unrequired = fixture(`std/b.ts: ${reason}\nstd/c.ts: ${reason}\nstd/regex.ts: ${reason}\n`, [])
+  check(
+    "instruction-coverage: nish/regex and nish/collections must be reached, and an exemption does not stand in",
+    unrequired.some((p) => p.startsWith("std/regex.ts: no counted program reaches it, and an exemption")) &&
+      unrequired.some((p) => p.startsWith("std/collections.ts: no counted program reaches it, and an exemption")),
+    unrequired.join("\n")
+  )
+  const missing = fixture(`std/b.ts: ${reason}\nstd/c.ts: ${reason}\n`, ["bench/p.ts", "bench/gone.ts"])
+  check(
+    "instruction-coverage: a counted program that does not compile fails, named",
+    missing.some((p) => p.startsWith("bench/gone.ts: a counted program's entry does not compile")),
+    missing.join("\n")
+  )
+
+  // The real tree.
+  const listedEntries = spawnSync(
+    "node",
+    [path.join(root, "bench", "run.mjs"), "--compiler", path.relative(root, NISH), "--entries"],
+    { cwd: root, encoding: "utf8" }
+  )
+  const counts = JSON.parse(fs.readFileSync(path.join(root, "bench", "instructions.json"), "utf8"))
+  let entries = []
+  try {
+    entries = JSON.parse(listedEntries.stdout)
+  } catch {}
+  check(
+    "instruction-coverage: bench/run.mjs --entries names every program bench/instructions.json counts",
+    listedEntries.status === 0 &&
+      entries.map((e) => e.name).join(",") === Object.keys(counts.programs).join(","),
+    `${listedEntries.stdout}${listedEntries.stderr}`
+  )
+  const exemptFile = path.join(root, "bench", "instructions-exempt.txt")
+  const exempt = fs.readFileSync(exemptFile, "utf8")
+  const modules = execFileSync("git", ["ls-files", "--", "std/*.ts", "std/**/*.ts"], { cwd: root, encoding: "utf8" })
+    .split("\n")
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".d.ts") && fs.existsSync(path.join(root, f)))
+  const real = coverageProblems({
+    modules,
+    entries: [...new Set(entries.map((e) => e.entry))],
+    exempt,
+    reach: compiledReach,
+    required: COVERAGE_REQUIRED,
+  })
+  check(
+    `instruction-coverage: every one of the ${modules.length} std modules is reached by a counted program or exempted with its reason`,
+    modules.length > 0 && real.length === 0,
+    real.join("\n")
+  )
+  const exemptLines = exempt.split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#")).length
+  check(
+    `instruction-coverage: bench/instructions-exempt.txt lists ${EXEMPT_LINES} modules, and only shrinks`,
+    exemptLines === EXEMPT_LINES,
+    `it lists ${exemptLines}; take a line out by reaching its module and lower EXEMPT_LINES with it, never raise it`
+  )
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------

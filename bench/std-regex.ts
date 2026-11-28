@@ -13,7 +13,9 @@ const generate = (): string[] => {
   const lines: string[] = []
   for (let i: i32 = 0; i < LINES; i++) {
     const level = i % 5 === 0 ? "ERROR" : "INFO"
-    lines.push(`2026-11-${10 + (i % 18)} ${level} worker${i % 13} handled request id=${i * 7919} in ${i % 97}ms`)
+    lines.push(
+      `2026-11-${10 + (i % 18)} ${level} worker${i % 13} handled request id=${i * 7919} in ${i % 97}ms`
+    )
   }
   return lines
 }
