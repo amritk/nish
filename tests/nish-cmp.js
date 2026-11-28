@@ -24261,13 +24261,6 @@ const DECLARED = [
     }
   ),
   ...wp86S1PanicFree(
-    "std/json-tokenizer reads its slices through proven bounds, so the panic_slice declare goes and json-tokenizer.ll moves (WP86 S1)",
-    {
-      "bench/httparena/main.ts": ["json-tokenizer.ll"],
-      "tests/link/httparena_entry/main.ts": ["json-tokenizer.ll"],
-    }
-  ),
-  ...wp86S1PanicFree(
     "std/json-value gains `JsonDocument.keys` and drops its array-length panic, std/json-number gains `jsonNumberDifference`, and std/json-equal walks object keys through `keys`, so the JSON helpers' modules move (WP86 S1)",
     {
       "bench/std-json-equal.ts": ["json-equal.ll", "json-number.ll", "json-tokenizer.ll", "json-value.ll", "std-json-equal.ll"],
