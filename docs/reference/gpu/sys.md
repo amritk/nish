@@ -42,6 +42,7 @@ import {
   nishgfx_bind_group_desc_buffer,
   nishgfx_bind_group_desc_new,
   nishgfx_bind_group_release,
+  nishgfx_buffer_new,
   nishgfx_buffer_release,
   nishgfx_device_release,
   nishgfx_device_request,
@@ -117,6 +118,12 @@ A bind group builder for group `index` of the pipeline's layout.
 <scalar-card title="nishgfx_​bind_​group_​release" icon="phosphor/regular/function" href="#nishgfx_bind_group_release">
 
 Release a bind group.
+
+</scalar-card>
+
+<scalar-card title="nishgfx_​buffer_​new" icon="phosphor/regular/function" href="#nishgfx_buffer_new">
+
+Create a buffer from scalars: nishgfx_buffer_create with the descriptor built here, for a caller that cannot build a NishGfxBufferDesc.
 
 </scalar-card>
 
@@ -622,6 +629,59 @@ const nishgfx_bind_group_release: (
 <scalar-field name="group" type="NishGfxBindGroup" required>
 
 the bind group to release
+
+</scalar-field>
+
+<a id="nishgfx_buffer_new" style="scroll-margin-top: 65px"></a>
+
+### nishgfx_buffer_new
+
+Create a buffer from scalars: nishgfx_buffer_create with the descriptor
+built here, for a caller that cannot build a NishGfxBufferDesc.
+
+```ts
+const nishgfx_buffer_new: (
+  device: NishGfxDevice,
+  size: u64,
+  usage: u32,
+  mapped_at_creation: u32,
+  label: string | null,
+) => NishGfxBuffer | null
+```
+
+<scalar-field name="device" type="NishGfxDevice" required>
+
+the device it lives on
+
+</scalar-field>
+
+<scalar-field name="size" type="u64" required>
+
+its size in bytes
+
+</scalar-field>
+
+<scalar-field name="usage" type="u32" required>
+
+WGPUBufferUsage bits
+
+</scalar-field>
+
+<scalar-field name="mapped_at_creation" type="u32" required>
+
+nonzero to start it mapped
+
+</scalar-field>
+
+<scalar-field name="label" type="string | null" required>
+
+a debug label, or null
+
+</scalar-field>
+
+<scalar-field name="returns" type="NishGfxBuffer | null">
+
+the buffer, or null when wgpu-native answers none
 
 </scalar-field>
 

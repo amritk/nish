@@ -173,6 +173,26 @@ int main(void) {
     printf("triangle: a size-0 binding reached the device and the process lived\n");
   }
 
+  /* nishgfx_buffer_new builds the descriptor nishgfx_buffer_create takes: a
+   * CopyDst | Vertex buffer takes a write with no report, and MapRead | Vertex
+   * is the one validation report, never an abort. */
+  {
+    drain(dev);
+    NishGfxBuffer *good = nishgfx_buffer_new(dev, 16, 0x8 /* CopyDst */ | 0x20 /* Vertex */, 0, "scalars");
+    if (good == NULL) return fail("nishgfx_buffer_new made no buffer");
+    const float four[4] = {1, 2, 3, 4};
+    nishgfx_queue_write(dev, good, 0, four, sizeof four);
+    nishgfx_buffer_release(good);
+    char what[NISHGFX_ERROR_MESSAGE_MAX + 1];
+    if (nishgfx_error_next(dev, what, sizeof what) != NISHGFX_ERROR_NONE)
+      return fail("a good nishgfx_buffer_new buffer was reported");
+    nishgfx_buffer_release(nishgfx_buffer_new(dev, 16, 0x1 /* MapRead */ | 0x20 /* Vertex */, 0, NULL));
+    if (nishgfx_error_next(dev, what, sizeof what) != NISHGFX_ERROR_VALIDATION ||
+        nishgfx_error_next(dev, what, sizeof what) != NISHGFX_ERROR_NONE)
+      return fail("a bad nishgfx_buffer_new usage was not one validation report");
+    printf("triangle: buffer_new from scalars takes a write, and a bad usage is one validation report\n");
+  }
+
   /* The shim refuses 0 and anything past 16384 a side before wgpu-native sees
    * it. 16384 itself reaches the device, which may hold a lower limit
    * (Metal's default is 8192): that is a reported error, never an abort. */
