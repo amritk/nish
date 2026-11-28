@@ -404,7 +404,7 @@ without the sites the prover discharges:
 Every `panic` left checks an argument the program passes: a window, a cap or a
 configuration. None is reached by a byte a peer sends. The compiler counts
 each `nish:net` call that takes a buffer range as a `slice` site, proven or
-not (`src/panics.ts`), so the server's three sends and receives stay on the
+not (`src/panics.ts`), so the server's three sends stay on the
 list. Each is given `rx` or `tx` with a range inside it, and the server's own
 guards hold that. Its two `io-exit` sites are the runtime's exit when the
 system cannot supply random bytes. Every other site is
