@@ -11940,7 +11940,11 @@ if (dealtHere("bench") && (!only || "instruction-raises".includes(only))) {
   const nbody = real.programs.nbody.instructions
   const copy = path.join(work, "instructions.json")
   const writeCopy = (edit = (x) => x) =>
-    fs.writeFileSync(copy, JSON.stringify(edit({ ...structuredClone(real), platform: `${process.platform}-${process.arch}` })))
+    // raises starts empty, so the checks read only the entries this fixture writes, never the real file's
+    fs.writeFileSync(
+      copy,
+      JSON.stringify(edit({ ...structuredClone(real), raises: [], platform: `${process.platform}-${process.arch}` }))
+    )
   const counts = path.join(work, "counts.json")
   fs.writeFileSync(counts, JSON.stringify({ fib: fib + Math.ceil(fib / 100), nbody: nbody - 1000 }))
   const update = (...extra) =>
