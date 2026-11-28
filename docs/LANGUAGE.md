@@ -16919,13 +16919,18 @@ call's is
   because each of its callers holds the window
   (`window_contract_late_forward` is a method that writes first and forwards
   nothing). After a guard's call returns, an index inside the window it
-  checked is proven: `buf[off]` to `buf[off + 3]` after a literal count of 4,
-  also after a forwarder's call that passes it
-  (`window_contract_statement_forward`).
-  After any other count, `off` and `len` are known to be at least 0 and at
-  most `buf.length`. A guard or forwarder passed as a value is judged
-  in each instance it is passed into, whose call is to it
-  (`window_contract_unnamed`, `window_contract_value_forward`). A call is judged in any function, one with
+  checked is proven: `buf[off]` to `buf[off + 3]` after a count of 4, and
+  neither `buf[off + 4]` nor `buf[off - 1]`; after any other count, `off`
+  is known to be at least 0, and `off` and `len` at most `buf.length`; an
+  assignment to `off` after the call undoes both
+  (`window_contract_guard_facts`). A forwarder's call records nothing, since
+  its body may change `buf` after its guard returns. A guard or forwarder
+  passed as a value is judged in each instance it is passed into, whose call
+  is to it (`window_contract_unnamed`); one a function is handed through a
+  value parameter is never proven by that function's callers, whatever they
+  pass (`window_contract_value_forward`). A forwarder a host can call is
+  refused under `--deny-panics` as a guard is
+  (`window_contract_host_called`, `window_contract_host_forward`). A call is judged in any function, one with
   nothing else to prove included. A window read from an object's fields is
   never proven (`window_kept_field`), and neither is one a statement or a
   later argument between the test and the call shortens or rebinds

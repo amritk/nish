@@ -3480,8 +3480,9 @@ const windowArgsFit = (target: FunctionSig, count: i32): boolean => {
  * records `off >= 0`, and a constant count `n` from 1 up records
  * `off + n - 1 < buf.length`, which proves `buf[off]` to `buf[off + n - 1]`;
  * any other count records `off <= buf.length`, and an index local one
- * `len >= 0` and `len <= buf.length` too. A guard's arguments that may change
- * anything record nothing.
+ * `len <= buf.length` too. A guard's arguments that may change
+ * anything record nothing, and so does a call into a forwarder: its body may
+ * change `buf` after its guard returns, so only the guard's own call is read.
  */
 const noteGuardedWindow = (walk: BoundsWalk, state: State, expr: Node): void => {
   const call = unwrapBoundsParens(expr)
@@ -3508,20 +3509,14 @@ const noteGuardedWindow = (walk: BoundsWalk, state: State, expr: Node): void => 
     return
   }
   addFact(state, new Fact(FACT_NON_NEGATIVE, off, null, 0))
-  // A literal count is the forward's own (`windowCount`), not an argument.
-  const literal = at[2] < 0
-  const count = literal ? target.windowCount : constantValue(walk, args[at[2]])
+  const count = constantValue(walk, args[at[2]])
   if (count > 0) {
     addFact(state, new Fact(FACT_BELOW, off, w, count - 1))
     return
   }
   addFact(state, new Fact(FACT_AT_MOST, off, w, 0))
-  if (literal) {
-    return
-  }
   const len = indexLocal(ctx, args[at[2]])
   if (len !== null) {
-    addFact(state, new Fact(FACT_NON_NEGATIVE, len, null, 0))
     addFact(state, new Fact(FACT_AT_MOST, len, w, 0))
   }
 }

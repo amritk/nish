@@ -1,7 +1,8 @@
 // A forwarding function taken as a value (docs/LANGUAGE.md, "Panic sites"):
 // `readU16` forwards its window to `checkWindow`, but `apply` calls it through
-// `f`, so no caller's test can prove the call. The call through `f` keeps an
-// unproven `window` site (`expected.panics`), which `--deny-panics` refuses.
+// `f`, so no caller's test can prove the call, whatever `apply`'s callers
+// pass. The call through `f` keeps an unproven `window` site
+// (`expected.panics`).
 // `window_contract_arrow_literal` is the forward called by name. `done.ts` is
 // only the cross-module call every linked case makes.
 import { done } from "./done"
