@@ -9,9 +9,9 @@ program can call a C function you declare.
 The examples on this page that keep a check build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do), which tests it as the
 program runs and stops the program if it fails. Under the default each is a
-compile error: an index into module storage, which no proof reaches yet, a
-string a handle class passes to C before a guard can test it for a NUL, and a
-`readCString` or `readStruct` call, whose `NULL` test no proof removes. The
+compile error: a string a handle class passes to C before a guard can test it
+for a NUL, and a `readCString` or `readStruct` call, whose `NULL` test no
+proof removes. The
 rest are written the way the default asks: a string passed to C is a literal
 or one the code searched with `s.indexOf("\u0000")`, and a C result is
 declared `| null` and narrowed.
@@ -142,7 +142,7 @@ For a page, link with the `wasm-host` profile instead. It takes the same
 inputs but exports only what the loader calls: your exported functions,
 `memory`, and the arena entry points when `runtime-wasm.c` is linked. That
 makes the module smaller than the `wasm` profile's (`examples/arrays.ts`:
-2,827 bytes down to 2,091). `--inline` also writes the bytes as an ES module, so
+3,116 bytes down to 2,249). `--inline` also writes the bytes as an ES module, so
 the page needs no `fetch` and no `await`:
 
 ```console
@@ -173,7 +173,7 @@ memory grows on demand. `--inline <file.mjs>` writes the bytes
 module. Any other profile refuses either flag with exit 2. The stack is a
 fixed 64 KiB. If `wasm-opt` (binaryen) is on `PATH`, `build.sh` runs
 `wasm-opt -Oz --strip-target-features` on the module (`examples/arrays.ts`:
-2,091 bytes down to 1,713), and the build line says whether it ran.
+2,249 bytes down to 1,851), and the build line says whether it ran.
 `NISH_WASM_OPT=0` skips it even when binaryen is installed, and so does
 clang's own `wasm-opt` call after the link:
 
@@ -481,8 +481,7 @@ world, a document, a list — declare module storage whose element is a class
 or `null`. Each slot is a *root*: the object in it, and everything that
 object reaches, outlives the call that built it.
 
-<!-- allow-panics: indexes module storage, which no guard the checker reads proves in range yet -->
-<!-- nish:ok --target wasm32 --allow-panics -->
+<!-- nish:ok --target wasm32 -->
 ```ts
 class Node {
   value: i32
@@ -599,7 +598,8 @@ export const tick = (): void => {
   Lending `0, toU32(xs.length)` of a local array `xs` is proven in bounds
   and costs no check. A window of module storage, such as `DATA` here,
   always keeps the check, even `0, toU32(DATA.length)`, so lending one needs
-  `--allow-panics`: the compiler proves facts about locals, not about storage.
+  `--allow-panics`: a window is proven from facts about locals, not about
+  storage, though an index into storage is proven like a local's.
 - **The page is handed a view of all of memory and an index**, so its
   `xs[at]` is the program's `DATA[at]`. Read and write only `[at, at + n)`:
   past it is the rest of the module's memory

@@ -494,7 +494,7 @@ function foldText(text: string): i64 -> @foldText
   local +1:12 i: i32 (let)
 function symbol(x: u32, mask: u32): u8 -> @symbol
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_div nish_panic_index
+  calls: nish_panic_div
   stackSites=0 stackLocals=0
   local +0:9 pick: u32 (const)
   local +1:9 at: i32 (const)

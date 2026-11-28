@@ -2,9 +2,15 @@
 // This is the recommended interop direction: keep hot loops in Nish,
 // let Node handle I/O and npm packages, and cross the boundary rarely.
 //
+//   nish examples/add.ts -o build/add.ll --emit-dts build/add.d.ts
 //   scripts/build.sh build/add.ll -o build/add.wasm --profile wasm
 //   node examples/node-host.mjs build/add.wasm              # add(2, 3) = 5
 //   node examples/node-host.mjs build/add.wasm add 40 2     # add(40, 2) = 42
+//
+// `add` answers a Result: the loader `--emit-dts` writes (below) gives it as
+// `{ ok: true, value }` or `{ ok: false, error }`, and this script prints the
+// value, or `error <e>` for an overflow. Without that loader a Result arrives
+// as the raw one-word bigint the wasm ABI returns.
 //
 // Arrays cross as typed arrays (examples/arrays.ts). `nish --emit-dts
 // build/arrays.d.ts` writes the typings and, next to them, `build/arrays.mjs`,
@@ -37,7 +43,15 @@ const parseArg = (text) => {
   const items = m[2] === "" ? [] : m[2].split(",")
   return TYPED[m[1]].from(m[1] === "i64" ? items.map(BigInt) : items.map(Number))
 }
-const show = (v) => (ArrayBuffer.isView(v) ? Array.from(v).join(", ") : String(v))
+const show = (v) => {
+  if (ArrayBuffer.isView(v)) {
+    return Array.from(v).join(", ")
+  }
+  if (v !== null && typeof v === "object" && typeof v.ok === "boolean") {
+    return v.ok ? show(v.value) : `error ${show(v.error)}`
+  }
+  return String(v)
+}
 
 const [file = "build/add.wasm", fn = "add", ...rawArgs] = process.argv.slice(2)
 // `<stem>.mjs` next to the module is the marshalling loader `--emit-dts` generated.

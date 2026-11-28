@@ -1,0 +1,7 @@
+{
+  "name": "storage-index-local-bound",
+  "private": true,
+  "nish": {
+    "noPanic": ["main.ts"]
+  }
+}

@@ -246,4 +246,4 @@ Sites the examples reach on 09a6f22a8 (the first per call; more may appear after
 
 Each new export is public std API, so it lands with its doc comment, its `@param` and `@returns`, its reference page and a guide mention (`docs/guide/using-nish/networking.md`, `docs/guide/using-nish/api-server.md`). The `tests/run.js` builds of file-server and http-app pass `ALLOW_PANICS` today; they drop it with the headers. The prefork snippets in `networking.md` keep their markers unless the stale opt-out check reports them freed.
 
-`examples/multi` keeps `--allow-panics` on the owner's decision of 2026-11-27 (its `math.ts` says no follow-up is planned); no stage of this package frees it.
+`examples/multi` builds strict: its `square` answers a `Result`, with the overflow in the `Err` arm. The owner's later decision for the examples-strict run (#2385, `.claude/plans/examples-strict.plan.md`) replaced the earlier one to keep `--allow-panics` there.
