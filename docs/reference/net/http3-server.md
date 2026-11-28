@@ -292,7 +292,7 @@ class Http3Server
 | `dataPool: BufferPool` | The `bodyChunk`-byte read buffers every slot's `Http3Connection` borrows, one at most each. |
 | `date: HttpDate` | The `date` every slot's responses carry, formatted once a second for all of them: each slot's `Http3Connection.date` is its bytes, refreshed by `connection` and `ready`. `date.pin` fixes its clock. |
 | `ecn: boolean` | Whether the platform sends ECN marks: true until a marked send answers -95, and every slot's `ecnMarking` with it. |
-| `entropy: u8[]` | `QUIC_CONN_ENTROPY_SIZE` bytes of scratch, refilled from `crypto.getRandomValues` for each slot built and each connection accepted; it holds the last one's until the next, and `stop` zeroes it. |
+| `entropy: u8[]` | `QUIC_CONN_ENTROPY_SIZE` bytes of scratch, filled from `crypto.tryGetRandomValues` for each connection accepted and zeroed by the connection that copies it, so it holds zeros between accepts; `stop` zeroes it too. |
 | `fd: i32` | The UDP socket every datagram is read from and sent on, as the constructor was given it. |
 | `index: Http3CidIndex` | The connection IDs of every slot holding a connection, which route each datagram to its slot. |
 | `limited: i32` | Datagrams no slot owns dropped past the answer budget before the listener read them, saturating. |
@@ -301,6 +301,7 @@ class Http3Server
 | `quics: QuicConnection[]` | The slots built so far, 0 up: each built on the first Initial accepted into it, or the first ask for it. |
 | `refused: i32` | Initials dropped because no slot was free, saturating at 2^31 - 1. |
 | `sectionPool: BufferPool` | The `maxFieldSectionSize`-byte HEADERS buffers every slot's `Http3Connection` borrows around a decode. |
+| `starved: i32` | Initials dropped because the entropy source failed (`crypto.tryGetRandomValues` answered false) before a slot was taken, saturating at 2^31 - 1; the slot stays free. |
 | `streamPools: QuicStreamPools \| null` | The stream buffers every slot's connection borrows from, made by the constructor for the stream table `quicConfig` gives every slot: `null` when its streams have none. Each pool makes a buffer only when a stream first needs one, so an idle server holds none (QUIC-3). It is made even for a configuration `quicConnConfigFits` refuses; a slot's connection shares it only when its stream buffers are the pools' size. |
 | `wheel: Http3Wheel` | Each slot's next deadline, filed by `flush` and run by `tick`; `timeout` reads it. |
 | `busy(): i32` | How many slots hold a connection. |

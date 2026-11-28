@@ -396,7 +396,7 @@ class WebTransportWaiting
 
 | Member | |
 | --- | --- |
-| `new WebTransportWaiting(size: i32)` | Makes an empty room, its hash salted with 4 bytes from `crypto.getRandomValues`. |
+| `new WebTransportWaiting(size: i32)` | Makes an empty room. Its hash is salted with 4 bytes from `crypto.tryGetRandomValues`, drawn by the first `add`, so a room that no stream ever waits in draws nothing; `add` answers false while the source fails. |
 | `count: i32` | How many streams are waiting now. |
 
 ## Limits
