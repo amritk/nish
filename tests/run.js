@@ -6854,139 +6854,6 @@ if (dealtHere("performance")) {
   )
 }
 
-// ---- std-panics: no u32-cast wrapping sum in std/compress -------------------------
-//
-// WP84 S3 took out every `toI32(toU32(a) + toU32(b))` in std/compress: a sum
-// that wraps through u32 to dodge its overflow proof answers a made-up value
-// where input can reach it. `u32WrappingSums` finds each `toI32(...)` whose
-// argument has a `toU32(...)` call as a direct operand of `+`, `-` or `*`,
-// over any spacing and line breaks, comments blanked. `COMPRESS_UNSIGNED_OPS`
-// lists the genuine unsigned ones by their spacing-free text, how many times
-// each occurs and why it is meant to wrap; any other one fails the check. It
-// pins that shape only: a `toU32` operand inside its own parentheses or under
-// a `/`, and a u32 local summed first and cast later, are not found, so it is
-// not a proof that std/compress wraps nowhere.
-/** The index of the `)` that closes the `(` at `open` in `src`, or -1. */
-const closingParen = (src, open) => {
-  let depth = 0
-  for (let i = open; i < src.length; i += 1) {
-    if (src[i] === "(") {
-      depth += 1
-    } else if (src[i] === ")") {
-      depth -= 1
-      if (depth === 0) {
-        return i
-      }
-    }
-  }
-  return -1
-}
-/** The offsets of each call of `name(` in `src` that is not the tail of a longer identifier. */
-const callsOf = (src, name) => {
-  const at = []
-  for (let i = src.indexOf(`${name}(`); i >= 0; i = src.indexOf(`${name}(`, i + 1)) {
-    if (!/[\w$.]/.test(src[i - 1] ?? "")) {
-      at.push(i)
-    }
-  }
-  return at
-}
-/**
- * The `toI32(...)` calls in `src` whose argument has a `toU32(...)` result as
- * an operand of `+`, `-` or `*`: `{ line, text }`, `text` with its spacing
- * removed. Line comments are blanked first, so a commented-out sum is not one.
- */
-const u32WrappingSums = (source) => {
-  const src = source.replace(/\/\/[^\n]*/g, (c) => " ".repeat(c.length))
-  const found = []
-  for (const at of callsOf(src, "toI32")) {
-    const end = closingParen(src, at + 5)
-    if (end < 0) {
-      continue
-    }
-    const arg = src.slice(at + 6, end)
-    // Each `toU32(...)` in the argument, nested ones within it included, becomes one placeholder.
-    let flat = ""
-    let from = 0
-    for (const u of callsOf(arg, "toU32")) {
-      if (u < from) {
-        continue
-      }
-      const close = closingParen(arg, u + 5)
-      flat += `${arg.slice(from, u)}\u0001`
-      from = close < 0 ? arg.length : close + 1
-    }
-    flat += arg.slice(from)
-    if (/\u0001\s*[-+*]|[-+*]\s*\u0001/.test(flat)) {
-      found.push({
-        line: src.slice(0, at).split("\n").length,
-        text: src.slice(at, end + 1).replace(/\s+/g, ""),
-      })
-    }
-  }
-  return found
-}
-/** The genuine unsigned ops `u32WrappingSums` finds in std/compress, by file and spacing-free text. */
-const COMPRESS_UNSIGNED_OPS = [
-  {
-    file: "std/compress/deflate.ts",
-    text: "toI32((word*toU32(DEFLATE_HASH_MUL))>>>17)",
-    count: 3,
-    reason:
-      "the multiplicative hash of four bytes: the product is meant to wrap mod 2^32 and its top 15 bits are the hash",
-  },
-  {
-    file: "std/compress/deflate.ts",
-    text: "toI32(((word<<8)*toU32(DEFLATE_HASH_MUL))>>>17)",
-    count: 2,
-    reason:
-      "the multiplicative hash of the three bytes after a position: the product is meant to wrap mod 2^32",
-  },
-  {
-    file: "std/compress/deflate.ts",
-    text: "toI32((deflateLoad32(src,q)*toU32(DEFLATE_HASH_MUL))>>>17)",
-    count: 1,
-    reason:
-      "the multiplicative hash of a skipped position's four bytes: the product is meant to wrap mod 2^32",
-  },
-  {
-    file: "std/compress/deflate.ts",
-    text: "toI32((toU32(w)*toU32(DEFLATE_HASH_MUL))>>>shift)",
-    count: 1,
-    reason:
-      "the fixed-Huffman compressor's multiplicative hash: the product is meant to wrap mod 2^32",
-  },
-  {
-    file: "std/compress/deflate.ts",
-    text: "toI32((deflateLoad32(src,qi)*toU32(DEFLATE_HASH_MUL))>>>shift)",
-    count: 1,
-    reason:
-      "the fixed-Huffman compressor's hash of a skipped position: the product is meant to wrap mod 2^32",
-  },
-]
-/** The differences between what `u32WrappingSums` found in each file and the allowlist: one line each. */
-const unsignedOpMismatches = (filesFound, allow) => {
-  const lines = []
-  for (const [file, found] of filesFound) {
-    const listed = allow.filter((a) => a.file === file)
-    for (const site of found) {
-      if (!listed.some((a) => a.text === site.text)) {
-        lines.push(
-          `${file}:${site.line}: ${site.text} wraps through u32; prove the i32 sum or return a DEFLATE_ERR_* code`,
-        )
-      }
-    }
-    for (const a of listed) {
-      const n = found.filter((site) => site.text === a.text).length
-      if (n !== a.count) {
-        lines.push(
-          `${file}: ${a.text} occurs ${n} time(s), the allowlist says ${a.count}`,
-        )
-      }
-    }
-  }
-  return lines
-}
 // ---- std-panics: the ratchet on std/'s panic sites --------------------------------
 //
 // Every git-tracked `std/` module is compiled as a root with `--allow-panics
@@ -7052,49 +6919,61 @@ const residualMismatches = (sites, residual) => {
     .map((k) => `${k}: ${got.get(k) ?? 0} counted, ${want.get(k) ?? 0} listed as residual`)
 }
 if (dealtHere("stdPanics")) {
+  // ---- std-panics: no cast wrap in std/, src/ or examples/ ----------------------
+  //
+  // CLAUDE.md's "A wrap is spelled, never cast": scripts/wrap-casts.mjs (in
+  // `npm run lint`) finds each `toI32(...)` with a `toU32(...)` operand of
+  // `+`, `-` or `*` (and the `toI64`/`toU64` form) in every std/, src/ and
+  // examples/ file, against scripts/wrap-casts.txt, whose counts only fall.
+  // WP84 S3 and WP91 S1 took std/compress, src/ and examples/ to none. This
+  // runs the script on the tree, then on a copy with one cast planted in
+  // std/compress/deflate.ts and on a copy whose baseline lost a line: each
+  // copy must fail, by the script's exit status, or the check is no guard.
   {
-    const files = execFileSync("git", ["ls-files", "--", "std/compress/*.ts"], {
-      cwd: root,
-      encoding: "utf8",
+    const wrapCasts = path.join(root, "scripts", "wrap-casts.mjs")
+    const live = spawnSync(process.execPath, [wrapCasts], { cwd: root, encoding: "utf8" })
+    check(
+      "std-panics: scripts/wrap-casts.mjs passes the tree, with no cast wrap in std/compress, src/ or examples/",
+      live.status === 0 &&
+        !/^\d+ (std\/compress\/|src\/|examples\/)/m.test(fs.readFileSync(path.join(root, "scripts", "wrap-casts.txt"), "utf8")),
+      shown(live)
+    )
+    /** A copy of the scanned tree and its baseline under build/, `edit`ed, and the script's run on it. */
+    const onCopy = (name, edit) => {
+      const dir = path.join(buildDir, "wrap_casts", name)
+      fs.rmSync(dir, { recursive: true, force: true })
+      for (const d of ["std", "src", "examples"]) {
+        fs.cpSync(path.join(root, d), path.join(dir, d), { recursive: true })
+      }
+      fs.mkdirSync(path.join(dir, "scripts"), { recursive: true })
+      fs.copyFileSync(path.join(root, "scripts", "wrap-casts.txt"), path.join(dir, "scripts", "wrap-casts.txt"))
+      edit(dir)
+      return spawnSync(process.execPath, [wrapCasts, "--root", dir], { cwd: root, encoding: "utf8" })
+    }
+    const same = onCopy("same", () => {})
+    const planted = onCopy("planted", (dir) =>
+      fs.appendFileSync(
+        path.join(dir, "std", "compress", "deflate.ts"),
+        "\nexport const plantedWrap = (a: u32, b: u32): i32 =>\n  toI32(toU32(a) +\n    toU32(b))\n"
+      )
+    )
+    check(
+      "std-panics: scripts/wrap-casts.mjs --root fails on a cast wrap planted in std/compress/deflate.ts, and passes the unplanted copy",
+      same.status === 0 && planted.status === 1 && planted.stderr.includes("std/compress/deflate.ts"),
+      `${shown(same)}\n${shown(planted)}`
+    )
+    let dropped = ""
+    const removed = onCopy("removed", (dir) => {
+      const file = path.join(dir, "scripts", "wrap-casts.txt")
+      const lines = fs.readFileSync(file, "utf8").split("\n")
+      const at = lines.findIndex((l) => /^\d+ \S+$/.test(l))
+      dropped = lines[at] ?? ""
+      fs.writeFileSync(file, lines.filter((_, k) => k !== at).join("\n"))
     })
-      .split("\n")
-      .filter((f) => f.endsWith(".ts"))
-    const filesFound = new Map(
-      files.map((f) => [
-        f,
-        u32WrappingSums(fs.readFileSync(path.join(root, f), "utf8")),
-      ]),
-    )
-    const mismatches = unsignedOpMismatches(filesFound, COMPRESS_UNSIGNED_OPS)
     check(
-      `std-panics: std/compress has no u32-cast wrapping sum (${files.length} files, ${COMPRESS_UNSIGNED_OPS.length} genuine unsigned ops listed)`,
-      files.length > 0 &&
-        mismatches.length === 0 &&
-        COMPRESS_UNSIGNED_OPS.every(
-          (a) => files.includes(a.file) && a.reason.length > 0,
-        ),
-      mismatches.join("\n"),
-    )
-    // The scan itself: a sum split over lines with odd spacing is found, a
-    // genuine op is not counted twice, and a commented-out one is not found.
-    const planted = [
-      "const a = toI32(",
-      "  toU32( p )",
-      "    +",
-      "  toU32(len)",
-      ")",
-      "const b = toI32(toU32(x) >>> 3)",
-      "// const c = toI32(toU32(p) + toU32(q))",
-    ].join("\n")
-    const plantedFound = u32WrappingSums(planted)
-    check(
-      `std-panics: the wrapping-sum scan fails on a planted multi-line site, and on no shift or comment`,
-      plantedFound.length === 1 &&
-        plantedFound[0].line === 1 &&
-        plantedFound[0].text === "toI32(toU32(p)+toU32(len))" &&
-        unsignedOpMismatches(new Map([["planted.ts", plantedFound]]), [])
-          .length === 1,
-      JSON.stringify(plantedFound),
+      `std-panics: scripts/wrap-casts.mjs --root fails on a baseline with a line removed (${dropped || "none found"})`,
+      dropped !== "" && removed.status === 1,
+      shown(removed)
     )
   }
   const baselineName = "tests/std-panics.json"
@@ -27532,7 +27411,7 @@ if (dealtHere("cliChecks")) {
       "json-doc":
         "std/json-tokenizer.ts:606:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 120 → 120 bytes",
       "zlib-each":
-        "std/compress/deflate.ts:894:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
+        "std/compress/deflate.ts:904:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
       "request-slot":
         "std/net/http-server.ts:238:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 200 → 200 bytes",
     }
@@ -41768,7 +41647,7 @@ if (!only || "wasm-arena".includes(only)) {
           `want ${want}${shown(native)}`
         )
         const emitted = path.join(out, "ts")
-        const ts = spawnNish(["examples/wasm-arena/replay.ts", "--deterministic", ALLOW_PANICS, "--emit-ts", emitted], {
+        const ts = spawnNish(["examples/wasm-arena/replay.ts", "--deterministic", "--emit-ts", emitted], {
           cwd: root,
           encoding: "utf8",
         })
