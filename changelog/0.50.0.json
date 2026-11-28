@@ -1,0 +1,879 @@
+{
+  "version": "0.50.0",
+  "date": "2026-11-28",
+  "tag": "v0.50.0",
+  "range": {
+    "from": "v0.49.1",
+    "to": "a4639015b"
+  },
+  "entries": [
+    {
+      "id": "split-wp80-s6-s-remainder-into-s7-std",
+      "type": "docs",
+      "scope": "plans",
+      "breaking": false,
+      "title": "split WP80 S6's remainder into S7 (std/bytes windows) and S8 (checked HTTP/1 config)",
+      "body": "On the owner's decision on amritk/nish#2209, S6 closes as done for what\n#2294 and #2350 merged. What it could not free moves to two new stages.\nS7 gives std/bytes window guards that work as contracts, which frees\nmerge-patch and the byte-order guide snippet. S8 adds a checked HTTP/1\nserver config snapshot and constructor twins, which frees file-server,\nprefork-server and http-app. examples/multi keeps --allow-panics.",
+      "metrics": [],
+      "refs": [
+        "amritk/nish#2128",
+        "amritk/nish#2356",
+        "amritk/nish#2357"
+      ],
+      "tests": [],
+      "commits": [
+        "a7d34d8"
+      ],
+      "pr": 2358,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "a-module-exports-its-c-bindings-2355",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a module exports its C bindings",
+      "body": "An `export declare function` and an opaque `export declare class X {}` can now be imported by name from another module, so one generated binding module can serve the others. An importer calls an exported binding under the same buffer, count and escape rules as its own declaration, and `ffi` is charged to every module that calls it. A `declare class` with fields still cannot be exported, and an exported signature that holds a fielded layout is refused. Re-exporting a binding, or importing one through `import * as`, is refused. The header, `.d.ts` and N-API sidecars describe only the program's own exports, never C's functions. `nish c-import` writes `export` on what can cross modules and carries a header's doc comments onto the bindings.\n\nTests: tests/link/export_declare_handle, tests/link/export_declare_header, tests/c-import/docs.h\nRefs: docs/LANGUAGE.md\n\nPart of #2281\nFixes #2352",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "be0921e"
+      ],
+      "pr": 2355,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "std-gpu-sys-ts-binds-the-nish-gfx",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "std/gpu/sys.ts binds the nish-gfx shim, with a clear-screen example",
+      "body": "std/gpu/sys.ts is the c-import of runtime/gfx/nish-gfx.h, now documented on every declaration, and tests/gfx.js pins it byte for byte against what nish c-import writes. examples/gfx/clear.ts opens a window and clears it to a colour that changes each frame; with --offscreen it draws into a 16x16 target, and the gfx check reads back all six frames.\n\nnishgfx_event_next and nishgfx_buffer_create stay module-local until their fielded classes are bound (the next stage). The reference generator gives a card heading containing an underscore an explicit anchor, so docs/reference/gpu/sys.md links on both sites.\n\nTests: tests/gfx.js\nFixes #2239",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a364c4b"
+      ],
+      "pr": 2333,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "add-the-rsassa-pss-sha-256-vector-spec",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "add the RSASSA-PSS SHA-256 vector spec for nish/crypto/rsa-sign",
+      "body": "The vector spec for RSASSA-PSS with SHA-256 and MGF1-SHA-256 (RFC 8017), as TLS 1.3's rsa_pss_rsae_sha256 (RFC 8446 Section 4.2.3), lands ahead of std/crypto/rsa-sign.ts, so its spec test skips on main until the module merges.\n\nIt quotes 25 requirements, records 31 exclusions with their reasons, and holds 13 known-answer rows and 18 properties. RFC 8017 prints no RSASSA-PSS signature, so the expected values come from specs/rfc8017-rsa-pss-sha256.kat.py, a standard-library RSASSA-PSS-SIGN independent of the module that `vector spec check --run-sources` reruns. Its --raw form runs RSASP1 alone. The rows cover 2048-, 2049- and 4096-bit keys, both sides of the salt-length encoding error, both sides of RSASP1's m < n range check, and a key whose d sets the top bit of its top limb.\n\nTests: test/spec/rfc8017-rsa-pss-sha256.ts\nRefs: specs/rfc8017-rsa-pss-sha256.md\n\nPart of #2311\nFixes #2354",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "6a5dc1e"
+      ],
+      "pr": 2371,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "check-http1server-caps-once-with-checked-router-and",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "check Http1Server caps once, with checked router and prefork twins",
+      "body": "The HTTP/1 server now takes its caps from a copy of Http1Config that it checks once. The new http1ServerChecked and http1ConnectionChecked return a bad cap as an Err naming it, before any connection is accepted, where the unchecked constructor panicked on its first connection. An unchecked Http1Server built with a bad cap now drops each connection instead (tryConnection answers null); build it with http1ServerChecked to have the refusal reported.\n\nThe router gains routerChecked, Router.tryMatch and Router.tryParamCount, and prefork gains tryPreforkSupervise and checked twins for its entry points. match and tryMatch share one lookup that tests its ranges once, so neither pays for a second test; Http1Parser.feed and tryFeed share one append helper. examples/file-server.ts and examples/prefork-server.ts now build without --allow-panics; examples/http-app calls the checked twins but still reaches sites in http1-codec, http-compress and std/bytes.\n\nMeasured: std-http1 114,125,785 vs 114,133,790 (-0.007%), std-router 162,242,505 vs 162,304,316 (-0.038%), CI instruction counts (tolerance 0.1%)\nTests: tests/link/net_http1_server_checked, tests/link/net_router_checked, tests/link/net_prefork_try_supervise\nRefs: docs/guide/using-nish/networking.md, docs/guide/using-nish/api-server.md\n\nPart of #2176\nFixes #2357",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "07b7954"
+      ],
+      "pr": 2370,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "refuse-a-new-u32-cast-wrap-and-spell",
+      "type": "ci",
+      "breaking": false,
+      "title": "refuse a new u32-cast wrap and spell intended wraps with nish:unsafe",
+      "body": "* ci: refuse a new u32-cast wrap and spell intended wraps with nish:unsafe\n\nA sum cast through u32 and back, toI32(toU32(a) + toU32(b)), makes signed\narithmetic wrap without the compiler proving it fits, so it can hide a panic\nand nobody reading it can tell whether the wrap was meant. CLAUDE.md now says\na wrap is spelled, never cast: a wrap that would hide an overflow becomes a\nproven sum or a Result, and one the algorithm means is wrappingAdd,\nwrappingSub or wrappingMul from nish:unsafe. The WP80-WP87 rules, WP83's\nwrapping-sum note and docs/AI.md say the same.\n\nscripts/wrap-casts.mjs, in npm run lint, finds each such cast in std/, src/\nand examples/ (i32 and i64 forms, any spacing or line break, comments\nblanked) and checks it against scripts/wrap-casts.txt, the 555 casts in 69\nfiles from before the rule. A count may only fall: a new cast fails and\nnames every cast in its file, and a fall fails until --update writes it back.\n\n* docs: plan WP91, taking every u32-cast wrap in std/, src/ and examples/ to zero\n\nWP91 sweeps the 555 cast wraps scripts/wrap-casts.txt pins, in seven\nstages by area, each cast becoming a proven sum, a Result, or a\nnish:unsafe wrapping call, then drops the baseline so the lint allows\nnone. Filed as #2359 at the top of the Roadmap, ahead of WP80.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "9533b5d"
+      ],
+      "pr": 2367,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "read-multipart-form-data-bodies-in-nish-net",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "read multipart/form-data bodies in nish/net/multipart",
+      "body": "nish/net/multipart reads a multipart/form-data body (RFC 7578, on RFC 2046's\nmultipart syntax) one part at a time.\n\nA MultipartReader walks a body against its boundary and gives each part's\nname, filename, content type and the byte range of its data. It refuses a\nbody that breaks the syntax or a MultipartLimits cap (parts, header bytes,\nheader lines), and refuses when the final delimiter is missing.\n\nFor one-off reads there are three calls, each a reader with the default\nlimits over the whole array:\n- multipartPartCount counts the parts, or answers a negative refusal code.\n- multipartFieldData gives the named field's bytes.\n- multipartFieldFilename gives the named field's filename.\n\nThe module lands spec-first: contracts/multipart-form-data.json holds 21\nrequirements, 18 properties and 5 vectors quoted from RFC 7578 and RFC 2046.\nIts security record is docs/security/multipart.md.\n\nTests: tests/link/net_multipart, test/spec/multipart-form-data.ts\nRefs: docs/guide/using-nish/http-server.md, docs/security/multipart.md\nFixes #2344",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5867103"
+      ],
+      "pr": 2353,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "wp91-s2-std-regex-ts-2375",
+      "type": "refactor",
+      "scope": "checker",
+      "breaking": false,
+      "title": "WP91 S2 — std/regex.ts",
+      "body": "The 131 cast wraps in std/regex.ts are gone: 12 are plain operations the\nprover discharges, 114 are plain sums behind a guard the prover reads, 4 run\nin u32 all the way through, and one is gone (a flagged DFA entry is stored as\nits complement). None wraps and the module still has no panic site. A subject\nlonger than 2,146,435,071 bytes never matches: test and exec give false and\ncount gives 0. docs/security/regex.md records the change as REGEX-8 and lists\nthe subject cap under its properties, untested.\n\nFixes #2361",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5d7e82f"
+      ],
+      "pr": 2375,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "split-syscall-cost-s-kernel-time-in-one",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "split syscall-cost's kernel time in one run and measure the QUICKACK alternatives",
+      "body": "bench/syscall-cost/run.sh now prints a request's kernel time split in the same invocation: (a) the syscall entry and exit cost, from strace's counts times the entry.c per-call cost, and (b) the rest of the system time. The separate --split run is gone. bench/quickack measures the route, BPF sockops and sysctl alternatives to the per-response QUICKACK reset, in place of reasoning about them. A tool the box refuses (strace that cannot attach, a route or sysctl write without the capability, a sockops build or attach that fails) prints a refusal in place of its figure. The figures are recorded as cloud-VM figures. The reported Xeon 8260 box is not measured, and the per-response QUICKACK call stays until it is.\n\nFixes #1092\nPart of #2324\n\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c5ed8e7"
+      ],
+      "pr": 2378,
+      "author": "Redis Stasa",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "give-a-runner-that-boots-with-no-ubuntu",
+      "type": "ci",
+      "breaking": false,
+      "title": "give a runner that boots with no Ubuntu apt source one",
+      "body": "A test shard on PR #2353 died at the apt install before any test ran: its\nubuntu-26.04 runner (AWS, image 20261122.9.1) had no Ubuntu archive source,\nonly packages.microsoft.com, so apt-get update fetched nothing from Ubuntu and\nevery package was \"Unable to locate\". The other shards and the re-run\ninstalled as usual, so it hit whichever job landed on such a runner.\napt-mirror.sh now writes a deb822 source at our mirror list, in the suites and\ncomponents the image's own ubuntu.sources uses, when no source names the\nUbuntu archive, and says so in a warning.",
+      "metrics": [],
+      "refs": [
+        ".github/apt-mirror.sh"
+      ],
+      "tests": [],
+      "commits": [
+        "1629b1d"
+      ],
+      "pr": 2384,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "write-examples-strict-keeping-allow-panics-only-for",
+      "type": "docs",
+      "scope": "guide",
+      "breaking": false,
+      "title": "write examples strict, keeping --allow-panics only for std code and shown panics",
+      "body": "The guide's and docs/AI.md's examples are the code readers learn to write, so they now build under the no-panic default: an example whose own code had a panic site gets the guard a reader would write (a bounded input, a saturating counter, a widening, readFileSyncOrNull, a narrowed C result) instead of --allow-panics. 239 opted-out examples become 116; the rest call std code that keeps panic sites, show a panic, or name a checker gap, and the docs run fails an opt-out whose own code panics for none of those reasons.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js docs section (own-code NL2457 per opted-out snippet",
+        "reason classifier unit check)"
+      ],
+      "commits": [
+        "1eafb51"
+      ],
+      "pr": 2383,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "finish-the-http-lean-get-record-with-component",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "finish the http-lean-get record with component ns and serving bytes against RSS",
+      "body": "bench/http1-conn gains a parts shape that times one Http1Connection's head parse apart from its header spans, and Date including its clock read (wall less a pinned clock), each against the base and a byte-identical copy of it for the noise band. The served-GET loop takes no clock read around its next calls, so its figures carry no bench overhead. The rss-serving shape sums a serving connection's bytes by object and checks them against RSS while every connection holds a response. docs/BENCHMARKS.md http-lean-get records both, on a shared 4-core cloud VM. The x86 PMU proof of the 16-byte head scans and the 18,000-connection ring runs stay with the deferred bench-lean-machine stage.\n\nFixes #1780\nPart of #2324\n\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "22cbf35"
+      ],
+      "pr": 2376,
+      "author": "Redis Stasa",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "rsa-pss-certificateverify-under-an-rsa-certificate-on",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "RSA-PSS CertificateVerify under an RSA certificate on the TLS and QUIC servers",
+      "body": "* feat(runtime): constant-time RSA-PSS signing under a Secret key (WIP)\n\nnish/crypto/rsa-sign parses a PKCS#1 RSAPrivateKey of 2048 to 4096 bits\ninto a Secret, and signs RSASSA-PSS with SHA-256 by a fixed 4-bit window\nover Montgomery arithmetic whose final subtraction is chosen by mask. Each\nsignature is checked against the public exponent before it is returned.\n\nRefs: RFC 8017 §8.1.1, §9.1.1\n\n* feat(runtime): split RSA key arithmetic from salted signing; TLS key signer\n\nMoves the key parser and Montgomery arithmetic into nish/crypto/rsa-key,\nwhich reaches no randomness, and leaves the salt-drawing signers in\nnish/crypto/rsa-sign. TlsKeySigner dispatches CertificateVerify signing on\nthe configured scheme; TlsTcpServer signs through it.\n\nRefs: docs/security/crypto-rsa.md\n\n* feat(runtime): derive the RSA-PSS salt from the key in nish/crypto/rsa-sign\n\nMerge the key parser and the signer into one module, nish/crypto/rsa-sign,\nand derive the 32-byte PSS salt as SHA-256(label || d || mHash), as P-256\nderives its nonce under RFC 6979. Nothing reaches crypto.getRandomValues, so\nthe module compiles for wasm32 and has no io-exit panic site. The private\nexponent is copied out with expose, hashed in the caller's scratch and wiped\nwith the hasher, the shape p256SignSha256Into has. TlsRsaSigner bounds the\nkey size with literals before it sizes the signature.\n\n* feat(runtime): load RSA keys from PEM and sign HTTP/3 handshakes by the configured scheme\n\nx509ParseRsaPrivateKey reads a PKCS#1 \"RSA PRIVATE KEY\" or a PKCS#8\n\"PRIVATE KEY\" holding rsaEncryption into a Secret for nish/crypto/rsa-sign.\nHttp3Server now signs its CertificateVerify through TlsKeySigner, so a QUIC\nconfig whose signatureScheme is rsa_pss_rsae_sha256 serves an RSA certificate.\n\nRefs: std/crypto/x509.ts, std/net/http3-server.ts\n\n* test(runtime): serve an RSA-2048 certificate to openssl, curl and a QUIC client\n\ntests/link/net_tls_rsa_server loads the PKCS#1 and PKCS#8 forms of an\nRSA-2048 key, refuses a 1024-bit one, completes TLS 1.3 handshakes whose\nCertificateVerify is rsa_pss_rsae_sha256 and checks it under the\ncertificate's key, refuses a hello offering only ECDSA, and answers an\nHTTP/3 GET over QUIC under the RSA leaf. tests/run.js runs the same program\nas an HTTP/1.1 and an HTTP/2 server over TLS for openssl s_client and curl.\n\nTests: tests/link/net_tls_rsa_server\n\n* feat(runtime): record RSA-PSS signing, with Wycheproof vectors, a ct_asm fixture and a wipe check\n\nThe RSA-PSS signer the TLS and QUIC servers use under an RSA certificate\ngets its security record: docs/security/crypto-rsa.md covers\nstd/crypto/rsa-sign.ts and x509ParseRsaPrivateKey (RSA-S1 to RSA-S6), and\ntls.md and http3.md describe RSA-PSS CertificateVerify. The raw private\noperation is checked against Wycheproof's RSA-2048, -3072 and -4096 keys,\nand PSS signing against known answers that OpenSSL verifies. ct_asm checks\nthe reduction, the Montgomery product and the window step for secret\nbranches and addresses, and a -O2 count pins the signer's wipes. The guide\nshows how to serve an RSA certificate and key.\n\nTests: tests/link/crypto_rsa_sign, tests/link/crypto_rsa_sign_f64, tests/cases/ct_asm_rsa\nRefs: docs/security/crypto-rsa.md#rsa-pss-signing\n\n* docs(runtime): name the Wycheproof files the RSA signing keys come from, and record the untested 2049-bit encoding\n\ncrypto-rsa.md said the signing tests' keys came from crypto_wycheproof_rsa;\nthey come from Wycheproof's rsa_pkcs1_{2048,3072,4096} decryption files,\nread by generate.mjs. RSA-S6 now also records that no test key has a bit\nlength one more than a multiple of 8, the case where the PSS encoding is a\nbyte shorter than the modulus. x509ParseRsaPrivateKey's doc comment no\nlonger claims the key must be a whole number of bytes: any odd modulus of\n2048 to 4096 bits loads.\n\nRefs: docs/security/crypto-rsa.md#method-signing\n\n* test(runtime): declare the IR that RSA-PSS CertificateVerify under an RSA certificate moves in nish-cmp\n\nThe TLS stack now links nish/crypto/rsa-sign (and through it\nnish/crypto/hmac), and TlsTcpServer and Http3Server hold a TlsKeySigner\nwhere they held a TlsP256Signer. Each program and module that moves is\ndeclared by name: 290 new rsa-sign.ll or hmac.ll modules, 26 programs whose\ntls.ll, http2-tls.ll or net_http3_peer.ll lay out the new signer, five\nwasm32 loaders whose storage global is renumbered, and the three new\nprograms that the seed refuses because it has no nish/crypto/rsa-sign.\n\nTests: tests/nish-cmp.js\n\n* fix(runtime): pin RSA key wipes and check HTTP/3 for RSA-PSS CertificateVerify under an RSA certificate\n\nRound-1 review of the RSA server signer. The opt -O2 wipe check now pins\nx509ParseRsaPrivateKey's key-block wipes and rsaParsePrivateKey's, with\nTlsKeySigner.sign making no key copy. net_tls_rsa_server drives the\nHTTP/3 listener on the RSA pair with OpenSSL's s_client -quic where the\ninstalled OpenSSL has it, and records a skip where it does not. The\npeer-signature match accepts OpenSSL 3.5's rsa_pss_rsae_sha256 spelling.\nrsaSignKeyBits keeps its leading-zero test behind a bound the panic\nprover reads, and the RSA and TLS docs state what the signer checks.\n\nTests: tests/link/net_tls_rsa_server, tests/link/crypto_rsa_sign\n\n* test(self): regenerate the httparena golden after merging main\n\n* fix(runtime): list nish/crypto/rsa-sign as a std module for RSA-PSS CertificateVerify under an RSA certificate\n\nsrc/std-modules.ts and the user guide's module table name the new\nnish/crypto/rsa-sign module, the guide's x509 row names\nx509ParseRsaPrivateKey, and crypto_rsa_sign links under --profile speed\nlike the other programs whose wipes a check counts. A doc comment in\nrsa-sign.ts is rewrapped.\n\nTests: tests/link/crypto_rsa_sign\n\n* test(runtime): link crypto_rsa_sign and its f64 twin through SPEED_LINK, not args\n\ntests/speed-link.txt sets the speed profile for the RSA signing programs, so their args no longer name one. The QUIC half's missing refusal check is recorded as untested in the TLS and HTTP/3 records.\n\n* perf(runtime): sign with CRT, checked, for RSA-PSS CertificateVerify under an RSA certificate\n\nThe RSA private operation is now two half-size fixed-window exponentiations,\nby dP mod p and dQ mod q, joined by Garner's formula, in place of one\nexponentiation by d mod n. Every signature is still raised to e and compared\nwith its input before it is returned, which is what stops a faulty half from\nleaking a prime (the Bellcore fault). A key's CRT values are checked when it\nloads: p and q odd, dP < p, dQ < q, qInv < p, p q = n and q qInv = 1 mod p,\nthen a trial signature under the CRT path and one under d. The per-prime\nMontgomery constants are computed once at load and kept in the key's\nSecret, which grows to 4 k + 9 w bytes. Every limb array that held a prime,\na half exponent or a half signature is wiped, and the new arithmetic is under\nthe constant-time assembly check on x86-64, aarch64 and x86-64-v3.\n\nAdds the spec-first contract for RFC 8017 RSASSA-PSS with SHA-256\n(specs/, contracts/, test/spec/), whose checks cite their clauses, and\nrsaVerifyPssDer for it to verify under a DER public key.\n\nMeasured: 2048-bit sign 15.6 ms -> 4.1 ms (3.8x), 3072-bit 55.1 -> 13.3 ms (4.1x), 4096-bit 131.6 -> 31.3 ms (4.2x); medians of 5 interleaved rounds of 30 signs, about +-10%, verify-after-sign included\nRefs: docs/security/crypto-rsa.md\nTests: tests/link/crypto_rsa_sign, test/spec/rfc8017-rsassa-pss-sha256.ts, tests/cases/ct_asm_rsa\n\n* chore(scripts): list rsa-sign's RFC 6979 and x509's RFC 8017 as cited\n\nThe PSS salt's comment names RFC 6979 for how it is derived, and x509 names\nthe PKCS#1 key that rsa-sign parses under its RFC 8017 spec; neither file\nimplements the RFC it names.\n\n* fix(runtime): discharge rsa-sign's five unproven indexes for RSA-PSS CertificateVerify under an RSA certificate\n\nThe CRT form's 2 c-limb loops kept a bounds check the prover could not\ndischarge (NL9007 under the performance gate): each now runs c limbs and\nreaches the upper half as c + l, and the key's span check runs to the span\nlist's length. The work still depends on the key size alone.\n\nTests: tests/cases/ct_asm_rsa\n\n* test(runtime): declare the TLS layout moves main's new h1 TLS and h2c programs show for RSA-PSS CertificateVerify under an RSA certificate\n\nFifteen programs main added since the last sync link the TLS stack, so they\nwrite rsa-sign.ll and lay out TlsKeySigner where the seed laid out\nTlsP256Signer.\n\n* test(runtime): format the RSA-PSS CertificateVerify under an RSA certificate declarations\n\n* test(crypto): sign RSA-PSS against NIST CAVP, OpenSSL, Go and pyca\n\nThe RSA-PSS signer now has to reproduce signatures it did not compute\nitself: NIST CAVP's 30 FIPS 186-2 SHA-256 signatures under its 2048, 3072\nand 4096-bit keys, and 50 signatures under ten keys that OpenSSL, Go's\ncrypto/rsa and pyca/cryptography made, with odd sizes (2049, 2050, 2054,\n3071, 4094 bits) and exponents of 3, 65537 and 2^32 - 1. Each key loads\nfrom the PKCS #1 DER and the PKCS #8 PEM its library wrote, and both loads\nsign every case byte for byte. Five keys outside 2048 to 4096 bits, or with\ne of 2^32 or more, must be refused by both parsers.\n\nThe 2049-bit key closes RSA-S6, the PSS encoding when emLen is one byte\nshorter than the modulus: setting emLen to k fails five of its cases.\nRemoving the e < 2^32 guard fails the refusal check.\n\nTests: tests/link/crypto_rsa_sign_interop\n\n* fix(crypto): prove every index and size in the RSA signer\n\nstd/crypto/rsa-sign.ts is a new std/ module, and a new module may have no\npanic site the compiler cannot prove away. The CRT rewrite left nine: the\nkey-buffer size in rsaSignKeyBytes, a span-length subtraction in\nrsaParsePrivateKey, and the window-table index in rsaSignWindowStep and\nrsaSignPow.\n\nEach one now has a range test the prover reads. The size restates\nrsaSignHalfWidth's bounds, a span refuses a negative end as well as a\nnegative start, and the table index is tested against the table's length.\nThat test is always true after the length test at the top of the function.\nIt is on public values only, and ct_asm still finds no secret branch in the\nwindow step.\n\nTests: tests/cases/ct_asm_rsa\n\n* fix(self): regenerate the goldens and reference for the first-form RSA key\n\nThe merge of main brought a known-answer spec that hands rsa-sign keys of\nRFC 8017's first form; the goldens and the library reference follow the\nmodule, and the security record names the route.\n\n* docs(security): name the first-form exponentiation in RSA-S2\n\nRSA-S2 now lists rsaSignFullOp and rsaSignPow, and records that\nrsaSignPow's table build and nibble loop, which both signing routes\nrun, are not in the constant-time fixture.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5a90267"
+      ],
+      "pr": 2335,
+      "author": "Redis Stasa",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "let-bench-http1-parse-run-again-and-time",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "let bench/http1-parse run again and time /json interleaved against another tree",
+      "body": "bench/http1-parse runs on main again. Its checksum folds each field's offsets relative to that field's own start, so it no longer depends on where a parser lays out the line, and run.mjs checks all three parsers against fixed knowns. The new bench/techempower/json-ab.sh times /json on the working tree, a byte-identical copy (the noise band), another tree's std/, runtime/ and scripts/ built by the same compiler, and the entry with the kept head off, all interleaved in rotated rounds in one run. docs/BENCHMARKS.md records the follow-up at 9533b5d5. /plaintext is 4,125 Ir per request, over the miss the owner accepted at 3,873 to 3,883, and its cause is unproven. The explicit /json loss and the browser-head gap did not reproduce on this VM within their bands, and neither candidate cause was isolated. varied shows no change.\n\nFixes #1525\nPart of #2324\n\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3a5bbba"
+      ],
+      "pr": 2382,
+      "author": "Redis Stasa",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "prove-the-slice-in-term-s-termbytestext-2390",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "prove the slice in term's termBytesText",
+      "body": "termBytesText's fast path restates the clamp's bound (end >= 0 && end <= bytes.length) so the prover discharges String.fromBytes's slice; std/term.ts keeps no panic site. The guide's term snippets build without --allow-panics, and term-probe's comment names the sites its strict build still reports (std/term-pixels.ts and its callers, the next stage).",
+      "metrics": [],
+      "refs": [
+        "#2385"
+      ],
+      "tests": [],
+      "commits": [
+        "0c203db"
+      ],
+      "pr": 2390,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "wp91-s3-json-text-temporal-sqlite-and-sync",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "WP91 S3 — json, text, temporal, sqlite and sync",
+      "body": "std/json, std/json-value, std/text, std/temporal, std/sqlite and std/sync/ring no longer make i32 arithmetic wrap by casting it through u32 or u64. Each such sum or product either has a bound src/bounds.ts proves, or a check that refuses the out-of-range case.\n\nspscRingBytes and mpscRingBytes now answer 2147483647 for a shape whose size passes the i32 range, instead of a wrapped value. initSpscRing, initMpscRing and tryInitMpscRing refuse that shape. The shared-memory guide says so.\n\nTests: tests/link/std_temporal_hours_range, tests/link/sync_ring_bytes_saturate\n\nFixes #2362",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ae1331c"
+      ],
+      "pr": 2387,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "record-a-parked-flag-in-http1connection-s-hot",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "record a parked flag in Http1Connection's hot block as no gain, and a slot-indexed block as not built",
+      "body": "Issue #1225's two hot-block ideas for std/net/http1-server.ts, against main at 3a5bbbaf with a byte-identical copy as the noise band. The lent buffer's start and capacity are fields of the parser, which the codec moves, so the connection keeps the one fact it can keep in step: a private flag that park lent the input buffer away. With it, inputRoom answers without loading the parser, but unpark still writes parser.buf, so the D1 miss moves from inputRoom to feed (15.28 misses per idle request on main against 15.27 with the flag, identical LL misses). No gain, not adopted. The patch stays as bench/http1-conn/parked-flag.patch so the run can be repeated. A slot-indexed struct-of-arrays hot block was not built and not measured: Http1Server already keeps a resting slot in slot-indexed arrays and lends a readable slot its most recently used spare connection. std/net/http1-server.ts is unchanged.\n\nFixes #1225\nPart of #2324\n\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f839d47"
+      ],
+      "pr": 2394,
+      "author": "Redis Stasa",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "add-multi-and-arrays-build-without-allow-panics",
+      "type": "fix",
+      "scope": "interop",
+      "breaking": false,
+      "title": "add, multi and arrays build without --allow-panics",
+      "body": "* fix(interop): add, multi and arrays build without --allow-panics (WIP)\n\nadd and square answer a Result whose error arm is the overflow; sumI32\nanswers one too. squares and sumI64, whose results a Result cannot carry\nto JS, refuse what they cannot answer on stderr and exit 1.\n\n* test(interop): read add's and sumI32's Result in the example checks\n\nThe C, N-API and wasm checks of examples/add.ts and examples/arrays.ts read the\nResult word, and the arrays driver reaches both new Err arms and both stderr exits.\n\n* docs(interop): drop --allow-panics from the add, multi and arrays builds\n\nThe README shows add's Err arm as its overflow check; package.json, the CI\nsize report and the release multi build compile strict. nish-cmp declares\narrays.ts, which the seed refuses and the strict default now builds.\n\n* test(self): regenerate the checked goldens for add, multi and arrays\n\n* fix(interop): spell add's and sumI32's Err codes as i32 so both number modes agree\n\nadd compiles under --number-mode f64 again; arrays.ts there is refused\nat squares' f64 index (NL2100) rather than at its element store.\n\n* test(self): regenerate the checked goldens for add and arrays\n\n* test(interop): raise add's and arrays' wasm-host ceilings for the Result answer\n\nadd and sumI32 answer a Result<i32, i32> and squares and sumI64 check their\ninputs, so add.wasm, arrays.wasm, their loaders and inline modules grow. Each\nceiling is the new measurement, with its before and after beside it, and the\nplain-program digests and host-import IR digests move with them. Of add's\nloader growth (828 bytes), 350 are the Result decoder, 361 the encoder the\nloader emits with it, and the rest the call's wrapper.\n\nMeasured: add.wasm 102 to 122, add.mjs 1625 to 2453, arrays.wasm 2091 to 2661 bytes raw\nRefs: #2385\n\n* fix(interop): keep squares' refusal message plain so arrays links without the text runtime\n\nsquares' message interpolated its count, which pulled runtime-text.c's\nstring builders into arrays.wasm and broke the --profile wasm link that\nnames runtime-wasm.c alone. A plain message keeps arrays to the wasm\nruntime: arrays.wasm under wasm-host is 2249 bytes, not 2661, and its\nceiling, digests and the wp50 figures move to match. The interop checks\nread add's Result through its header and its .d.ts.\n\nMeasured: arrays.wasm 2661 to 2249 bytes raw (main's build 2039)\nRefs: #2385\n\n* test(interop): pin add, multi and arrays at their overflow edges\n\nThe refusal checks covered one point per function, so a sign slip in a\nbranch could pass. A C driver now reaches squares(46341) and squares(46342),\nsumI64 overflowing below i64 min and landing exactly on max and min, and\nmulti's square at 46340, 46341 and a negative n.\n\nmulti's square is spelled i32 like add and arrays, so it means the same in\nboth number modes; under f64 its Result<number, number> was refused. main\nanswers i32 too, so multi now builds in f64 and leaves the performance\ngate's refused list. The guide's arrays.wasm sizes, the web README and the\nwp80 plan's multi line follow the strict build.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "dd2b7ab"
+      ],
+      "pr": 2393,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "prove-index-sites-into-module-storage-2391",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "prove index sites into module storage",
+      "body": "* fix(checker): prove index sites into module storage\n\nWIP: a module storage's folded length bounds an index the way a constant\ntable's does, and a guard against a module constant or a storage's\n.length bounds a loop index.\n\n* test(checker): pin module storage index proofs\n\nA positive case under --deny-panics with no bounds check left in its IR,\nand a link negative whose off-by-one guard on a storage's .length stays\nrefused.\n\n* test(self): regenerate checked goldens for storage index proofs\n\n* docs: say an index into module storage is proven like a local's\n\n* docs(checker): regenerate the IR cookbook and reference for module-storage proofs\n\nThe cookbook's storage entries lose their index checks, and the reference\npicks up the LANGUAGE.md rule for indexes into module storage.\n\n* test(checker): declare the IR module-storage proofs move in nish-cmp\n\nThe prover now orders an index against a constant local, a folded module\nconstant or a fixed length, so the manifest, proto-parse and lexer modules\nof src/ and the storage cases drop index and overflow checks. Each moved\nfile is declared by program and file.\n\n* test(checker): pin the constant-guard orders the storage prover reads\n\nThe storage prover's change reads a folded module constant, a function\n`const` and a storage `.length` as a guard's bound. Four tests/link\nnegatives pin what that must not prove: `i <= SLOTS` against a module\nconstant and against a function `const`, an index with only an upper\nguard, and adds and subtracts with no headroom past a constant guard.\nA --deny-panics positive pins the overflow check the guard removes.\n\nThe existing storage IR goldens and const_array_numeric lose their\nbounds and overflow checks with it, and tests/std-panics.json loses\nthe aesGcmOpen and chacha20Poly1305Open array-length sites and six\nyaml overflow sites, each now proven by a guard against a constant.\n\nTests: tests/cases/deny_panics_storage_const_guard, tests/link/storage_index_const_bound, tests/link/storage_index_local_bound, tests/link/storage_index_signed, tests/link/storage_const_guard_overflow\n\n* test(checker): declare the module-storage proofs' nish-cmp moves\n\nThe constant-guard orders the prover now reads drop overflow and\narray-length checks in bounds.ll, pg.ll, the http2 and h1-tls link\nprograms and chacha20poly1305.ll; declare each under the stage's\nrelease-note words.\n\n* test(checker): declare the protobuf and QUIC moves the constant-guard orders make\n\n* test(checker): pin a guard against a function const into module storage\n\ndeny_panics_storage_local_const indexes module storage past a guard against\na function `const`, and fails when constantValue stops reading function\nconsts. The const_guard case's comment now says which constants a guard\nreads.\n\nTests: tests/cases/deny_panics_storage_local_const\n\n* docs(checker): drop the module-storage opt-out and record the AEAD sites it proves\n\nThe Module storage example in docs/AI.md now builds under the default\n--deny-panics, so its allow-panics opt-out goes. AEAD-5 in\ndocs/security/crypto-aead.md records that a guard against a module\nconstant now discharges the aesGcmOpen and chacha20Poly1305Open\narray-length sites, taking the kept sites from 10 to 8.\n\nTests: node tests/run.js docs, node tests/run.js std-panics",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1c6d6d3"
+      ],
+      "pr": 2391,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "wp91-s1-compress-src-and-examples-and-one",
+      "type": "refactor",
+      "scope": "self",
+      "breaking": false,
+      "title": "WP91 S1 — compress, src/ and examples, and one check for every file",
+      "body": "Moves std/compress, src/ and examples/ off cast wraps: each deliberate wrap is now wrappingAdd, wrappingSub or wrappingMul from nish:unsafe, and the remaining sites get a bound src/bounds.ts proves. scripts/wrap-casts.mjs now checks every file the rule covers, so a missed site fails lint.\n\nFixes #2360",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "2894462"
+      ],
+      "pr": 2374,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "wasm-arena-builds-without-allow-panics-2404",
+      "type": "fix",
+      "scope": "interop",
+      "breaking": false,
+      "title": "wasm-arena builds without --allow-panics",
+      "body": "client.ts, sim.ts and replay.ts drop their opt-out headers and the --allow-panics in their smoke lines, and build.mjs drops both flags. The sim.ts helpers that take an index as a parameter (bounce, collide, fly) now test it against BODY_CAP or SHOT_CAP first, the same way the file already tests ship.length. Only the step() loops call them, so the tests never return early, and the replay hash the guide pins is unchanged.\n\nThe arena's wasm and inline size ceilings in tests/runtime-budgets.js are lowered to what the strict build measures.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1f1c0ac"
+      ],
+      "pr": 2404,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "add-tryframebuffer-and-framebuffer-tryresize-beside-the-panicking",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add tryFramebuffer and Framebuffer.tryResize beside the panicking API",
+      "body": "tryFramebuffer(width, height) and Framebuffer.tryResize(width, height) answer Err for a negative side or more than 2^31 - 1 pixels, beside the panicking constructor and resize, which stay as they are. A refused tryResize leaves the size and the pixels unchanged. pixelWidth(), pixelHeight() and pixelData() read the size and the array.\n\nThe term-io, term-rate and base64 sites examples/term-probe.ts reaches are proved or made total. readStdin's slices are proved. runTerminal's work time is summed in f64. The frame-rate counters stop at 2^31 - 1. A pixel frame that would pass 2^31 - 1 bytes is not sent, and the last frame stays on screen. base64EncodeIfFits answers -1, writing nothing, where base64EncodeInto panics on its range.\n\nFramebuffer's fields become private, and term-probe drops --allow-panics, in a follow-up after the next release ships the new API.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "63faa82"
+      ],
+      "pr": 2400,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "scan-the-workflows-with-codeql-and-keep-pinned",
+      "type": "ci",
+      "breaking": false,
+      "title": "scan the workflows with CodeQL, and keep pinned actions current with Dependabot",
+      "body": "codeql-actions.yml runs CodeQL's actions language over .github/ through\namritk/workflows' reusable CodeQL workflow, on workflow changes and weekly,\nbeside codeql.yml's scan of the C runtime. It reports script injection from\nevent text, over-broad tokens and untrusted checkouts in privileged jobs.\n\ndependabot.yml proposes updates to the commit-pinned actions and to the npm\ndevDependencies, one grouped pull request per ecosystem, held until a\nrelease is 5 days old, titled ci: or build(deps): so pr-title.yml accepts\nthem.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ff911ea"
+      ],
+      "pr": 2395,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "std-net-tls-quic-postgresql-and-dns-without",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "std/net TLS, QUIC, PostgreSQL and DNS without cast wraps",
+      "body": "WP91 S5: the std/net TLS, QUIC, PostgreSQL and DNS modules make no i32 or i64 arithmetic wrap by casting it through u32 or u64. Each site is a sum src/bounds.ts proves, an existing error, a value unsigned throughout, or a spelled wrap; scripts/wrap-casts.txt lists none of these files.\n\nFixes #2364",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1221d4a"
+      ],
+      "pr": 2389,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "add-wp93-stored-callbacks-for-signals-2416",
+      "type": "docs",
+      "scope": "plan",
+      "breaking": false,
+      "title": "add WP93, stored callbacks for signals",
+      "body": "* docs(plan): draft WP93 stored callbacks for signals\n\nDraft plan for two strict-mode stored-callback forms (context argument\nthrough generic function-type aliases, and inline-environment closures),\nwith measured dispatch, wasm32 fields and a signals acceptance program.\n\n* docs(plan): correct WP93 against review\n\nS3 narrows the sidecar-build field refusal, since a plain wasm32 build\nalready compiles unexported function-typed fields. S2 accounts for\nper-signature tag numbering and quotes WP51's figures as measured.\nTest filters, citations and the arena code range are fixed; S4 and S5\nopen with gate todos.\n\n* docs(plan): queue WP93 at 270, ready\n\n* docs(plan): file WP93 as issues\n\nRecords the parent issue and the six stage issues filed from the WP93\nplan, so the next plan-issues run sees them as filed.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "60ea37a"
+      ],
+      "pr": 2416,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "a-std-class-owns-its-native-handles-is",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a std class owns its native handles, is exported, and closes with using",
+      "body": "A handle class may now own several native fields (CPtr, an opaque declare class, HostHandle<K>, or another handle class), each optionally `| null` except HostHandle. Each field is readonly and written once at the top of the constructor. `using` closes them in reverse declaration order, then closes owned child handles. Handle classes and the functions that take them can be exported from a library module and lent across modules. A top-level factory may return H, H | null or Result<H, E>. Each method call is still one field load plus the direct C call.\n\nNew refusals: NL2825 (a write to an owning field that is not a move), NL2826 (an argument that may leave after a `new` has taken ownership of a handle), NL2827 (an entry module exporting a handle). Library-module handle functions are left out of --emit-header, --emit-dts and --emit-napi.\n\nRefs: docs/LANGUAGE.md, docs/guide/using-nish/interop.md\nTests: tests/cases/ffi_handle_owned, tests/link/ffi_handle_owned, tests/link/ffi_handle_sidecar\n\nFixes #2379",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "dc8657e"
+      ],
+      "pr": 2397,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "wp91-s4-std-net-http-hpack-url-and",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP91 S4 — std/net HTTP, HPACK, URL and the server stack",
+      "body": "* refactor(runtime): prove std/net/url.ts sums instead of casting them to wrap\n\nWIP for WP91 S4: the URL parser's cast wraps become sums the bounds prover\ndischarges, so a window or escape past the array is refused, not wrapped.\n\n* refactor(runtime): type urlLowerString's width so --number-mode f64 compiles it\n\nA literal 0 in a ternary is f64 under --number-mode f64, so the width is an\ni32 local set under the guard instead.\n\n* refactor(runtime): prove the HTTP/1 codec, server, serve and prefork sums instead of casting them to wrap\n\nOffsets in the HTTP/1 codec go through saturating helpers the bounds prover\nproves; clock sums in the server, serve and prefork add same-sign magnitudes\nin u64 and hold the result below 2^63, exact on every reachable input.\n\n* refactor(runtime): prove the HTTP client, its response codec and the outbound filter sums instead of casting them to wrap\n\nWindow ends go through a checked helper whose refusal takes the codec's\nexisting error, digit accumulators stay u64 under their existing caps, and the\nresponse generation counter, compared only for equality, wraps by wrappingAdd.\n\n* refactor(runtime): prove the HPACK, HTTP/2 and protobuf sums instead of casting them to wrap\n\nHPACK table and index arithmetic become ordered differences the bounds prover\nproves, with an out-of-range dynamic index taking the existing reject path;\nHTTP/2 clock and flow-control sums hold at the i64 range's ends; protobuf's\nzigzag stays unsigned; HPACK's copied-octets statistic, read only as a\ndifference, wraps by wrappingAdd.\n\n* fix(runtime): spell the wraps in std/net fields, static, compress, upstream, handler and server\n\nThe cast wraps in the HTTP field codec, the static file server, the response\ncompressor, the upstream pool, the handler and the HTTP server become sums the\nprover proves under the parse's existing caps, or saturating clock helpers.\nNo peer-reachable value changes.\n\n* chore(runtime): lower the cast-wrap baseline for std/net HTTP\n\n* test(runtime): regenerate the checked goldens for the std/net HTTP wraps\n\n* refactor(runtime): keep serveTask's line where the pinned negative names it\n\n* test(runtime): declare the httparena IR moves of std/net HTTP, HPACK, URL and the server stack\n\n* docs(runtime): point the handler record at handlerCheckLimits's moved lines\n\nThe handler record's std/net/handler.ts line references named lines that had moved; they now name the guard's panic, openHttpHandler's fault check and its constructor call where they stand.\n\n* perf(runtime): keep the HTTP/1 field and section scans at main's cost\n\nThe field-line and section scans write the sums their guards bound plainly\nand keep http1Past and http1Less for the rest, so the bounds prover\ndischarges them without a clamp in the loop.\n\n* perf(runtime): write the HTTP/1 section's line sums plainly\n\n* perf(runtime): take the HTTP/1 request-line marks and writer ends as exact sums\n\nThe request-line marks, the response writer's byte copies and the request\nline's length cap now add offsets whose range the code has already checked,\nin place of a clamped i64 sum per call, and urlPortOf keeps its port in a\nranged lane.\n\n* refactor(runtime): format the HTTP/1 name guard and drop the unread port constant\n\n* test(self): regenerate the goldens for the HTTP/1 and URL sum rewrites\n\n* test(self): declare the nish-cmp differences std/net's sum rewrites make\n\nEvery corpus program reaching nish/net/hpack, http2-tls, protobuf or\nhttp-compress gets a narrow declaration per moved file, measured against\nthe 0.49.1 seed.\n\n* perf(runtime): keep HPACK Huffman decode at main's instruction count\n\nhpackHuffmanDecode finds its slot with one unsigned compare: baseRank\nis now u32 like the rank it is built from, and the constructor counts\neach length in it, so neither needs a cap test. hpackWindowEnd takes\noff + len in i64 with one compare, and hpackCheckWindow's panic moves\ninto its own function so the check inlines. std-net-http2-frame is back\nat main's count.\n\n* perf(runtime): inline the HPACK window check, its panic kept apart\n\nEvery window check goes through hpackCheckedWindowEnd, whose test\ninlines; hpackCheckWindow holds only the panic, so std-panics keeps it\nas the one kept site it was.\n\n* test(runtime): declare the HPACK Huffman header moves for std/net HTTP, HPACK, URL and the server stack\n\nHpackHuffman.baseRank is now a u32[], so every C header that lays out\nHpackHuffman comments the field as `u32[]` where the seed's said\n`number[]`. Declares that one-line move for the 24 hpack, http2-frame,\nhttp3 and qpack link cases and bench/std-net-http2-frame.ts.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "6633205"
+      ],
+      "pr": 2377,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "plan-wp92-std-ui-state-management-and-the",
+      "type": "docs",
+      "scope": "plans",
+      "breaking": false,
+      "title": "plan WP92 std/ui state management and the WP89 idle mode",
+      "body": "WP92 plans std/ui's state model. It is signals-based: alien-signals is\nported as std/signals on flat i32 arrays, a per-node typed context and\ntop-level functions stand in for closures, and signal writes mark nodes\nlayout-dirty or paint-dirty. WP89 gains a wait-for-events runApp mode\nand an idle bench (S8, S9), which WP92 S4 runs on. WP92 S5 moves to\npassing derivations directly once WP93 S1 lands.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "13da64a"
+      ],
+      "pr": 2423,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "replay-unchanged-tests-link-programs-and-defer-other",
+      "type": "ci",
+      "breaking": false,
+      "title": "replay unchanged tests/link programs, and defer other platforms' jobs and interop, on pull requests",
+      "body": "* ci: replay unchanged tests/link programs, and defer other platforms' jobs and interop, on pull requests\n\nA pull request's `test` shard now replays a tests/link program whose\ncompiler, harness, runtime, toolchain, directory and sources all match a\nrun in which every one of its checks passed (`--link-results`,\ntests/link-results.js), under a REPLAY line, instead of building it again.\nThe file is kept per shard in the Actions cache: a pull request restores\nits own last push's, else main's; the push to main, the Release PR and the\nrelease never restore one, so they build every program. Link programs were\nabout two fifths of a shard's suite time.\n\nA pull request also leaves simd-arm64, sha256-macos, gfx-macos,\npostgres-live and the aarch64 rows of bootstrap and nish-cmp-elision to the\npush to main, the Release PR and the release (`pullRequests: false` lanes\nand `rows=native` in scripts/ci-scope.mjs; `ci:full` runs them). nish-cmp\nkeeps its aarch64 row, which failed alone on two recorded pull requests.\n\ninterop.yml runs on a pull request only with the `ci:interop` or `ci:full`\nlabel: its fourteen jobs took 16 to 20 minutes, longer than ci.yml.\nrelease-pr.yml dispatches it at release/next beside ci.yml.\n\ntests/shard-costs.json is refit from three green runs, with the\nnet_tls_rsa_server section scripts/shard-costs.mjs had no recognizer for.\n\nRefs: docs/wp10-ci.md#link-program-results-across-runs\nTests: node tests/run.js ci-scope, ci.yml, link-results, interop.yml\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw6JsBqhRB1TyUGWhw4\n\n* chore: allow git add, commit and push in Claude Code sessions\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw6JsBqhRB1TyUGWhw4",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "d17c383"
+      ],
+      "pr": 2408,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "wp86-s1-make-the-json-helpers-and-the",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP86 S1 — make the JSON helpers and the YAML loader and writer panic-free",
+      "body": "std/json-equal.ts, std/json-value.ts, std/json-number.ts, std/json-tokenizer.ts, std/yaml-lines.ts, std/yaml-write.ts and std/yaml-json.ts now have no unproven panic site, and each builds in f64 number mode. Their rows leave tests/std-panics.json. Overflow and index sites are proven or answered as errors. YAML merge and alias expansion is counted in i64 and refuses with YAML_JSON_ERR_EXPANSION exactly where the old budget went negative. A JSON value offset past i32 answers JSON_VALUE_ERR_VALUES, and YamlLineIndex's column and byteColumn return -1 past the largest i32, as their docs say. No cast wraps or made-up caps are used.\n\nThree counted bench programs (std-yaml-parse, std-yaml-json, std-json-equal) pin the cost. JsonDocument.keys reads an object's keys in one pass.\n\nMeasured: CI valgrind instruction counts, std-yaml-parse 150,348,576 (+0.000%), std-yaml-json 173,632,559 (-0.040%), std-json-equal 169,511,889 (-0.387%)\nTests: tests/std-panics.json, tests/link/std_yaml_json, bench/std-json-equal.ts, bench/std-yaml-json.ts, bench/std-yaml-parse.ts\n\nPart of #2158\nFixes #2159",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "bd66c3f"
+      ],
+      "pr": 2388,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "window-contracts-forward-from-free-functions-arrow-consts",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "window contracts forward from free functions, arrow consts and literal lengths",
+      "body": "A window guard's contract now reaches its caller when the guard is a free\nfunction, an arrow const, or is called with a literal count, not only when it\nis a method called with a variable length. The reads a guarded window makes\nafter the call are proven in range, and their bounds checks go.\n\nFacts are recorded only from the guard's own call, so a guard called as a\nstatement no longer lends its window to an unrelated read.\n\nTests: tests/link/window_contract_*\nFixes #2398\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8fcfabf"
+      ],
+      "pr": 2403,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "decide-the-plans-only-skip-inside-each-test",
+      "type": "ci",
+      "breaking": false,
+      "title": "decide the plans-only skip inside each test shard instead of waiting on scope",
+      "body": "The `test` shards and `examples` no longer need the `scope` job. A job that\nneeds another is created only once that one ends, so on a full runner queue\nevery pull request's shards waited for scope's own runner first (run\n46097423926: 12 minutes). Each now runs `scripts/ci-scope.mjs --suite` in\nthe step after its checkout and gates every later step on it: a pull\nrequest that changes only paths the suite never reads still skips the\nsuite, and every other one starts its shards at once.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "node tests/run.js ci-scope",
+        "ci.yml",
+        "link-results",
+        "interop.yml"
+      ],
+      "commits": [
+        "180298d"
+      ],
+      "pr": 2427,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "wp91-s6-std-crypto-2392",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP91 S6 — std/crypto",
+      "body": "The cast wraps in std/crypto (base64url, bcrypt, jwt, p256, pki, pki-roots, rsa, sha256, x25519, x509) become sums src/bounds.ts proves, or values that are unsigned all the way through. Sha256's absorbed-byte count `total` is now a u64 field, so counting past 2^63 bytes wraps by its type instead of through a cast. scripts/wrap-casts.txt lists no file now, and its tests/run.js self-check plants its own baselined cast.\n\nFixes #2365",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ad29ae3"
+      ],
+      "pr": 2392,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "add-the-wp92-widget-library-stages-s6-to",
+      "type": "docs",
+      "scope": "plans",
+      "breaking": false,
+      "title": "add the WP92 widget library stages S6 to S16",
+      "body": "WP92's plan gains the std/ui widget library on top of its signals state\nmodel and WP89's std/gpu and std/gfx: flexbox layout, a display list with a\nCPU reference painter, TrueType text and a glyph atlas, input and the basic\ncontrols, std/png, DTCG themes and `nish ui import-tokens`, scrolling and\nvirtualList, textInput with the clipboard and IME, a GPU SDF renderer held to\na 240 Hz budget, a game HUD pack and an AccessKit accessibility tree. Each\nstage is filed as a sub-issue of the plan's parent issue.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "4b5ee7c"
+      ],
+      "pr": 2439,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "a-std-resource-owns-its-native-handle-and",
+      "type": "docs",
+      "breaking": false,
+      "title": "a std resource owns its native handle and closes with using",
+      "body": "* docs: state the owned-handle resource standard in CLAUDE.md\n\nA std/ resource with a single owner holds its native object as a handle\nclass and closes with using; a table id is kept only for a shared,\ncollected or JS-owned object.\n\n* docs: add the std resource rules an author meets to the architecture guide\n\n* docs: point AGENTS.md's house rules at the std resource standard\n\n* docs: say in AI.md when a resource owns its handle and when it keeps an id\n\n* docs: correct the handle-class doc comment in nish.d.ts to several owned fields\n\n* docs: a library module may export a handle class, not must\n\n* docs: a twin's handle field is private, and a dispose closes the last field first\n\nThe two files of a target pair must export the same public members\n(NL3063), so the owning field of a handle class with a wasm32 twin is\nprivate. The dispose body itself closes the native fields last-declared\nfirst; the compiler does not reorder them.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "2f5ba74"
+      ],
+      "pr": 2425,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "count-the-pipeline-s-no-spin-waits-from",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "count the pipeline's no-spin waits from once its seats have parked",
+      "body": "std_postgres_async_pipeline's section 9 took its snapshot of pool.turnWaits\nafter a fixed 10 ms sleep. On a runner that stalls past the late seats'\n3 ms and 4 ms timers, the snapshot runs while a seat is still yielding, so\nthat seat's first park behind `ahead` counts as a spin. Main's CI printed 4\nagainst the bound of 3 (shard 8/9). The snapshot now waits for the three\nparks themselves, which nothing can wake until `board.open`, so the window\nholds only the re-parks behind the gate.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_postgres_async_pipeline"
+      ],
+      "commits": [
+        "fba0576"
+      ],
+      "pr": 2442,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "httphandler-builds-its-body-decoder-through-a-checked",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "HttpHandler builds its body decoder through a checked limit and copies through tryCopyBytes",
+      "body": "The HTTP/1 handler, static file server and compression layer now build the request body decoder through a limit the compiler proves, and copy bytes through tryCopyBytes, so their panic sites are proven or carried as Results instead of opted out. http1TryWriteChunk writes its hex size through a u32 index that the window proves. examples/http-app builds with fewer --allow-panics sites; the gzip window at std/compress/gzip.ts:97 is left for a std/compress stage.\n\nPart of #2399\n\nVerified: pr-adversary 3 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "2fe75a8"
+      ],
+      "pr": 2402,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "bump-the-actions-group-across-1-directory-with",
+      "type": "ci",
+      "breaking": false,
+      "title": "bump the actions group across 1 directory with 11 updates",
+      "body": "Bumps the actions group with 11 updates in the / directory:\n\n| Package | From | To |\n| --- | --- | --- |\n| [actions/checkout](https://github.com/actions/checkout) | `4.4.0` | `7.0.1` |\n| [actions/setup-node](https://github.com/actions/setup-node) | `4.4.0` | `7.1.0` |\n| [actions/setup-go](https://github.com/actions/setup-go) | `6.5.0` | `7.1.0` |\n| [actions/cache/restore](https://github.com/actions/cache) | `4.3.0` | `6.1.0` |\n| [actions/cache/save](https://github.com/actions/cache) | `4.3.0` | `6.1.0` |\n| [actions/upload-artifact](https://github.com/actions/upload-artifact) | `4.6.2` | `7.0.2` |\n| [github/codeql-action/init](https://github.com/github/codeql-action) | `4.39.1` | `4.39.4` |\n| [github/codeql-action/analyze](https://github.com/github/codeql-action) | `4.39.1` | `4.39.4` |\n| [actions/download-artifact](https://github.com/actions/download-artifact) | `4.3.0` | `8.0.2` |\n| [docker/setup-docker-action](https://github.com/docker/setup-docker-action) | `5.5.0` | `5.7.0` |\n| [actions/cache](https://github.com/actions/cache) | `4.3.0` | `6.1.0` |\n\n\n\nUpdates `actions/checkout` from 4.4.0 to 7.0.1\n- [Release notes](https://github.com/actions/checkout/releases)\n- [Changelog](https://github.com/actions/checkout/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/actions/checkout/compare/11d5960a326750d5838078e36cf38b85af677262...3d3c42e5aac5ba805825da76410c181273ba90b1)\n\nUpdates `actions/setup-node` from 4.4.0 to 7.1.0\n- [Release notes](https://github.com/actions/setup-node/releases)\n- [Commits](https://github.com/actions/setup-node/compare/49933ea5288caeca8642d1e84afbd3f7d6820020...949feb2413d6458794dcd2491c4babbbce0c15c1)\n\nUpdates `actions/setup-go` from 6.5.0 to 7.1.0\n- [Release notes](https://github.com/actions/setup-go/releases)\n- [Commits](https://github.com/actions/setup-go/compare/924ae3a1cded613372ab5595356fb5720e22ba16...d8cbb8045d7f43706b9177cceb36c1f91a6644d5)\n\nUpdates `actions/cache/restore` from 4.3.0 to 6.1.0\n- [Release notes](https://github.com/actions/cache/releases)\n- [Changelog](https://github.com/actions/cache/blob/main/RELEASES.md)\n- [Commits](https://github.com/actions/cache/compare/0057852bfaa89a56745cba8c7296529d2fc39830...55cc8345863c7cc4c66a329aec7e433d2d1c52a9)\n\nUpdates `actions/cache/save` from 4.3.0 to 6.1.0\n- [Release notes](https://github.com/actions/cache/releases)\n- [Changelog](https://github.com/actions/cache/blob/main/RELEASES.md)\n- [Commits](https://github.com/actions/cache/compare/0057852bfaa89a56745cba8c7296529d2fc39830...55cc8345863c7cc4c66a329aec7e433d2d1c52a9)\n\nUpdates `actions/upload-artifact` from 4.6.2 to 7.0.2\n- [Release notes](https://github.com/actions/upload-artifact/releases)\n- [Commits](https://github.com/actions/upload-artifact/compare/ea165f8d65b6e75b540449e92b4886f43607fa02...cf430e030ddbb5b0abf93d22962f4752f3646cd9)\n\nUpdates `github/codeql-action/init` from 4.39.1 to 4.39.4\n- [Release notes](https://github.com/github/codeql-action/releases)\n- [Changelog](https://github.com/github/codeql-action/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/github/codeql-action/compare/9b3254085494b55a0f7c4c2b3d2d52cc712ce370...1bd86f2fdb4b86187fa4059f16f31a3202acc9ea)\n\nUpdates `github/codeql-action/analyze` from 4.39.1 to 4.39.4\n- [Release notes](https://github.com/github/codeql-action/releases)\n- [Changelog](https://github.com/github/codeql-action/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/github/codeql-action/compare/9b3254085494b55a0f7c4c2b3d2d52cc712ce370...1bd86f2fdb4b86187fa4059f16f31a3202acc9ea)\n\nUpdates `actions/download-artifact` from 4.3.0 to 8.0.2\n- [Release notes](https://github.com/actions/download-artifact/releases)\n- [Commits](https://github.com/actions/download-artifact/compare/d3f86a106a0bac45b974a628896c90dbdf5c8093...9000827ccba6bdab643e8b6fd33ac0654aef8333)\n\nUpdates `docker/setup-docker-action` from 5.5.0 to 5.7.0\n- [Release notes](https://github.com/docker/setup-docker-action/releases)\n- [Commits](https://github.com/docker/setup-docker-action/compare/2bf61fb9464cc67f0cbdeabed6aa0380accd1c70...3f1ab1ab0e29231562e4db4ca600c1a49653bac6)\n\nUpdates `actions/cache` from 4.3.0 to 6.1.0\n- [Release notes](https://github.com/actions/cache/releases)\n- [Changelog](https://github.com/actions/cache/blob/main/RELEASES.md)\n- [Commits](https://github.com/actions/cache/compare/0057852bfaa89a56745cba8c7296529d2fc39830...55cc8345863c7cc4c66a329aec7e433d2d1c52a9)\n\n---\nupdated-dependencies:\n- dependency-name: actions/cache\n  dependency-version: 6.1.0\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n  dependency-group: actions\n- dependency-name: actions/cache/restore\n  dependency-version: 6.1.0\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n  dependency-group: actions\n- dependency-name: actions/cache/save\n  dependency-version: 6.1.0\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n  dependency-group: actions\n- dependency-name: actions/checkout\n  dependency-version: 7.0.1\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n  dependency-group: actions\n- dependency-name: actions/download-artifact\n  dependency-version: 8.0.2\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n  dependency-group: actions\n- dependency-name: actions/setup-go\n  dependency-version: 7.1.0\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n  dependency-group: actions\n- dependency-name: actions/setup-node\n  dependency-version: 7.1.0\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n  dependency-group: actions\n- dependency-name: actions/upload-artifact\n  dependency-version: 7.0.2\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n  dependency-group: actions\n- dependency-name: docker/setup-docker-action\n  dependency-version: 5.7.0\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n  dependency-group: actions\n- dependency-name: github/codeql-action/analyze\n  dependency-version: 4.39.4\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n  dependency-group: actions\n- dependency-name: github/codeql-action/init\n  dependency-version: 4.39.4\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n  dependency-group: actions\n...",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f3b37da"
+      ],
+      "pr": 2426,
+      "author": "dependabot[bot]",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "explicit-baseline-raises-in-bench-instructions-json-2444",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "explicit baseline raises in bench/instructions.json",
+      "body": "No instruction baseline can rise without a recorded entry. `node bench/run.mjs --instructions --update` refuses to write a count more than the tolerance above its baseline unless `--raise <row> --why \"...\"` names that row. A named raise is appended to a new `raises` array in bench/instructions.json as `{row, from, to, why, pr}`. A row with no stored count is new and needs no raise.\n\nscripts/instruction-raises.mjs <base.json> <head.json> compares two baseline files. It prints a base/head/change table, which also goes to $GITHUB_STEP_SUMMARY when that is set. It uses the smaller of the two tolerances, so a head cannot widen its own band. It fails on a raise that has no new matching entry, on a row the head keeps without its count, and on any file whose counts are not positive integers.\n\nTests: tests/fixtures/instruction-raises, node tests/run.js instruction-raises\n\nPart of #2440\n\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1d309db"
+      ],
+      "pr": 2444,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "the-byte-getters-check-their-window-through-one",
+      "type": "fix",
+      "scope": "std",
+      "breaking": false,
+      "title": "the byte getters check their window through one guard callers can prove",
+      "body": "Each fixed-width getter and setter in std/bytes.ts checks its whole window once, first, through bytesWindow, a guard in the shape the window contract records, and panics with a literal message naming the function and its width. A caller whose own test holds the window, such as `off >= 0 && off + 4 <= b.length` before a getU32LE, now proves the call and builds without --allow-panics; an untested call still lists one unproven site. The dns and postgres callers keep their proofs, std/bytes.ts drops from the std-panics count (total 939 to 931), and examples/merge-patch.ts keeps its opt-out.\n\nFixes #2356\n\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7ceb993"
+      ],
+      "pr": 2443,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-27"
+    },
+    {
+      "id": "name-the-std-files-each-example-s-panic",
+      "type": "docs",
+      "scope": "guide",
+      "breaking": false,
+      "title": "name the std files each example's panic opt-out reaches, and check them",
+      "body": "Twenty of the guide's 105 `--allow-panics` reasons had drifted as std/ fixes moved panic sites: they blamed `std/yaml-lines.ts`, which is panic-free now, or `std/bytes.ts` and `std/net/http-compress.ts` behind the handler, while the site the build reaches is the gzip reader. Others left out a file the build does report. The reasons now name the files the strict build reports, and the api-server page no longer blames the byte copies, which go through `tryCopyBytes`.\n\nThe docs run now fails an opt-out whose reason leaves out a `std/` file whose panic site the strict build reports. Only that direction is checked: the compiler names one site per call, so a file named but not shown may still be reached behind the one it does show.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js docs section (a reason names every std/ file whose panic site the build reaches",
+        "per opted-out snippet; unit check of the file matcher)"
+      ],
+      "commits": [
+        "ff5e3ab"
+      ],
+      "pr": 2447,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "bump-biome-knip-and-types-node-and-typescript",
+      "type": "build",
+      "scope": "deps-dev",
+      "breaking": false,
+      "title": "bump biome, knip and @types/node, and TypeScript to 6.0",
+      "body": "* build(deps-dev): bump biome, knip and @types/node, and TypeScript to 6.0\n\nTakes the npm group from #2405 except TypeScript 7: typedoc 0.28, which\nbuilds the library reference, accepts TypeScript up to 6.0, so 7.0 made\n`npm ci` fail in every CI job. TypeScript moves to ^6.0.3 instead, and\nDependabot is told to skip 7.x until typedoc accepts it.\n\nBiome 2.6 formats Markdown, which 2.5 skipped; examples/**/*.md is left\nout of biome so the relay README's table keeps its hand layout.\n\n* test(self): standsAlone finds no-default-lib by its text, which TypeScript 6 no longer flags\n\nTypeScript 6 ignores `/// <reference no-default-lib=\"true\" />` and leaves\n`sourceFile.hasNoDefaultLib` false, so a declaration file carrying the\ndirective was judged to stand alone and the \"tsc over many declaration files\"\nprobe failed. The directive is now also matched in the file's text, which\nholds under TypeScript 5 and 6 alike.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "562c01d"
+      ],
+      "pr": 2446,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "wp91-s7-refuse-every-cast-wrap-with-no",
+      "type": "ci",
+      "breaking": false,
+      "title": "WP91 S7 — refuse every cast wrap, with no baseline",
+      "body": "* ci: refuse every cast wrap, with no baseline\n\nscripts/wrap-casts.mjs no longer reads or writes scripts/wrap-casts.txt:\nWP91 took every scanned file to none, so any cast wrap in a git-tracked\nstd/, src/ or examples/ file fails lint, naming its file and line, and\n--update is refused as an unknown argument. The std-panics check plants a\ncast in std/, src/ and examples/, and fails if the count file or the\nflag comes back.\n\nTests: tests/run.js std-panics\nFixes #2366\n\n* refactor(self): scan one copy for the planted wrap casts\n\nPlant each cast in one copy of std/, src/ and examples/ and take it out\nagain, rather than copying the tree four times; tighten the script's\nending and the COMP-21 evidence wording.\n\n* docs: pair each wrap-casts claim with the check that fails without it\n\nREGEX-8 credited the tree and count-file checks with failing when the\nscan stops covering std/, which neither can; it now cites the planted\ncopy check for that, as COMP-21 does, and COMP-21's entry is rewrapped.\n\n* test: pin the live wrap-casts scan to the files git lists\n\nThe planted copies only walk a --root directory, so a git listing that\nfound nothing still passed the tree. The script now prints how many\nfiles it scanned in each directory, and the tree check requires those\ncounts to match git's own and none to be zero.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7ae622f"
+      ],
+      "pr": 2445,
+      "author": "Redis Stasa",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "wp86-s2-make-std-yaml-ts-panic-free",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP86 S2 — make std/yaml.ts panic-free",
+      "body": "Every index, slice and arithmetic site in std/yaml.ts now carries a bound\nthe prover discharges: byte reads answer -1 outside the text, buffer growth\ngoes through sized room checks, counters are tied to the arrays they count,\nand block-scalar indents are checked against YAML_MAX_BLOCK_INDENT. The one\nsite left is parseYamlWith's documented maxDepth panic, so parseYaml builds\nunder --deny-panics and the guide's nish/yaml examples drop their\nallow-panics opt-outs. The std-yaml-parse and std-yaml-json instruction\ncounts fall to 148,396,698 and 173,405,840.\n\nFixes #2160\nRefs: docs/security/yaml.md\nTests: tests/link/std_yaml_strict\nVerified: pr-adversary 1 round, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "31f7214"
+      ],
+      "pr": 2441,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "compare-instruction-baselines-against-the-merge-base-2448",
+      "type": "ci",
+      "scope": "self",
+      "breaking": false,
+      "title": "compare instruction baselines against the merge-base",
+      "body": "* ci(self): compare instruction baselines against the merge-base\n\nThe lint job runs scripts/instruction-raises.mjs over bench/instructions.json\nagainst the merge-base of a pull request's base and head, or HEAD's parent on\nevery other run, and fails on a raise its `raises` does not record. The table\ngoes to the step summary. A base with no bench/instructions.json skips with a\nline saying so.\n\n* docs(self): removing a panic site raises no instruction count\n\nCLAUDE.md's definition of done and every open std-panics plan now say that\na change removing or proving a std/ panic site may not raise any count in\nbench/instructions.json: teach the prover instead, as #2303 did, and only\nwhere that cannot be done record the raise in `raises` with a measured\nreason. The ci.yml check on event reads takes the lint job's new\ninstruction-count step.\n\n* ci(self): say what the instruction-count step's pull request head is\n\nThe step's comment records that `--unshallow` relies on the lint job's\ndefault one-commit checkout, and its summary line says the head file is\nthe pull request merged into its base.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "bb45938"
+      ],
+      "pr": 2448,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "a-caller-s-proof-discharges-a-std-callee",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a caller's proof discharges a std callee's contract panic",
+      "body": "* fix(checker): a caller's proof discharges a std callee's contract panic (WIP)\n\nA function or method whose leading statements are if (test) { panic(m) } on\ncomparisons of its own parameters holds those tests as a contract site at\neach call, proven where the caller proves every comparison false.\n\nRefs: #2296\n\n* fix(checker): a caller's proof discharges a std callee's contract panic\n\nA function or method whose first statements are `if (test) { panic(m) }`\non its own parameters holds those tests as a `contract` site at each call,\nproven where the caller's arguments make every comparison false. When every\ncall into the callee is proven, its panic is listed proven, so a root\nprogram's call into std that proves the guard builds under --deny-panics.\nOne call nothing proves leaves the panic the callee's.\n\nTests: tests/cases/deny_panics_caller, tests/link/caller_contract_proven, tests/link/caller_contract_unproven\n\n* test(self): regenerate the checked goldens for the caller contract\n\n* test(self): declare the caller-contract flips in nish-cmp\n\nThe two new cases compile under the candidate and are refused by the seed,\nwhich still keeps a proven caller contract's panic.\n\nTests: tests/cases/deny_panics_caller, tests/link/caller_contract_proven\n\n* fix(checker): a caller's proof discharges a std callee's contract panic across forwards, fields and modules\n\nA caller contract is read only from the module that defines the callee, so an\nimporter's listing of a signature no longer marks it seen before its home\nmodule records the contract (std's routerDecode lost its contract that way),\nand a forward reads its target from the target's own module, which may come\nlater in the program list. Method guards, field initializers and `new` in a\nfield read the caller's proof too, and a re-export keeps the contract.\n\nEach exclusion holdCallerContracts keeps has a case that fails without it;\nthe tag, hidden-reference and dispatcher exclusions are gone, subsumed by the\nvalue cases.\n\nTests: tests/link/caller_contract_*\n\n* test(checker): drop caller-contract nish-cmp entries main's merge settles\n\nAfter merging main, hpack, the quic-* modules and record.ll agree between the\nseed and the candidate for both httparena programs, and record.ll does for\nnet_handler_pipelined_stream, so their caller-contract declarations go.\n\n* fix(checker): a call into a caller contract no one holds lists no contract site\n\nA call whose callee's contract is not held (a window shape #2403 does not\nread as a guard, or a holder whose own target is dropped) kept a proven\ncontract entry beside its call-through-panic entry. The fixpoint now drops\nsuch holders and their contract sites, so each call site is one or the other.\n\nThe guards the prover could not read in the caller-contract loops are spelled\nso it reads them (no new NL9007), and the http1-codec guide example, which\nnow builds strict, loses its --allow-panics opt-out.\n\nTests: tests/link/window_contract_not_a_guard, tests/link/window_near_dropped\n\n* test(checker): pin that a panic guard no caller proves stays the callee's\n\nThe caller-contract rule proves a leading `if (test) { panic(m) }` guard\nwhen every call into its function proves the test false. A new link case,\ntests/link/panic_caller_unproven, pins the other half: a guard whose one\ncall passes a value read from the command line stays unproven, and the call\nlists `call` via `panic`. It fails if the rule holds a contract an unproven\ncall reaches. docs/LANGUAGE.md's `panic` row now names both cases.\n\nTests: tests/link/panic_caller_unproven\n\n* test(checker): regenerate panics_panic for the caller-proof rule\n\n`checked(21)` is a call into a leading `panic` guard its caller proves\nfalse, so its panic is now proven and the call lists a proven `contract`\nsite. The golden is rewritten from the compiler's output and the header\nnames the case that keeps the unproven half.\n\nTests: tests/cases/panics_panic",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "067fda7"
+      ],
+      "pr": 2407,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "prove-or-remove-the-std-panic-sites-relay",
+      "type": "fix",
+      "scope": "net",
+      "breaking": false,
+      "title": "prove or remove the std panic sites relay reaches",
+      "body": "* fix(net): make h3CheckWindow a window guard so callers prove it away\n\nh3CheckWindow now has the window-guard shape, so a caller that proves its\nwindow removes the panic site, and WebTransport.close, sendDatagram and write\nforward the proof to their callers. Http3FrameHeader.read is the forwarding\nform of h3ReadFrameHeader, and WebTransport's own capsule writes test their\nwindows where the prover sees them.\n\nTests: tests/link/net_http3_frame\n\n* fix(runtime): prove the base64 decoders' output allocations\n\nbase64urlDecode and base64StdPadDecode sized their output with an inline\n`u32` product the bounds prover could not read, so each allocation was a\nchecked length that panics on overflow. Both now size it as the sum of two\nnon-negative `i32` locals, at most three quarters of the text's length, which\nthe prover discharges: strict callers of either decoder no longer reach a\npanic site in them.\n\nTests: test/spec/rfc4648-base64.ts\n\n* fix(net): prove the HTTP/3 frame and server windows relay reaches\n\nh3CheckWindow takes the window guard's shape, so a caller's window over its\nown buffer is a window site the prover discharges, not the one panic inside\nthe guard every caller reached. Http3FrameHeader.read checks its window and\nreads through h3FrameHeaderIn; Http3Server's receive hands udpRecvFrom the\nwhole receive buffer, its length bounded by a literal the prover reads. The\nstd-panics baseline records the exported forwarders' guard calls the\nroot-package sweep keeps, and docs/security/http3.md says why.\n\nTests: tests/std-panics.json, link/net_http3_frame_bad_window\n\n* docs(net): regenerate the http3-frame reference for Http3FrameHeader.read\n\nThe reference moves with the new public method's doc comment.\n\n* refactor(net): drop webtransport's unused h3ReadFrameHeader import\n\nThe capsule header reads through Http3FrameHeader.read now.\n\n* fix(net): give webtransport's zero window starts an i32 local\n\nA bare 0 is an f64 under --number-mode f64, and the prover does not read WT_ZERO, a module constant; a typed local is both an i32 and a literal it proves.\n\nTests: link/net_webtransport_f64, link/net_relay_f64\n\n* docs(net): say WebTransport.write panics on a window outside its buffer\n\nThe guard now runs before the stream lookup, so a bad window panics even\nfor a stream this layer does not hold.\n\n* test(net): declare the HTTP/3 frame IR moves of the std panic sites relay reaches\n\nh3CheckWindow's window-guard shape and Http3FrameHeader.read move\nhttp3-frame.ll, http3.ll and the modules that declare the header's\nmethods in 31 corpus programs; no program flips between refused and\ncompiled.\n\n* test(self): regenerate the checked goldens for the std panic sites relay reaches\n\n* docs(net): regenerate the webtransport reference for WebTransport.write\n\n* docs(net): record the entropy exit and WebTransport.write's window check\n\nWebTransport.write checks its window before it looks up the stream, so a\nwindow outside `buf` on a stream this layer does not hold now panics where\nit used to answer H3_CLOSED; its doc comment says so. The HTTP/3 record\ngains H3-10: a failed entropy read in the server's `build`/`unowned` exits\nthe process, and no caller can carry a Result because the builtin has no\nfailure answer. tests/std-panics.json is regenerated after taking in main.\n\n* docs(net): cite H3-10 from the HTTP/3 security index row\n\n* fix(runtime): clear std panic sites relay reaches in qpack and p256 hashing\n\nWIP: qpack whole-field encode, sha256 absorb without the finished check for a fresh hasher, p256Mac over sha256Wiped.\n\n* refactor(runtime): keep hmac and qpack window checkers off the forwarder contract\n\nA checker turned into a window guard makes every forwarding method a\nhost-judged window site in its own module, which raised the per-kind\ncounts; the relay path past hmac's begin still stops at Sha256.update.\n\n* fix(runtime): hash RFC 6979's HMAC through a fresh absorbed Sha256\n\np256Mac takes its two hashers from sha256Absorbed, which absorbs the\nparts into a fresh hasher past update's finished check, so signing\nreaches no Sha256.update panic; p256Mac still wipes both hashers, as\nbefore. carryEnd hands writeData a local zero the window prover reads.\n\n* fix(runtime): drop sha256's unused wipe import\n\n* test(runtime): lower http-server's window count and move qpack's kept panic\n\ncarryEnd's local zero clears one window site, so the ratchet falls 1055 to 1054.\nqpack's range panic now lives in qpackPushStreamCancellation.\n\n* perf(runtime): keep Sha256.update a single absorb call\n\nThe window and finished checks move into sha256Absorb, which reports a\nrefused window as false, so update stays one call and one test on the HMAC\nhot path; encodeLine's arguments at qpack.ts go one per line.\n\n* perf(runtime): write SHA-256's padding as a zero run and one 0x80 byte\n\ndigestInto zeroed the block after the message one byte at a time, choosing 0x80\nor 0 per byte; zeroing the run and then writing the 0x80 byte lets it lower to a\nfill, which pays for the window check moving into sha256Absorb. update keeps its\nfinished check and its two panics.\n\n* docs(runtime): build the key-distrust example under the default\n\npkiDistrustSpki's example reaches no std panic site now that sha256.ts\nproves its windows, so its --allow-panics marker and the note above it go.\n\n* fix(net): answer H3_INVALID for a write window outside its buffer\n\nHttp3Connection.writeStream, writeData and writeDataWhole, and\nWebTransport.close, write and sendDatagram, refuse a window that does not\nlie inside its buffer with H3_INVALID, before the stream or session is\nlooked at, rather than panicking. Each was an exported forwarder of\nh3CheckWindow, so each kept an unproven window site of its own.\n\nTests: tests/link/net_http3_write_window, tests/link/net_webtransport_stream_window\n\n* fix(net): record the HTTP/3 writes' H3_INVALID window answer\n\nThe std-panics ratchet falls to 1028, and the HTTP/3 record states that a\nwrite's window outside its buffer answers H3_INVALID, not a panic.\n\n* docs(net): regenerate the reference for the H3_INVALID windows\n\n* test(net): declare qpack.ll's move under examples-strict S8\n\nqpackPushInteger takes its prefix as a literal mask and a u64 and no\nlonger panics, so qpack.ll moves in the twenty corpus programs that link\nthe HTTP/3 stack.\n\n* test(net): declare qpack.ll's move in the rest of S8's HTTP/3 programs",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "65f494a"
+      ],
+      "pr": 2396,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "websocket-on-the-nish-net-http-server-fa",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WebSocket on the nish/net/http-server façade's HTTP/1.1 listener",
+      "body": "* feat(runtime): WebSocket on the nish/net/http-server façade's HTTP/1.1 listener\n\nWIP: HttpServer.acceptWebSocket, sendFrame, received and closeWebSocket over\nthe HTTP/1.1 carrier's WebSocket slot; a held message is the decoder's buffer,\nhanded to the program through take, with no copy.\n\nFixes #2011\n\n* test(runtime): cover the façade's WebSocket in tests/link/net_http_server_ws\n\nAn echo program on `HttpServer.listenHttp1` upgrades with `acceptWebSocket`\nand echoes text, a 300000-byte fragmented binary message, and a burst a\nnon-reading client stalls on `H1_AGAIN` and resumes on `writable`. It closes\nfrom either side (1000), closes an unmasked frame with 1002 and a dropped\nconnection with 1006, reuses a pool of one request, keeps `Arena.used()` flat\nover 200 warmed round trips, refuses the upgrade on h2c and on a GET without\n`Upgrade` (`H1_INVALID`, answered 400), and keeps a WebSocket open past a\n1 ms `bodyTimeout`.\n\nThe façade's doc comments now point at `Http1Connection` and\n`nish/net/websocket` for the WebSocket rules they follow instead of citing\nRFC 6455 and RFC 8441, which the façade does not implement.\n\nTests: tests/link/net_http_server_ws\n\n* ci(interop): run Autobahn against the façade's WebSocket echo server\n\nThe interop job's autobahn lane now runs every fuzzingclient case against a\nsecond server, agent nish-facade on port 9002:\ntests/link/net_http_server_ws/autobahn.ts, which is the net_http_server_ws\nrig. It upgrades every request through HttpServer.acceptWebSocket, takes\nmessages of up to 16 MiB, and echoes each one in 16 KiB fragments with\nsendFrame. The interop image builds it as /ws-facade-server. The job checks\nboth agents' verdicts and keeps both servers' logs.\n\nTests: tests/link/net_http_server_ws\n\n* docs(runtime): WebSocket on the façade's HTTP/1.1 listener\n\nThe security record gains HTTPSRV-26 to HTTPSRV-29: the upgrade only on\nHTTP/1.1, the request handed back on every end, idleTimeout rather than\nbodyTimeout, and the pool WebSockets can hold, recorded open. Each row\ncites the check that fails when its guard is removed. The design note\ngains §2.6 and the test table, and the user guide a WebSocket section\nwith an echo server. A test now pins that idleTimeout closes a quiet\nWebSocket with 1006 and hands its request back.\n\nTests: tests/link/net_http_server_ws\n\n* docs(runtime): regenerate the http-server reference for the WebSocket notes\n\nTests: node scripts/gen-reference.mjs --check\n\n* fix(runtime): clear a held WebSocket message when the socket closes\n\nA WebSocket that closed while the program held a message still answered\n`message`, so its `messageData` could point into a connection buffer the\npool hands to the next connection. Closing now clears it. The record and\nthe guide name the decoder's close codes 1007 and 1009 beside 1002, and\nthe record's notes add two cases no check drives yet.\n\nTests: tests/link/net_http_server_ws\n\n* test(self): regenerate the checked goldens for the WebSocket close fix\n\n* refactor(runtime): simplify the façade's WebSocket paths and rig\n\nA slot whose program holds a WebSocket message no longer asks for a read\nwakeup, so the server does not spin while the program works on it. The\nthree WebSocket calls share one ownership check, the \"programs\" states\nhave one predicate, and the test rig takes the interop echo's slots,\nconfig and fragment size instead of copying them.\n\nTests: tests/link/net_http_server_ws\n\n* test(runtime): cover WebSocket over TLS and the held pool on the façade\n\nAdds a listenHttp1Tls case to net_http_server_ws (upgrade, echo, close),\npins that a second handshake waits while a WebSocket holds a pool of one\nand is upgraded once it closes, runs interop on the ws link paths, and\ncorrects the records' citations and scope row.\n\nTests: tests/link/net_http_server_ws\n\n* fix(runtime): answer WebSocket misuse on the façade with H1_INVALID, not a panic\n\nsendFrame, closeWebSocket and acceptWebSocket on the nish/net/http-server\nfaçade now answer H1_INVALID on a request that is not a WebSocket the\nprogram holds (never upgraded, or handed back), and sendFrame answers it to\na window outside its buffer; received does nothing there. The window is\nsummed in i64 and guarded so src/bounds.ts proves it, so std-panics holds\nthe module's counts as before.\n\nTests: tests/link/net_http_server_ws\n\n* test(interop): declare the WebSocket program nish-cmp's seed refuses\n\ntests/link/net_http_server_ws reads HttpServerRequest.socket and calls\nHttpServer.acceptWebSocket, which the seed's std/net does not have, so only\nthe candidate compiles it; nish-cmp declares that exit difference under the\nstage's release-note words, as it does the HTTP/1.1 over TLS programs.\n\nTests: tests/nish-cmp.js\n\n* fix(interop): type sendFrame's window guard under both number modes\n\n`sendFrame` compared an `i32` against `buf.length`, which `--number-mode f64`\ntypes as `f64`; it now casts the length as the façade's other window guards\ndo. The guide's WebSocket sample makes its router with `routerChecked`, so its\nown code builds under the default no-panic rule, and the explain-layout\nexpectation for the request-slot bench follows `HttpServerRequest`'s line and\nsize.\n\n* fix(runtime): a draining http-server façade upgrades no WebSocket\n\nacceptWebSocket now answers H1_INVALID on a draining server. The carrier's\naccept cleared the close-after mark drain had set on the connection, so a\nhandshake read during a drain became a WebSocket the drain could not end.\nThe program answers the request with a status, and its connection closes.\n\nThe façade's tests also send a handshake with no Sec-WebSocket-Key and one\nfor version 8. The test client now looks for a response head before it\nreads the peer's end, since one turn can read both.\n\nTests: tests/link/net_http_server_ws",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "27b391f"
+      ],
+      "pr": 2381,
+      "author": "Redis Stasa",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "name-the-std-files-each-panic-opt-out",
+      "type": "docs",
+      "scope": "guide",
+      "breaking": false,
+      "title": "name the std files each panic opt-out now reaches",
+      "body": "#2447 checks that each guide example's allow-panics reason names every\nstd/ file whose panic site its build reaches; #2396, #2407 and #2381\nlanded after it and moved those reaches, so six reasons on main missed\nstd/net/http3-server.ts, std/crypto/sha512.ts or std/crypto/rsa-sign.ts.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "node tests/run.js guide"
+      ],
+      "commits": [
+        "9fd87ea"
+      ],
+      "pr": 2456,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "require-a-provoking-check-for-each-new-std",
+      "type": "docs",
+      "scope": "self",
+      "breaking": false,
+      "title": "require a provoking check for each new std error path",
+      "body": "In #2388 and #2441, both WP86 stages added error paths (YAML_ERR_BAD_INDENT,\nJSON_VALUE_ERR_VALUES on an i32 end overflow, the yaml-json append failure)\nwith no check that provokes them. Review refuted each one as unreachable,\nand acceptance then found the gap (follow-up #2452). A new std error path\nnow lands with a tests/link case or tests/run.js check that reaches it, or\nis named as untested in the PR body and its security record.",
+      "metrics": [],
+      "refs": [
+        "#2386",
+        "#2452"
+      ],
+      "tests": [],
+      "commits": [
+        "a463901"
+      ],
+      "pr": 2455,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    }
+  ]
+}
