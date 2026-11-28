@@ -297,7 +297,7 @@ class GzipDecompressor
 | Member | |
 | --- | --- |
 | `new GzipDecompressor()` | Builds the tables. |
-| `decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32` | Decompresses every member of `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends; or `DEFLATE_ERR_OUTPUT_LIMIT` when the data is longer, `GZIP_ERR_HEADER`, `GZIP_ERR_CRC`, `GZIP_ERR_SIZE`, `DEFLATE_ERR_TRUNCATED` or another `DEFLATE_ERR_*` for a malformed stream. An empty input is truncated. A window outside its array, or a negative `limit`, panics. Allocates nothing. |
+| `decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32` | Decompresses every member of `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends; or `DEFLATE_ERR_OUTPUT_LIMIT` when the data is longer, `GZIP_ERR_HEADER`, `GZIP_ERR_CRC`, `GZIP_ERR_SIZE`, `DEFLATE_ERR_TRUNCATED` or another `DEFLATE_ERR_*` for a malformed stream. An empty input is truncated. A window outside its array, or a negative `limit`, panics: `decompressRange` answers those instead. Allocates nothing. |
 
 ### GzipFixedCompressor
 

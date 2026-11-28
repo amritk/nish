@@ -1,12 +1,13 @@
-// Opt-out (`--allow-panics`): `FetchSyncClient.fetch` reaches the
-// `array-length` site in `std/net/url.ts`'s `urlBytesOf` and, on an `https:`
-// URL, the exit of `crypto.getRandomValues` in `std/net/fetch`'s TLS start;
-// the request write and `close` reach the range check of the `netWrite`
-// builtin and `HttpBodyReader.readAll` that of `netRead`, both in
-// `std/net/fetch`, which no proof discharges yet.
-// Follow-up: a non-exiting entropy draw, a proof of the `netRead` and
-// `netWrite` windows, and a bounded `urlBytesOf`, then build this file
-// without `--allow-panics`.
+// Opt-out (`--allow-panics`): `FetchSyncClient.fetch` reaches, on an
+// `https:` URL, the exit of `crypto.getRandomValues` in `std/net/fetch`'s TLS
+// start, which has no non-exiting twin, and the unproven sites of the DNS
+// and TLS code it calls: `std/crypto/{aes,hkdf,sha512,pki-roots}`,
+// `std/base64`, `std/net/{dns,dns-config,dns-resolver,dns-message,
+// http1-client-codec}` and `std/net/tls/schedule`, with the `HmacSha256Scratch`
+// and `HmacSha384Scratch` windows, `Sha256.update` and `BufferPool` sites
+// those reach.
+// Follow-up: a non-exiting entropy draw and those modules' proofs, then build
+// this file without `--allow-panics`.
 //
 // Fetches a JSON document over HTTP or HTTPS with `nish/net/fetch` and
 // prints the fields named on the command line, or the whole document when

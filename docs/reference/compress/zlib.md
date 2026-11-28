@@ -223,7 +223,7 @@ class ZlibDecompressor
 | Member | |
 | --- | --- |
 | `new ZlibDecompressor()` | Builds the tables. |
-| `decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32` | Decompresses the zlib stream `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends, or a negative `ZLIB_ERR_*` or `DEFLATE_ERR_*`. A window outside its array, or a negative `limit`, panics. Allocates nothing. |
+| `decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32` | Decompresses the zlib stream `src[off .. off + len)` into `out` from `at`, writing at most `limit` bytes and never past `out`'s end, and answers where the output ends, or a negative `ZLIB_ERR_*` or `DEFLATE_ERR_*`. A window outside its array, or a negative `limit`, panics: `decompressRange` answers those instead. Allocates nothing. |
 
 ## Constants
 

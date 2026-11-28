@@ -98,6 +98,12 @@ export const DEFLATE_ERR_OUTPUT_LIMIT: i32 = -8
 /** `decompress`: bytes follow the final block. */
 export const DEFLATE_ERR_TRAILING: i32 = -15
 
+/**
+ * A window outside its array, from the calls that answer it rather than
+ * panic: `Inflater.inflateAll` and the decoders' `decompressRange`.
+ */
+export const DEFLATE_ERR_WINDOW: i32 = -16
+
 /** `Inflater.inflate`: the final block has ended; `inPos` is the first byte after it. */
 export const INFLATE_DONE: i32 = 1
 
@@ -3707,7 +3713,8 @@ export class Inflater {
    * copy from `op` on, which is what a one-shot decoder passes. Its checks
    * test the parameters themselves, so a caller that has tested the same
    * ends proves them away; `inflate`'s `histStart <= op` is one a caller
-   * passing `op` for both cannot prove. Windows outside their arrays panic.
+   * passing `op` for both cannot prove. A window outside its array is
+   * `DEFLATE_ERR_WINDOW`, with nothing read or written.
    *
    * @internal Called by `decompress` here and by the one-shot decoders of
    * std/compress/gzip.ts and std/compress/zlib.ts.
@@ -3718,14 +3725,12 @@ export class Inflater {
    * @param out The array the decoded bytes are written into.
    * @param op Where in `out` the first decoded byte goes.
    * @param outEnd One past the last byte of `out` this call may write.
-   * @returns As `inflate` answers, never `INFLATE_NEED_INPUT`.
+   * @returns As `inflate` answers, never `INFLATE_NEED_INPUT`; or
+   *   `DEFLATE_ERR_WINDOW` for a window outside its array.
    */
   inflateAll(src: u8[], ip: i32, inEnd: i32, out: u8[], op: i32, outEnd: i32): i32 {
-    if (ip < 0 || ip > inEnd || inEnd > toI32(src.length)) {
-      panic("Inflater.inflateAll: an input window outside its array")
-    }
-    if (op < 0 || op > outEnd || outEnd > toI32(out.length)) {
-      panic("Inflater.inflateAll: an output window outside its array")
+    if (ip < 0 || ip > inEnd || inEnd > toI32(src.length) || op < 0 || op > outEnd || outEnd > toI32(out.length)) {
+      return DEFLATE_ERR_WINDOW
     }
     return this.run(src, ip, inEnd, false, out, op, outEnd, op)
   }
@@ -4351,13 +4356,11 @@ export class Inflater {
     const inEnd: i32 = toI32(src.length) - inGap
     const end: i32 = toI32(out.length) - outGap
     this.reset()
-    // The window as `inflateAll` tests it, on its two ends: what proves its
-    // checks away. It always passes where the tests above did.
-    if (off < 0 || off > inEnd || inEnd > toI32(src.length) || at < 0 || at > end || end > toI32(out.length)) {
-      this.consumed = 0
-      return DEFLATE_ERR_TRUNCATED
-    }
     const r: i32 = this.inflateAll(src, off, inEnd, out, at, end)
+    if (r === DEFLATE_ERR_WINDOW) {
+      this.consumed = 0
+      return r
+    }
     const pos: i32 = this.inPos
     if (pos < 0) {
       this.consumed = 0

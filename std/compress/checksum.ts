@@ -164,22 +164,23 @@ export class Crc32 {
 
   /**
    * The CRC-32 of `buf[off .. end)` alone, a range given by its two ends:
-   * `update` from 0. Its checks test the parameters themselves, so a caller
-   * that has tested the same ends proves them away, which a length cannot
-   * give: the decoders under `nish/net/http-compress` call this one. A range
-   * outside `buf` panics.
+   * `update` from 0, or -1 for a range outside `buf`. It answers rather than
+   * panics, so the decoders under `nish/net/http-compress` reach no panic
+   * through it: a malformed body there is the peer's, never the program's.
    *
    * @internal Called by std/compress/gzip.ts's range decoder and header reader.
    * @param buf The array that holds the bytes to checksum.
    * @param off Where in `buf` the bytes start.
    * @param end One past the last byte; `off` answers 0.
-   * @returns The CRC-32 of the range, as `update(0, buf, off, end - off)` answers it.
+   * @returns The CRC-32 of the range, as `update(0, buf, off, end - off)`
+   *   answers it; or -1 when `off` is negative, past `end`, or `end` is past
+   *   `buf`'s end.
    */
-  ofRange(buf: u8[], off: i32, end: i32): u32 {
+  ofRange(buf: u8[], off: i32, end: i32): i64 {
     if (off < 0 || off > end || end > toI32(buf.length)) {
-      panic("Crc32.ofRange: the range lies outside its array")
+      return -1
     }
-    return crc32Walk(this.table, this.braid, toU32(0), buf, off, end - off)
+    return toI64(crc32Walk(this.table, this.braid, toU32(0), buf, off, end - off))
   }
 }
 
@@ -361,21 +362,20 @@ const adler32Walk = (adler: u32, buf: u8[], off: i32, len: i32): u32 => {
 export const adler32 = (buf: u8[], off: i32, len: i32): u32 => adler32Update(toU32(1), buf, off, len)
 
 /**
- * `adler32` over `buf[off .. end)`, a range given by its two ends. Its
- * checks test the parameters themselves, so a caller that has tested the
- * same ends proves them away, which a length cannot give: the decoders
- * under `nish/net/http-compress` call this one. A range outside `buf`
- * panics.
+ * `adler32` over `buf[off .. end)`, a range given by its two ends, or -1 for
+ * a range outside `buf`. It answers rather than panics, so the decoders
+ * under `nish/net/http-compress` reach no panic through it.
  *
  * @internal Called by std/compress/zlib.ts's range decoder.
  * @param buf The array that holds the bytes to checksum.
  * @param off Where in `buf` the bytes start.
  * @param end One past the last byte to checksum; `off` answers 1.
- * @returns The Adler-32 of the range, the value zlib's trailer carries.
+ * @returns The Adler-32 of the range, the value zlib's trailer carries; or
+ *   -1 when `off` is negative, past `end`, or `end` is past `buf`'s end.
  */
-export const adler32Range = (buf: u8[], off: i32, end: i32): u32 => {
+export const adler32Range = (buf: u8[], off: i32, end: i32): i64 => {
   if (off < 0 || off > end || end > toI32(buf.length)) {
-    panic("adler32Range: the range lies outside its array")
+    return -1
   }
-  return adler32Walk(toU32(1), buf, off, end - off)
+  return toI64(adler32Walk(toU32(1), buf, off, end - off))
 }

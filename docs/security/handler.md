@@ -128,9 +128,10 @@ answers `Err` (`tests/link/net_handler_dead_loop`, whose `expected.out` reads
 only through `httpBodyDecoderFault`, so `openHttpHandler` reaches no handler
 panic. A program that builds a handler through it builds without
 `--allow-panics` as far as the handler goes. The decoder's `tryDecode` calls
-the gzip and zlib range decoders (`decompressRange`) on a window it has just
-tested, so their checks, and those of `Inflater.inflateAll`, `Crc32.ofRange`
-and `adler32Range` under them, are proven at each call: `examples/http-app`
+the gzip and zlib range decoders (`decompressRange`), which hold no panic: a
+window outside its array or a negative limit answers `DEFLATE_ERR_WINDOW`, as
+`Inflater.inflateAll` does, and `Crc32.ofRange` and `adler32Range` under them
+answer -1 (`tests/link/std_http_compress_window`). So `examples/http-app`
 builds without `--allow-panics`. The check "net_static app: examples/http-app
 links under --sandbox --allow net,signal,clock,fs.read=<www>" builds it
 without the flag, and fails when any of those checks is left unproven.

@@ -40,6 +40,7 @@ import { Crc32 } from "nish/compress/checksum"
 import {
   DEFLATE_ERR_OUTPUT_LIMIT,
   DEFLATE_ERR_TRUNCATED,
+  DEFLATE_ERR_WINDOW,
   DEFLATE_NO_ROOM,
   Deflater,
   FixedDeflater,
@@ -230,13 +231,13 @@ const gzipReadHeader = (crc: Crc32, src: u8[], p: i32, end: i32): i32 => {
       return DEFLATE_ERR_TRUNCATED
     }
     const want: i32 = (h0 & 255) | ((h1 & 255) << 8)
-    // `h1` read inside `src`, so `q` lies inside it and past `p`: tested
-    // again in the form the range's checks take, with the answer a header
-    // that ran past the input would get.
-    if (p < 0 || p > q || q > toI32(src.length)) {
+    // `h1` was read inside `src`, so `[p, q)` lies inside it and `ofRange`
+    // answers no -1 here; were it to, the header ran past the input.
+    const got: i64 = crc.ofRange(src, p, q)
+    if (got < 0) {
       return DEFLATE_ERR_TRUNCATED
     }
-    if (toI32(crc.ofRange(src, p, q) & 0xffff) !== want) {
+    if (toI32(got & 0xffff) !== want) {
       return GZIP_ERR_HEADER
     }
     q = toI32(toI64(q) + 2)
@@ -406,7 +407,8 @@ export class GzipDecompressor {
    * data is longer, `GZIP_ERR_HEADER`, `GZIP_ERR_CRC`, `GZIP_ERR_SIZE`,
    * `DEFLATE_ERR_TRUNCATED` or another `DEFLATE_ERR_*` for a malformed
    * stream. An empty input is truncated. A window outside its array, or a
-   * negative `limit`, panics. Allocates nothing.
+   * negative `limit`, panics: `decompressRange` answers those instead.
+   * Allocates nothing.
    *
    * @param src The array that holds the gzip data, one member or several.
    * @param off Where in `src` the first member starts.
@@ -427,27 +429,19 @@ export class GzipDecompressor {
    *   nothing.
    */
   decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 {
-    // Tested on the window's two ends, the form `decompressRange`'s checks
-    // take: a window whose end leaves the i32 range ends before it starts.
-    const end: i32 = toI32(toI64(off) + toI64(len))
-    if (off < 0 || len < 0 || off > end || end > toI32(src.length)) {
-      panic("GzipDecompressor.decompress: the input window lies outside its array")
+    // One test for every argument, so the call's misuse is one panic site.
+    if (off < 0 || len < 0 || off > toI32(src.length) - len || at < 0 || at > toI32(out.length) || limit < 0) {
+      panic("GzipDecompressor.decompress: a window outside its array, or a negative limit")
     }
-    if (at < 0 || at > toI32(out.length)) {
-      panic("GzipDecompressor.decompress: the output start lies outside its array")
-    }
-    if (limit < 0) {
-      panic("GzipDecompressor.decompress: a negative limit")
-    }
-    return this.decompressRange(src, off, end, out, at, limit)
+    return this.decompressRange(src, off, toI32(toI64(off) + toI64(len)), out, at, limit)
   }
 
   /**
-   * `decompress` over `src[off .. end)`, a range given by its two ends. Its
-   * checks test the parameters themselves, so a caller that has tested the
-   * same ends proves them away, which a length cannot give:
-   * `nish/net/http-compress`'s decoder calls this one. A range outside
-   * `src`, an output start outside `out`, or a negative `limit` panics.
+   * `decompress` over `src[off .. end)`, a range given by its two ends, that
+   * answers a misuse rather than panicking: a range outside `src`, an output
+   * start outside `out` or a negative `limit` is `DEFLATE_ERR_WINDOW`, with
+   * nothing read or written. `nish/net/http-compress`'s decoder calls this
+   * one, so a body it decodes reaches no panic.
    *
    * @internal Called by std/net/http-compress.ts's body decoder.
    * @param src The array that holds the gzip data, one member or several.
@@ -457,17 +451,11 @@ export class GzipDecompressor {
    * @param at Where in `out` the data starts.
    * @param limit The most bytes of data to accept over all the members.
    * @returns The index in `out` one past the data's last byte, or a negative
-   *   code, as `decompress` answers.
+   *   code, as `decompress` answers; or `DEFLATE_ERR_WINDOW`.
    */
   decompressRange(src: u8[], off: i32, end: i32, out: u8[], at: i32, limit: i32): i32 {
-    if (off < 0 || off > end || end > toI32(src.length)) {
-      panic("GzipDecompressor.decompressRange: the input range lies outside its array")
-    }
-    if (at < 0 || at > toI32(out.length)) {
-      panic("GzipDecompressor.decompressRange: the output start lies outside its array")
-    }
-    if (limit < 0) {
-      panic("GzipDecompressor.decompressRange: a negative limit")
+    if (off < 0 || off > end || end > toI32(src.length) || at < 0 || at > toI32(out.length) || limit < 0) {
+      return DEFLATE_ERR_WINDOW
     }
     let outEnd: i32 = toI32(out.length)
     if (toI64(limit) < toI64(outEnd) - toI64(at)) {
@@ -484,12 +472,6 @@ export class GzipDecompressor {
       }
       const inf: Inflater = this.inflater
       inf.reset()
-      // The checks above hold still, but the calls since have taken what
-      // the prover knew of the arrays' lengths: tested again for it, with
-      // the answer a header past the input's end would get.
-      if (body < 0 || body > end || end > toI32(src.length) || op < 0 || op > outEnd || outEnd > toI32(out.length)) {
-        return DEFLATE_ERR_TRUNCATED
-      }
       const r: i32 = inf.inflateAll(src, body, end, out, op, outEnd)
       if (r === INFLATE_NEED_OUTPUT) {
         return DEFLATE_ERR_OUTPUT_LIMIT
@@ -504,14 +486,15 @@ export class GzipDecompressor {
         return DEFLATE_ERR_TRUNCATED
       }
       const outPos: i32 = inf.outPos
-      if (op > outPos || outPos > toI32(out.length)) {
-        return DEFLATE_ERR_TRUNCATED
+      // `inflateAll` wrote `out[op .. outPos)`, so `ofRange` answers no -1.
+      const got: i64 = this.crc.ofRange(out, op, outPos)
+      if (got < 0) {
+        return DEFLATE_ERR_WINDOW
       }
-      const n: i32 = outPos - op
-      if (wantCrc !== toI64(this.crc.ofRange(out, op, outPos))) {
+      if (wantCrc !== got) {
         return GZIP_ERR_CRC
       }
-      if (wantSize !== toI64(toU32(n))) {
+      if (wantSize !== toI64(toU32(toI32(toI64(outPos) - toI64(op))))) {
         return GZIP_ERR_SIZE
       }
       op = outPos
