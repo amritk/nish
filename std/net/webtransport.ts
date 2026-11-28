@@ -2018,7 +2018,10 @@ export class WebTransport {
  * @param h3 The connection the layer reads and writes, kept for the layer's life.
  * @returns `Ok` with the layer, or `Err` saying which cap is out of range or that `h3` has WebTransport off.
  */
-export const openWebTransport = (config: WebTransportConfig, h3: Http3Connection): Result<WebTransport, string> => {
+export const openWebTransport = (
+  config: WebTransportConfig,
+  h3: Http3Connection
+): Result<WebTransport, string> => {
   if (h3.config.webtransportSessions < 1) {
     return Err("WebTransport: the Http3Connection has WebTransport off (webtransportSessions 0)")
   }
