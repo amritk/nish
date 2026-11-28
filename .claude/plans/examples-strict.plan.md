@@ -83,8 +83,8 @@ stages:
         content: Drop game.ts's header and build.mjs's flag; regenerate help.ts and docs/site/break with node examples/break-web/build.mjs
         status: pending
   - id: s7-http
-    title: examples-strict S7 — http-get-json and http-app
-    goal: Both build strict with -o and --link; the fetch.ts, url.ts, bytes.ts and http-compress.ts sites they reach are discharged by S2 or removed.
+    title: examples-strict S7 — http-app and the shared fetch/TLS sites
+    goal: http-app builds strict with -o and --link; the fetch.ts, url.ts, bytes.ts, http-compress.ts, sha256.ts, hmac.ts, buffer-pool.ts and compress/{gzip,deflate,zlib,checksum}.ts sites it and http-get-json reach are discharged by S2 or removed. (Split at run time, 2026-11-28 - http-get-json's TLS/DNS path reached ~70 more sites, moved to S7b.)
     after: [s2-prover-caller]
     verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js net && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/self/goldens.js && node tests/nish-cmp.js
     todos:
@@ -92,7 +92,28 @@ stages:
         content: Clear std/net/fetch.ts:1894 and :900, url.ts:1141, bytes.ts:526, http-compress.ts:1150 and app.ts's own site; regenerate pinned std line numbers
         status: pending
       - id: s7-optout
-        content: Drop both examples' headers and smoke args, guide mentions and their tests/run.js ALLOW_PANICS builds
+        content: Drop http-app's header and smoke args, guide mentions and its tests/run.js ALLOW_PANICS build; http-get-json's header lists what S7b clears
+        status: pending
+  - id: s7b-tls-dns
+    title: examples-strict S7b — http-get-json's TLS and DNS path
+    goal: http-get-json builds strict with -o and --link; the crypto/{aes,hkdf,sha512,pki-roots}.ts, base64.ts, net/{dns,dns-config,dns-resolver,dns-message,http1-client-codec}.ts and net/tls/schedule.ts sites it reaches are removed or proved.
+    after: [s7-http]
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js net && node tests/run.js crypto && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/self/goldens.js && node tests/nish-cmp.js
+    todos:
+      - id: s7b-fix
+        content: Clear the sites S7's PR body lists; secret intermediates stay Secret and wiped; rerun vector check and mutate on any spec'd module touched; update the docs/security records whose counts change
+        status: pending
+      - id: s7b-optout
+        content: Drop http-get-json's header and smoke args, guide mentions and its tests/run.js ALLOW_PANICS build
+        status: pending
+  - id: s8b-relay-handoff
+    title: examples-strict S8b — the relay sites S8 left
+    goal: The http3-server.ts:906 and hpack.ts:410 sites relay reaches are removed or proved, with their callers.
+    after: [s8-relay-std, s7-http]
+    verification: node tests/run.js std-panics && node tests/run.js instructions && node tests/run.js performance && node tests/run.js net && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check && node tests/self/goldens.js && node tests/nish-cmp.js
+    todos:
+      - id: s8b-fix
+        content: Remove or prove the sites and any that surface after them in files no other open stage owns
         status: pending
   - id: s8-relay-std
     title: examples-strict S8 — the std sites relay reaches (HTTP/3, QPACK, WebSocket, WebTransport, hmac, sha256, base64url)
@@ -105,7 +126,7 @@ stages:
   - id: s9-relay
     title: examples-strict S9 — relay's own code
     goal: examples/relay builds strict - its ~320 own sites (parsers become Result-returning, indexes proven, overflow bounded) and its four deliberate pinned panics become Results reported on stderr with the exit codes their tests pin (owner, 2026-11-27); README drops the flag.
-    after: [s8-relay-std]
+    after: [s8-relay-std, s8b-relay-handoff]
     verification: node tests/run.js relay && node tests/run.js performance && node tests/run.js link && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node tests/self/goldens.js && node tests/nish-cmp.js
     todos:
       - id: s9-fix
@@ -114,7 +135,7 @@ stages:
   - id: s10-guard
     title: examples-strict S10 — refuse a new opt-out under examples/
     goal: tests/run.js fails when any file under examples/ (smoke line, build script, README) names --allow-panics, except an allowlist that only shrinks (merge-patch until WP80 S7 lands); the stale opt-out check folds into it.
-    after: [s3-own-small, s4-term, s4b-term-pixels, s5-wasm-arena, s6-break-web, s7-http, s9-relay]
+    after: [s3-own-small, s4-term, s4b-term-pixels, s5-wasm-arena, s6-break-web, s7-http, s7b-tls-dns, s9-relay]
     verification: node tests/run.js performance && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
     todos:
       - id: s10-guard
@@ -174,13 +195,15 @@ and reviewed, then left green for the owner to merge.
 - **S4b** `std/term-pixels.ts`, `std/term-io.ts`, `std/term-rate.ts`, `std/base64.ts`, `examples/term-probe.ts`, `docs/guide/using-nish/terminal.md`, `docs/security/term*.md`; the Framebuffer call sites only in `src/break-gfx.ts`, `src/break.ts`, `src/break-director.ts`, `examples/break-web/game.ts`, `std/raster.ts` (S6 owns the rest of those files and runs after S4b)
 - **S5** `examples/wasm-arena/**`, `tests/interop/chrome-arena.py`, `tests/runtime-budgets.js` (arena rows), any `std/math.ts` site that surfaces
 - **S6** `examples/break-web/**`, `src/break-*.ts`, `std/raster.ts`, `std/random.ts`, `docs/site/break/**`, `tests/break-web/**`
-- **S7** `std/net/fetch.ts`, `std/net/url.ts`, `std/bytes.ts`, `std/net/http-compress.ts`, `examples/http-get-json.ts`, `examples/http-app/**`, `tests/link/net_http_app/**`, `docs/security/{handler,router,static}.md`, `docs/guide/using-nish/api-server.md`
+- **S7** `std/net/fetch.ts`, `std/net/url.ts`, `std/bytes.ts`, `std/net/http-compress.ts`, `examples/http-get-json.ts`, `examples/http-app/**`, `tests/link/net_http_app/**`, `docs/security/{handler,router,static}.md`, `docs/guide/using-nish/api-server.md`; widened at run time: `std/crypto/{sha256,hmac}.ts`, `std/net/buffer-pool.ts`, `std/compress/{gzip,deflate,zlib,checksum}.ts`, their records, and caller lines a changed signature forces
+- **S7b** `std/crypto/{aes,hkdf,sha512,pki-roots}.ts`, `std/base64.ts`, `std/net/{dns,dns-config,dns-resolver,dns-message,http1-client-codec}.ts`, `std/net/tls/schedule.ts`, `examples/http-get-json.ts`, their records, specs and `tests/link` cases
+- **S8b** `std/net/http3-server.ts`, `std/net/hpack.ts` and the caller lines their fixes force
 - **S8** `std/net/http3-*.ts`, `std/net/qpack.ts`, `std/net/websocket.ts`, `std/net/webtransport.ts`, `std/crypto/{hmac,sha256,base64url}.ts`, `docs/security/http3.md` and the crypto/websocket records whose counts change, `contracts/**` and `test/spec/**` for those modules; widened in review (owned by no other stage): `std/net/http3.ts`, `std/net/quic.ts`, `std/crypto/p256.ts`, `std/net/buffer-pool.ts`, `std/net/http-server.ts`, their `tests/link` cases, security records and specs. Left to S2's caller-proof rule (S9 rechecks): the constructor config checks at `http3-server.ts` ~831 and `webtransport.ts` ~757; `websocket.ts` ~287 goes to S9
 - **S9** `examples/relay/**`, `tests/link/net_relay*/**`, `docs/guide/using-nish/networking.md`
 - **S10** the stale opt-out block of `tests/run.js` (~6577), `AGENTS.md`
 
 **Waves.** First: S1, S3, S4, S8 (disjoint). Then S2 (after S1), S5 (after
-S1), S4b (after S4), S6 (after S1, S4b), S9 (after S8), S7 (after S2), S10 last. No stage runs on
+S1), S4b (after S4), S6 (after S1, S4b), S9 (after S8), S7 (after S2), S7b and S8b (after S7), S10 last. No stage runs on
 Sonnet: each one designs a proof, a Result or a prover rule.
 
 ## Rules (from WP80, binding on every stage)
