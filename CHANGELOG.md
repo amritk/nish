@@ -16,6 +16,29 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-28
+
+### Added
+
+- runtime: Add crypto.tryGetRandomValues, an entropy builtin that answers instead of exiting ([#2463](https://github.com/amritk/nish/pull/2463))
+
+### Fixed
+
+- runtime: Pin the WebTransport H3_INVALID guard and fix http3 record counts ([#2457](https://github.com/amritk/nish/pull/2457))
+- runtime: Break-web builds without --allow-panics ([#2424](https://github.com/amritk/nish/pull/2424))
+- interop: Http-app builds without --allow-panics ([#2460](https://github.com/amritk/nish/pull/2460))
+
+### Performance
+
+- runtime: Json-value bulk regrowth with one new Array, and the std/ audit for push-loop copies ([#2449](https://github.com/amritk/nish/pull/2449))
+
+### Tests
+
+- runtime: Declare the nish-cmp moves of the WebTransport H3_INVALID guard ([#2461](https://github.com/amritk/nish/pull/2461))
+- checker: Pin caller-proof exclusions for function values ([#2459](https://github.com/amritk/nish/pull/2459))
+- self: Counted std rows that grow from empty after one new Array, and a check that every std module is counted ([#2462](https://github.com/amritk/nish/pull/2462))
+
+
 ## [0.50.0] - 2026-11-28
 
 ### Added
@@ -2503,3 +2526,4 @@ file per release, and each release's notes and downloads are on the
 [0.49.0]: https://github.com/amritk/nish/releases/tag/v0.49.0
 [0.49.1]: https://github.com/amritk/nish/releases/tag/v0.49.1
 [0.50.0]: https://github.com/amritk/nish/releases/tag/v0.50.0
+[0.51.0]: https://github.com/amritk/nish/releases/tag/v0.51.0

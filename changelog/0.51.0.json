@@ -1,0 +1,151 @@
+{
+  "version": "0.51.0",
+  "date": "2026-11-28",
+  "tag": "v0.51.0",
+  "range": {
+    "from": "v0.50.0",
+    "to": "8aeba6a6f"
+  },
+  "entries": [
+    {
+      "id": "pin-the-webtransport-h3-invalid-guard-and-fix",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "pin the WebTransport H3_INVALID guard and fix http3 record counts",
+      "body": "* fix(runtime): pin the WebTransport H3_INVALID guard and fix http3 record counts\n\nnet_webtransport_write_window calls WebTransport.write on a stream the\nsession does not hold, so a window outside its buffer answers H3_INVALID\nfrom the WebTransport layer and the case fails once the guard is removed.\nHttp3Connection.readHeader's never-taken window guard now fails the\nconnection, as controlFrame's does, instead of returning a zero header.\nThe HTTP/3 record counts the slice and window sites the code has.\n\nTests: tests/link/net_webtransport_write_window\n\n* docs(runtime): name only the HTTP/3 server's sends in the panic-site count",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "9b6da51"
+      ],
+      "pr": 2457,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "json-value-bulk-regrowth-with-one-new-array",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "json-value bulk regrowth with one new Array, and the std/ audit for push-loop copies",
+      "body": "jsonValueRoom and jsonValueRoomI32 now grow their buffer with one new Array and a guarded bulk set, replacing the per-element push loop that #2103 introduced. On the reported repro, parse cost drops below the 0.44.0 seed in both text and ranged modes. The std/ audit rewrote every other push-loop copy and fill to a guarded new Array plus a bulk copy, or recorded why it was left alone. The new lengths are proven non-negative rather than guarded by untested early returns. No panic site is added, and bench/instructions.json does not rise.\n\nVerified: pr-adversary 3 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "6c7da24"
+      ],
+      "pr": 2449,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "declare-the-nish-cmp-moves-of-the-webtransport",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "declare the nish-cmp moves of the WebTransport H3_INVALID guard",
+      "body": "Declares the 10 nish-cmp pairs the WebTransport H3_INVALID guard moved against seed 0.50.0 (http3.ll in http-app, net_http_app, net_http_server_ws and net_tls_rsa_server), and drops the S8 relay declarations the 0.50.0 seed already ships.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8d3de63"
+      ],
+      "pr": 2461,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "pin-caller-proof-exclusions-for-function-values-2459",
+      "type": "test",
+      "scope": "checker",
+      "breaking": false,
+      "title": "pin caller-proof exclusions for function values",
+      "body": "Pins the caller-contract cases the prover does not discharge for a function held as a value, with tests/link negatives and tests/cases positives, and aligns the NL2457 wording in src/panics.ts with docs/guide/errors.md.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b119d81"
+      ],
+      "pr": 2459,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "break-web-builds-without-allow-panics-2424",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "break-web builds without --allow-panics",
+      "body": "examples/break-web now builds under the no-panic default: its framebuffer keeps its fields private behind a Result factory, and the raster and random paths it reaches prove their indices or answer a Result, so the --allow-panics opt-out is gone.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e227541"
+      ],
+      "pr": 2424,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "counted-std-rows-that-grow-from-empty-after",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "counted std rows that grow from empty after one new Array, and a check that every std module is counted",
+      "body": "This adds six counted programs to the instruction gate. Each one grows a std structure from empty, so the bulk regrowth that #2449 rewrote with one new Array is now measured: std-json-value-parse, -reuse and -read, std-yaml-json-load, std-regex and std-text. Their baselines are CI's valgrind-3.26.0 counts.\n\nThe 19 existing rows that CI measured below their stored count are lowered to it. A new check compiles every counted program with its counted run's flags and fails when a scanned std module is reached by none of them and is missing from bench/instructions-exempt.txt. That file lists 42 modules, each with its reason.\n\nTests: tests/run.js instruction-coverage, instructions\nVerified: pr-adversary 2 rounds, CI green",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "21757b3"
+      ],
+      "pr": 2462,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "http-app-builds-without-allow-panics-2460",
+      "type": "fix",
+      "scope": "interop",
+      "breaking": false,
+      "title": "http-app builds without --allow-panics",
+      "body": "examples/http-app now builds under the no-panic default. The gzip reader checks its trailer through Crc32.ofRange and inflates through deflate's window-tested paths. Those paths answer an error code for a window outside the input, where the old reads panicked. The --allow-panics opt-out is gone, and the gzip instruction baseline is raised to cover the added checks.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1537abd"
+      ],
+      "pr": 2460,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    },
+    {
+      "id": "add-crypto-trygetrandomvalues-an-entropy-builtin-that-answers",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add crypto.tryGetRandomValues, an entropy builtin that answers instead of exiting",
+      "body": "crypto.tryGetRandomValues(bytes) fills bytes from the OS entropy source like\ncrypto.getRandomValues, but answers false when the source fails instead of\nexiting, so a program built under the no-panic default can turn the failure\ninto a Result. It is refused on wasm32, like its twin.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/cases/os_random_try",
+        "tests/link/deny_panics_entropy",
+        "tests/link/deny_panics_entropy_try"
+      ],
+      "commits": [
+        "8aeba6a"
+      ],
+      "pr": 2463,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-28"
+    }
+  ]
+}
