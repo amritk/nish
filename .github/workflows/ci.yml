@@ -199,7 +199,7 @@ jobs:
       gfx: ${{ steps.scope.outputs.gfx }}
       why: ${{ steps.scope.outputs.why }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: scripts/ci-scope.mjs
           sparse-checkout-cone-mode: false
@@ -317,9 +317,9 @@ jobs:
         # list's length, and a check in tests/run.js holds the two together.
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # Exact: tests/differential/emit-ts-known.txt quotes Node's own
           # messages as evidence, and is regenerated under this version.
@@ -333,7 +333,7 @@ jobs:
       # moved golang.org/x/crypto to v0.52.0, and the handshake twin for 1.26
       # since #818 moved golang.org/x/net to v0.60.0. The action exports
       # GOTOOLCHAIN=local, which is what the bench sets anyway.
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: "1.26.x"
           cache: false
@@ -706,9 +706,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26.13.1
           cache: npm
@@ -878,7 +878,7 @@ jobs:
       rows: ${{ steps.linux.outputs.rows }}
       cmp: ${{ steps.pick.outputs.cmp }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The lookup is a job of its own, before any toolchain and before
       # `npm ci`, for two reasons. It is the gate, so it should answer in
@@ -931,10 +931,10 @@ jobs:
           echo "### Not selected: the bootstrap lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "scripts/ci-scope.mjs found no changed path the bootstrap lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.scope.outputs.bootstrap != 'false'
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: needs.scope.outputs.bootstrap != 'false'
         with:
           node-version: 26.13.1
@@ -1121,10 +1121,10 @@ jobs:
           echo "### Not selected: the nish_cmp lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "scripts/ci-scope.mjs found no changed path the nish_cmp lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.scope.outputs.nish_cmp != 'false'
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: needs.scope.outputs.nish_cmp != 'false'
         with:
           node-version: 26.13.1
@@ -1261,10 +1261,10 @@ jobs:
           echo "### Not selected: the elision lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "scripts/ci-scope.mjs found no changed path the elision lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.scope.outputs.elision != 'false'
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: needs.scope.outputs.elision != 'false'
         with:
           node-version: 26.13.1
@@ -1384,9 +1384,9 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26.13.1
           cache: npm
@@ -1490,10 +1490,10 @@ jobs:
           echo "### Not selected: the simd lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "scripts/ci-scope.mjs found no changed path the simd lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.scope.outputs.simd != 'false'
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: needs.scope.outputs.simd != 'false'
         with:
           node-version: 26.13.1
@@ -1699,9 +1699,9 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26.13.1
           cache: npm
@@ -1825,10 +1825,10 @@ jobs:
           echo "### Not selected: the sha256_macos lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "scripts/ci-scope.mjs found no changed path the sha256_macos lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.scope.outputs.sha256_macos != 'false'
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: needs.scope.outputs.sha256_macos != 'false'
         with:
           node-version: 26.13.1
@@ -1927,10 +1927,10 @@ jobs:
           echo "### Not selected: the gfx lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "scripts/ci-scope.mjs found no changed path the gfx lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.scope.outputs.gfx != 'false'
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: needs.scope.outputs.gfx != 'false'
         with:
           node-version: 26.13.1
@@ -2006,10 +2006,10 @@ jobs:
           echo "### Not selected: the gfx lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "scripts/ci-scope.mjs found no changed path the gfx lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.scope.outputs.gfx != 'false'
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: needs.scope.outputs.gfx != 'false'
         with:
           node-version: 26.13.1
@@ -2080,10 +2080,10 @@ jobs:
           echo "### Not selected: the fuzz lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "scripts/ci-scope.mjs found no changed path the fuzz lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.scope.outputs.fuzz != 'false'
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: needs.scope.outputs.fuzz != 'false'
         with:
           node-version: 26.13.1
@@ -2166,7 +2166,7 @@ jobs:
 
       - name: Upload crash inputs
         if: ${{ (failure()) && needs.scope.outputs.fuzz != 'false' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-smoke-artifacts
           path: build/fuzz/artifacts/
@@ -2212,10 +2212,10 @@ jobs:
           echo "### Not selected: the postgres lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "scripts/ci-scope.mjs found no changed path the postgres lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.scope.outputs.postgres != 'false'
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: needs.scope.outputs.postgres != 'false'
         with:
           node-version: 26.13.1
@@ -2306,9 +2306,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26.13.1
           cache: npm
@@ -2391,7 +2391,7 @@ jobs:
       # The commit status below, on a dispatched run only.
       statuses: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: scripts/ci-scope.mjs
           sparse-checkout-cone-mode: false
