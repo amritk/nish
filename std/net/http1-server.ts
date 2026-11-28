@@ -567,11 +567,49 @@ const http1ServerPast = (now: i64, since: i64, ms: i32): boolean =>
   now > since && toU64(now) - toU64(since) > toU64(ms) * toU64(1000000)
 
 /**
- * The `monotonicNanos` instant `ms` milliseconds after `at`. Worked in `u64`,
- * whose wrapping sum has the bits of the signed one: an instant is centuries
- * short of 2^63 and the timeout a checked cap, so neither wraps.
+ * The `monotonicNanos` instant `ms` milliseconds after `at`. An instant is
+ * centuries short of 2^63 and the timeout a checked cap, so the sum is exact;
+ * `http1ServerSum64` holds it at the `i64` range's ends only so that the
+ * bounds prover sees no sum that can overflow.
  */
-const http1ServerAfter = (at: i64, ms: i32): i64 => toI64(toU64(at) + toU64(ms) * toU64(1000000))
+const http1ServerAfter = (at: i64, ms: i32): i64 => http1ServerSum64(at, toI64(ms) * 1000000)
+
+/**
+ * `a + b`, held at the `i64` range's ends where the sum would leave it. Two
+ * values of opposite signs add in `i64`, as they cannot leave the range. Two
+ * of one sign add as magnitudes in `u64`, where they are below 2^64 and so
+ * exact: a sum of values at least 0 is the `u64` sum, and a sum of values
+ * below 0 is `-1 - ((-1 - a) + (-1 - b) + 1)`. Each magnitude is held below
+ * 2^63 before it is read back as an `i64`, so the read is exact too.
+ */
+const http1ServerSum64 = (a: i64, b: i64): i64 => {
+  if (a >= 0) {
+    if (b < 0) {
+      return a + b
+    }
+    const sum: u64 = toU64(a) + toU64(b)
+    return toI64(http1ServerBelow2p63(sum))
+  }
+  if (b >= 0) {
+    return a + b
+  }
+  const past: u64 = toU64(-1 - a) + toU64(-1 - b) + toU64(1)
+  const k: i64 = toI64(http1ServerBelow2p63(past))
+  if (k < 0) {
+    // Not taken: `k` is below 2^63. The test is what proves `-1 - k` fits.
+    return -1
+  }
+  return -1 - k
+}
+
+/** `x`, or 2^63 - 1 where `x` is larger: the most an `i64` holds. */
+const http1ServerBelow2p63 = (x: u64): u64 => {
+  const most: u64 = (toU64(1) << toU64(63)) - toU64(1)
+  if (x > most) {
+    return most
+  }
+  return x
+}
 
 /** Copies `src[off .. off + n)` to `out` at `at`, which the caller has made sure holds it, and answers where it ends. */
 const http1ServerCopy = (out: u8[], at: i32, src: readonly u8[], off: i32, n: i32): i32 => {
@@ -3210,9 +3248,9 @@ export class Http1Server {
     this.at[k] = -1
     this.rested[k] = this.clock()
     this.owner[k] = this.accepts
-    // A serial only keys a kept head to its peer: in u64, which wraps where
-    // an i64 would be a site, after more accepts than a server ever sees.
-    this.accepts = toI64(toU64(this.accepts) + toU64(1))
+    // A serial only keys a kept head to its peer. It is held at 2^63 - 1
+    // rather than overflowing, after more accepts than a server ever sees.
+    this.accepts = http1ServerSum64(this.accepts, 1)
     // Once a connection, not a request, so a keep-alive request costs no
     // syscall: a path whose MSS moves after the handshake is not followed.
     const mss: i32 = netMss(fd)

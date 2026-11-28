@@ -16950,6 +16950,200 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi-handle -->
 
+### A handle class that owns native objects and another handle
+
+A handle class (WP89 S5a) may own several native fields and other handle
+classes. `Pair` below owns two `CPtr`s; `Stack` owns a `Pair`, which
+`new Stack(openPair())` moves into it, and a `CPtr` of its own. A field of a
+handle-class type is a `%struct.Pair*`, as any class field is: the factory
+`openPair` builds its `Pair` with `nish_alloc_struct`, in the caller's arena,
+and the `using` takes an arena mark first. `Pair.read` is one
+`getelementptr`, one `load` of `second` and the `call i32 @slot_read`, with no
+test or copy between them. At the exit, after the returned value is computed,
+`Stack`'s dispose (`slot_close` of `top`) runs, then `Pair`'s is inlined
+through the loaded field: `second`, then `first`, the last declared first.
+Only then is the arena released, so the `Pair` is closed before its memory
+goes.
+
+<!-- cookbook:begin decl-ffi-handle-owned -->
+```ts
+// biome-ignore lint/style/useNamingConvention: the C function's own name
+declare function slot_open(): CPtr
+// biome-ignore lint/style/useNamingConvention: the C function's own name
+declare function slot_close(p: CPtr): i32
+// biome-ignore lint/style/useNamingConvention: the C function's own name
+declare function slot_read(p: CPtr): i32
+
+class Pair {
+  readonly first: CPtr
+  readonly second: CPtr
+  constructor() {
+    this.first = slot_open()
+    this.second = slot_open()
+  }
+  read(): i32 {
+    return slot_read(this.second)
+  }
+  [Symbol.dispose](): void {
+    slot_close(this.second)
+    slot_close(this.first)
+  }
+}
+
+class Stack {
+  readonly pair: Pair
+  readonly top: CPtr
+  constructor(pair: Pair) {
+    this.pair = pair
+    this.top = slot_open()
+  }
+  [Symbol.dispose](): void {
+    slot_close(this.top)
+  }
+}
+
+const openPair = (): Pair => new Pair()
+
+const both = (p: Pair): i32 => p.read()
+
+export const depth = (): i32 => {
+  using s = new Stack(openPair())
+  return s.pair.read()
+}
+```
+
+```llvm
+%struct.Pair = type { i8*, i8* }
+%struct.Stack = type { %struct.Pair*, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare i8* @slot_open()
+declare i32 @slot_close(i8*)
+declare i32 @slot_read(i8*)
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @Pair.constructor(%struct.Pair* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this) #0 {
+entry:
+  %0 = call i8* @slot_open()
+  %1 = getelementptr inbounds %struct.Pair, %struct.Pair* %this, i32 0, i32 0
+  store i8* %0, i8** %1, align 8, !tbaa !4
+  %2 = call i8* @slot_open()
+  %3 = getelementptr inbounds %struct.Pair, %struct.Pair* %this, i32 0, i32 1
+  store i8* %2, i8** %3, align 8, !tbaa !5
+  ret void
+}
+
+define internal noundef i32 @Pair.read(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Pair, %struct.Pair* %this, i32 0, i32 1
+  %1 = load i8*, i8** %0, align 8, !tbaa !5
+  %2 = call i32 @slot_read(i8* %1)
+  ret i32 %2
+}
+
+define internal void @Stack.constructor(%struct.Stack* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, %struct.Pair* noundef nonnull align 8 dereferenceable(16) %pair) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Stack, %struct.Stack* %this, i32 0, i32 0
+  store %struct.Pair* %pair, %struct.Pair** %0, align 8, !tbaa !7
+  %1 = call i8* @slot_open()
+  %2 = getelementptr inbounds %struct.Stack, %struct.Stack* %this, i32 0, i32 1
+  store i8* %1, i8** %2, align 8, !tbaa !8
+  ret void
+}
+
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Pair* @openPair() #0 {
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 16)
+  %1 = bitcast i8* %0 to %struct.Pair*
+  call void @Pair.constructor(%struct.Pair* %1)
+  ret %struct.Pair* %1
+}
+
+define internal noundef i32 @both(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(16) nocapture %p) #0 {
+entry:
+  %0 = call i32 @Pair.read(%struct.Pair* %p)
+  ret i32 %0
+}
+
+define noundef i32 @depth() #0 {
+entry:
+  %s.addr = alloca %struct.Stack*, align 8
+  %Stack.obj = alloca %struct.Stack, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call %struct.Pair* @openPair()
+  call void @Stack.constructor(%struct.Stack* %Stack.obj, %struct.Pair* %0)
+  store %struct.Stack* %Stack.obj, %struct.Stack** %s.addr, align 8
+  %1 = load %struct.Stack*, %struct.Stack** %s.addr, align 8
+  %2 = load %struct.Stack*, %struct.Stack** %s.addr, align 8
+  %3 = getelementptr inbounds %struct.Stack, %struct.Stack* %2, i32 0, i32 0
+  %4 = load %struct.Pair*, %struct.Pair** %3, align 8, !tbaa !7
+  %5 = call i32 @Pair.read(%struct.Pair* %4)
+  %6 = getelementptr inbounds %struct.Stack, %struct.Stack* %1, i32 0, i32 1
+  %7 = load i8*, i8** %6, align 8, !tbaa !8
+  %8 = call i32 @slot_close(i8* %7)
+  %9 = getelementptr inbounds %struct.Stack, %struct.Stack* %1, i32 0, i32 0
+  %10 = load %struct.Pair*, %struct.Pair** %9, align 8, !tbaa !7
+  %11 = getelementptr inbounds %struct.Pair, %struct.Pair* %10, i32 0, i32 1
+  %12 = load i8*, i8** %11, align 8, !tbaa !5
+  %13 = call i32 @slot_close(i8* %12)
+  %14 = getelementptr inbounds %struct.Pair, %struct.Pair* %10, i32 0, i32 0
+  %15 = load i8*, i8** %14, align 8, !tbaa !4
+  %16 = call i32 @slot_close(i8* %15)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %5
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!9, !10, !11, !12, !13}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"Pair", !2, i64 0, !2, i64 8}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 8}
+!6 = !{!"Stack", !2, i64 0, !2, i64 8}
+!7 = !{!6, !2, i64 0}
+!8 = !{!6, !2, i64 8}
+!9 = !{i32 8, !"cf-protection-branch", i32 1}
+!10 = !{i32 8, !"cf-protection-return", i32 1}
+!11 = !{i32 8, !"branch-target-enforcement", i32 1}
+!12 = !{i32 8, !"sign-return-address", i32 1}
+!13 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-ffi-handle-owned -->
+
 ### `declare class`: a C struct, lent by pointer
 
 A `declare class` (WP27 S4.1) is a named LLVM struct whose fields are the

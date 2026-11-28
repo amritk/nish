@@ -1446,6 +1446,21 @@ const exportedBindings = () =>
     why: "the program imports an opaque `declare class` and the `declare function`s that take it from another module, which the candidate compiles and the reference refuses, because it lets no binding be exported",
   }))
 
+/** The changelog words of WP89 S5a, a class that owns its native handles. */
+const OWNED_HANDLES = "a std class owns its native handles"
+const ownedHandles = () =>
+  [
+    "tests/cases/ffi_handle_host.ts",
+    "tests/cases/ffi_handle_owned.ts",
+    "tests/link/ffi_handle_owned/main.ts",
+    "docs/cookbook/decl-ffi-handle-owned.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: OWNED_HANDLES,
+    why: "the program declares a class that owns a native object and closes it with `[Symbol.dispose]` and `using`, which the candidate compiles and the reference refuses, because it lets only nish/threads' scope and lock and the builtin arena be disposed",
+  }))
+
 /** The changelog words of WP89 S6, a module file chosen by target. */
 const TARGET_FILES = "a module file chosen by target"
 const targetFiles = () => [
@@ -11767,6 +11782,9 @@ const wp91s1 = byFinding(WP91_S1)
 /** The changelog words of WP90 S1, the multipart/form-data reader. */
 const MULTIPART_BODIES = "multipart/form-data bodies"
 
+/** WP91 S4: the cast wraps in std/net's HTTP, HPACK, URL and server modules, spelled. */
+const WP91_S4_NET_HTTP = "std/net HTTP, HPACK, URL and the server stack"
+
 /** The changelog words of examples-strict S1, indexes into module storage. */
 const STORAGE_INDEX = "prove index sites into module storage"
 /** Why each module examples-strict S1 moves writes different IR. */
@@ -15032,6 +15050,7 @@ const DECLARED = [
   ...typedBuffers(),
   ...targetFiles(),
   ...exportedBindings(),
+  ...ownedHandles(),
   ...storageIndex(),
   ...arenaStrict(),
   {
@@ -24805,6 +24824,177 @@ const DECLARED = [
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
   },
+  // WP91 S4: std/net's HTTP modules drop their cast wraps for sums under
+  // guards the prover reads, so their IR moves in every program reaching them.
+  ...[
+    "bench/httparena/main.ts",
+    "tests/link/httparena_entry/main.ts",
+    "tests/link/net_grpc/main.ts",
+    "tests/link/net_grpc_interop/main.ts",
+    "tests/link/net_http2_stream/main.ts",
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+    "tests/link/net_http_server_steps/main.ts",
+    "tests/link/net_http_server_steps_full/main.ts",
+    "tests/link/net_http_server_steps_split/main.ts",
+    "tests/link/net_http_server_stream/main.ts",
+    "tests/link/net_http_server_trailers_after_end/main.ts",
+    "tests/link/net_http_server_trailers_ended/main.ts",
+    "tests/link/net_http_server_trailers_fields/main.ts",
+    "tests/link/net_http_server_trailers_h1/main.ts",
+    "tests/link/net_http_server_trailers_h3/main.ts",
+    "tests/link/net_http_server_trailers_short/main.ts",
+    "tests/link/net_http_server_trailers_unstarted/main.ts",
+    "tests/link/net_static/main.ts",
+  ].map((program) => ({
+    program,
+    file: "hpack.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/hpack.ts spells its cast wraps as sums under guards the prover reads, a `wrappingAdd` for the deliberate wrap, or the codec's existing error, so the program's nish/net/hpack module has new compares and fewer conversions; its own module does not move",
+  })),
+  ...[
+    "bench/httparena/main.ts",
+    "tests/link/httparena_entry/main.ts",
+    "tests/link/net_grpc/main.ts",
+    "tests/link/net_grpc_interop/main.ts",
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+    "tests/link/net_http_server_steps/main.ts",
+    "tests/link/net_http_server_steps_full/main.ts",
+    "tests/link/net_http_server_steps_split/main.ts",
+    "tests/link/net_http_server_stream/main.ts",
+    "tests/link/net_http_server_trailers_after_end/main.ts",
+    "tests/link/net_http_server_trailers_ended/main.ts",
+    "tests/link/net_http_server_trailers_fields/main.ts",
+    "tests/link/net_http_server_trailers_h1/main.ts",
+    "tests/link/net_http_server_trailers_h3/main.ts",
+    "tests/link/net_http_server_trailers_short/main.ts",
+    "tests/link/net_http_server_trailers_unstarted/main.ts",
+    "tests/link/net_static/main.ts",
+  ].map((program) => ({
+    program,
+    file: "http2-tls.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/http2-tls.ts writes its held byte count as the plain difference `end - start` under the guard `0 <= start <= end`, so the subtraction gains `nsw`, and the module's declaration of `HttpDate.current`, whose `httpDateWrite` std/net/http-fields.ts rewrites, carries a different attribute group",
+  })),
+  ...[
+    "tests/link/net_grpc/main.ts",
+    "tests/link/net_grpc_interop/main.ts",
+    "tests/link/net_proto_classes/main.ts",
+    "tests/link/net_protobuf/main.ts",
+    "tests/link/net_protobuf_bad_depth/main.ts",
+    "tests/link/net_protobuf_bad_field/main.ts",
+    "tests/link/net_protobuf_bad_group/main.ts",
+    "tests/link/net_protobuf_bad_length/main.ts",
+    "tests/link/net_protobuf_bad_reader_window/main.ts",
+    "tests/link/net_protobuf_bad_varint/main.ts",
+    "tests/link/net_protobuf_bad_writer_window/main.ts",
+    "tests/link/net_protobuf_f64/main.ts",
+  ].map((program) => ({
+    program,
+    file: "protobuf.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/protobuf.ts names the zigzag sign mask of `sint32` and `sint64` as a `u32`/`u64` local that wraps by its type, so the decoders gain a local's alloca, store and load",
+  })),
+  ...[
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_release/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+  ].map((program) => ({
+    program,
+    file: "http-compress.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/http-compress.ts computes its segment count, q-value, kept length and identity head in i32 under guards the prover reads instead of casting them through u32, so the program's nish/net/http-compress module has new compares and fewer conversions",
+  })),
+  ...["tests/link/net_http_server_h1_tls/main.ts"].map((program) => ({
+    program,
+    file: "peer.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/http-fields.ts's `httpDateWrite`, which `HttpDate.current` calls, spells its sums for the prover with this stage, so the module's declaration of `HttpDate.current` carries a different attribute group",
+  })),
+  ...[
+    "tests/link/net_hpack/main.ts",
+    "tests/link/net_hpack_bad_huffman_window/main.ts",
+    "tests/link/net_hpack_bad_indexing/main.ts",
+    "tests/link/net_hpack_bad_prefix_decode/main.ts",
+    "tests/link/net_hpack_bad_prefix_encode/main.ts",
+    "tests/link/net_hpack_bad_window/main.ts",
+    "tests/link/net_hpack_f64/main.ts",
+    "tests/link/net_hpack_malformed/main.ts",
+    "tests/link/net_hpack_negative_list_limit/main.ts",
+    "tests/link/net_hpack_negative_resize/main.ts",
+    "tests/link/net_hpack_negative_settings_limit/main.ts",
+    "tests/link/net_hpack_negative_table_size/main.ts",
+    "tests/link/net_http2_frame/main.ts",
+    "tests/link/net_http2_frame_f64/main.ts",
+    "tests/link/net_http3_malformed/main.ts",
+    "tests/link/net_qpack/main.ts",
+    "tests/link/net_qpack_bad_decoder_stream_window/main.ts",
+    "tests/link/net_qpack_bad_encoder_stream_window/main.ts",
+    "tests/link/net_qpack_bad_field_window/main.ts",
+    "tests/link/net_qpack_bad_limit/main.ts",
+    "tests/link/net_qpack_bad_stream_id/main.ts",
+    "tests/link/net_qpack_bad_value_window/main.ts",
+    "tests/link/net_qpack_bad_window/main.ts",
+    "tests/link/net_qpack_f64/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/hpack.ts keeps `HpackHuffman.baseRank` as a `u32[]`, so its Huffman ranks wrap by their type, and a header that lays out `HpackHuffman` comments the field as `u32[]` where it said `number[]`",
+  })),
+  {
+    program: "bench/std-net-http2-frame.ts",
+    file: "std-net-http2-frame.h",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/hpack.ts keeps `HpackHuffman.baseRank` as a `u32[]`, so its Huffman ranks wrap by their type, and a header that lays out `HpackHuffman` comments the field as `u32[]` where it said `number[]`",
+  },
+  ...[
+    "tests/link/net_http_server_steps/main.ts",
+    "tests/link/net_http_server_trailers_h3/main.ts",
+    "tests/link/net_static/main.ts",
+  ].map((program) => ({
+    program,
+    file: "net_http3_peer.ll",
+    changelog: WP91_S4_NET_HTTP,
+    why: "std/net/http-fields.ts's `httpDateWrite`, which `HttpDate.current` calls, spells its sums for the prover with this stage, so the module's declaration of `HttpDate.current` carries a different attribute group",
+  })),
   // WP91 S6: Sha256's byte count is a `u64` that wraps by its type instead of
   // an `i64` summed through a split `u64` cast, so the struct a C header
   // declares for it changes type.

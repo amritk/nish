@@ -421,8 +421,14 @@ export class Http2CleartextServer {
         this.close(slot)
         return false
       }
-      // `netRead` answers at most the 24 - `have` bytes it was asked for, so the unsigned sum is at most 24.
-      const end: i32 = toI32(toU32(have) + toU32(n))
+      // `netRead` answers at most the 24 - `have` bytes it was asked for, so the sum is at most 24. The test
+      // restates that with literals (`H2C_PREFACE_SIZE` is 24) for the bounds proof; a read that broke it
+      // would be a fault, and ends the connection as a failed read does.
+      if (have > 24 || n > 24) {
+        this.close(slot)
+        return false
+      }
+      const end: i32 = have + n
       for (let k: i32 = have; k < end; k++) {
         if (k < 0 || k >= toI32(preface.length) || k >= toI32(want.length)) {
           break
@@ -542,8 +548,8 @@ export class Http2CleartextServer {
       if (start < 0 || end < start) {
         break
       }
-      // Both ends checked just above, so the unsigned difference is the span's length and does not wrap.
-      const n: i32 = netWrite(s.fd, conn.output, start, toI32(toU32(end) - toU32(start)))
+      // Both ends checked just above, so the difference is the span's length and cannot overflow.
+      const n: i32 = netWrite(s.fd, conn.output, start, end - start)
       if (n === H2C_AGAIN) {
         break
       }

@@ -1,5 +1,5 @@
-// WP53 H1.1, Row 2: a `using` initialiser is exactly `new C(args)`; one picked
-// by a ternary is not.
+// WP53 H1.1, Row 2; WP89 S5a: a `using` initialiser opens the handle it
+// closes, so a ternary may pick between two it opens but not a borrowed one.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32
@@ -23,8 +23,8 @@ class File {
   }
 }
 
-const count = (path: string, first: boolean): i32 => {
-  using f = first ? new File(path) : new File("other")
+const count = (g: File, first: boolean): i32 => {
+  using f = first ? g : new File("other")
   return f.read()
 };
 

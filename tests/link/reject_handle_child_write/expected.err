@@ -1,0 +1,1 @@
+main.ts:23:7: error: The field `slot` of handle class `Holder` owns a handle and is written only once, by `this.slot = p` as a statement at the top of the constructor
