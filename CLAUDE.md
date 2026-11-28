@@ -67,8 +67,7 @@ multiply, a counter mod 2^32), it is `wrappingAdd`, `wrappingSub` or
 `wrappingMul` from `nish:unsafe`, so every deliberate wrap is greppable and
 reads as one. A value that is `u32` or `u64` all the way through wraps by its
 type and needs neither. `scripts/wrap-casts.mjs` (in `npm run lint`) fails on
-a new cast wrap; `scripts/wrap-casts.txt`, the casts from before the rule,
-only falls.
+any cast wrap.
 
 A new diagnostic code lands with a `tests/link` negative that provokes it
 (an `expected.err`): inline `tests/run.js` checks do not count toward "every
