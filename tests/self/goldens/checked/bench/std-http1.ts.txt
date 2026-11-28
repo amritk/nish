@@ -5095,57 +5095,57 @@ unsafe call 3498:26 uncheckedGet (node 18689)
 unsafe call 3538:30 uncheckedGet (node 18993)
 unsafe call 3581:30 uncheckedGet (node 19266)
 unsafe call 3587:22 uncheckedGet (node 19294)
-unsafe call 3808:34 uncheckedGet (node 20261)
-unsafe call 3808:66 uncheckedGet (node 20272)
-unsafe call 3809:35 uncheckedGet (node 20293)
-unsafe call 3809:71 uncheckedGet (node 20306)
-unsafe call 3947:14 wrappingAdd (node 20986)
-unsafe call 3949:22 uncheckedGet (node 21016)
-unsafe call 3955:18 wrappingSub (node 21052)
-unsafe call 3956:13 uncheckedSet (node 21059)
-unsafe call 3957:18 wrappingAdd (node 21075)
-unsafe call 3958:17 uncheckedGet (node 21084)
-unsafe call 3961:20 wrappingSub (node 21117)
-unsafe call 3962:15 uncheckedSet (node 21124)
-unsafe call 3963:20 wrappingAdd (node 21140)
-unsafe call 3964:19 uncheckedGet (node 21149)
-unsafe call 3967:22 wrappingSub (node 21182)
-unsafe call 3968:17 uncheckedSet (node 21189)
-unsafe call 3969:22 wrappingAdd (node 21205)
-unsafe call 3970:21 uncheckedGet (node 21214)
-unsafe call 3977:20 wrappingSub (node 21252)
-unsafe call 3980:19 uncheckedGet (node 21261)
-unsafe call 3992:18 wrappingSub (node 21328)
-unsafe call 3995:17 uncheckedSet (node 21355)
-unsafe call 3996:22 wrappingAdd (node 21371)
-unsafe call 3997:21 uncheckedGet (node 21380)
-unsafe call 4013:20 wrappingSub (node 21473)
-unsafe call 4014:28 uncheckedGet (node 21485)
-unsafe call 4017:22 wrappingSub (node 21520)
-unsafe call 4019:21 uncheckedGet (node 21529)
-unsafe call 4031:20 wrappingSub (node 21595)
-unsafe call 4036:20 wrappingSub (node 21655)
-unsafe call 4046:19 uncheckedGet (node 21688)
-unsafe call 4047:33 wrappingAdd (node 21706)
-unsafe call 4061:24 wrappingAdd (node 21765)
-unsafe call 4062:26 wrappingAdd (node 21774)
-unsafe call 4065:19 uncheckedSet (node 21786)
-unsafe call 4065:41 uncheckedGet (node 21792)
-unsafe call 4066:24 wrappingAdd (node 21801)
-unsafe call 4067:26 wrappingAdd (node 21810)
-unsafe call 4072:41 uncheckedGet (node 21831)
-unsafe call 4077:24 wrappingAdd (node 21892)
-unsafe call 4080:19 uncheckedSet (node 21904)
-unsafe call 4081:24 wrappingAdd (node 21918)
-unsafe call 4088:19 uncheckedSet (node 21947)
-unsafe call 4088:41 uncheckedGet (node 21953)
-unsafe call 4089:24 wrappingAdd (node 21962)
-unsafe call 4090:26 wrappingAdd (node 21971)
-unsafe call 4101:16 wrappingAdd (node 22030)
-unsafe call 4121:28 uncheckedGet (node 22159)
-unsafe call 4157:9 uncheckedSet (node 22323)
-unsafe call 4243:11 uncheckedSet (node 22819)
-unsafe call 4243:33 uncheckedGet (node 22825)
+unsafe call 3810:34 uncheckedGet (node 20234)
+unsafe call 3810:66 uncheckedGet (node 20245)
+unsafe call 3811:35 uncheckedGet (node 20266)
+unsafe call 3811:71 uncheckedGet (node 20279)
+unsafe call 3962:14 wrappingAdd (node 21021)
+unsafe call 3964:22 uncheckedGet (node 21051)
+unsafe call 3970:18 wrappingSub (node 21087)
+unsafe call 3971:13 uncheckedSet (node 21094)
+unsafe call 3972:18 wrappingAdd (node 21110)
+unsafe call 3973:17 uncheckedGet (node 21119)
+unsafe call 3976:20 wrappingSub (node 21152)
+unsafe call 3977:15 uncheckedSet (node 21159)
+unsafe call 3978:20 wrappingAdd (node 21175)
+unsafe call 3979:19 uncheckedGet (node 21184)
+unsafe call 3982:22 wrappingSub (node 21217)
+unsafe call 3983:17 uncheckedSet (node 21224)
+unsafe call 3984:22 wrappingAdd (node 21240)
+unsafe call 3985:21 uncheckedGet (node 21249)
+unsafe call 3992:20 wrappingSub (node 21287)
+unsafe call 3995:19 uncheckedGet (node 21296)
+unsafe call 4007:18 wrappingSub (node 21363)
+unsafe call 4010:17 uncheckedSet (node 21390)
+unsafe call 4011:22 wrappingAdd (node 21406)
+unsafe call 4012:21 uncheckedGet (node 21415)
+unsafe call 4028:20 wrappingSub (node 21508)
+unsafe call 4029:28 uncheckedGet (node 21520)
+unsafe call 4032:22 wrappingSub (node 21555)
+unsafe call 4034:21 uncheckedGet (node 21564)
+unsafe call 4046:20 wrappingSub (node 21630)
+unsafe call 4051:20 wrappingSub (node 21690)
+unsafe call 4061:19 uncheckedGet (node 21723)
+unsafe call 4062:33 wrappingAdd (node 21741)
+unsafe call 4076:24 wrappingAdd (node 21800)
+unsafe call 4077:26 wrappingAdd (node 21809)
+unsafe call 4080:19 uncheckedSet (node 21821)
+unsafe call 4080:41 uncheckedGet (node 21827)
+unsafe call 4081:24 wrappingAdd (node 21836)
+unsafe call 4082:26 wrappingAdd (node 21845)
+unsafe call 4087:41 uncheckedGet (node 21866)
+unsafe call 4092:24 wrappingAdd (node 21927)
+unsafe call 4095:19 uncheckedSet (node 21939)
+unsafe call 4096:24 wrappingAdd (node 21953)
+unsafe call 4103:19 uncheckedSet (node 21982)
+unsafe call 4103:41 uncheckedGet (node 21988)
+unsafe call 4104:24 wrappingAdd (node 21997)
+unsafe call 4105:26 wrappingAdd (node 22006)
+unsafe call 4116:16 wrappingAdd (node 22065)
+unsafe call 4136:28 uncheckedGet (node 22194)
+unsafe call 4172:9 uncheckedSet (node 22358)
+unsafe call 4258:11 uncheckedSet (node 22854)
+unsafe call 4258:33 uncheckedGet (node 22860)
 const DEFLATE_STORE: i32 = 0 [exported]
 const DEFLATE_FAST: i32 = 1 [exported]
 const DEFLATE_DEFAULT: i32 = 6 [exported]
@@ -5315,8 +5315,9 @@ struct Inflater (class) size=160 align=8 exported
   method readDynamic -> @nish.Inflater.readDynamic
   method inflate -> @nish.Inflater.inflate
   method inflateAll -> @nish.Inflater.inflateAll
-  method run -> @nish.Inflater.run
+  method window -> @nish.Inflater.window
   method step -> @nish.Inflater.step
+  method stored -> @nish.Inflater.stored
   method huffman -> @nish.Inflater.huffman
   method lookup -> @nish.Inflater.lookup
   method decompress -> @nish.Inflater.decompress
@@ -6447,27 +6448,28 @@ function Inflater.readDynamic(this: Inflater, src: u8[], end: i32): i32 -> @nish
   local +133:11 rd: i32 (const)
   callee +133:21 Inflater.build -> @nish.Inflater.build
 function Inflater.inflate(this: Inflater, src: u8[], ip: i32, inEnd: i32, more: boolean, out: u8[], op: i32, outEnd: i32, histStart: i32): i32 -> @nish.Inflater.inflate [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Inflater.run
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Inflater.window
   escaping: histStart inEnd ip more op outEnd
-  calls: nish.Inflater.run nish_panic
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.run#0
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.run#1
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.run#5
+  calls: nish.Inflater.window nish_panic
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.window#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.window#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.window#5
   stackSites=0 stackLocals=0
-  callee +0:12 Inflater.run -> @nish.Inflater.run
+  local +0:11 r: i32 (const)
+  callee +0:20 Inflater.window -> @nish.Inflater.window
 function Inflater.inflateAll(this: Inflater, src: u8[], ip: i32, inEnd: i32, out: u8[], op: i32, outEnd: i32): i32 -> @nish.Inflater.inflateAll [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Inflater.run
-  escaping: inEnd ip op outEnd
-  calls: nish.Inflater.run
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.run#0
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.run#1
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.run#5
-  stackSites=0 stackLocals=0
-  callee +0:12 Inflater.run -> @nish.Inflater.run
-function Inflater.run(this: Inflater, src: u8[], ip: i32, inEnd: i32, more: boolean, out: u8[], op: i32, outEnd: i32, histStart: i32): i32 -> @nish.Inflater.run [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Inflater.window
+  escaping: inEnd ip op outEnd
+  calls: nish.Inflater.window
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.window#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.window#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.window#5
+  stackSites=0 stackLocals=0
+  callee +0:12 Inflater.window -> @nish.Inflater.window
+function Inflater.window(this: Inflater, src: u8[], ip: i32, inEnd: i32, more: boolean, out: u8[], op: i32, outEnd: i32, histStart: i32): i32 -> @nish.Inflater.window [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: histStart inEnd ip more op outEnd
   calls: nish.Inflater.giveBack nish.Inflater.step
@@ -6482,10 +6484,10 @@ function Inflater.step(this: Inflater, src: u8[], inEnd: i32, more: boolean, out
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: histStart inEnd more outEnd
-  calls: nish.Inflater.fill nish.Inflater.huffman nish.Inflater.readDynamic nish.Inflater.unread nish.tryCopyBytes
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.unread#0 nish.Inflater.fill#0 nish.Inflater.unread#0 nish.Inflater.readDynamic#0 nish.Inflater.huffman#0
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.fill#1 nish.Inflater.readDynamic#1 nish.tryCopyBytes#2 nish.Inflater.huffman#1
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tryCopyBytes#0 nish.Inflater.huffman#4
+  calls: nish.Inflater.fill nish.Inflater.huffman nish.Inflater.readDynamic nish.Inflater.stored nish.Inflater.unread
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.unread#0 nish.Inflater.fill#0 nish.Inflater.unread#0 nish.Inflater.readDynamic#0 nish.Inflater.stored#0 nish.Inflater.huffman#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.fill#1 nish.Inflater.readDynamic#1 nish.Inflater.stored#1 nish.Inflater.huffman#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.stored#4 nish.Inflater.huffman#4
   stackSites=0 stackLocals=0
   local -9:13 s: i32 (const)
   callee -3:16 Inflater.unread -> @nish.Inflater.unread
@@ -6502,17 +6504,28 @@ function Inflater.step(this: Inflater, src: u8[], inEnd: i32, more: boolean, out
   local +37:17 nlen: i32 (const)
   local +53:17 r: i32 (const)
   callee +53:26 Inflater.readDynamic -> @nish.Inflater.readDynamic
-  local +70:15 ip: i32 (const)
-  local +71:15 opos: i32 (const)
-  local +77:15 inAvail: i32 (const)
-  local +78:15 outAvail: i32 (const)
-  local +83:15 left: i32 (const)
-  local +87:13 n: i32 (let)
-  local +96:15 inGap: i32 (const)
-  local +97:15 outGap: i32 (const)
-  callee +104:14 tryCopyBytes -> @nish.tryCopyBytes
-  local +118:15 r: i32 (const)
-  callee +118:24 Inflater.huffman -> @nish.Inflater.huffman
+  local +70:15 r: i32 (const)
+  callee +70:24 Inflater.stored -> @nish.Inflater.stored
+  local +76:15 r: i32 (const)
+  callee +76:24 Inflater.huffman -> @nish.Inflater.huffman
+function Inflater.stored(this: Inflater, src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32): i32 -> @nish.Inflater.stored [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.tryCopyBytes
+  pointer this: size=160 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tryCopyBytes#0
+  stackSites=0 stackLocals=0
+  local -35:11 ip: i32 (const)
+  local -34:11 opos: i32 (const)
+  local -28:11 inAvail: i32 (const)
+  local -27:11 outAvail: i32 (const)
+  local -22:11 left: i32 (const)
+  local -18:9 n: i32 (let)
+  local -9:11 inGap: i32 (const)
+  local -8:11 outGap: i32 (const)
+  local -1:11 copied: boolean (const)
+  callee -1:29 tryCopyBytes -> @nish.tryCopyBytes
 function Inflater.huffman(this: Inflater, src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32 -> @nish.Inflater.huffman [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:13
@@ -6621,9 +6634,9 @@ function Inflater.decompress(this: Inflater, src: u8[], off: i32, len: i32, out:
   local +20:11 inEnd: i32 (const)
   local +21:11 end: i32 (const)
   callee +22:5 Inflater.reset -> @nish.Inflater.reset
-  local +23:11 r: i32 (const)
-  callee +23:20 Inflater.inflateAll -> @nish.Inflater.inflateAll
-  local +28:11 pos: i32 (const)
+  local +25:11 r: i32 (const)
+  callee +25:20 Inflater.inflateAll -> @nish.Inflater.inflateAll
+  local +26:11 pos: i32 (const)
 function deflateCompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, level: i32): i32 -> @nish.deflateCompress [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Deflater.compress
