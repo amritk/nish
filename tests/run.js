@@ -14806,6 +14806,70 @@ if (dealtHere("netStartup")) {
       )
     }
   }
+
+  // A source that fails while a server runs: `tests/link/net_http3_server/entropy.ts`
+  // sends one Initial to an `Http3Server` and files one stream in a
+  // `WebTransportWaiting` room, then prints `accepted starved busy filed`. A
+  // helper this check builds installs a seccomp filter that answers EPERM to
+  // every `getrandom` but a 16-byte one (the Map hash seed the program draws
+  // before `main`), then execs it: the connection's 104-byte draw and the
+  // room's 4-byte salt fail, so the Initial is dropped and counted with no slot
+  // taken, the stream is refused, and the program exits 0. Exit status and the
+  // program's own stdout decide, never a tool's words.
+  if (
+    process.platform === "linux" &&
+    (!only || "net_http3_server".includes(only) || "net_webtransport".includes(only) || "entropy".includes(only))
+  ) {
+    const dir = path.join(buildDir, "link", "net_http3_server.entropy")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "app")
+    const built = spawnNish(
+      [path.join(root, "tests", "link", "net_http3_server", "entropy.ts"), "-o", dir + path.sep, "--link", exe, "--allow-panics"],
+      { cwd: root, encoding: "utf8" }
+    )
+    if (check("net_http3_server: entropy.ts links", built.status === 0, shown(built))) {
+      const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+      check(
+        "net_http3_server: with entropy, the Initial takes a slot and the room files the stream",
+        run.status === 0 && run.stdout === "1 0 1 true\n",
+        shown(run)
+      )
+      const src = path.join(dir, "no-getrandom.c")
+      const helper = path.join(dir, "no-getrandom")
+      fs.writeFileSync(
+        src,
+        "#include <errno.h>\n#include <stddef.h>\n#include <sys/prctl.h>\n#include <sys/syscall.h>\n#include <unistd.h>\n" +
+          "#include <linux/filter.h>\n#include <linux/seccomp.h>\n" +
+          "int main(int argc, char **argv) {\n  if (argc < 2) return 2;\n" +
+          "  struct sock_filter f[] = {\n" +
+          "    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),\n" +
+          "    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_getrandom, 0, 3),\n" +
+          "    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[1])),\n" +
+          "    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 16, 1, 0),\n" +
+          "    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),\n" +
+          "    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),\n  };\n" +
+          "  struct sock_fprog prog = {6, f};\n" +
+          "  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) return 3;\n" +
+          "  if (syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, 0, &prog) != 0) return 3;\n" +
+          "  execv(argv[1], argv + 1);\n  return 111;\n}\n"
+      )
+      const cc = spawnSync("clang", ["-O2", src, "-o", helper], { encoding: "utf8" })
+      if (check("net_http3_server: the getrandom-refusing helper builds", cc.status === 0, String(cc.stderr))) {
+        const probe = spawnSync(helper, ["/bin/true"], { encoding: "utf8" })
+        if (probe.status === 3) {
+          skip("net_http3_server: this kernel takes no seccomp filter, so the failing source is not checked")
+        } else {
+          const r = spawnSync(helper, [exe], { cwd: root, encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+          check(
+            "net_http3_server: with getrandom refused, the Initial is counted as starved with no slot taken and the room refuses the stream",
+            r.status === 0 && r.stdout === "0 1 0 false\n",
+            shown(r)
+          )
+        }
+      }
+    }
+  }
 }
 
 if (dealtHere("threadWasi")) {
