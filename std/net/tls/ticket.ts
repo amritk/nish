@@ -86,6 +86,7 @@ import {
 } from "nish/crypto/chacha20poly1305"
 import { tlsSuiteHashLength } from "nish/net/tls/schedule"
 import { Secret, exposeWith, secret, wipe } from "nish:secret"
+import { wrappingAdd } from "nish:unsafe"
 
 /** A ticket key's id, sent in the clear at the head of each ticket it seals. */
 export const TLS_TICKET_KEY_ID_SIZE: i32 = 16
@@ -134,21 +135,21 @@ const TLS_TICKET_NAME_AT: i32 = 22
 
 /**
  * `a + b`, held at the `i64` range's ends rather than past them. Two values of one
- * sign sum within 2^64 of zero, so their sum in `u64` reads across the sign bit only
- * when it has left the range.
+ * sign sum within 2^64 of zero, so `wrappingAdd` crosses the sign bit only when the
+ * true sum has left the range: the wrap is how that is seen, and the sum is held instead.
  */
 const tlsTicketAdd = (a: i64, b: i64): i64 => {
   if (a >= 0) {
     if (b < 0) {
       return a + b
     }
-    const sum: i64 = toI64(toU64(a) + toU64(b))
-    return sum >= 0 ? sum : toI64((toU64(0) - toU64(1)) >> toU64(1))
+    const sum: i64 = wrappingAdd(a, b)
+    return sum >= 0 ? sum : toI64(-1) >>> toI64(1)
   }
   if (b >= 0) {
     return a + b
   }
-  const sum: i64 = toI64(toU64(a) + toU64(b))
+  const sum: i64 = wrappingAdd(a, b)
   return sum < 0 ? sum : toI64(toU64(1) << toU64(63))
 }
 
