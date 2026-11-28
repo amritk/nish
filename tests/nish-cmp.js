@@ -26558,6 +26558,24 @@ const DECLARED = [
     changelog: ONE_NEW_ARRAY,
     why: "websocketBytes makes its bytes with one new Array and no push loop, so wsEvent's second lb.peers[index] read after WsDecoder.feed keeps the first read's bounds check and checks.ll drops its own",
   },
+  // The counted std programs bench/run.mjs gained after #2449 reach
+  // JsonDocument's regrowth, which the release still grows by pushes.
+  ...Object.entries({
+    "bench/std-json-value-parse.ts": ["json-value.ll", "std-json-value-parse.ll"],
+    "bench/std-json-value-read.ts": ["json-value.ll", "std-json-value-read.ll"],
+    "bench/std-json-value-reuse.ts": ["json-value.ll", "std-json-value-reuse.ll"],
+    "bench/std-yaml-json-load.ts": ["json-value.ll", "std-yaml-json-load.ll", "yaml-json.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: ONE_NEW_ARRAY,
+      why:
+        file === "json-value.ll"
+          ? "JsonDocument grows its node and string arrays with one new Array each and a memmove copy in place of a push loop, so json-value.ll declares memmove and its functions move"
+          : "JsonDocument.append and reserve gain an attribute group with the new regrowth, so the module declaring them renumbers its attribute reference",
+    }))
+  ),
   ...Object.entries({
     "examples/http-app/main.ts": ["http3.ll"],
     "tests/link/net_http_app/main.ts": ["http3.ll"],
