@@ -2129,17 +2129,19 @@ const ANSWER_BYTES: i32 = 12
 const ANSWER_SLOTS: i32 = 32
 const ANSWER_SLOT: i32 = 16
 const WAIT_MS: i32 = 1000
-function answersAt(worker: i32): i32 -> @answersAt
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.mpscRingBytes
+function answersAt(worker: i32): Result<i32, string> -> @answersAt
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  calls: nish.mpscRingBytes nish_alloc_struct nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
-  callee +0:13 mpscRingBytes -> @nish.mpscRingBytes
-  callee +1:35 mpscRingBytes -> @nish.mpscRingBytes
-function regionBytes(): i32 -> @regionBytes
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  local +0:9 jobs: i32 (const)
+  callee +0:21 mpscRingBytes -> @nish.mpscRingBytes
+  local +1:9 each: i32 (const)
+  callee +1:21 mpscRingBytes -> @nish.mpscRingBytes
+function regionBytes(): Result<i32, string> -> @regionBytes
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: answersAt
   stackSites=0 stackLocals=0
-  callee +0:32 answersAt -> @answersAt
+  callee +0:48 answersAt -> @answersAt
 function takeRecord(ring: MpscRing, buf: u8[]): i32 -> @takeRecord
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.MpscRing.takeWait
@@ -2160,33 +2162,34 @@ function owner(region: SharedRegion): i32 -> @owner
   callee +0:16 attachMpscRing -> @nish.attachMpscRing
   local +5:9 answers: MpscRing[] (const)
   local +6:12 c: i32 (let)
-  local +7:11 ring: Result<MpscRing, string> (const)
-  callee +7:18 attachMpscRing -> @nish.attachMpscRing
-  callee +7:41 answersAt -> @answersAt
-  local +15:9 counters: u64[] (const)
-  local +16:9 job: u8[] (const)
-  local +17:9 answer: u8[] (const)
-  local +18:7 done: i32 (let)
-  local +19:7 answered: u64 (let)
-  callee +22:28 takeRecord -> @takeRecord
-  local +25:11 clientAt: Result<i32, string> (const)
-  callee +25:22 tryGetI32LE -> @nish.tryGetI32LE
-  local +26:11 counterAt: Result<i32, string> (const)
-  callee +26:23 tryGetI32LE -> @nish.tryGetI32LE
-  local +27:11 tagAt: Result<i32, string> (const)
-  callee +27:19 tryGetI32LE -> @nish.tryGetI32LE
-  local +28:11 addAt: Result<i32, string> (const)
-  callee +28:19 tryGetI32LE -> @nish.tryGetI32LE
-  local +32:11 client: i32 (const)
-  local +33:11 counter: i32 (const)
-  local +41:11 slot: i32 (const)
-  callee +46:10 trySetI32LE -> @nish.trySetI32LE
-  callee +46:50 trySetI64LE -> @nish.trySetI64LE
-  callee +50:5 MpscRing.offer -> @nish.MpscRing.offer
-  local +53:7 total: u64 (let)
-  local +54:14 v: u64 (const)
-  callee +57:3 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
-  callee +58:3 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
+  local +7:11 at: Result<i32, string> (const)
+  callee +7:16 answersAt -> @answersAt
+  local +12:11 ring: Result<MpscRing, string> (const)
+  callee +12:18 attachMpscRing -> @nish.attachMpscRing
+  local +20:9 counters: u64[] (const)
+  local +21:9 job: u8[] (const)
+  local +22:9 answer: u8[] (const)
+  local +23:7 done: i32 (let)
+  local +24:7 answered: u64 (let)
+  callee +27:28 takeRecord -> @takeRecord
+  local +30:11 clientAt: Result<i32, string> (const)
+  callee +30:22 tryGetI32LE -> @nish.tryGetI32LE
+  local +31:11 counterAt: Result<i32, string> (const)
+  callee +31:23 tryGetI32LE -> @nish.tryGetI32LE
+  local +32:11 tagAt: Result<i32, string> (const)
+  callee +32:19 tryGetI32LE -> @nish.tryGetI32LE
+  local +33:11 addAt: Result<i32, string> (const)
+  callee +33:19 tryGetI32LE -> @nish.tryGetI32LE
+  local +37:11 client: i32 (const)
+  local +38:11 counter: i32 (const)
+  local +46:11 slot: i32 (const)
+  callee +51:10 trySetI32LE -> @nish.trySetI32LE
+  callee +51:50 trySetI64LE -> @nish.trySetI64LE
+  callee +55:5 MpscRing.offer -> @nish.MpscRing.offer
+  local +58:7 total: u64 (let)
+  local +59:14 v: u64 (const)
+  callee +62:3 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
+  callee +63:3 SharedRegion.storeI64 -> @nish.SharedRegion.storeI64
 function client(region: SharedRegion, me: i32): i32 -> @client
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.attachMpscRing
@@ -2196,30 +2199,34 @@ function client(region: SharedRegion, me: i32): i32 -> @client
   stackSites=0 stackLocals=0
   local +0:9 jobs: Result<MpscRing, string> (const)
   callee +0:16 attachMpscRing -> @nish.attachMpscRing
-  local +5:9 answers: Result<MpscRing, string> (const)
-  callee +5:19 attachMpscRing -> @nish.attachMpscRing
-  callee +5:42 answersAt -> @answersAt
-  local +10:9 job: u8[] (const)
-  local +11:9 answer: u8[] (const)
-  callee +14:3 trySetI32LE -> @nish.trySetI32LE
-  local +15:7 sent: u32 (let)
-  local +16:7 got: u32 (let)
-  local +17:7 wrong: u32 (let)
-  local +18:7 since: u64 (let)
-  callee +21:7 trySetI32LE -> @nish.trySetI32LE
-  callee +22:7 trySetI32LE -> @nish.trySetI32LE
-  callee +23:7 trySetI32LE -> @nish.trySetI32LE
-  callee +24:11 MpscRing.offer -> @nish.MpscRing.offer
-  local +36:11 took: i32 (const)
-  callee +36:23 takeRecord -> @takeRecord
-  local +43:11 tag: Result<i32, string> (const)
-  callee +43:17 tryGetI32LE -> @nish.tryGetI32LE
-  local +44:11 value: Result<i64, string> (const)
-  callee +44:19 tryGetI64LE -> @nish.tryGetI64LE
-  callee +49:3 trySetI32LE -> @nish.trySetI32LE
-  local +50:12 k: i32 (let)
-  callee +50:39 MpscRing.offer -> @nish.MpscRing.offer
-  callee +53:3 SharedRegion.addI32 -> @nish.SharedRegion.addI32
+  local +5:9 at: Result<i32, string> (const)
+  callee +5:14 answersAt -> @answersAt
+  local +10:9 answers: Result<MpscRing, string> (const)
+  callee +10:19 attachMpscRing -> @nish.attachMpscRing
+  local +15:9 job: u8[] (const)
+  local +16:9 answer: u8[] (const)
+  callee +19:3 trySetI32LE -> @nish.trySetI32LE
+  local +20:7 sent: u32 (let)
+  local +21:7 got: u32 (let)
+  local +22:7 wrong: u32 (let)
+  local +23:7 since: u64 (let)
+  callee +26:7 trySetI32LE -> @nish.trySetI32LE
+  callee +27:7 trySetI32LE -> @nish.trySetI32LE
+  callee +28:7 trySetI32LE -> @nish.trySetI32LE
+  callee +29:11 MpscRing.offer -> @nish.MpscRing.offer
+  local +41:11 took: i32 (const)
+  callee +41:23 takeRecord -> @takeRecord
+  local +48:11 tag: Result<i32, string> (const)
+  callee +48:17 tryGetI32LE -> @nish.tryGetI32LE
+  local +49:11 value: Result<i64, string> (const)
+  callee +49:19 tryGetI64LE -> @nish.tryGetI64LE
+  callee +54:3 trySetI32LE -> @nish.trySetI32LE
+  local +55:12 k: i32 (let)
+  callee +55:39 MpscRing.offer -> @nish.MpscRing.offer
+  local +61:9 bad: i32 (const)
+  local +62:9 answered: i32 (const)
+  local +63:7 failures: i32 (let)
+  callee +67:3 SharedRegion.addI32 -> @nish.SharedRegion.addI32
 function supervise(name: string): i32 -> @supervise
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.unlinkRegion
@@ -2228,29 +2235,31 @@ function supervise(name: string): i32 -> @supervise
   stackSites=0 stackLocals=0
   local +0:9 stale: Result<void, ShmError> (const)
   callee +0:17 unlinkRegion -> @nish.unlinkRegion
-  local +4:9 created: Result<SharedRegion, ShmError> (const)
-  callee +4:19 createRegion -> @nish.createRegion
-  callee +4:38 regionBytes -> @regionBytes
-  local +9:9 region: SharedRegion (const)
-  local +10:9 made: Result<MpscRing, string> (const)
-  callee +10:16 tryInitMpscRing -> @nish.tryInitMpscRing
-  local +15:12 c: i32 (let)
-  local +16:11 ring: Result<MpscRing, string> (const)
-  callee +16:18 tryInitMpscRing -> @nish.tryInitMpscRing
-  callee +16:42 answersAt -> @answersAt
-  local +22:9 config: PreforkConfig (const)
-  local +25:9 ran: Result<i32, string> (const)
-  callee +25:15 tryPreforkWith -> @nish.tryPreforkWith
-  local +30:9 ended: i32 (const)
-  local +31:9 unlinked: Result<void, ShmError> (const)
-  callee +31:20 unlinkRegion -> @nish.unlinkRegion
-  local +36:9 failures: i32 (const)
-  callee +36:25 SharedRegion.loadI32 -> @nish.SharedRegion.loadI32
-  local +37:9 answered: i64 (const)
-  callee +37:25 SharedRegion.loadI64 -> @nish.SharedRegion.loadI64
-  local +38:9 total: i64 (const)
-  callee +38:22 SharedRegion.loadI64 -> @nish.SharedRegion.loadI64
-  local +41:9 want: i64 (const)
+  local +4:9 bytes: Result<i32, string> (const)
+  callee +4:17 regionBytes -> @regionBytes
+  local +9:9 created: Result<SharedRegion, ShmError> (const)
+  callee +9:19 createRegion -> @nish.createRegion
+  local +14:9 region: SharedRegion (const)
+  local +15:9 made: Result<MpscRing, string> (const)
+  callee +15:16 tryInitMpscRing -> @nish.tryInitMpscRing
+  local +20:12 c: i32 (let)
+  local +21:11 at: Result<i32, string> (const)
+  callee +21:16 answersAt -> @answersAt
+  local +26:11 ring: Result<MpscRing, string> (const)
+  callee +26:18 tryInitMpscRing -> @nish.tryInitMpscRing
+  local +32:9 config: PreforkConfig (const)
+  local +35:9 ran: Result<i32, string> (const)
+  callee +35:15 tryPreforkWith -> @nish.tryPreforkWith
+  local +40:9 ended: i32 (const)
+  local +41:9 unlinked: Result<void, ShmError> (const)
+  callee +41:20 unlinkRegion -> @nish.unlinkRegion
+  local +46:9 failures: i32 (const)
+  callee +46:25 SharedRegion.loadI32 -> @nish.SharedRegion.loadI32
+  local +47:9 answered: i64 (const)
+  callee +47:25 SharedRegion.loadI64 -> @nish.SharedRegion.loadI64
+  local +48:9 total: i64 (const)
+  callee +48:22 SharedRegion.loadI64 -> @nish.SharedRegion.loadI64
+  local +51:9 want: i64 (const)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via supervise
