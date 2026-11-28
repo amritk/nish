@@ -859,25 +859,20 @@ const upstreamParser = (limits: UpstreamLimits): Http1ResponseParser => {
   return p
 }
 
-/**
- * `n` zero bytes, none when `n` is below 1. Filled by `push`, so no `i32`
- * length is computed for `new Array`.
- */
+/** `n` zero bytes, none when `n` is below 1: one zeroed allocation, not a `push` per byte. */
 const upstreamBytes = (n: i32): u8[] => {
-  const a: u8[] = []
-  for (let i: i32 = 0; i < n; i += 1) {
-    a.push(0)
+  if (n <= 0) {
+    return []
   }
-  return a
+  return new Array<u8>(n)
 }
 
-/** Room for `n` slot indexes, filled the way `upstreamBytes` is. */
+/** Room for `n` zeroed slot indexes, none when `n` is below 1, allocated the way `upstreamBytes` is. */
 const upstreamSlots = (n: i32): i32[] => {
-  const a: i32[] = []
-  for (let i: i32 = 0; i < n; i += 1) {
-    a.push(0)
+  if (n <= 0) {
+    return []
   }
-  return a
+  return new Array<i32>(n)
 }
 
 /**

@@ -2346,7 +2346,7 @@ const jsonValueRoom = (a: u8[], n: i32): u8[] => {
     return a
   }
   const grown: u8[] = new Array<u8>(target)
-  // The prover does not carry `grown.length === target` from `new Array`.
+  // Always true (`target` > `have`); the prover does not carry `grown.length === target` from `new Array`.
   if (toI32(a.length) <= toI32(grown.length)) {
     grown.set(a, 0)
   }
@@ -2364,7 +2364,7 @@ const jsonValueRoomI32 = (a: i32[], n: i32): i32[] => {
     return a
   }
   const grown: i32[] = new Array<i32>(target)
-  // The prover does not carry `grown.length === target` from `new Array`.
+  // Always true (`target` > `have`); the prover does not carry `grown.length === target` from `new Array`.
   if (toI32(a.length) <= toI32(grown.length)) {
     grown.set(a, 0)
   }

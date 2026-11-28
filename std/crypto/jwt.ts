@@ -244,7 +244,7 @@ const jwtCopy = (a: u8[]): u8[] => {
     return []
   }
   const out: u8[] = new Array<u8>(n)
-  // The prover does not carry `out.length === n` from `new Array`.
+  // Always true; the prover does not carry `out.length === n` from `new Array`.
   if (toI32(a.length) <= toI32(out.length)) {
     out.set(a, 0)
   }
