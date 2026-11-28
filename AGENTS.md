@@ -377,6 +377,9 @@ what is blocking and what you need — and keep watching.
   structure of `src/`, CI) do not touch it. The page rules are in
   [`docs/README.md`](./docs/README.md#writing-a-guide-page), and
   `node tests/run.js guide` compiles every marked example.
+- **A `std/` resource owns its native handle and closes with `using`**, with
+  a table id only for a shared, collected or JS-owned object
+  ([`CLAUDE.md`](./CLAUDE.md#definition-of-done)).
 - **A construct is implemented once, in `src/`.** There is no second
   implementation to compare it with since WP19 R6
   ([wp19](./docs/wp19-stage0-retirement.md)), so its golden `.ll`, its native
