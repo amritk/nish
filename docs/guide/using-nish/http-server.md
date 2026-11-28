@@ -424,7 +424,7 @@ three things holds:
 is copied once, into the connection's output. Pings are answered by the
 connection and never reach you.
 
-<!-- allow-panics: calls `std/net/http-server.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/http-server.ts` and `std/net/router.ts` code that keeps panic sites, and reaches those of `std/net/http3-server.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server";
