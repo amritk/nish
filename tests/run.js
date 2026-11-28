@@ -12113,11 +12113,10 @@ if (dealtHere("bench") && (!only || "instruction-coverage".includes(only))) {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "nish-coverage-"))
     try {
       const report = path.join(out, "panics.json")
-      const r = spawnSync(
-        NISH,
-        [path.join(root, entry), ...args, ...(args.includes("--allow-panics") ? [] : ["--allow-panics"]), "--emit-panics", report, "-o", `${out}${path.sep}`],
-        { cwd: root, encoding: "utf8" }
-      )
+      const r = spawnNish([path.join(root, entry), ...args, "--emit-panics", report, "-o", `${out}${path.sep}`], {
+        cwd: root,
+        encoding: "utf8",
+      })
       if (r.status !== 0 || !fs.existsSync(report)) {
         return { error: `does not compile: ${r.stderr.split("\n").filter((l) => / error: /.test(l)).slice(0, 3).join("; ")}` }
       }
