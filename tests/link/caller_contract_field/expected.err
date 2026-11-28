@@ -1,0 +1,1 @@
+main.ts:16:12: error: Field `v` of class `Box`: initializers must be literals

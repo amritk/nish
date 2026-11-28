@@ -11786,6 +11786,8 @@ const WP91_S1 = "compress, src/ and examples, and one check for every file"
 const wp91s1 = byFinding(WP91_S1)
 /** The changelog words of WP90 S1, the multipart/form-data reader. */
 const MULTIPART_BODIES = "multipart/form-data bodies"
+/** The changelog words of examples-strict S2 (#2296): a caller's proof discharges a std callee's leading contract guard. */
+const CALLER_CONTRACT = "a caller's proof discharges a std callee's contract panic"
 
 /** The release-note words of WP80 S10, window contracts forwarded from free functions, arrow consts and literal counts. */
 const WINDOW_FORWARD = "window contracts forward from free functions, arrow consts and literal lengths"
@@ -25970,6 +25972,96 @@ const DECLARED = [
     changelog: MULTIPART_BODIES,
     why: "the case is new with this change and imports nish/net/multipart, which the seed does not ship, so the reference refuses it",
   },
+  {
+    program: "tests/cases/deny_panics_caller.ts",
+    file: "exit",
+    changelog: CALLER_CONTRACT,
+    why: "the case is new with this change: under `--deny-panics` its callers prove `count`'s leading range guard, which the candidate records as proven at each call, where the reference keeps the guard's `panic` and refuses the program",
+  },
+  {
+    program: "tests/link/caller_contract_proven/main.ts",
+    file: "exit",
+    changelog: CALLER_CONTRACT,
+    why: "the case is new with this change: every call into `sum` and `Span.width` proves the callee's leading guard, which the candidate records as proven, where the reference keeps each guard's `panic` and refuses the program",
+  },
+  ...Object.entries({
+    "src/caller-contract.ts": [
+      "bounds.ll",
+      "constants.ll",
+      "emit-async.ll",
+      "expressions.ll",
+      "lexer.ll",
+      "map.ll",
+      "types.ll",
+    ],
+    "src/fault-contract.ts": ["constants.ll", "emit-async.ll", "expressions.ll", "map.ll", "types.ll"],
+    "src/window-contract.ts": ["constants.ll", "emit-async.ll", "expressions.ll", "map.ll", "types.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: CALLER_CONTRACT,
+      why: `the program compiles src/program.ts and src/bounds.ts, which this change edits to carry and prove caller contracts, so the ${file} module it writes drops the array-length and overflow checks the prover now discharges and renumbers its strings and attribute groups`,
+    }))
+  ),
+  ...Object.entries({
+    "bench/httparena/main.ts": ["buffer-pool.ll", "bytes.ll", "client.ll"],
+    "tests/link/httparena_entry/main.ts": [
+      "buffer-pool.ll",
+      "client.ll",
+      "net_tls_record_common_bytes.ll",
+      "std_bytes.ll",
+    ],
+  }).flatMap(([program, files]) =>
+    [
+      ...files,
+      "ct.ll",
+      "hkdf.ll",
+      "http3-frame.ll",
+      "http3.ll",
+      "p384.ll",
+      "qpack.ll",
+      "scram.ll",
+    ].map((file) => ({
+      program,
+      file,
+      changelog: CALLER_CONTRACT,
+      why: `the server's calls into std/bytes.ts, std/crypto and std/net prove the ranges their callees guard (copyBytes and the array-length checks), which src/bounds.ts now reads, so ${file} drops those guards' panic strings and renumbers its strings and attribute groups`,
+    }))
+  ),
+  ...Object.entries({
+    "tests/link/net_handler_pipelined_stream/main.ts": [
+      "buffer-pool.ll",
+      "client.ll",
+      "ct.ll",
+      "hkdf.ll",
+      "net_tls_record_common_bytes.ll",
+      "p384.ll",
+      "std_bytes.ll",
+    ],
+    "tests/link/std_compress_checked_sums/main.ts": ["bytes.ll"],
+    "tests/link/std_compress_sweep/main.ts": ["bytes.ll", "main.ll"],
+    "tests/link/std_term_decoder_bounds/main.ts": ["main.h", "main.ll", "testing.ll"],
+    "tests/link/window_near_other_array/main.ts": ["sink.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: CALLER_CONTRACT,
+      why: `the program's calls prove the ranges their std callees guard, or index and size what an initializer or a guard bounds, which src/bounds.ts now reads, so ${file} drops those index, overflow and contract checks and renumbers its strings, types and attribute groups`,
+    }))
+  ),
+  ...[
+    "caller_contract_forward",
+    "caller_contract_forward_import",
+    "caller_contract_method_guard",
+    "caller_contract_shapes",
+  ].map((name) => ({
+    program: `tests/link/${name}/main.ts`,
+    file: "exit",
+    changelog: CALLER_CONTRACT,
+    why: "the case is new with this change: under `--deny-panics` its callers prove the callee's leading guard, which the candidate records as proven, where the reference keeps the guard's `panic` and refuses the program",
+  })),
   ...[
     "tests/link/window_contract_arrow_literal/main.ts",
     "tests/link/window_contract_value_forward/main.ts",

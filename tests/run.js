@@ -30031,6 +30031,47 @@ if (dealtHere("releaseChecks")) {
     }
   }
 
+  // ---- The caller contract: a root call proves a std callee's leading guard (#2296) -------
+  // `routerDecode` starts with `if (start < 0 || end < 0 || end < start ||
+  // end > toI32(target.length)) { panic(...) }`. A call whose arguments make
+  // every comparison false is a proven `contract` site, so `--deny-panics`
+  // builds it; `[1, 5)` of a three-byte buffer is not proven and reaches the
+  // guard's `panic` in `std/net/router.ts` as any call does, and the call is refused.
+  if (!only || "caller contract std deny-panics".includes(only)) {
+    const contractRun = (name, start, end) => {
+      const src = path.join(buildDir, `caller_contract_${name}.ts`)
+      fs.writeFileSync(
+        src,
+        [
+          'import { routerDecode } from "nish/net/router"',
+          "export const main = (): i32 => {",
+          "  const t: u8[] = [47, 97, 98]",
+          "  const out: u8[] = [0, 0, 0]",
+          `  console.log(\`\${routerDecode(t, ${start}, ${end}, out)}\`)`,
+          "  return 0",
+          "}",
+          "",
+        ].join("\n")
+      )
+      return spawnNish([src, "-o", path.join(buildDir, `caller_contract_${name}`) + "/", "--deny-panics"], {
+        cwd: root,
+        encoding: "utf8",
+      })
+    }
+    const proven = contractRun("proven", "0", "toI32(t.length)")
+    check(
+      "caller contract: --deny-panics builds a call to routerDecode whose range the caller proves",
+      proven.status === 0,
+      shown(proven)
+    )
+    const unproven = contractRun("unproven", "1", "5")
+    check(
+      "caller contract: --deny-panics refuses routerDecode's [1, 5) of a three-byte buffer at its panic",
+      unproven.status === 1 && /This call to `routerDecode` may panic: it reaches the `panic` site at std\/net\/router\.ts:\d+:\d+/.test(String(unproven.stderr)),
+      shown(unproven)
+    )
+  }
+
   // ---- `--allow-panics`: the way out of the default, where a compiler lists it -------------
   // Every module of the root package is held to no panic by default; the flag
   // relaxes that to the `noPanic` list, undoes an earlier `--deny-panics` (the
