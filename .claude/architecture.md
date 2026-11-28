@@ -114,6 +114,25 @@ Compilation                                                            src/compi
   rule there cites the test case that proves it; the `docs/wp*.md` notes are
   historical, and where they disagree LANGUAGE.md wins.
 
+## A `std/` resource
+
+A resource that must be released is a handle class closed with `using`
+(`CLAUDE.md` holds the standard; the rule is `docs/LANGUAGE.md` →
+[A handle class](../docs/LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr)).
+What an author meets:
+
+- It may own several fields: `CPtr`s, opaque `declare class`es, `HostHandle`s
+  and other handle classes. They close in the reverse of their declaration
+  order, so declare first what must close last.
+- It opens through a factory, a top-level function or `const` arrow returning
+  `X`, `X | null` or `Result<X, E>`: Nish has no static methods.
+- A callee borrows it through a parameter of its type and never copies,
+  stores or returns it.
+- The entry module exports no handle class and no function that names one
+  (NL2827); a library module does.
+- Its `std/<name>.wasm32.ts` twin owns a `HostHandle` where the native file
+  owns a pointer.
+
 ## Where to read next
 
 | Question | Document |
