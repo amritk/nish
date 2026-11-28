@@ -159,7 +159,10 @@ the panic would carry, and `Ok` with what the answer returns. A program held
 to no panics answers through them, opens its handler with
 `openHttpHandler(limits, listener, router)`, which gives `Err` for limits it
 cannot use or a failed `pollCreate`, watches with `h.tryWatch(fd, id)`, and
-takes requests with `h.next()`, which is `null` when none is ready.
+takes requests with `h.next()`, which is `null` when none is ready. A handler
+made with `new HttpHandler` from a loop whose `pollCreate` failed does not
+panic: it watches nothing, and each `h.wait` returns `HANDLER_NO_LOOP` at once
+instead of a count, so stop the loop that calls it.
 
 **A request may be answered later**, after a database answers, say: keep it
 and answer it in a later turn. If its client has gone in the meantime, the
@@ -343,8 +346,8 @@ answer.
 flags, a log line a request, problems for bad input, and the graceful stop
 above with a deadline. It answers through the `try` calls, so of the handler's own panic sites it
 reaches none; build it with `nish examples/http-app/main.ts --allow-panics
---link http-app` all the same, for the codec, decoder and copy sites its
-header lists, and run `./http-app 8080`. Copy it and change it: logging and
+--link http-app` all the same, for the gzip reader site its header
+lists, and run `./http-app 8080`. Copy it and change it: logging and
 configuration are left to the example because every server wants them a
 little differently.
 

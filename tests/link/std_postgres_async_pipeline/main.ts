@@ -472,11 +472,19 @@ export async function main(): Promise<i32> {
   console.log(`connected ${live} of 1`)
   board.sent = 0
   board.want = 1000
+  const before9: i32 = pool.turnWaits
   spawn(pipe(pool, board, handles, wait, "", "ahead"))
   spawn(seatLate(pool, board, quick, 3, "behind 1"))
   spawn(seatLate(pool, board, quick, 4, "behind 2"))
   spawn(pipe(pool, board, handles, gate, "", "gate"))
-  await sleep(10)
+  // Counted from once all three have parked behind `ahead`, not after a fixed
+  // sleep: a runner that stalls past the seats' timers runs the count while a
+  // seat is still yielding, and that first park then reads as a spin.
+  let settle9: i32 = 0
+  while (pool.turnWaits - before9 < 3 && settle9 < 3000) {
+    await sleep(1)
+    settle9 += 1
+  }
   const parked: i32 = pool.turnWaits
   board.open = 1
   await sleep(50)
