@@ -713,7 +713,7 @@ function PgBinary.reset(this: PgBinary): void -> @nish.PgBinary.reset [exported 
   pointer this: size=1 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgBinary.int(this: PgBinary, b: u8[], start: i32, length: i32): i64 -> @nish.PgBinary.int [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: start
   calls: nish.getI32BE nish.getI64BE nish.getU16BE
@@ -733,7 +733,7 @@ function PgBinary.bool(this: PgBinary, b: u8[], start: i32, length: i32): boolea
   stackSites=0 stackLocals=0
   local -8:13 c: i32 (const)
 function PgBinary.float(this: PgBinary, b: u8[], start: i32, length: i32): f64 -> @nish.PgBinary.float [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: start
   calls: nish.getF64BE
@@ -742,7 +742,7 @@ function PgBinary.float(this: PgBinary, b: u8[], start: i32, length: i32): f64 -
   stackSites=0 stackLocals=0
   callee +3:12 getF64BE -> @nish.getF64BE
 function PgBinary.timestamp(this: PgBinary, b: u8[], start: i32, length: i32, out: u8[], at: i32): i32 -> @nish.PgBinary.timestamp [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: at start
   calls: nish.PgBinary.iso nish.getI64BE
@@ -787,7 +787,7 @@ function PgBinaryArray.constructor(this: PgBinaryArray, binary: PgBinary): void 
   pointer binary: size=1 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function PgBinaryArray.begin(this: PgBinaryArray, b: u8[], start: i32, length: i32): void -> @nish.PgBinaryArray.begin [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: b start
   calls: nish.PgBinaryArray.refuse nish.getI32BE
@@ -813,7 +813,7 @@ function PgBinaryArray.refuse(this: PgBinaryArray): i32 -> @nish.PgBinaryArray.r
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgBinaryArray.next(this: PgBinaryArray): i32 -> @nish.PgBinaryArray.next [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.PgBinaryArray.refuse nish.getI32BE
   pointer this: size=56 writesThrough=true captured=false passedTo=nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0
@@ -832,7 +832,7 @@ function PgBinaryArray.next(this: PgBinaryArray): i32 -> @nish.PgBinaryArray.nex
   local +10:11 q: i64 (const)
   callee +12:14 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
 function PgBinaryArray.int(this: PgBinaryArray): i64 -> @nish.PgBinaryArray.int [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.PgBinary.int
   pointer this: size=56 writesThrough=false captured=false
@@ -1430,7 +1430,7 @@ function PgConnection.startMessage(this: PgConnection, type: i32): i32 -> @nish.
   callee +1:5 PgConnection.putByte -> @nish.PgConnection.putByte
   callee +2:5 PgConnection.putI32 -> @nish.PgConnection.putI32
 function PgConnection.endMessage(this: PgConnection, at: i32): void -> @nish.PgConnection.endMessage [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.setI32BE
   calls: nish.setI32BE
   pointer this: size=216 writesThrough=false captured=false
@@ -1553,7 +1553,7 @@ function PgConnection.startBinaryParam(this: PgConnection, size: i32): i32 -> @n
   local +8:11 at: i32 (const)
   callee +9:5 PgConnection.putI32 -> @nish.PgConnection.putI32
 function PgConnection.endParam(this: PgConnection, at: i32): void -> @nish.PgConnection.endParam [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.setI32BE
   escaping: at
   calls: nish.setI32BE
@@ -1988,7 +1988,7 @@ function PgConnection.bool(this: PgConnection, c: i32): boolean -> @nish.PgConne
   stackSites=0 stackLocals=0
   callee +0:12 PgText.bool -> @nish.PgText.bool
 function PgConnection.binaryInt(this: PgConnection, c: i32): i64 -> @nish.PgConnection.binaryInt [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgBinary.int
   escaping: c
   calls: nish.PgBinary.int nish_panic_index
@@ -2004,7 +2004,7 @@ function PgConnection.binaryBool(this: PgConnection, c: i32): boolean -> @nish.P
   stackSites=0 stackLocals=0
   callee +0:12 PgBinary.bool -> @nish.PgBinary.bool
 function PgConnection.binaryFloat(this: PgConnection, c: i32): f64 -> @nish.PgConnection.binaryFloat [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgBinary.float
   escaping: c
   calls: nish.PgBinary.float nish_panic_index
@@ -2912,55 +2912,55 @@ const BYTES_BACKSLASH: i32 = 92
 const BYTES_NON_ASCII: i32 = 128
 const BYTES_CONTINUATION_TOP: i32 = 191
 function bytesWindow(what: string, b: readonly u8[], off: i32, len: i32): void -> @nish.bytesWindow
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 size: i32 (const)
 function getU16LE(b: u8[], off: i32): u16 -> @nish.getU16LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
   callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU16BE(b: u8[], off: i32): u16 -> @nish.getU16BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
   callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU32LE(b: u8[], off: i32): u32 -> @nish.getU32LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
   callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU32BE(b: u8[], off: i32): u32 -> @nish.getU32BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
   callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU64LE(b: u8[], off: i32): u64 -> @nish.getU64LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
   callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
   callee +0:3 bytesWindow -> @nish.bytesWindow
 function getI32LE(b: u8[], off: i32): i32 -> @nish.getI32LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow nish.getU32LE
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU32LE#0
@@ -2968,7 +2968,7 @@ function getI32LE(b: u8[], off: i32): i32 -> @nish.getI32LE [exported]
   callee +0:3 bytesWindow -> @nish.bytesWindow
   callee +1:16 getU32LE -> @nish.getU32LE
 function getI32BE(b: u8[], off: i32): i32 -> @nish.getI32BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow nish.getU32BE
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU32BE#0
@@ -2976,7 +2976,7 @@ function getI32BE(b: u8[], off: i32): i32 -> @nish.getI32BE [exported]
   callee +0:3 bytesWindow -> @nish.bytesWindow
   callee +1:16 getU32BE -> @nish.getU32BE
 function getI64LE(b: u8[], off: i32): i64 -> @nish.getI64LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow nish.getU64LE
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64LE#0
@@ -2984,7 +2984,7 @@ function getI64LE(b: u8[], off: i32): i64 -> @nish.getI64LE [exported]
   callee +0:3 bytesWindow -> @nish.bytesWindow
   callee +1:16 getU64LE -> @nish.getU64LE
 function getI64BE(b: u8[], off: i32): i64 -> @nish.getI64BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow nish.getU64BE
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64BE#0
@@ -2992,7 +2992,7 @@ function getI64BE(b: u8[], off: i32): i64 -> @nish.getI64BE [exported]
   callee +0:3 bytesWindow -> @nish.bytesWindow
   callee +1:16 getU64BE -> @nish.getU64BE
 function getF64LE(b: u8[], off: i32): f64 -> @nish.getF64LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow nish.getU64LE
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64LE#0
@@ -3000,7 +3000,7 @@ function getF64LE(b: u8[], off: i32): f64 -> @nish.getF64LE [exported]
   callee +0:3 bytesWindow -> @nish.bytesWindow
   callee +1:26 getU64LE -> @nish.getU64LE
 function getF64BE(b: u8[], off: i32): f64 -> @nish.getF64BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.bytesWindow nish.getU64BE
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64BE#0
@@ -3008,7 +3008,7 @@ function getF64BE(b: u8[], off: i32): f64 -> @nish.getF64BE [exported]
   callee +0:3 bytesWindow -> @nish.bytesWindow
   callee +1:26 getU64BE -> @nish.getU64BE
 function setU16LE(b: u8[], off: i32, v: u16): void -> @nish.setU16LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3016,7 +3016,7 @@ function setU16LE(b: u8[], off: i32, v: u16): void -> @nish.setU16LE [exported]
   stackSites=0 stackLocals=0
   callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU16BE(b: u8[], off: i32, v: u16): void -> @nish.setU16BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3024,7 +3024,7 @@ function setU16BE(b: u8[], off: i32, v: u16): void -> @nish.setU16BE [exported]
   stackSites=0 stackLocals=0
   callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU32LE(b: u8[], off: i32, v: u32): void -> @nish.setU32LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3032,7 +3032,7 @@ function setU32LE(b: u8[], off: i32, v: u32): void -> @nish.setU32LE [exported]
   stackSites=0 stackLocals=0
   callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU32BE(b: u8[], off: i32, v: u32): void -> @nish.setU32BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3040,7 +3040,7 @@ function setU32BE(b: u8[], off: i32, v: u32): void -> @nish.setU32BE [exported]
   stackSites=0 stackLocals=0
   callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU64LE(b: u8[], off: i32, v: u64): void -> @nish.setU64LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3048,7 +3048,7 @@ function setU64LE(b: u8[], off: i32, v: u64): void -> @nish.setU64LE [exported]
   stackSites=0 stackLocals=0
   callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU64BE(b: u8[], off: i32, v: u64): void -> @nish.setU64BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3056,7 +3056,7 @@ function setU64BE(b: u8[], off: i32, v: u64): void -> @nish.setU64BE [exported]
   stackSites=0 stackLocals=0
   callee -1:3 bytesWindow -> @nish.bytesWindow
 function setI32LE(b: u8[], off: i32, v: i32): void -> @nish.setI32LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3065,7 +3065,7 @@ function setI32LE(b: u8[], off: i32, v: i32): void -> @nish.setI32LE [exported]
   callee -2:3 bytesWindow -> @nish.bytesWindow
   local -1:9 u: u32 (const)
 function setI32BE(b: u8[], off: i32, v: i32): void -> @nish.setI32BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3074,7 +3074,7 @@ function setI32BE(b: u8[], off: i32, v: i32): void -> @nish.setI32BE [exported]
   callee -2:3 bytesWindow -> @nish.bytesWindow
   local -1:9 u: u32 (const)
 function setI64LE(b: u8[], off: i32, v: i64): void -> @nish.setI64LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3083,7 +3083,7 @@ function setI64LE(b: u8[], off: i32, v: i64): void -> @nish.setI64LE [exported]
   callee -2:3 bytesWindow -> @nish.bytesWindow
   local -1:9 u: u64 (const)
 function setI64BE(b: u8[], off: i32, v: i64): void -> @nish.setI64BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3092,7 +3092,7 @@ function setI64BE(b: u8[], off: i32, v: i64): void -> @nish.setI64BE [exported]
   callee -2:3 bytesWindow -> @nish.bytesWindow
   local -1:9 u: u64 (const)
 function setF64LE(b: u8[], off: i32, v: f64): void -> @nish.setF64LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -3101,7 +3101,7 @@ function setF64LE(b: u8[], off: i32, v: f64): void -> @nish.setF64LE [exported]
   callee -2:3 bytesWindow -> @nish.bytesWindow
   local -1:9 u: u64 (const)
 function setF64BE(b: u8[], off: i32, v: f64): void -> @nish.setF64BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
   calls: nish.bytesWindow
@@ -6321,7 +6321,7 @@ function Readers.constructor(this: Readers, conn: PgConnection): void -> @Reader
   callee +0:17 new PgBinaryArray -> @nish.PgBinaryArray.constructor
   callee +1:19 new PgArrayWalker -> @nish.PgArrayWalker.constructor
 function readRow(conn: PgConnection, r: Readers, binary: boolean, h: u32): u32 -> @readRow
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.binaryInt
   escaping: h
   calls: foldInt mix nish.PgArrayWalker.begin nish.PgArrayWalker.next nish.PgBinaryArray.begin nish.PgBinaryArray.int nish.PgBinaryArray.next nish.PgConnection.binaryInt nish.PgConnection.colLength nish.PgConnection.colStart nish.PgConnection.inputBuffer nish.PgConnection.int nish.PgConnection.isNull nish.PgText.int

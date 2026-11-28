@@ -1,1 +1,1 @@
-getU64BE: the 8 bytes at -1 do not all lie in an array of 9
+getU64BE: the 8 bytes at the offset do not all lie in the array

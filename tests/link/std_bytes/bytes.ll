@@ -5,43 +5,39 @@
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
-@.str.0 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c": the \00" }, align 8
-@.str.1 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c" bytes at \00" }, align 8
-@.str.2 = private unnamed_addr constant { i64, [32 x i8] } { i64 31, [32 x i8] c" do not all lie in an array of \00" }, align 8
-@.str.3 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getU16LE\00" }, align 8
-@.str.4 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getU16BE\00" }, align 8
-@.str.5 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getU32LE\00" }, align 8
-@.str.6 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getU32BE\00" }, align 8
-@.str.7 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getU64LE\00" }, align 8
-@.str.8 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getU64BE\00" }, align 8
-@.str.9 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getI32LE\00" }, align 8
-@.str.10 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getI32BE\00" }, align 8
-@.str.11 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getI64LE\00" }, align 8
-@.str.12 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getI64BE\00" }, align 8
-@.str.13 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getF64LE\00" }, align 8
-@.str.14 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"getF64BE\00" }, align 8
-@.str.15 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setU16LE\00" }, align 8
-@.str.16 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setU16BE\00" }, align 8
-@.str.17 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setU32LE\00" }, align 8
-@.str.18 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setU32BE\00" }, align 8
-@.str.19 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setU64LE\00" }, align 8
-@.str.20 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setU64BE\00" }, align 8
-@.str.21 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setI32LE\00" }, align 8
-@.str.22 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setI32BE\00" }, align 8
-@.str.23 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setI64LE\00" }, align 8
-@.str.24 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setI64BE\00" }, align 8
-@.str.25 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setF64LE\00" }, align 8
-@.str.26 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"setF64BE\00" }, align 8
-@.str.27 = private unnamed_addr constant { i64, [43 x i8] } { i64 42, [43 x i8] c"copyBytes: the range lies outside an array\00" }, align 8
-@.str.28 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"bytes \00" }, align 8
-@.str.29 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c" to \00" }, align 8
-@.str.30 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c" lie outside an array of \00" }, align 8
+@.str.0 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getU16LE: the 2 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getU16BE: the 2 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getU32LE: the 4 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getU32BE: the 4 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getU64LE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getU64BE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getI32LE: the 4 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getI32BE: the 4 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.8 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getI64LE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getI64BE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getF64LE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.11 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"getF64BE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.12 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setU16LE: the 2 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.13 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setU16BE: the 2 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.14 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setU32LE: the 4 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.15 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setU32BE: the 4 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.16 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setU64LE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.17 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setU64BE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.18 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setI32LE: the 4 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.19 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setI32BE: the 4 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.20 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setI64LE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.21 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setI64BE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.22 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setF64LE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.23 = private unnamed_addr constant { i64, [64 x i8] } { i64 63, [64 x i8] c"setF64BE: the 8 bytes at the offset do not all lie in the array\00" }, align 8
+@.str.24 = private unnamed_addr constant { i64, [43 x i8] } { i64 42, [43 x i8] c"copyBytes: the range lies outside an array\00" }, align 8
+@.str.25 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"bytes \00" }, align 8
+@.str.26 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c" to \00" }, align 8
+@.str.27 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c" lie outside an array of \00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memmove.p0i8.p0i8.i64(i8* nocapture writeonly, i8* nocapture readonly, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #5
 declare noundef i64 @nish_arena_mark() #4
-declare void @nish_arena_release(i64 noundef) #4
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #4
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare i64 @nish_bytes_skip_blank(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #6
@@ -80,7 +76,6 @@ slow:
 define internal void @nish.bytesWindow(i8* noundef nonnull noalias readonly align 8 nocapture %what, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off, i32 noundef %len) #0 {
 entry:
   %size.addr = alloca i32, align 4
-  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 0
   %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %2 = trunc i64 %1 to i32
@@ -116,27 +111,16 @@ lor.end:
   br i1 %12, label %if.then, label %if.end
 
 if.then:
-  %13 = call i8* @nish_str_concat(i8* %what, i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*))
-  %14 = call i8* @nish_str_from_i32(i32 %len)
-  %15 = call i8* @nish_str_concat(i8* %13, i8* %14)
-  %16 = call i8* @nish_str_concat(i8* %15, i8* bitcast ({ i64, [11 x i8] }* @.str.1 to i8*))
-  %17 = call i8* @nish_str_from_i32(i32 %off)
-  %18 = call i8* @nish_str_concat(i8* %16, i8* %17)
-  %19 = call i8* @nish_str_concat(i8* %18, i8* bitcast ({ i64, [32 x i8] }* @.str.2 to i8*))
-  %20 = load i32, i32* %size.addr, align 4
-  %21 = call i8* @nish_str_from_i32(i32 %20)
-  %22 = call i8* @nish_str_concat(i8* %19, i8* %21)
-  call void @nish_panic(i8* %22)
+  call void @nish_panic(i8* %what)
   unreachable
 
 if.end:
-  call void @nish_arena_release(i64 %arena.mark)
   ret void
 }
 
 define noundef i16 @nish.getU16LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.3 to i8*), %struct.nish_array* %b, i32 %off, i32 2)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.0 to i8*), %struct.nish_array* %b, i32 %off, i32 2)
   %0 = sext i32 %off to i64
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
   %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
@@ -159,7 +143,7 @@ entry:
 
 define noundef i16 @nish.getU16BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.4 to i8*), %struct.nish_array* %b, i32 %off, i32 2)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.1 to i8*), %struct.nish_array* %b, i32 %off, i32 2)
   %0 = sext i32 %off to i64
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
   %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
@@ -182,7 +166,7 @@ entry:
 
 define noundef i32 @nish.getU32LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.5 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.2 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
   %0 = sext i32 %off to i64
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
   %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
@@ -225,7 +209,7 @@ entry:
 
 define noundef i32 @nish.getU32BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.6 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.3 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
   %0 = sext i32 %off to i64
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
   %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
@@ -268,7 +252,7 @@ entry:
 
 define noundef i64 @nish.getU64LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.7 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.4 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   %0 = sext i32 %off to i64
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
   %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
@@ -365,7 +349,7 @@ entry:
 
 define noundef i64 @nish.getU64BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.8 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.5 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   %0 = sext i32 %off to i64
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
   %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
@@ -462,35 +446,35 @@ entry:
 
 define noundef i32 @nish.getI32LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.9 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.6 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
   %0 = call i32 @nish.getU32LE(%struct.nish_array* %b, i32 %off)
   ret i32 %0
 }
 
 define noundef i32 @nish.getI32BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.10 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.7 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
   %0 = call i32 @nish.getU32BE(%struct.nish_array* %b, i32 %off)
   ret i32 %0
 }
 
 define noundef i64 @nish.getI64LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.11 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.8 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   %0 = call i64 @nish.getU64LE(%struct.nish_array* %b, i32 %off)
   ret i64 %0
 }
 
 define noundef i64 @nish.getI64BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.12 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.9 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   %0 = call i64 @nish.getU64BE(%struct.nish_array* %b, i32 %off)
   ret i64 %0
 }
 
 define noundef double @nish.getF64LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.13 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.10 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   %0 = call i64 @nish.getU64LE(%struct.nish_array* %b, i32 %off)
   %1 = bitcast i64 %0 to double
   ret double %1
@@ -498,7 +482,7 @@ entry:
 
 define noundef double @nish.getF64BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.14 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.11 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   %0 = call i64 @nish.getU64BE(%struct.nish_array* %b, i32 %off)
   %1 = bitcast i64 %0 to double
   ret double %1
@@ -506,7 +490,7 @@ entry:
 
 define void @nish.setU16LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, i16 noundef %v) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.15 to i8*), %struct.nish_array* %b, i32 %off, i32 2)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.12 to i8*), %struct.nish_array* %b, i32 %off, i32 2)
   %0 = sext i32 %off to i64
   %1 = and i16 %v, 255
   %2 = trunc i16 %1 to i8
@@ -530,7 +514,7 @@ entry:
 
 define void @nish.setU16BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, i16 noundef %v) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.16 to i8*), %struct.nish_array* %b, i32 %off, i32 2)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.13 to i8*), %struct.nish_array* %b, i32 %off, i32 2)
   %0 = sext i32 %off to i64
   %1 = lshr i16 %v, 8
   %2 = and i16 %1, 255
@@ -554,7 +538,7 @@ entry:
 
 define void @nish.setU32LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, i32 noundef %v) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.17 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.14 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
   %0 = sext i32 %off to i64
   %1 = and i32 %v, 255
   %2 = trunc i32 %1 to i8
@@ -598,7 +582,7 @@ entry:
 
 define void @nish.setU32BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, i32 noundef %v) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.18 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.15 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
   %0 = sext i32 %off to i64
   %1 = lshr i32 %v, 24
   %2 = and i32 %1, 255
@@ -642,7 +626,7 @@ entry:
 
 define void @nish.setU64LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, i64 noundef %v) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.19 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.16 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   %0 = sext i32 %off to i64
   %1 = sext i32 255 to i64
   %2 = and i64 %v, %1
@@ -748,7 +732,7 @@ entry:
 
 define void @nish.setU64BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, i64 noundef %v) #0 {
 entry:
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.20 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.17 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   %0 = sext i32 %off to i64
   %1 = sext i32 56 to i64
   %2 = and i64 %1, 63
@@ -855,7 +839,7 @@ entry:
 define void @nish.setI32LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, i32 noundef %v) #0 {
 entry:
   %u.addr = alloca i32, align 4
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.21 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.18 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
   store i32 %v, i32* %u.addr, align 4
   %0 = sext i32 %off to i64
   %1 = load i32, i32* %u.addr, align 4
@@ -905,7 +889,7 @@ entry:
 define void @nish.setI32BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, i32 noundef %v) #0 {
 entry:
   %u.addr = alloca i32, align 4
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.22 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.19 to i8*), %struct.nish_array* %b, i32 %off, i32 4)
   store i32 %v, i32* %u.addr, align 4
   %0 = sext i32 %off to i64
   %1 = load i32, i32* %u.addr, align 4
@@ -955,7 +939,7 @@ entry:
 define void @nish.setI64LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, i64 noundef %v) #0 {
 entry:
   %u.addr = alloca i64, align 8
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.23 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.20 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   store i64 %v, i64* %u.addr, align 8
   %0 = sext i32 %off to i64
   %1 = load i64, i64* %u.addr, align 8
@@ -1071,7 +1055,7 @@ entry:
 define void @nish.setI64BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, i64 noundef %v) #0 {
 entry:
   %u.addr = alloca i64, align 8
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.24 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.21 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   store i64 %v, i64* %u.addr, align 8
   %0 = sext i32 %off to i64
   %1 = load i64, i64* %u.addr, align 8
@@ -1187,7 +1171,7 @@ entry:
 define void @nish.setF64LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, double noundef %v) #0 {
 entry:
   %u.addr = alloca i64, align 8
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.25 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.22 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   %0 = bitcast double %v to i64
   store i64 %0, i64* %u.addr, align 8
   %1 = sext i32 %off to i64
@@ -1304,7 +1288,7 @@ entry:
 define void @nish.setF64BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %b, i32 noundef %off, double noundef %v) #0 {
 entry:
   %u.addr = alloca i64, align 8
-  call void @nish.bytesWindow(i8* bitcast ({ i64, [9 x i8] }* @.str.26 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
+  call void @nish.bytesWindow(i8* bitcast ({ i64, [64 x i8] }* @.str.23 to i8*), %struct.nish_array* %b, i32 %off, i32 8)
   %0 = bitcast double %v to i64
   store i64 %0, i64* %u.addr, align 8
   %1 = sext i32 %off to i64
@@ -1546,7 +1530,7 @@ entry:
   br i1 %1, label %if.then, label %if.end
 
 if.then:
-  call void @nish_panic(i8* bitcast ({ i64, [43 x i8] }* @.str.27 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [43 x i8] }* @.str.24 to i8*))
   unreachable
 
 if.end:
@@ -2946,8 +2930,8 @@ entry:
 define internal noundef nonnull align 8 i8* @nish.bytesRangeError(i32 noundef %off, i32 noundef %width, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b) #0 {
 entry:
   %0 = call i8* @nish_str_from_i32(i32 %off)
-  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.28 to i8*), i8* %0)
-  %2 = call i8* @nish_str_concat(i8* %1, i8* bitcast ({ i64, [5 x i8] }* @.str.29 to i8*))
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.25 to i8*), i8* %0)
+  %2 = call i8* @nish_str_concat(i8* %1, i8* bitcast ({ i64, [5 x i8] }* @.str.26 to i8*))
   %3 = sext i32 %off to i64
   %4 = sext i32 %width to i64
   %5 = add nsw i64 %3, %4
@@ -2955,7 +2939,7 @@ entry:
   %7 = sub nsw i64 %5, %6
   %8 = call i8* @nish_str_from_i64(i64 %7)
   %9 = call i8* @nish_str_concat(i8* %2, i8* %8)
-  %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [26 x i8] }* @.str.30 to i8*))
+  %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [26 x i8] }* @.str.27 to i8*))
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 0
   %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %13 = trunc i64 %12 to i32

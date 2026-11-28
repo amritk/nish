@@ -78,15 +78,16 @@
 
 /**
  * The window guard every fixed-width read and write calls first: it returns
- * exactly when `b[off]` to `b[off + len - 1]` all lie in `b`, and panics,
- * naming `what`, otherwise. Its shape is the `window` contract's
+ * exactly when `b[off]` to `b[off + len - 1]` all lie in `b`, and panics
+ * with the message `what` otherwise. Its shape is the `window` contract's
  * (docs/LANGUAGE.md, "Panic sites"), so each function that calls it first
- * forwards the check to its own callers.
+ * forwards the check to its own callers. `what` is a literal at every call:
+ * a message built here would cost every read an arena mark and release.
  */
 const bytesWindow = (what: string, b: readonly u8[], off: i32, len: i32): void => {
   const size: i32 = toI32(b.length)
   if (off < 0 || len < 0 || off > size || len > size - off) {
-    panic(`${what}: the ${len} bytes at ${off} do not all lie in an array of ${size}`)
+    panic(what)
   }
 }
 
@@ -99,7 +100,7 @@ const bytesWindow = (what: string, b: readonly u8[], off: i32, len: i32): void =
  * @returns The number read.
  */
 export const getU16LE = (b: u8[], off: i32): u16 => {
-  bytesWindow("getU16LE", b, off, 2)
+  bytesWindow("getU16LE: the 2 bytes at the offset do not all lie in the array", b, off, 2)
   return toU16(b[off]) | (toU16(b[off + 1]) << 8)
 }
 
@@ -112,7 +113,7 @@ export const getU16LE = (b: u8[], off: i32): u16 => {
  * @returns The number read.
  */
 export const getU16BE = (b: u8[], off: i32): u16 => {
-  bytesWindow("getU16BE", b, off, 2)
+  bytesWindow("getU16BE: the 2 bytes at the offset do not all lie in the array", b, off, 2)
   return (toU16(b[off]) << 8) | toU16(b[off + 1])
 }
 
@@ -125,7 +126,7 @@ export const getU16BE = (b: u8[], off: i32): u16 => {
  * @returns The number read.
  */
 export const getU32LE = (b: u8[], off: i32): u32 => {
-  bytesWindow("getU32LE", b, off, 4)
+  bytesWindow("getU32LE: the 4 bytes at the offset do not all lie in the array", b, off, 4)
   return (
     (toU32(b[off]) | (toU32(b[off + 1]) << 8) | (toU32(b[off + 2]) << 16)) +
     toU32(b[off + 3]) * toU32(0x1000000)
@@ -141,7 +142,7 @@ export const getU32LE = (b: u8[], off: i32): u32 => {
  * @returns The number read.
  */
 export const getU32BE = (b: u8[], off: i32): u32 => {
-  bytesWindow("getU32BE", b, off, 4)
+  bytesWindow("getU32BE: the 4 bytes at the offset do not all lie in the array", b, off, 4)
   return (
     toU32(b[off]) * toU32(0x1000000) +
     ((toU32(b[off + 1]) << 16) | (toU32(b[off + 2]) << 8) | toU32(b[off + 3]))
@@ -157,7 +158,7 @@ export const getU32BE = (b: u8[], off: i32): u32 => {
  * @returns The number read.
  */
 export const getU64LE = (b: u8[], off: i32): u64 => {
-  bytesWindow("getU64LE", b, off, 8)
+  bytesWindow("getU64LE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   return (
     toU64(b[off]) |
     (toU64(b[off + 1]) << toU64(8)) |
@@ -179,7 +180,7 @@ export const getU64LE = (b: u8[], off: i32): u64 => {
  * @returns The number read.
  */
 export const getU64BE = (b: u8[], off: i32): u64 => {
-  bytesWindow("getU64BE", b, off, 8)
+  bytesWindow("getU64BE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   return (
     (toU64(b[off]) << toU64(56)) |
     (toU64(b[off + 1]) << toU64(48)) |
@@ -199,7 +200,7 @@ export const getU64BE = (b: u8[], off: i32): u64 => {
  * @returns The number read, from -2^31 to 2^31 - 1.
  */
 export const getI32LE = (b: u8[], off: i32): i32 => {
-  bytesWindow("getI32LE", b, off, 4)
+  bytesWindow("getI32LE: the 4 bytes at the offset do not all lie in the array", b, off, 4)
   return toI32(getU32LE(b, off))
 }
 
@@ -212,7 +213,7 @@ export const getI32LE = (b: u8[], off: i32): i32 => {
  * @returns The number read, from -2^31 to 2^31 - 1.
  */
 export const getI32BE = (b: u8[], off: i32): i32 => {
-  bytesWindow("getI32BE", b, off, 4)
+  bytesWindow("getI32BE: the 4 bytes at the offset do not all lie in the array", b, off, 4)
   return toI32(getU32BE(b, off))
 }
 
@@ -225,7 +226,7 @@ export const getI32BE = (b: u8[], off: i32): i32 => {
  * @returns The number read, from -2^63 to 2^63 - 1.
  */
 export const getI64LE = (b: u8[], off: i32): i64 => {
-  bytesWindow("getI64LE", b, off, 8)
+  bytesWindow("getI64LE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   return toI64(getU64LE(b, off))
 }
 
@@ -238,7 +239,7 @@ export const getI64LE = (b: u8[], off: i32): i64 => {
  * @returns The number read, from -2^63 to 2^63 - 1.
  */
 export const getI64BE = (b: u8[], off: i32): i64 => {
-  bytesWindow("getI64BE", b, off, 8)
+  bytesWindow("getI64BE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   return toI64(getU64BE(b, off))
 }
 
@@ -251,7 +252,7 @@ export const getI64BE = (b: u8[], off: i32): i64 => {
  * @returns The double whose bits the eight bytes are.
  */
 export const getF64LE = (b: u8[], off: i32): f64 => {
-  bytesWindow("getF64LE", b, off, 8)
+  bytesWindow("getF64LE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   return bitsToF64(toI64(getU64LE(b, off)))
 }
 
@@ -264,7 +265,7 @@ export const getF64LE = (b: u8[], off: i32): f64 => {
  * @returns The double whose bits the eight bytes are.
  */
 export const getF64BE = (b: u8[], off: i32): f64 => {
-  bytesWindow("getF64BE", b, off, 8)
+  bytesWindow("getF64BE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   return bitsToF64(toI64(getU64BE(b, off)))
 }
 
@@ -277,7 +278,7 @@ export const getF64BE = (b: u8[], off: i32): f64 => {
  * @param v The number to store.
  */
 export const setU16LE = (b: u8[], off: i32, v: u16): void => {
-  bytesWindow("setU16LE", b, off, 2)
+  bytesWindow("setU16LE: the 2 bytes at the offset do not all lie in the array", b, off, 2)
   b[off] = toU8(v & 255)
   b[off + 1] = toU8((v >> 8) & 255)
 }
@@ -291,7 +292,7 @@ export const setU16LE = (b: u8[], off: i32, v: u16): void => {
  * @param v The number to store.
  */
 export const setU16BE = (b: u8[], off: i32, v: u16): void => {
-  bytesWindow("setU16BE", b, off, 2)
+  bytesWindow("setU16BE: the 2 bytes at the offset do not all lie in the array", b, off, 2)
   b[off] = toU8((v >> 8) & 255)
   b[off + 1] = toU8(v & 255)
 }
@@ -305,7 +306,7 @@ export const setU16BE = (b: u8[], off: i32, v: u16): void => {
  * @param v The number to store.
  */
 export const setU32LE = (b: u8[], off: i32, v: u32): void => {
-  bytesWindow("setU32LE", b, off, 4)
+  bytesWindow("setU32LE: the 4 bytes at the offset do not all lie in the array", b, off, 4)
   b[off] = toU8(v & 255)
   b[off + 1] = toU8((v >> 8) & 255)
   b[off + 2] = toU8((v >> 16) & 255)
@@ -321,7 +322,7 @@ export const setU32LE = (b: u8[], off: i32, v: u32): void => {
  * @param v The number to store.
  */
 export const setU32BE = (b: u8[], off: i32, v: u32): void => {
-  bytesWindow("setU32BE", b, off, 4)
+  bytesWindow("setU32BE: the 4 bytes at the offset do not all lie in the array", b, off, 4)
   b[off] = toU8((v >> 24) & 255)
   b[off + 1] = toU8((v >> 16) & 255)
   b[off + 2] = toU8((v >> 8) & 255)
@@ -337,7 +338,7 @@ export const setU32BE = (b: u8[], off: i32, v: u32): void => {
  * @param v The number to store.
  */
 export const setU64LE = (b: u8[], off: i32, v: u64): void => {
-  bytesWindow("setU64LE", b, off, 8)
+  bytesWindow("setU64LE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   b[off] = toU8(v & toU64(255))
   b[off + 1] = toU8((v >> toU64(8)) & toU64(255))
   b[off + 2] = toU8((v >> toU64(16)) & toU64(255))
@@ -357,7 +358,7 @@ export const setU64LE = (b: u8[], off: i32, v: u64): void => {
  * @param v The number to store.
  */
 export const setU64BE = (b: u8[], off: i32, v: u64): void => {
-  bytesWindow("setU64BE", b, off, 8)
+  bytesWindow("setU64BE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   b[off] = toU8((v >> toU64(56)) & toU64(255))
   b[off + 1] = toU8((v >> toU64(48)) & toU64(255))
   b[off + 2] = toU8((v >> toU64(40)) & toU64(255))
@@ -378,7 +379,7 @@ export const setU64BE = (b: u8[], off: i32, v: u64): void => {
  *   complement.
  */
 export const setI32LE = (b: u8[], off: i32, v: i32): void => {
-  bytesWindow("setI32LE", b, off, 4)
+  bytesWindow("setI32LE: the 4 bytes at the offset do not all lie in the array", b, off, 4)
   const u: u32 = toU32(v)
   b[off] = toU8(u & 255)
   b[off + 1] = toU8((u >> 8) & 255)
@@ -396,7 +397,7 @@ export const setI32LE = (b: u8[], off: i32, v: i32): void => {
  *   complement.
  */
 export const setI32BE = (b: u8[], off: i32, v: i32): void => {
-  bytesWindow("setI32BE", b, off, 4)
+  bytesWindow("setI32BE: the 4 bytes at the offset do not all lie in the array", b, off, 4)
   const u: u32 = toU32(v)
   b[off] = toU8((u >> 24) & 255)
   b[off + 1] = toU8((u >> 16) & 255)
@@ -414,7 +415,7 @@ export const setI32BE = (b: u8[], off: i32, v: i32): void => {
  *   complement.
  */
 export const setI64LE = (b: u8[], off: i32, v: i64): void => {
-  bytesWindow("setI64LE", b, off, 8)
+  bytesWindow("setI64LE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   const u: u64 = toU64(v)
   b[off] = toU8(u & toU64(255))
   b[off + 1] = toU8((u >> toU64(8)) & toU64(255))
@@ -436,7 +437,7 @@ export const setI64LE = (b: u8[], off: i32, v: i64): void => {
  *   complement.
  */
 export const setI64BE = (b: u8[], off: i32, v: i64): void => {
-  bytesWindow("setI64BE", b, off, 8)
+  bytesWindow("setI64BE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   const u: u64 = toU64(v)
   b[off] = toU8((u >> toU64(56)) & toU64(255))
   b[off + 1] = toU8((u >> toU64(48)) & toU64(255))
@@ -457,7 +458,7 @@ export const setI64BE = (b: u8[], off: i32, v: i64): void => {
  * @param v The double to store, as its IEEE 754 bits.
  */
 export const setF64LE = (b: u8[], off: i32, v: f64): void => {
-  bytesWindow("setF64LE", b, off, 8)
+  bytesWindow("setF64LE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   const u: u64 = toU64(f64ToBits(v))
   b[off] = toU8(u & toU64(255))
   b[off + 1] = toU8((u >> toU64(8)) & toU64(255))
@@ -478,7 +479,7 @@ export const setF64LE = (b: u8[], off: i32, v: f64): void => {
  * @param v The double to store, as its IEEE 754 bits.
  */
 export const setF64BE = (b: u8[], off: i32, v: f64): void => {
-  bytesWindow("setF64BE", b, off, 8)
+  bytesWindow("setF64BE: the 8 bytes at the offset do not all lie in the array", b, off, 8)
   const u: u64 = toU64(f64ToBits(v))
   b[off] = toU8((u >> toU64(56)) & toU64(255))
   b[off + 1] = toU8((u >> toU64(48)) & toU64(255))

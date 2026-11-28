@@ -1,1 +1,1 @@
-getU32LE: the 4 bytes at 2147483647 do not all lie in an array of 4
+getU32LE: the 4 bytes at the offset do not all lie in the array

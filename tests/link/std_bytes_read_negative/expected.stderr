@@ -1,1 +1,1 @@
-getU16BE: the 2 bytes at -1 do not all lie in an array of 4
+getU16BE: the 2 bytes at the offset do not all lie in the array
