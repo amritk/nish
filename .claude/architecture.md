@@ -129,7 +129,7 @@ What an author meets:
 - A callee borrows it through a parameter of its type and never copies,
   stores or returns it.
 - The entry module exports no handle class and no function that names one
-  (NL2827); a library module does.
+  (NL2827); a library module may.
 - Its `std/<name>.wasm32.ts` twin owns a `HostHandle` where the native file
   owns a pointer.
 
