@@ -25,7 +25,7 @@
 //                       rewrites only their two tables and keeps the rest
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
-//     --instructions    count the instructions each of the 37 programs executes
+//     --instructions    count the instructions each of the 67 programs executes
 //                       (the crypto kernels among them) under valgrind's cachegrind, at the sizes in
 //                       bench/instructions.json; nothing is timed. With --check,
 //                       fail when one exceeds its baseline by more than the
@@ -33,6 +33,10 @@
 //                       refuses a count above its baseline by more than the
 //                       tolerance unless --raise names the row). --runs N
 //                       repeats each run (default 1)
+//     --entries         print the counted programs' entry files as JSON
+//                       ([{ name, entry, args }], in bench/instructions.json's order,
+//                       args the compiler flags the counted run builds it with)
+//                       and exit; tests/run.js's instruction-coverage check reads it
 //     --raise a,b       with --update: the rows allowed to rise; each gets a
 //                       `raises` entry in bench/instructions.json. Needs --why
 //     --why <text>      with --raise: the reason the entries record
@@ -252,6 +256,7 @@ const opts = {
   sizes: new Map(),
   validate: false,
   instructions: false,
+  entries: false,
   check: false,
   update: false,
   raise: new Set(),
@@ -299,6 +304,8 @@ for (let i = 2; i < argv.length; i++) {
     opts.validate = true
   } else if (a === "--instructions") {
     opts.instructions = true
+  } else if (a === "--entries") {
+    opts.entries = true
   } else if (a === "--check") {
     opts.check = true
   } else if (a === "--update") {
@@ -394,7 +401,7 @@ const version = (cmd, args = ["--version"]) => {
   return r.status === 0 ? r.stdout.split("\n")[0].trim() : `${cmd}: not found`
 }
 
-const CC = process.env.CC || which("clang") || fail("clang not found (set CC)")
+const CC = process.env.CC || which("clang") || (opts.entries ? null : fail("clang not found (set CC)"))
 const RUSTC = opts.rust
   ? process.env.RUSTC || which("rustc", [path.join(os.homedir(), ".cargo", "bin")])
   : null
@@ -409,15 +416,17 @@ const CARGO =
     : null
 // Peak RSS of a child comes from bench/rss.c (fork, exec, wait4): `/usr/bin/time`
 // is not installed everywhere and an interpreter's fork would count its own pages.
-const RSS_HELPER = (() => {
-  const exe = path.join(outDir, "rss")
-  fs.mkdirSync(outDir, { recursive: true })
-  const r = spawnSync(CC, ["-O2", path.join(benchDir, "rss.c"), "-o", exe], { encoding: "utf8" })
-  if (r.status !== 0) {
-    console.error(`note: bench/rss.c did not build; the memory table is skipped\n${r.stderr}`)
-  }
-  return r.status === 0 ? exe : null
-})()
+const RSS_HELPER = opts.entries
+  ? null
+  : (() => {
+      const exe = path.join(outDir, "rss")
+      fs.mkdirSync(outDir, { recursive: true })
+      const r = spawnSync(CC, ["-O2", path.join(benchDir, "rss.c"), "-o", exe], { encoding: "utf8" })
+      if (r.status !== 0) {
+        console.error(`note: bench/rss.c did not build; the memory table is skipped\n${r.stderr}`)
+      }
+      return r.status === 0 ? exe : null
+    })()
 if (!RUSTC && opts.rust) {
   console.error("note: rustc not found; Rust columns are skipped (set RUSTC=<path> or install rustup)")
 }
@@ -773,7 +782,42 @@ const STD_COUNTED = [
     what: "YamlJsonLoader.load and stringifyYaml of a merged document, with line and column",
   },
   { name: "std-json-equal", what: "jsonEqual, hash, canonical text and duplicate check of two spellings" },
+  {
+    name: "std-json-value-parse",
+    what: "parseText and parseTextRanged of 2 MiB, each into a fresh JsonDocument",
+  },
+  { name: "std-json-value-reuse", what: "parseText of 2 MiB into one JsonDocument, grown once" },
+  { name: "std-json-value-read", what: "get, at, keyAt, string, keyStart and start over every node" },
+  {
+    name: "std-yaml-json-load",
+    what: "parseYaml and YamlJsonLoader.load of 1 MiB of merged YAML, fresh each time",
+  },
+  { name: "std-regex", what: "regexCompile, test and findAll of a prefixed and an unprefixed pattern" },
+  { name: "std-text", what: "splitLines, trim and indexOfAny over 1 MiB of padded lines" },
 ]
+
+/**
+ * Every counted program, in bench/instructions.json's order, with the file its
+ * build compiles: `bench/<name>.ts` for most, the one AWFY harness for the AWFY
+ * rows and a family's `main.ts` for the crypto kernels.
+ */
+const countedEntries = () => {
+  // A program built from `bench/<name>.ts` takes its `.args` sidecar, as
+  // runInstructions compiles it; the awfy harness and the crypto families take none.
+  const own = (b) => ({ name: b.name, entry: `bench/${b.name}.ts`, args: sourceArgs(b.name) })
+  return [
+    ...BENCHMARKS.filter((b) => b.counted !== false).map(own),
+    ...MAPS.map(own),
+    ...MAP_MEASURES.map(own),
+    ...AWFY.map((b) => ({ name: b.name, entry: "bench/awfy/main.ts", args: [] })),
+    ...CRYPTO_COUNTED.map((b) => ({
+      name: b.name,
+      entry: `bench/${b.main ?? `crypto/${b.family}/main.ts`}`,
+      args: [],
+    })),
+    ...STD_COUNTED.map(own),
+  ]
+}
 
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
 const change = (count, base) => (count - base) / base
@@ -860,14 +904,7 @@ const runInstructions = () => {
     )
   }
   const counted = BENCHMARKS.filter((b) => b.counted !== false)
-  const names = [
-    ...counted.map((b) => b.name),
-    ...MAPS.map((b) => b.name),
-    ...MAP_MEASURES.map((b) => b.name),
-    ...AWFY.map((b) => b.name),
-    ...CRYPTO_COUNTED.map((b) => b.name),
-    ...STD_COUNTED.map((b) => b.name),
-  ]
+  const names = countedEntries().map((e) => e.name)
   const listed = Object.keys(baseline.programs)
   if (listed.join(",") !== names.join(",")) {
     fail(`bench/instructions.json must list ${names.join(", ")} in that order; it lists ${listed.join(", ")}`)
@@ -1143,6 +1180,10 @@ const reportInstructions = (valgrind, baseline, names, rows, runs) => {
 
 // ---- Main --------------------------------------------------------------------------------
 
+if (opts.entries) {
+  console.log(JSON.stringify(countedEntries()))
+  process.exit(0)
+}
 if (opts.instructions) {
   process.exit(runInstructions())
 }
