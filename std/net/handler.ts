@@ -1003,11 +1003,14 @@ export class HttpHandler {
    * `watch`, with an id outside the range answered as an `Err` instead of a panic.
    * @param fd the program's descriptor to watch for reading; it stays the program's to read and close
    * @param id the name `fired` asks about it by, from 0 to `HANDLER_MAX_WATCHED - 1`
-   * @returns `Ok(true)` once `fd` is watched, or `Err` naming the id outside the range
+   * @returns `Ok(true)` once `fd` is watched, or `Err` naming the id outside the range or the handler's lack of a readiness loop
    */
   tryWatch(fd: i32, id: i32): Result<boolean, string> {
     if (id < 0 || id >= HANDLER_MAX_WATCHED) {
       return Err(`HttpHandler.watch: id ${id} is outside 0 to ${HANDLER_MAX_WATCHED - 1}`)
+    }
+    if (this.loop < 0) {
+      return Err("HttpHandler.watch: the handler has no readiness loop")
     }
     pollAdd(this.loop, fd, H1_WANT_READ, -2 - id)
     return Ok(true)
@@ -2728,8 +2731,9 @@ const handlerRing = (start: i32, k: i32, size: i32): i32 => {
 
 /**
  * A handler as `new HttpHandler(limits, listener, router)` makes one, with
- * what that constructor panics on answered as an `Err`: limits below their
- * least, or a readiness loop `pollCreate` could not make.
+ * limits below their least, which that constructor panics on, answered as an
+ * `Err`, and a readiness loop `pollCreate` could not make, which would leave
+ * that constructor's handler dead, answered as an `Err` too.
  * @param limits the caps and timeouts, as the constructor reads them
  * @param listener the listening socket's descriptor, still the program's to close
  * @param router the routes, which the handler keeps and consults at each request head

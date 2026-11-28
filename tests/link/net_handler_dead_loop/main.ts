@@ -11,13 +11,16 @@ export const main = (): i32 => {
   router.add("GET", "/")
   const listener: i32 = tcpListen("127.0.0.1", 0, 8)
   const h = new HttpHandler(new HandlerLimits(), listener, router, -2)
-  // A dead loop's `wait(-1)` must return, not block for a socket: a block
-  // here hangs the case past its timeout.
+  // Without the dead-loop guard, `wait` polls loop -2, which fails at once,
+  // and answers 0, so the case fails on `first: 0` rather than hanging.
   const first: i32 = h.wait(-1)
   const second: i32 = h.wait(1000)
   console.log(`first: ${first === HANDLER_NO_LOOP ? "HANDLER_NO_LOOP" : `${first}`}`)
   console.log(`second: ${second === HANDLER_NO_LOOP ? "HANDLER_NO_LOOP" : `${second}`}`)
   console.log(`queued: ${h.next() === null ? "none" : "some"}`)
+  // A dead handler watches nothing, so `tryWatch` refuses instead of
+  // answering `Ok(true)`.
+  console.log(`tryWatch: ${h.tryWatch(listener, 0).ok ? "Ok" : "Err"}`)
   netClose(listener)
   return 0
 }
