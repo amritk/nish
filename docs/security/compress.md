@@ -245,9 +245,8 @@ byte by `link/std_compress: exits with 0 and stdout matches expected.out`,
 - **COMP-21** (`tests/run.js`): `std-panics: scripts/wrap-casts.mjs passes
   the tree, with no cast wrap in std/, src/ or examples/`, which fails on any
   such cast in `std/compress`; `std-panics: scripts/wrap-casts.mjs --root
-  fails on a cast wrap planted in std/compress/deflate.ts,
-  src/wrap-casts-planted.ts, examples/wrap-casts-planted.ts, and passes the
-  unplanted copy`, which fails when the scan stops finding a planted cast;
+  fails on a cast wrap planted in std/compress/deflate.ts, src/ or
+  examples/, and passes the unplanted copy`, which fails when the scan stops finding a planted cast;
   and `std-panics: scripts/wrap-casts.mjs refuses the count-lowering flag
   it dropped, and no count file sits beside it`, which fails when a per-file
   allowance of casts comes back; the std-panics ratchet, which

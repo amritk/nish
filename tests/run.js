@@ -6967,28 +6967,29 @@ if (dealtHere("stdPanics")) {
       update.status === 2 && !fs.existsSync(path.join(root, "scripts", "wrap-casts.txt")),
       shown(update)
     )
-    /** A copy of the scanned tree under build/, `edit`ed, and the script's run on it. */
-    const onCopy = (name, edit) => {
-      const dir = path.join(buildDir, "wrap_casts", name)
-      fs.rmSync(dir, { recursive: true, force: true })
-      for (const d of ["std", "src", "examples"]) {
-        fs.cpSync(path.join(root, d), path.join(dir, d), { recursive: true })
-      }
-      edit(dir)
-      return spawnSync(process.execPath, [wrapCasts, "--root", dir], { cwd: root, encoding: "utf8" })
+    // One copy of the scanned tree under build/; each cast is planted in it, scanned and taken out again.
+    const dir = path.join(buildDir, "wrap_casts")
+    fs.rmSync(dir, { recursive: true, force: true })
+    for (const d of ["std", "src", "examples"]) {
+      fs.cpSync(path.join(root, d), path.join(dir, d), { recursive: true })
     }
-    const same = onCopy("same", () => {})
+    const scanCopy = () => spawnSync(process.execPath, [wrapCasts, "--root", dir], { cwd: root, encoding: "utf8" })
+    const same = scanCopy()
     const plantedIn = ["std/compress/deflate.ts", "src/wrap-casts-planted.ts", "examples/wrap-casts-planted.ts"]
-    const planted = plantedIn.map((file, at) =>
-      onCopy(`planted${at}`, (dir) =>
-        fs.appendFileSync(
-          path.join(dir, file),
-          "\nexport const plantedWrap = (a: u32, b: u32): i32 =>\n  toI32(toU32(a) +\n    toU32(b))\n"
-        )
-      )
-    )
+    const planted = plantedIn.map((file) => {
+      const at = path.join(dir, file)
+      const before = fs.existsSync(at) ? fs.readFileSync(at) : undefined
+      fs.appendFileSync(at, "\nexport const plantedWrap = (a: u32, b: u32): i32 =>\n  toI32(toU32(a) +\n    toU32(b))\n")
+      const run = scanCopy()
+      if (before === undefined) {
+        fs.rmSync(at)
+      } else {
+        fs.writeFileSync(at, before)
+      }
+      return run
+    })
     check(
-      `std-panics: scripts/wrap-casts.mjs --root fails on a cast wrap planted in ${plantedIn.join(", ")}, and passes the unplanted copy`,
+      "std-panics: scripts/wrap-casts.mjs --root fails on a cast wrap planted in std/compress/deflate.ts, src/ or examples/, and passes the unplanted copy",
       same.status === 0 && planted.every((r, at) => r.status === 1 && r.stderr.includes(plantedIn[at])),
       [same, ...planted].map(shown).join("\n")
     )

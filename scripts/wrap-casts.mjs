@@ -166,15 +166,10 @@ const files = (
       }).split("\n")
     : scanned.flatMap(walk)
 ).filter((f) => f.endsWith(".ts"))
-const found = new Map()
-for (const f of files) {
-  const sites = castWraps(fs.readFileSync(path.join(root, f), "utf8"))
-  if (sites.length > 0) {
-    found.set(f, sites)
-  }
-}
-if (found.size > 0) {
-  const sites = [...found].flatMap(([f, ss]) => ss.map((x) => `  ${f}:${x.line}: ${x.text}`))
+const sites = files.flatMap((f) =>
+  castWraps(fs.readFileSync(path.join(root, f), "utf8")).map((x) => `  ${f}:${x.line}: ${x.text}`)
+)
+if (sites.length > 0) {
   console.error(
     `wrap-casts: a cast wrap (CLAUDE.md, "A wrap is spelled, never cast"); prove the sum, return a Result, or call wrappingAdd/wrappingSub/wrappingMul from nish:unsafe:\n${sites.join("\n")}`
   )
