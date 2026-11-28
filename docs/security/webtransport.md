@@ -222,11 +222,13 @@ WebTransport over a QUIC connection that takes no datagrams
 WebTransport off (`net_webtransport_bad_datagrams_off`); a `WebTransport` over
 a connection with WebTransport off (`net_webtransport_bad_layer`);
 `maxStreams` of 0 or past 4,096 (`net_webtransport_bad_streams`,
-`_bad_streams_high`); `maxPending` negative or past 4,096
-(`net_webtransport_bad_pending`, `_bad_pending_high`); and a window outside its buffer for
-`sendDatagram`, `close`, `writeStream` and `writeDataWhole`
+`_bad_streams_high`); and `maxPending` negative or past 4,096
+(`net_webtransport_bad_pending`, `_bad_pending_high`). A window outside its
+buffer is not a panic: `sendDatagram` and `close`, and the
+`Http3Connection.writeStream` and `writeDataWhole` this layer writes through,
+answer H3_INVALID before anything about the session or stream is asked
 (`net_webtransport_datagram_window`, `_close_window`, `_stream_window`,
-`_whole_window`).
+`_whole_window`, each printing -22 and exiting 0).
 
 **Panic sites: the program's mistakes and the clock.** In
 `webtransport.ts` each session's state and each stream slot's state is one
@@ -240,8 +242,7 @@ checks above (entries with their reasons in `tests/std-panics.json`); the
 salt `WebTransportWaiting` draws with `crypto.getRandomValues`, which exits
 when the system has no entropy; and the two `i64` sums of a clock reading and
 a wait of at most a day in `expire` and `expiresNoSooner`, which overflow
-only for a clock reading within a day of 2^63. The window panics above are
-`nish/net/http3-frame`'s, whose window check these calls share. A new site
+only for a clock reading within a day of 2^63. A new site
 fails
 `std-panics: no std/ module has more panic sites of a kind than tests/std-panics.json allows`
 and a kept one that goes fails `std-panics: every kept panic in tests/std-panics.json`.

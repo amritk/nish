@@ -1,11 +1,7 @@
-// `Http3Connection.writeStream` writes `buf[off .. off + len)` to a
-// WebTransport stream, so a window outside the buffer is the program's
-// mistake and panics, with
-//
-//     Http3Connection.writeStream: the window [-1, -1 + 2) is outside a buffer of 4 bytes
-//
-// and exits 1. The link harness compares stdout and the exit code only, so
-// the message is named here rather than pinned.
+// `Http3Connection.writeStream` takes a WebTransport stream's bytes as a window `(buf, off, len)` the program
+// chose, so a window that does not lie inside its buffer answers H3_INVALID
+// (-22) rather than reading past it, before anything about the stream or
+// session is asked. Neither call panics, and the program exits 0.
 import { QuicConnection } from "nish/net/quic";
 import { Http3Connection } from "nish/net/http3";
 import { fixedEntropy } from "../net_quic_conn_replay/server";
@@ -16,6 +12,6 @@ export const main = (): i32 => {
   const h3 = new Http3Connection(wtH3Config(limits), new QuicConnection(wtQuicConfig(limits), fixedEntropy()));
   const buf: u8[] = [1, 2, 3, 4];
   console.log(`a window inside its buffer: ${h3.writeStream(toI64(4), buf, 0, 4, false)}`);
-  console.log(`unreachable: ${h3.writeStream(toI64(4), buf, -1, 2, false)}`);
+  console.log(`a window outside it: ${h3.writeStream(toI64(4), buf, -1, 2, false)}`);
   return 0;
 };
