@@ -496,6 +496,11 @@ const declareStringExports = (moved, changelog, why) =>
  * for one release: the reseed that ships a change makes its entries match
  * nothing, the full run says so, and they go.
  */
+// #2457's subject: readHeader's window guard fails the connection.
+const H3_READ_HEADER_FAILS = "Pin the WebTransport H3_INVALID guard and fix http3 record counts"
+// The std/ push-loop audit lands under this PR's subject, which names the
+// one new Array each copy now makes.
+const ONE_NEW_ARRAY = "one new Array"
 const DNS_FALLBACK =
   "A DNS search fallback no longer masks a later NODATA, and resolveHost keeps an answered family at its timeout"
 const dnsFallback = (why, filesByProgram) =>
@@ -26273,6 +26278,50 @@ const DECLARED = [
     changelog: WP80_BYTES_WINDOW,
     why: "the case is new with this change and builds under --deny-panics because its caller's window test discharges getU32BE's guard; the seed's std/bytes.ts keeps per-byte index panics no caller test reaches, so the reference refuses it",
   },
+  ...[
+    "examples/http-app/main.ts",
+    "tests/link/net_http_app/main.ts",
+    "tests/link/net_http_server_ws/main.ts",
+    "tests/link/net_tls_rsa_server/main.ts",
+  ].map((program) => ({
+    program,
+    file: "hpack.ll",
+    changelog: ONE_NEW_ARRAY,
+    why: "HpackWork.take makes a class's room with one new Array of a guarded size in place of a 65535-byte start grown by pushes, so hpack.ll gains the size local and loses the push loop",
+  })),
+  ...["tests/link/net_handler_dead_loop/main.ts", "tests/link/net_http_server_ws/main.ts"].flatMap((program) => [
+    {
+      program,
+      file: "handler.ll",
+      changelog: ONE_NEW_ARRAY,
+      why: "handlerInts, handlerFlags and handlerBytes allocate their n elements at once and handlerHead, which capped the first allocation at 65535 for the pushes after it, goes",
+    },
+    {
+      program,
+      file: "http-compress.ll",
+      changelog: ONE_NEW_ARRAY,
+      why: "HttpCompressor's constructor makes its output with one zeroed new Array of compressBound's length in place of a push loop, so http-compress.ll declares memset",
+    },
+  ]),
+  {
+    program: "tests/link/net_tls_rsa_server/main.ts",
+    file: "checks.ll",
+    changelog: ONE_NEW_ARRAY,
+    why: "websocketBytes makes its bytes with one new Array and no push loop, so wsEvent's second lb.peers[index] read after WsDecoder.feed keeps the first read's bounds check and checks.ll drops its own",
+  },
+  ...Object.entries({
+    "examples/http-app/main.ts": ["http3.ll"],
+    "tests/link/net_http_app/main.ts": ["http3.ll"],
+    "tests/link/net_http_server_ws/main.ts": ["client.ll", "http3.ll", "main.ll", "rig.ll", "tls-client.ll"],
+    "tests/link/net_tls_rsa_server/main.ts": ["h3.ll", "http3.ll", "main.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: H3_READ_HEADER_FAILS,
+      why: "Http3Connection.readHeader's never-taken window guard fails the connection instead of answering a zero header, so http3.ll gains the fail call and every module declaring readHeader loses its readonly this",
+    }))
+  ),
 ]
 
 /**

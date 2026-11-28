@@ -2663,45 +2663,34 @@ const handlerAllowAppend = (value: u8[], bytes: u8[], start: i32, end: i32): voi
 }
 
 /**
- * The first `n` elements' length as a `u16`, at most 65535, and 0 when `n` is
- * not positive: an allocation of a `u16` length is not an `array-length`
- * site, so the helpers below allocate once up to it and push only past it.
+ * `n` copies of `fill`, none when `n` is not positive: one allocation, its
+ * length proven non-negative by the guard.
  */
-const handlerHead = (n: i32): u16 => {
-  if (n <= 0) {
-    return 0
-  }
-  return toU16(n < 65535 ? n : toI32(65535))
-}
-
-/** `n` copies of `fill`, none when `n` is not positive: one allocation up to 65535, pushed past it. */
 const handlerInts = (n: i32, fill: i32): i32[] => {
-  const out: i32[] = new Array<i32>(handlerHead(n))
+  if (n <= 0) {
+    return []
+  }
+  const out: i32[] = new Array<i32>(n)
   if (fill !== 0) {
     out.fill(fill)
-  }
-  for (let k: i32 = 65535; k < n; k++) {
-    out.push(fill)
   }
   return out
 }
 
 /** `n` flags, each false, made as `handlerInts` makes its numbers. */
 const handlerFlags = (n: i32): boolean[] => {
-  const out: boolean[] = new Array<boolean>(handlerHead(n))
-  for (let k: i32 = 65535; k < n; k++) {
-    out.push(false)
+  if (n <= 0) {
+    return []
   }
-  return out
+  return new Array<boolean>(n)
 }
 
 /** `n` zero bytes, made as `handlerInts` makes its numbers. */
 const handlerBytes = (n: i32): u8[] => {
-  const out: u8[] = new Array<u8>(handlerHead(n))
-  for (let k: i32 = 65535; k < n; k++) {
-    out.push(0)
+  if (n <= 0) {
+    return []
   }
-  return out
+  return new Array<u8>(n)
 }
 
 /** The length of `Router.match`'s scratch for routes of up to `maxParams` parameters: two a parameter and two more. */
