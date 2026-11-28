@@ -53,7 +53,18 @@ Tracking issue: #2440. The run started at 05:40Z and hit its 8-hour deadline at 
 
 ## Acceptance (main @ 21757b38)
 
-ACCEPTANCE
+The acceptance check ran on `main` at 21757b38 and passed all 8 criteria. Criterion 2's counts come from CI, not from this container. This container has valgrind 3.22 and CI has 3.26, so the local `instructions` check fails here (#1727).
+
+| # | criterion | evidence | verdict |
+|---|---|---|---|
+| 1 | The json-value repro costs no more than on the 0.44.0 seed | I built main and the seed and ran each under cachegrind once in this container. With the generation cost subtracted, `text` fell from 179.08M on the seed to 158.50M (−20.6M) and `ranged` from 195.99M to 174.80M (−21.2M). | met |
+| 2 | The six new rows are counted | Each row has its `.ts` and `.args`. CI shard 8/9 (job 140990937576) passes `instructions` with all six at +0.000%. | met (CI) |
+| 3 | The coverage check fails on an unreached module | `instruction-coverage` exits 0: 132 modules, 42 exemptions, each with a reason. I deleted `std/pair.ts`'s exemption and the check failed, naming `std/pair.ts`. | met |
+| 4 | An unnamed raise is refused | `instruction-raises` exits 0 with 55 checks passing. They cover: an unnamed raise fails, a named raise passes, `--update` refuses an unnamed raise, and `--raise` without `--why` is refused. | met |
+| 5 | CI compares the PR against its merge-base | The step at ci.yml:2499 runs in `lint`, which `ci-gate` requires. It passed on #2462. I did not open the rendered step-summary table. | met |
+| 6 | The rule is written down | It is in CLAUDE.md:61-66 and in all eight wp80–wp87 std-panics plans. | met |
+| 7 | Panic sites did not rise | `tests/std-panics.json` totals 630 (the limit is 940), and json-value has no sites. | met |
+| 8 | Every merged head was green, and the PR bodies carry their tables | `ci-gate` and all nine shards were green on each merged head. #2449's body has a delta for each helper; two of them, `jwtCopy` and HpackPool `take`, only cite a row-level delta (`jwtCopy` +11,989 on crypto-jwt-verify, a row that #2462 then lowered). #2462's body has a before/after table for all 25 rows. | met |
 
 ## Not done
 
