@@ -467,13 +467,13 @@ const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
  */
 export class Sha256 {
   /**
-   * The message length absorbed so far, in bytes. An `i64` because §5.1.1
-   * appends the length in bits as a 64-bit number, and a transcript can pass
-   * 2^31 bytes where an `i32` would wrap.
+   * The message length absorbed so far, in bytes. A `u64` because §5.1.1
+   * appends the length in bits modulo 2^64, which a `u64` wraps to by its type,
+   * and a transcript can pass 2^31 bytes where an `i32` would wrap.
    *
    * @internal Set by `nish/crypto/hmac` and `nish/net/postgres` when they wipe, copy or restart a hasher.
    */
-  total: i64 = 0
+  total: u64 = 0
   /** H_0 .. H_7, the eight words of the intermediate hash value (§6.2.2 step 4). */
   state: u32[]
   /** The pending bytes of the current block; the first `fill` of them are live. */
@@ -531,10 +531,10 @@ export class Sha256 {
     if (off < 0 || len < 0 || off > size || len > size - off) {
       panic("Sha256: the window is outside the buffer")
     }
-    // §5.1.1 appends the length modulo 2^64: the count is a `u64`, which wraps
-    // by its type, kept in an `i64` field that hmac.ts and scram.ts also set.
-    const count: u64 = toU64(this.total) + toU64(len)
-    this.total = toI64(count)
+    // §5.1.1 appends the length modulo 2^64: `total` is a `u64`, which wraps
+    // to it by its type, so the sum needs no cast and no wrapping call (this
+    // module stays clear of `nish:unsafe`, which SCRAM's `--deny unsafe` refuses).
+    this.total = this.total + toU64(len)
     const state: u32[] = this.state
     const schedule: u32[] = this.schedule
     const block: u8[] = this.block
@@ -592,9 +592,9 @@ export class Sha256 {
       this.update(data, from, toI32(n))
       return
     }
-    // The count is a `u64` modulo 2^64, as in `update`.
-    const count: u64 = toU64(this.total) + toU64(n)
-    this.total = toI64(count)
+    // The count is a `u64` modulo 2^64, as in `update`: it wraps by its type,
+    // which is the length §5.1.1 appends.
+    this.total = this.total + toU64(n)
     const state: u32[] = this.state
     const schedule: u32[] = this.schedule
     const block: u8[] = this.block
@@ -700,7 +700,7 @@ export class Sha256 {
           block[i] = 0
         }
       }
-      const bits: u64 = toU64(this.total) << 3
+      const bits: u64 = this.total << 3
       let shift: u64 = 0
       for (let i: i32 = 63; i >= 56 && i < room; i -= 1) {
         block[i] = toU8(bits >>> shift)
