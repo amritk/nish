@@ -20,18 +20,18 @@ The rules for `async`, `await` and `spawn` are in
 ## A first server
 
 The examples on this page build with
-[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/serve`,
-`nish/net/router`, `nish/net/handler` and `nish/net/postgres` keep panic sites
-no proof removes yet, so a call to them is refused by default until the
-standard library is made panic-free. The sums, indexes and `panic` call in your
-own code build under the default once a guard proves each, such as `i <
-xs.length` before an index, and the `panic` becomes an error answer.
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/serve` and
+`nish/net/postgres-async` keep panic sites no proof removes yet, so a call to
+them is refused by default until the standard library is made panic-free. The
+code you write around them needs no such flag: the examples build the route
+table with `routerChecked`, read a parameter with `tryParamNumber`, and answer
+400 when it is not a number, so nothing in them panics on a bad request.
 
-<!-- allow-panics: calls `std/net/handler.ts`, `std/net/router.ts`, `std/net/serve.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/serve.ts` code that keeps or reaches panic sites (in `std/bytes.ts`) no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Request, Response, ServeLimits, refuse, serve } from "nish/net/serve";
-import { Router, RouterLimits } from "nish/net/router";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { sleep } from "nish:async";
 
 // The routes, in the order they are added: `add` answers 0, 1, 2.
@@ -44,11 +44,13 @@ const handle = async (req: Request): Promise<Response> => {
     case HOME:
       return new Response(200).text("hello\n");
     case USER: {
-      if (req.paramMalformed(0)) {
-        return new Response(400).text("a bad escape\n");
+      // `/users/:id` has parameter 0; one that is not a number is -1.
+      const id = req.tryParamNumber(0);
+      if (id.isErr() || id.value < 0) {
+        return new Response(400).text("the id is a number\n");
       }
       await sleep(5); // the loop answers other requests meanwhile
-      return new Response(200).json(`{"id":${req.paramNumber(0)}}`);
+      return new Response(200).json(`{"id":${id.value}}`);
     }
     case ECHO:
       return new Response(201).text(req.text());
@@ -58,7 +60,12 @@ const handle = async (req: Request): Promise<Response> => {
 };
 
 export const main = async (): Promise<i32> => {
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    console.error(table.error);
+    return 1;
+  }
+  const router = table.value;
   router.add("GET", "/");
   router.add("GET", "/users/:id");
   router.add("POST", "/echo");
@@ -120,11 +127,11 @@ shares those objects with `main`, in place, so a handler reads and updates
 their numbers and awaits a pooled query, and builds its answer in its own
 memory:
 
-<!-- allow-panics: calls `panic`; does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/net/handler.ts`, `std/net/postgres.ts`, `std/net/router.ts`, `std/net/serve.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/serve.ts` and `std/net/postgres-async.ts` code that keeps or reaches panic sites (in `std/bytes.ts`) no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Request, Response, ServeLimits, refuse, serve } from "nish/net/serve";
-import { Router, RouterLimits } from "nish/net/router";
+import { RouterLimits, routerChecked } from "nish/net/router";
 import { secret, wipe } from "nish:secret";
 import { PgConfig, pgTarget } from "nish/net/postgres";
 import {
@@ -152,19 +159,31 @@ export const main = async (): Promise<i32> => {
   await pgAsyncConnect(pool, config, password, pgTarget("127.0.0.1", 5432));
   wipe(password);
   const stats = new Stats();
-  const router = new Router(new RouterLimits());
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    console.error(table.error);
+    return 1;
+  }
+  const router = table.value;
   router.add("GET", "/articles/:id");
   return await serve(8080, router, new ServeLimits(), async (req: Request): Promise<Response> => {
-    if (req.route !== 0 || req.paramMalformed(0)) {
+    if (req.route !== 0) {
       return refuse(req);
     }
-    stats.served = stats.served + 1;
+    const id = req.tryParamNumber(0);
+    if (id.isErr() || id.value < 0) {
+      return new Response(400).text("the id is a number\n");
+    }
+    const served: i32 = stats.served;
+    if (served < 2147483647) {
+      stats.served = served + 1; // a count that stops at its top, never wraps
+    }
     const ticket: i32 = await pgAsyncClaim(pool);
     if (ticket < 0) {
       return new Response(503).text("no connection\n");
     }
     const params = new PgAsyncParams();
-    params.int(req.paramNumber(0));
+    params.int(id.value);
     const r = await pgAsyncQuery(pool, ticket, "select title from article where id = $1", params);
     pgAsyncRelease(pool, ticket, r.reusable);
     if (!r.ok() || r.rows === 0) {
@@ -236,7 +255,7 @@ so does every one it makes later, so the handler runs on to its end, its
 `using` bindings are disposed and its region is freed. Check `cancelled()`
 from `nish:async` after an `await` that failed, and answer:
 
-<!-- allow-panics: calls `std/net/serve.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/serve.ts` code that reaches `std/bytes.ts` panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { cancelled, sleep } from "nish:async";

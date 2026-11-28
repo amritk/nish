@@ -195,9 +195,13 @@ const advance = (ball: Float64Array, score: Int32Array, input: StepInput): void 
     ball[1] = PADDLE_Y - BALL_R
     ball[3] = -Math.min(ball[3] * 1.04, MAX_DY)
     ball[2] = Math.min(Math.max(ball[2] + off * 4.0, -MAX_DY), MAX_DY)
-    // In `u32`, which wraps rather than panics: the score stays far below
-    // 2^31, which would take a hit every frame for over a year.
-    score[0] = toI32(toU32(score[0]) + 1)
+    // The score stays far below 2^31, which would take a hit every frame for
+    // over a year; the guard says so where the prover reads it, and holds
+    // the score there rather than wrapping it negative.
+    const hits: i32 = score[0]
+    if (hits < 2147483647) {
+      score[0] = hits + 1
+    }
     score[1] = Math.max(score[1], score[0])
     gamePlaySound(SOUND_HIT)
   }

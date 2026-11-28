@@ -1,0 +1,33 @@
+# The cast wraps (`toI32(toU32(a) + toU32(b))`, and toI64/toU64) that predate
+# CLAUDE.md's "A wrap is spelled, never cast", per file. Counts only fall:
+# lower them with `node scripts/wrap-casts.mjs --update`, never by hand.
+14 std/crypto/base64url.ts
+5 std/crypto/bcrypt.ts
+5 std/crypto/jwt.ts
+1 std/crypto/p256.ts
+2 std/crypto/pki-roots.ts
+13 std/crypto/pki.ts
+1 std/crypto/rsa.ts
+2 std/crypto/sha256.ts
+3 std/crypto/x25519.ts
+14 std/crypto/x509.ts
+17 std/net/fetch.ts
+4 std/net/handler.ts
+25 std/net/hpack.ts
+7 std/net/http-compress.ts
+6 std/net/http-fields.ts
+3 std/net/http-server.ts
+17 std/net/http1-client-codec.ts
+31 std/net/http1-codec.ts
+2 std/net/http1-server.ts
+2 std/net/http2-cleartext.ts
+1 std/net/http2-frame.ts
+1 std/net/http2-tls.ts
+5 std/net/http2.ts
+3 std/net/outbound.ts
+2 std/net/prefork.ts
+2 std/net/protobuf.ts
+2 std/net/serve.ts
+6 std/net/static.ts
+8 std/net/upstream.ts
+17 std/net/url.ts

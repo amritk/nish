@@ -5,9 +5,9 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1053,
+  "total": 1029,
   "explicit": {
-    "kept": 362,
+    "kept": 359,
     "toFix": 7
   },
   "modules": {
@@ -40,15 +40,12 @@
       "panic": 2
     },
     "std/crypto/aes.ts": {
-      "array-length": 2,
+      "array-length": 1,
       "index": 7
     },
     "std/crypto/base64url.ts": {
       "array-length": 2,
       "panic": 7
-    },
-    "std/crypto/chacha20poly1305.ts": {
-      "array-length": 1
     },
     "std/crypto/hkdf.ts": {
       "panic": 14
@@ -116,8 +113,7 @@
     },
     "std/net/handler.ts": {
       "fault": 1,
-      "panic": 8,
-      "window": 2
+      "panic": 8
     },
     "std/net/hpack.ts": {
       "panic": 8
@@ -141,7 +137,7 @@
     "std/net/http1-server.ts": {
       "fault": 3,
       "slice": 1,
-      "window": 10
+      "window": 9
     },
     "std/net/http2-cleartext.ts": {
       "panic": 2,
@@ -200,6 +196,7 @@
       "panic": 1
     },
     "std/net/router.ts": {
+      "fault": 1,
       "panic": 6
     },
     "std/net/serve.ts": {
@@ -208,8 +205,7 @@
       "window": 2
     },
     "std/net/static.ts": {
-      "panic": 1,
-      "slice": 2
+      "panic": 1
     },
     "std/net/tls-tcp.ts": {
       "io-exit": 3,
@@ -235,7 +231,7 @@
       "slice": 6
     },
     "std/net/websocket.ts": {
-      "panic": 2
+      "window": 2
     },
     "std/net/webtransport.ts": {
       "io-exit": 1,
@@ -262,18 +258,9 @@
       "panic": 1,
       "slice": 1
     },
-    "std/term-io.ts": {
-      "slice": 2
-    },
     "std/term-pixels.ts": {
-      "array-length": 6,
-      "panic": 12,
-      "slice": 2
-    },
-    "std/term-rate.ts": {
-      "overflow": 3
-    },
-    "std/term.ts": {
+      "array-length": 2,
+      "panic": 11,
       "slice": 1
     },
     "std/text.ts": {
@@ -288,7 +275,7 @@
     },
     "std/yaml-json.ts": {
       "index": 18,
-      "overflow": 39
+      "overflow": 38
     },
     "std/yaml-lines.ts": {
       "overflow": 12
@@ -299,7 +286,7 @@
     "std/yaml.ts": {
       "array-length": 3,
       "index": 12,
-      "overflow": 275,
+      "overflow": 270,
       "panic": 1,
       "slice": 3
     }
@@ -1392,17 +1379,12 @@
     },
     {
       "module": "std/net/router.ts",
-      "function": "routerLimit",
-      "reason": "RouterLimits fields must lie within the documented low..high; limits are a static caller configuration"
-    },
-    {
-      "module": "std/net/router.ts",
       "function": "routerNoRoute",
       "reason": "the route index must be in the table; the route ids are static caller values"
     },
     {
       "module": "std/net/router.ts",
-      "function": "routerOutside",
+      "function": "routerCheckRanges",
       "reason": "the match range must lie inside its buffer; a caller precondition of Router.match"
     },
     {
@@ -1444,16 +1426,6 @@
       "module": "std/net/url.ts",
       "function": "urlDecodeChecked",
       "reason": "The source window must lie inside src and at must be within out; caller-controlled bounds, not the decoded content. tryPercentDecode answers URL_DECODE_ERR_WINDOW instead"
-    },
-    {
-      "module": "std/net/websocket.ts",
-      "function": "websocketIsUtf8",
-      "reason": "the window must lie inside buf; the caller controls off and len"
-    },
-    {
-      "module": "std/net/websocket.ts",
-      "function": "WsDecoder.feed",
-      "reason": "the window must lie inside data; the caller controls off and len, and the panic does not depend on the bytes"
     },
     {
       "module": "std/net/webtransport.ts",
@@ -1552,11 +1524,6 @@
     },
     {
       "module": "std/term-pixels.ts",
-      "function": "PixelBytes.reserve",
-      "reason": "an escape sequence past 2^31 - 1 bytes, which an i32 length cannot hold; the caller's framebuffer size sets it"
-    },
-    {
-      "module": "std/term-pixels.ts",
       "function": "pixelsArea",
       "reason": "width and height must be non-negative with product at most 2^31 - 1; the caller chooses the framebuffer size"
     },
@@ -1649,24 +1616,6 @@
         "array-length": 1
       },
       "reason": "new Array(n) with n the plaintext length plus the 16-byte tag, below 2^31 by Seal's guard: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/aes.ts",
-      "function": "aesGcmOpen",
-      "sites": {
-        "array-length": 1
-      },
-      "reason": "new Array(n) with n the sealed length less the tag: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/chacha20poly1305.ts",
-      "function": "chacha20Poly1305Open",
-      "sites": {
-        "array-length": 1
-      },
-      "reason": "new Array(n) with n the sealed length less the tag: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
       "record": "docs/security/crypto-aead.md"
     }
   ]

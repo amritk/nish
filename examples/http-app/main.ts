@@ -1,17 +1,14 @@
 // Opt-out (`--allow-panics`): it answers through the `try` calls of
-// `nish/net/handler`, `nish/net/serve` and `nish/net/static`, and still
-// reaches: the cap check of `Http1Connection`'s constructor
-// (std/net/http1-server.ts:499:5), through every answer, `wait`, `next` and
-// `drain`; the limits panic of the `HttpHandler` constructor
-// (std/net/handler.ts:934:7), which `openHttpHandler` calls only once the
-// limits passed the same check; `std/net/router`'s contract panics
-// (std/net/router.ts:1290:3, :1304:5), through `Router`, `add` and
-// `tryRefuse`; and a `nish/net/static` slice (std/net/static.ts:221:20). The
-// config and the limits are mutable classes stored as given, and the router's
-// panics are not window guards, so no caller's proof discharges them (only a
-// guard's window is, the `window` contract in docs/LANGUAGE.md, "Panic
-// sites", #2296). Once the panics above are gone, build this program without
-// `--allow-panics`.
+// `nish/net/handler`, `nish/net/serve` and `nish/net/static`, routes through
+// `routerChecked` and `Router.tryMatch`, and still reaches: the chunk-size
+// digit index of `std/net/http1-codec` (std/net/http1-codec.ts:2536:5),
+// through every answer; the limit panic of `HttpBodyDecoder`'s constructor
+// (std/net/http-compress.ts:1150:7) and the `std/compress` decoders behind
+// it, through `openHttpHandler`; and `copyBytes`'s range panic
+// (std/bytes.ts:526:5), through `HttpHandler.wait` and
+// `StaticFiles.tryServeHandler`. None is a window guard, so no caller's proof
+// discharges it (docs/LANGUAGE.md, "Panic sites", #2296). Once they are gone,
+// build this program without `--allow-panics`.
 //
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
@@ -41,7 +38,7 @@ import { HttpHandler, HandlerLimits, openHttpHandler } from "nish/net/handler"
 import { Router } from "nish/net/router"
 import { netClose, tcpListen } from "nish:net"
 import { monotonicNanos, readSignal, signalFd } from "nish:process"
-import { App, appRoutes, configure, serveTurn } from "./app"
+import { App, configure, serveTurn, tryAppRoutes } from "./app"
 
 /** The handler's watched-descriptor id for the signal pipe. */
 const SIGNALS: i32 = 0
@@ -54,6 +51,12 @@ const usage = (error: string): i32 => {
   console.error("usage: http-app <port> [--max-notes <n>] [--drain-ms <ms>] [--static <dir>] [--quiet]")
   console.error("  serves a JSON notes API on <port> until SIGINT or SIGTERM")
   return 2
+}
+
+/** Whether less than `budget` nanoseconds have passed since `start`, a `monotonicNanos` reading. */
+const draining = (start: i64, budget: i64): boolean => {
+  const now: i64 = monotonicNanos()
+  return now >= 0 && start >= 0 && now - start < budget
 }
 
 export const main = (): i32 => {
@@ -73,7 +76,14 @@ export const main = (): i32 => {
     netClose(listener)
     return 1
   }
-  const router: Router = appRoutes()
+  const routes: Result<Router, string> = tryAppRoutes()
+  if (routes.isErr()) {
+    console.error(`http-app: ${routes.error}`)
+    netClose(signals)
+    netClose(listener)
+    return 1
+  }
+  const router: Router = routes.value
   const opened: Result<HttpHandler, string> = openHttpHandler(new HandlerLimits(), listener, router)
   if (opened.isErr()) {
     console.error(`http-app: ${opened.error}`)
@@ -102,12 +112,14 @@ export const main = (): i32 => {
   }
   console.log(`http-app: stopping, draining ${h.connections()} connections`)
   h.drain()
-  // `u64`, which wraps rather than panics, and cannot here: the clock counts
-  // from boot and `--drain-ms` has nine digits at most, so the sum stays
-  // under 2^60.
-  const deadline: i64 = toI64(toU64(monotonicNanos()) + toU64(config.drainMs) * toU64(NANOS_PER_MS))
+  // The drain is timed by what has passed since it began, not by a deadline
+  // summed from the clock: the budget is an `i32` of milliseconds in
+  // nanoseconds, under 2^51, and two clock readings, neither negative,
+  // subtract without overflow, so both are proven to fit.
+  const start: i64 = monotonicNanos()
+  const budget: i64 = config.drainMs < 0 ? 0 : toI64(config.drainMs) * NANOS_PER_MS
   let forced = false
-  while (h.connections() > 0 && monotonicNanos() < deadline && !forced) {
+  while (h.connections() > 0 && draining(start, budget) && !forced) {
     serveTurn(app, DRAIN_TURN_MS)
     if (h.fired(SIGNALS)) {
       readSignal(signals)

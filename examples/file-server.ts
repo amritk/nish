@@ -1,22 +1,10 @@
-// Opt-out (`--allow-panics`), for sites no guard here removes. `readable`,
-// `connection` and `flush` reach the cap check of `Http1Connection`'s
-// constructor (std/net/http1-server.ts:499:5) through the server's `build` of
-// a pooled connection: `Http1Config` is a mutable class stored as given, so no
-// caller's proof reaches it. `next` reaches the window check of
-// `websocketIsUtf8` (std/net/websocket.ts:267:5), written inline rather than
-// as a window guard. `write` holds its window at each call (the `window`
-// contract, docs/LANGUAGE.md, "Panic sites", #2296), and the call below
-// (file-server.ts:126:23) passes `n`, the count `fileReadAt` returned, which
-// nothing proves is within `served.window`. Once all are gone, build this
-// file without `--allow-panics`.
-//
 // An HTTP/1.1 server that answers every request with one file, streamed a
 // window at a time (WP44, #710). The file is opened once at start-up; each
 // connection keeps only how far into it it has got, an i64, and every
 // connection reads through the same 64 KiB window. So memory follows the
 // window and not the file: a 4 GiB video costs what a 64 KiB one does.
 //
-//     build/nish --allow-panics examples/file-server.ts --link build/file-server
+//     build/nish examples/file-server.ts --link build/file-server
 //     build/file-server big.mp4 8080 &
 //     curl -s http://127.0.0.1:8080/ | cmp - big.mp4
 //     kill %1
@@ -25,7 +13,6 @@
 // response carries a Content-Length, which `respond` takes as an i32, so a
 // file past 2^31 - 1 bytes is refused at start-up. Without a path and a port
 // it prints how to run it and exits 2.
-// smoke: args --allow-panics
 // smoke: exit 2
 import { fileOpen, fileReadAt, fileSize } from "nish:fs"
 import { netLocalPort, pollAdd, pollCreate, pollModify, pollWait, tcpListen } from "nish:net"
@@ -42,6 +29,7 @@ import {
   Http1Config,
   Http1Connection,
   Http1Server,
+  http1ServerChecked,
 } from "nish/net/http1-server"
 
 /** The listener's token; a connection's token is its slot. */
@@ -105,10 +93,22 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
     }
     pos = 0
   }
-  while (pos < served.size) {
-    // `u64` here and below, which wraps rather than panics, and cannot: in
-    // this loop 0 <= `pos` < `size` <= 2^31 - 1, which `main` makes sure of.
-    const left: i64 = toI64(toU64(served.size) - toU64(pos))
+  // `main` holds the file to 2^31 - 1 bytes, so in this loop 0 <= `pos` <
+  // `size` < 2^31 and `pos` fits an `i32`: the guards say so where the prover
+  // reads them, and `size - here` and `here + took` are proven to fit.
+  const size: i64 = served.size
+  if (size < 0 || size > toI64(2147483647)) {
+    conn.abort()
+    return IDLE
+  }
+  while (pos < size) {
+    const low: i32 = toI32(pos)
+    if (pos < 0 || low < 0) {
+      conn.abort()
+      return IDLE
+    }
+    const here: integer<0, 2147483647> = low
+    const left: i64 = size - toI64(here)
     const want: i32 = left < toI64(WINDOW) ? toI32(left) : WINDOW
     const window: u8[] = served.window
     if (want < 0 || want > toI32(window.length)) {
@@ -116,11 +116,12 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
       return IDLE
     }
     const n: i32 = fileReadAt(served.file, window, 0, want, pos)
-    if (n <= 0) {
+    // `fileReadAt` answers at most `want`; anything else is a failed read.
+    if (n <= 0 || n > toI32(window.length)) {
       conn.abort()
       return IDLE
     }
-    const took: i32 = conn.write(served.window, toI32(0), n)
+    const took: i32 = conn.write(window, toI32(0), n)
     if (took === H1_AGAIN) {
       return pos
     }
@@ -128,7 +129,7 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
       conn.abort()
       return IDLE
     }
-    pos = toI64(toU64(pos) + toU64(took))
+    pos = toI64(here) + toI64(took)
     if (took < n) {
       // The rest of this window is read again on the next H1_WRITE.
       return pos
@@ -139,7 +140,12 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
 }
 
 const serve = (served: Served, listener: i32): i32 => {
-  const server = new Http1Server(new Http1Config(), listener, 64)
+  const made = http1ServerChecked(new Http1Config(), listener, 64)
+  if (!made.ok) {
+    console.error(`file-server: ${made.error}`)
+    return 1
+  }
+  const server: Http1Server = made.value
   const at: i64[] = []
   for (let k: i32 = 0; k < server.size(); k++) {
     at.push(IDLE)
@@ -181,10 +187,12 @@ const serve = (served: Served, listener: i32): i32 => {
         }
         let event: i32 = server.next(slot)
         while (event !== H1_NEED_MORE && event !== H1_ERROR) {
-          if (event === H1_END) {
-            pos = pump(server.connection(slot), served, HEAD_OWED)
-          } else if (event === H1_WRITE && pos !== IDLE) {
-            pos = pump(server.connection(slot), served, pos)
+          // A checked server always has a connection to give; null is no work.
+          const conn: Http1Connection | null = server.tryConnection(slot)
+          if (conn !== null && event === H1_END) {
+            pos = pump(conn, served, HEAD_OWED)
+          } else if (conn !== null && event === H1_WRITE && pos !== IDLE) {
+            pos = pump(conn, served, pos)
           }
           event = server.next(slot)
         }

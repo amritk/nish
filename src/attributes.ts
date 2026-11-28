@@ -41,7 +41,7 @@ import { isPureRuntime, SECRET_MAKE, SECRET_WIPE, secretRoleOf } from "./secret"
 import { isRegionIntrinsic } from "./region-check"
 import { isShmSource, isShmWindowIntrinsic } from "./shm-window"
 import { jsonRouteCallees, jsonRouteOf } from "./json-typed"
-import { openedHandle } from "./handles"
+import { openedHandle, ownedCloses } from "./handles"
 import { layoutClass } from "./structs"
 import {
   builtinCalleesNamed,
@@ -3746,14 +3746,12 @@ class FactCollector {
     if (info === null) {
       return
     }
-    const close = info.handleClose
-    if (close === null) {
-      return
-    }
-    this.facts.callees.add(close.name)
-    this.facts.wholeCallees.add(close.name)
-    if (this.known !== null) {
-      this.facts.offerCapability(CAP_FFI, close.sourceName, node, 0)
+    for (const close of ownedCloses(info)) {
+      this.facts.callees.add(close.name)
+      this.facts.wholeCallees.add(close.name)
+      if (this.known !== null) {
+        this.facts.offerCapability(CAP_FFI, close.sourceName, node, 0)
+      }
     }
   }
 

@@ -353,7 +353,7 @@ function chacha20Poly1305Seal(key: u8[], nonce: u8[], aad: u8[], plaintext: u8[]
 function chacha20Poly1305Open(key: u8[], nonce: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @chacha20Poly1305Open [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via chacha20Poly1305Setup
-  calls: chacha20CounterFits chacha20Poly1305Setup chacha20Poly1305Tag chacha20Poly1305TagMatch chacha20State chacha20XorInto nish.wipe$arr.u32 nish.wipe$arr.u8 nish_panic
+  calls: chacha20CounterFits chacha20Poly1305Setup chacha20Poly1305Tag chacha20Poly1305TagMatch chacha20State chacha20XorInto nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer key: size=0 writesThrough=false captured=false passedTo=chacha20State#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=chacha20State#2
   pointer aad: size=0 writesThrough=false captured=false passedTo=chacha20Poly1305Tag#1

@@ -147,28 +147,25 @@ function Http1Parser.constructor(this: Http1Parser, maxTarget: i32, maxHeaderByt
   callee +3:20 http1Clamp -> @nish.http1Clamp
   callee +21:5 Http1Parser.restart -> @nish.Http1Parser.restart
 function Http1Parser.feed(this: Http1Parser, data: u8[], off: i32, len: i32): void -> @nish.Http1Parser.feed [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Http1Parser.tryFeed
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.http1Append
   escaping: len off
-  calls: nish.Http1Parser.tryFeed nish_panic
-  pointer this: size=232 writesThrough=true captured=false passedTo=nish.Http1Parser.tryFeed#0
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Http1Parser.tryFeed#1
+  calls: nish.http1Append nish_panic
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.http1Append#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.http1Append#1
   stackSites=0 stackLocals=0
-  callee +0:10 Http1Parser.tryFeed -> @nish.Http1Parser.tryFeed
+  local +0:11 size: i32 (const)
+  callee +4:5 http1Append -> @nish.http1Append
 function Http1Parser.tryFeed(this: Http1Parser, data: u8[], off: i32, len: i32): boolean -> @nish.Http1Parser.tryFeed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: via nish.http1Append
   escaping: len off
-  calls: nish.http1Fail nish.http1Reserve nish.tryCopyBytes
-  pointer this: size=232 writesThrough=true captured=false passedTo=nish.http1Reserve#0 nish.http1Fail#0
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
+  calls: nish.http1Append
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.http1Append#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.http1Append#1
   stackSites=0 stackLocals=0
-  local -20:11 size: i32 (const)
-  callee -13:10 http1Reserve -> @nish.http1Reserve
-  local -10:11 buf: u8[] (const)
-  local -9:11 at: i32 (const)
-  callee -5:10 tryCopyBytes -> @nish.tryCopyBytes
-  callee -4:7 http1Fail -> @nish.http1Fail
+  local +0:11 size: i32 (const)
+  callee +4:5 http1Append -> @nish.http1Append
 function Http1Parser.next(this: Http1Parser): i32 -> @nish.Http1Parser.next [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.http1Next
@@ -263,6 +260,19 @@ function Http1Parser.declineUpgrade(this: Http1Parser): void -> @nish.Http1Parse
   pointer this: size=232 writesThrough=true captured=false passedTo=nish.http1StartRequest#0
   stackSites=0 stackLocals=0
   callee +0:7 http1StartRequest -> @nish.http1StartRequest
+function http1Append(p: Http1Parser, data: u8[], off: i32, len: i32): void -> @nish.http1Append
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: len off
+  calls: nish.http1Fail nish.http1Reserve nish.tryCopyBytes
+  pointer p: size=232 writesThrough=true captured=false passedTo=nish.http1Reserve#0 nish.http1Fail#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
+  stackSites=0 stackLocals=0
+  callee -13:8 http1Reserve -> @nish.http1Reserve
+  local -10:9 buf: u8[] (const)
+  local -9:9 at: i32 (const)
+  callee -5:8 tryCopyBytes -> @nish.tryCopyBytes
+  callee -4:5 http1Fail -> @nish.http1Fail
 function http1Reserve(p: Http1Parser, len: i32): boolean -> @nish.http1Reserve
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -2128,13 +2138,19 @@ function toBytes(text: string): u8[] -> @toBytes
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 i: i32 (let)
+function byteAt(head: u8[], at: i32): i32 -> @byteAt
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  pointer head: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function mix(sum: u32, x: i32): u32 -> @mix
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function headSum(sum0: u32, methodStart: i32, methodEnd: i32, targetStart: i32, targetEnd: i32, count: i32, spans: i32[], contentLength: i32): u32 -> @headSum
+function headSum(sum0: u32, head: u8[], methodStart: i32, methodEnd: i32, targetStart: i32, targetEnd: i32, count: i32, spans: i32[], contentLength: i32): u32 -> @headSum
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: contentLength count methodEnd methodStart sum0 targetEnd targetStart
-  calls: mix nish_panic_overflow
+  calls: byteAt mix nish_panic_overflow
+  pointer head: size=0 writesThrough=false captured=false passedTo=byteAt#0 byteAt#0
   pointer spans: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:7 sum: u32 (let)
@@ -2144,8 +2160,15 @@ function headSum(sum0: u32, methodStart: i32, methodEnd: i32, targetStart: i32, 
   callee +3:9 mix -> @mix
   callee +4:9 mix -> @mix
   local +5:12 k: i32 (let)
-  callee +6:11 mix -> @mix
-  callee +8:10 mix -> @mix
+  local +6:11 at: i32 (const)
+  callee +7:11 mix -> @mix
+  callee +8:11 mix -> @mix
+  callee +9:11 mix -> @mix
+  callee +10:11 mix -> @mix
+  callee +10:20 byteAt -> @byteAt
+  callee +11:11 mix -> @mix
+  callee +11:20 byteAt -> @byteAt
+  callee +13:10 mix -> @mix
 function runNew(request: u8[], iterations: i32): i32 -> @runNew
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via now
@@ -2163,9 +2186,9 @@ function runNew(request: u8[], iterations: i32): i32 -> @runNew
   local +7:9 event: i32 (let)
   callee +7:22 Http1Parser.next -> @nish.Http1Parser.next
   callee +10:15 headSum -> @headSum
-  callee +21:15 mix -> @mix
-  callee +26:15 Http1Parser.next -> @nish.Http1Parser.next
-  callee +29:3 report -> @report
+  callee +22:15 mix -> @mix
+  callee +27:15 Http1Parser.next -> @nish.Http1Parser.next
+  callee +30:3 report -> @report
 function runOld(request: u8[], iterations: i32): i32 -> @runOld
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via now
@@ -2183,9 +2206,9 @@ function runOld(request: u8[], iterations: i32): i32 -> @runOld
   local +7:9 event: i32 (let)
   callee +7:22 H1aParser.next -> @H1aParser.next
   callee +10:15 headSum -> @headSum
-  callee +21:15 mix -> @mix
-  callee +26:15 H1aParser.next -> @H1aParser.next
-  callee +29:3 report -> @report
+  callee +22:15 mix -> @mix
+  callee +27:15 H1aParser.next -> @H1aParser.next
+  callee +30:3 report -> @report
 function runOldCopy(request: u8[], iterations: i32): i32 -> @runOldCopy
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via now
@@ -2203,9 +2226,9 @@ function runOldCopy(request: u8[], iterations: i32): i32 -> @runOldCopy
   local +7:9 event: i32 (let)
   callee +7:22 H1bParser.next -> @H1bParser.next
   callee +10:15 headSum -> @headSum
-  callee +21:15 mix -> @mix
-  callee +26:15 H1bParser.next -> @H1bParser.next
-  callee +29:3 report -> @report
+  callee +22:15 mix -> @mix
+  callee +27:15 H1bParser.next -> @H1bParser.next
+  callee +30:3 report -> @report
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via parseArgs

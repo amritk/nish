@@ -1,0 +1,7 @@
+{
+  "name": "ffi-handle-sidecar",
+  "private": true,
+  "nish": {
+    "link": { "sources": ["c/probe.c"] }
+  }
+}

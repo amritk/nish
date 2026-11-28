@@ -15083,10 +15083,9 @@ target triple = "wasm32-unknown-unknown"
 @nish_storage_0_head = internal global %struct.nish_array { i64 1, i64 1, i8* bitcast ([1 x %struct.Node*]* @nish_storage_0_head.data to i8*) }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_runtime_root_keep(i64 noundef, i8* noundef, i32 noundef) #0
 declare void @nish_runtime_root_reset(i8* noundef, i32 noundef) #0
-declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 
 define void @nish_root_keep(i64 %mark) {
   call void @nish_runtime_root_keep(i64 %mark, i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
@@ -15103,7 +15102,7 @@ define void @nish_free_arena() {
   ret void
 }
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -15136,7 +15135,7 @@ entry:
   ret void
 }
 
-define void @push(i32 noundef %value) #1 {
+define void @push(i32 noundef %value) #0 {
 entry:
   %n.addr = alloca %struct.Node*, align 4
   %0 = call i8* @nish_alloc_struct(i64 8)
@@ -15144,47 +15143,25 @@ entry:
   call void @Node.constructor(%struct.Node* %1, i32 %value)
   store %struct.Node* %1, %struct.Node** %n.addr, align 4
   %2 = load %struct.Node*, %struct.Node** %n.addr, align 4
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 0
-  %4 = load i64, i64* %3, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %5 = icmp ult i64 0, %4
-  br i1 %5, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %4), !nish.site !{i32 0}
-  unreachable
-
-bounds.ok:
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
-  %7 = load i8*, i8** %6, align 8, !alias.scope !10, !noalias !11, !tbaa !16
-  %8 = bitcast i8* %7 to %struct.Node**
-  %9 = getelementptr inbounds %struct.Node*, %struct.Node** %8, i64 0
-  %10 = load %struct.Node*, %struct.Node** %9, align 4, !alias.scope !11, !noalias !10, !tbaa !18
-  %11 = getelementptr inbounds %struct.Node, %struct.Node* %2, i32 0, i32 1
-  store %struct.Node* %10, %struct.Node** %11, align 4, !tbaa !5
-  %12 = load %struct.Node*, %struct.Node** %n.addr, align 4
-  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 0
-  %14 = load i64, i64* %13, align 8, !alias.scope !10, !noalias !11, !tbaa !15
-  %15 = icmp ult i64 0, %14
-  br i1 %15, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 0, i64 %14), !nish.site !{i32 1}
-  unreachable
-
-bounds.ok.1:
-  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
-  %17 = load i8*, i8** %16, align 8, !alias.scope !10, !noalias !11, !tbaa !16
-  %18 = bitcast i8* %17 to %struct.Node**
-  %19 = getelementptr inbounds %struct.Node*, %struct.Node** %18, i64 0
-  store %struct.Node* %12, %struct.Node** %19, align 4, !alias.scope !11, !noalias !10, !tbaa !18
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
+  %4 = load i8*, i8** %3, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %5 = bitcast i8* %4 to %struct.Node**
+  %6 = getelementptr inbounds %struct.Node*, %struct.Node** %5, i64 0
+  %7 = load %struct.Node*, %struct.Node** %6, align 4, !alias.scope !11, !noalias !10, !tbaa !17
+  %8 = getelementptr inbounds %struct.Node, %struct.Node* %2, i32 0, i32 1
+  store %struct.Node* %7, %struct.Node** %8, align 4, !tbaa !5
+  %9 = load %struct.Node*, %struct.Node** %n.addr, align 4
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
+  %11 = load i8*, i8** %10, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %12 = bitcast i8* %11 to %struct.Node**
+  %13 = getelementptr inbounds %struct.Node*, %struct.Node** %12, i64 0
+  store %struct.Node* %9, %struct.Node** %13, align 4, !alias.scope !11, !noalias !10, !tbaa !17
   ret void
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
@@ -15201,10 +15178,9 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!"header i64", !1, i64 0}
 !13 = !{!"header ptr", !1, i64 0}
 !14 = !{!"array header", !12, i64 0, !12, i64 8, !13, i64 16}
-!15 = !{!14, !12, i64 0}
-!16 = !{!14, !13, i64 16}
-!17 = !{!"element ptr", !1, i64 0}
-!18 = !{!17, !17, i64 0}
+!15 = !{!14, !13, i64 16}
+!16 = !{!"element ptr", !1, i64 0}
+!17 = !{!16, !16, i64 0}
 
 ```
 <!-- cookbook:end storage-root -->
@@ -16973,6 +16949,200 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !9 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-handle -->
+
+### A handle class that owns native objects and another handle
+
+A handle class (WP89 S5a) may own several native fields and other handle
+classes. `Pair` below owns two `CPtr`s; `Stack` owns a `Pair`, which
+`new Stack(openPair())` moves into it, and a `CPtr` of its own. A field of a
+handle-class type is a `%struct.Pair*`, as any class field is: the factory
+`openPair` builds its `Pair` with `nish_alloc_struct`, in the caller's arena,
+and the `using` takes an arena mark first. `Pair.read` is one
+`getelementptr`, one `load` of `second` and the `call i32 @slot_read`, with no
+test or copy between them. At the exit, after the returned value is computed,
+`Stack`'s dispose (`slot_close` of `top`) runs, then `Pair`'s is inlined
+through the loaded field: `second`, then `first`, the last declared first.
+Only then is the arena released, so the `Pair` is closed before its memory
+goes.
+
+<!-- cookbook:begin decl-ffi-handle-owned -->
+```ts
+// biome-ignore lint/style/useNamingConvention: the C function's own name
+declare function slot_open(): CPtr
+// biome-ignore lint/style/useNamingConvention: the C function's own name
+declare function slot_close(p: CPtr): i32
+// biome-ignore lint/style/useNamingConvention: the C function's own name
+declare function slot_read(p: CPtr): i32
+
+class Pair {
+  readonly first: CPtr
+  readonly second: CPtr
+  constructor() {
+    this.first = slot_open()
+    this.second = slot_open()
+  }
+  read(): i32 {
+    return slot_read(this.second)
+  }
+  [Symbol.dispose](): void {
+    slot_close(this.second)
+    slot_close(this.first)
+  }
+}
+
+class Stack {
+  readonly pair: Pair
+  readonly top: CPtr
+  constructor(pair: Pair) {
+    this.pair = pair
+    this.top = slot_open()
+  }
+  [Symbol.dispose](): void {
+    slot_close(this.top)
+  }
+}
+
+const openPair = (): Pair => new Pair()
+
+const both = (p: Pair): i32 => p.read()
+
+export const depth = (): i32 => {
+  using s = new Stack(openPair())
+  return s.pair.read()
+}
+```
+
+```llvm
+%struct.Pair = type { i8*, i8* }
+%struct.Stack = type { %struct.Pair*, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare i8* @slot_open()
+declare i32 @slot_close(i8*)
+declare i32 @slot_read(i8*)
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @Pair.constructor(%struct.Pair* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this) #0 {
+entry:
+  %0 = call i8* @slot_open()
+  %1 = getelementptr inbounds %struct.Pair, %struct.Pair* %this, i32 0, i32 0
+  store i8* %0, i8** %1, align 8, !tbaa !4
+  %2 = call i8* @slot_open()
+  %3 = getelementptr inbounds %struct.Pair, %struct.Pair* %this, i32 0, i32 1
+  store i8* %2, i8** %3, align 8, !tbaa !5
+  ret void
+}
+
+define internal noundef i32 @Pair.read(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Pair, %struct.Pair* %this, i32 0, i32 1
+  %1 = load i8*, i8** %0, align 8, !tbaa !5
+  %2 = call i32 @slot_read(i8* %1)
+  ret i32 %2
+}
+
+define internal void @Stack.constructor(%struct.Stack* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, %struct.Pair* noundef nonnull align 8 dereferenceable(16) %pair) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Stack, %struct.Stack* %this, i32 0, i32 0
+  store %struct.Pair* %pair, %struct.Pair** %0, align 8, !tbaa !7
+  %1 = call i8* @slot_open()
+  %2 = getelementptr inbounds %struct.Stack, %struct.Stack* %this, i32 0, i32 1
+  store i8* %1, i8** %2, align 8, !tbaa !8
+  ret void
+}
+
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Pair* @openPair() #0 {
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 16)
+  %1 = bitcast i8* %0 to %struct.Pair*
+  call void @Pair.constructor(%struct.Pair* %1)
+  ret %struct.Pair* %1
+}
+
+define internal noundef i32 @both(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(16) nocapture %p) #0 {
+entry:
+  %0 = call i32 @Pair.read(%struct.Pair* %p)
+  ret i32 %0
+}
+
+define noundef i32 @depth() #0 {
+entry:
+  %s.addr = alloca %struct.Stack*, align 8
+  %Stack.obj = alloca %struct.Stack, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call %struct.Pair* @openPair()
+  call void @Stack.constructor(%struct.Stack* %Stack.obj, %struct.Pair* %0)
+  store %struct.Stack* %Stack.obj, %struct.Stack** %s.addr, align 8
+  %1 = load %struct.Stack*, %struct.Stack** %s.addr, align 8
+  %2 = load %struct.Stack*, %struct.Stack** %s.addr, align 8
+  %3 = getelementptr inbounds %struct.Stack, %struct.Stack* %2, i32 0, i32 0
+  %4 = load %struct.Pair*, %struct.Pair** %3, align 8, !tbaa !7
+  %5 = call i32 @Pair.read(%struct.Pair* %4)
+  %6 = getelementptr inbounds %struct.Stack, %struct.Stack* %1, i32 0, i32 1
+  %7 = load i8*, i8** %6, align 8, !tbaa !8
+  %8 = call i32 @slot_close(i8* %7)
+  %9 = getelementptr inbounds %struct.Stack, %struct.Stack* %1, i32 0, i32 0
+  %10 = load %struct.Pair*, %struct.Pair** %9, align 8, !tbaa !7
+  %11 = getelementptr inbounds %struct.Pair, %struct.Pair* %10, i32 0, i32 1
+  %12 = load i8*, i8** %11, align 8, !tbaa !5
+  %13 = call i32 @slot_close(i8* %12)
+  %14 = getelementptr inbounds %struct.Pair, %struct.Pair* %10, i32 0, i32 0
+  %15 = load i8*, i8** %14, align 8, !tbaa !4
+  %16 = call i32 @slot_close(i8* %15)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %5
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!9, !10, !11, !12, !13}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"Pair", !2, i64 0, !2, i64 8}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 8}
+!6 = !{!"Stack", !2, i64 0, !2, i64 8}
+!7 = !{!6, !2, i64 0}
+!8 = !{!6, !2, i64 8}
+!9 = !{i32 8, !"cf-protection-branch", i32 1}
+!10 = !{i32 8, !"cf-protection-return", i32 1}
+!11 = !{i32 8, !"branch-target-enforcement", i32 1}
+!12 = !{i32 8, !"sign-return-address", i32 1}
+!13 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-ffi-handle-owned -->
 
 ### `declare class`: a C struct, lent by pointer
 
@@ -34080,16 +34250,15 @@ export const test = (): i64 => total(toI64(100000))
 ```llvm
 declare extern_weak void @nish_panic_overflow(i32 noundef) #1
 declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64) #2
-declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #2
 
 define internal noundef i64 @total(i64 noundef %n.in) #0 {
 entry:
   br label %rec.head
 
 rec.head:
-  %n = phi i64 [ %n.in, %entry ], [ %8, %ovf.ok.1 ]
-  %rec.prev = phi i64 [ 0, %entry ], [ %rec.sum, %ovf.ok.1 ]
-  %rec.last = phi i64 [ 0, %entry ], [ %n, %ovf.ok.1 ]
+  %n = phi i64 [ %n.in, %entry ], [ %7, %if.end ]
+  %rec.prev = phi i64 [ 0, %entry ], [ %rec.sum, %if.end ]
+  %rec.last = phi i64 [ 0, %entry ], [ %n, %if.end ]
   %rec.sum = add i64 %rec.prev, %rec.last
   %rec.signs = or i64 %rec.last, %rec.sum
   %rec.cold = icmp slt i64 %rec.signs, 0
@@ -34110,36 +34279,30 @@ ovf.ok:
 
 if.end:
   %6 = sext i32 1 to i64
-  %7 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 %n, i64 %6)
-  %8 = extractvalue { i64, i1 } %7, 0
-  %9 = extractvalue { i64, i1 } %7, 1
-  br i1 %9, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
+  %7 = sub nsw i64 %n, %6
   br label %rec.head
 
 rec.exit:
   br i1 %rec.cold, label %rec.call, label %if.then
 
 rec.call:
-  %10 = call i64 @total(i64 %n)
-  %11 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %rec.last, i64 %10)
-  %12 = extractvalue { i64, i1 } %11, 0
-  %13 = extractvalue { i64, i1 } %11, 1
-  br i1 %13, label %ovf.fail, label %ovf.ok.2
+  %8 = call i64 @total(i64 %n)
+  %9 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %rec.last, i64 %8)
+  %10 = extractvalue { i64, i1 } %9, 0
+  %11 = extractvalue { i64, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %12 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %rec.prev, i64 %10)
+  %13 = extractvalue { i64, i1 } %12, 0
+  %14 = extractvalue { i64, i1 } %12, 1
+  br i1 %14, label %ovf.fail, label %ovf.ok.2
 
 ovf.ok.2:
-  %14 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %rec.prev, i64 %12)
-  %15 = extractvalue { i64, i1 } %14, 0
-  %16 = extractvalue { i64, i1 } %14, 1
-  br i1 %16, label %ovf.fail, label %ovf.ok.3
-
-ovf.ok.3:
-  ret i64 %15
+  ret i64 %13
 
 ovf.fail:
-  %ovf.op = phi i32 [ 0, %if.then ], [ 1, %if.end ], [ 0, %rec.call ], [ 0, %ovf.ok.2 ]
-  call void @nish_panic_overflow(i32 %ovf.op)
+  call void @nish_panic_overflow(i32 0)
   unreachable
 }
 

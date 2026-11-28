@@ -797,7 +797,7 @@ document's bytes exactly as `key` and `string` escape a string of them
 and stringBytes as key and string write it"; `tests/link/std_json_writer`,
 "bytes: every byte value, minified, as string and key write it" and the lines
 after it). A window outside its array is `JSON_WRITE_BAD_WINDOW` before
-anything is written (`std/json.ts:1098`, `:1137`; "bytes: a
+anything is written (`std/json.ts:1099`, `:1137`; "bytes: a
 negative offset" through "bytes: keyBytes refuses a negative offset").
 
 ### Tests

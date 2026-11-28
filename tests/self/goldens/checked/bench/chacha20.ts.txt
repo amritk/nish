@@ -356,9 +356,9 @@ function chacha20Poly1305Seal(key: u8[], nonce: u8[], aad: u8[], plaintext: u8[]
   callee +26:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +27:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function chacha20Poly1305Open(key: u8[], nonce: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.chacha20Poly1305Open [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20Poly1305Setup
-  calls: nish.chacha20CounterFits nish.chacha20Poly1305Setup nish.chacha20Poly1305Tag nish.chacha20Poly1305TagMatch nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32 nish.wipe$arr.u8 nish_panic
+  calls: nish.chacha20CounterFits nish.chacha20Poly1305Setup nish.chacha20Poly1305Tag nish.chacha20Poly1305TagMatch nish.chacha20State nish.chacha20XorInto nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#0
   pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.chacha20State#2
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Tag#1

@@ -144,6 +144,23 @@ export const TLS_KEY_UPDATE_RECORDS: i64 = 16777216
  */
 export const TLS_LAST_SEQUENCE: i64 = 9007199254740991
 
+/**
+ * The sequence number after `sequence`, or -1 when no record may use
+ * `sequence`: below 0, or at `TLS_LAST_SEQUENCE`, where §5.3's counter would
+ * have to wrap. Counted down from `TLS_LAST_SEQUENCE`, so every step is a sum
+ * `src/bounds.ts` proves, never a wrap.
+ */
+const tlsNextSequence = (sequence: i64): i64 => {
+  if (sequence < 0) {
+    return -1
+  }
+  const left: i64 = TLS_LAST_SEQUENCE - sequence
+  if (left < 1) {
+    return -1
+  }
+  return TLS_LAST_SEQUENCE - (left - 1)
+}
+
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const TLS_RECORD_FROM: i32 = 0
 
@@ -742,10 +759,9 @@ export class TlsRecordProtection {
       }
       return TLS_RECORD_HEADER_SIZE + len
     }
-    // The number never passes `TLS_LAST_SEQUENCE` (2^53 - 1) and starts at 0: the guard is that rule, and it
-    // keeps the step at the end from overflowing.
-    const sequence: i64 = this.sequence
-    if (padding > TLS_MAX_INNER_PLAINTEXT - 1 - len || sequence < 0 || sequence >= 9007199254740991) {
+    // The number never passes `TLS_LAST_SEQUENCE` (2^53 - 1) and starts at 0: the guard is that rule.
+    const next: i64 = tlsNextSequence(this.sequence)
+    if (padding > TLS_MAX_INNER_PLAINTEXT - 1 - len || next < 0) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
     const inner: i32 = len + 1 + padding
@@ -786,8 +802,7 @@ export class TlsRecordProtection {
       out[k] = ciphertext[i]
       k++
     }
-    // Unsigned, the step cannot panic; it cannot wrap either, since `sequence` is below 2^53 - 1.
-    this.sequence = toI64(toU64(sequence) + toU64(1))
+    this.sequence = next
     return TLS_RECORD_HEADER_SIZE + body
   }
 
@@ -874,10 +889,9 @@ export class TlsRecordProtection {
     if (body < TLS_RECORD_TAG_SIZE + 1) {
       return -TLS_ALERT_BAD_RECORD_MAC
     }
-    // The number never passes `TLS_LAST_SEQUENCE` (2^53 - 1) and starts at 0: the guard is that rule, and it
-    // keeps the step below from wrapping.
-    const sequence: i64 = this.sequence
-    if (sequence < 0 || sequence >= 9007199254740991) {
+    // The number never passes `TLS_LAST_SEQUENCE` (2^53 - 1) and starts at 0: the guard is that rule.
+    const next: i64 = tlsNextSequence(this.sequence)
+    if (next < 0) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
     // `body` is at most 2^14 + 256, so it is a u16 as it is.
@@ -908,9 +922,8 @@ export class TlsRecordProtection {
     }
     const inner: u8[] = opened
     // The record authenticated, so it is the peer's, and its number is spent
-    // whatever its content turns out to be. Unsigned, the step cannot panic, and it cannot wrap from below
-    // 2^53 - 1.
-    this.sequence = toI64(toU64(sequence) + toU64(1))
+    // whatever its content turns out to be.
+    this.sequence = next
     const innerLength: i32 = toI32(inner.length)
     if (innerLength > TLS_MAX_INNER_PLAINTEXT) {
       return -TLS_ALERT_RECORD_OVERFLOW

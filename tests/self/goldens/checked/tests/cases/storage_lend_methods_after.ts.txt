@@ -159,7 +159,7 @@ const BUF: i32[] = new Array<i32>(3)
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: allSet anyBig firstOne kept mapped nish_panic_index nish_print nish_str_concat nish_str_from_i32 sliced sortFirst
+  calls: allSet anyBig firstOne kept mapped nish_print nish_str_concat nish_str_from_i32 sliced sortFirst
   stackSites=0 stackLocals=0
   callee +3:18 sliced -> @sliced
   callee +3:33 mapped -> @mapped

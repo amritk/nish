@@ -1,4 +1,5 @@
-// WP53 H1.1, Row 32: a handle class owns exactly one pointer.
+// WP53 H1.1, Row 32; WP89 S5a: a handle class may own several pointers, and
+// its dispose closes every one of them, the last declared first.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32
