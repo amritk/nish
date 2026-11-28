@@ -1363,7 +1363,9 @@ export class Http3Connection {
       const end: i32 = base + have
       const head: u8[] = this.head
       // Never: slot `k`'s H3_HEAD bytes lie inside `head`, which nothing resizes.
+      // Were it taken, the connection fails, as `controlFrame`'s does.
       if (base < 0 || base > end || end > toI32(head.length)) {
+        this.fail(H3_INTERNAL_ERROR)
         return H3_ZERO
       }
       if (h3ReadFrameHeader(this.header, head, base, end - base) > 0) {

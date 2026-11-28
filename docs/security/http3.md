@@ -17,7 +17,10 @@ so that the audit of the protocol stack starts from evidence.
 **Result.** Every connection error RFC 9114 and RFC 9204 name is made with the
 code they name, as an application CONNECTION_CLOSE, and every stream error
 resets the one request both ways; none is a panic, and a panic is only ever
-the program's own mistake (a window outside its buffer, a cap out of range).
+the program's own mistake (a window outside its buffer handed to a frame or
+QPACK reader, a cap out of range). A window outside its buffer handed to a
+connection's or a WebTransport session's write or datagram answers
+H3_INVALID instead.
 Every cap is a number the program fixes at start-up and is checked against
 the buffer it bounds.
 
@@ -127,7 +130,8 @@ SETTINGS: an identifier twice, or one HTTP/2 used with no HTTP/3 setting (0x00,
 H3_FRAME_ERROR; unknown identifiers are kept for an extension, the first eight,
 and counted past them without being compared. A one-identifier payload of the
 wrong length is -1, H3_FRAME_ERROR's case. The error codes are §8.1's table, in
-order. A window outside its buffer panics (`net_http3_frame_bad_window`).
+order. A window outside its buffer handed to one of these readers panics
+(`net_http3_frame_bad_window`).
 
 **Every connection error, with its code** (`tests/link/net_http3_errors`,
 `_f64`, 55 checks, each on a fresh connection, each asserting the code of the
@@ -400,7 +404,7 @@ without the sites the prover discharges:
 Every `panic` left checks an argument the program passes: a window, a cap or a
 configuration. None is reached by a byte a peer sends. The compiler counts
 each `nish:net` call that takes a buffer range as a `slice` site, proven or
-not (`src/panics.ts`), so the server's four sends and receives stay on the
+not (`src/panics.ts`), so the server's three sends and receives stay on the
 list. Each is given `rx` or `tx` with a range inside it, and the server's own
 guards hold that. Its two `io-exit` sites are the runtime's exit when the
 system cannot supply random bytes. Every other site is
@@ -426,11 +430,18 @@ the guard every caller reached. A program that builds `nish/net` as a
 dependency (relay) sees its calls proven or forwarded. The sweep above builds
 each module as the root package, where an exported forwarder keeps its own
 guard call as an unproven `window` site (`link/window_contract_proven`): the
-two in `http3-frame.ts`, each checking the window its caller passes, as the
+three in `http3-frame.ts` (`h3ReadFrameHeader`, `h3ReadSettings` and
+`h3ReadIdPayload`), each checking the window its caller passes, as the
 guard's `panic` did before. `Http3Connection.writeStream`, `writeData` and
 `writeDataWhole`, and `WebTransport.close`, `write` and `sendDatagram`, do not
 call the guard: a window outside `buf` is a failure their callers already
-handle, so they answer H3_INVALID and count no site. `http3-server.ts`'s
+handle, so they answer H3_INVALID and count no site
+(`net_http3_write_window`, `net_webtransport_stream_window`,
+`net_webtransport_whole_window`, `net_webtransport_close_window`,
+`net_webtransport_datagram_window`; `net_webtransport_write_window` calls
+`WebTransport.write` itself on a stream that layer does not hold, so it
+prints -32 for a window inside its buffer and -22 for one outside it, and
+-32 for both once the guard is removed). `http3-server.ts`'s
 receive now hands `udpRecvFrom` the whole of `rx`, and its guard refuses a
 length past `rx`'s 65,536 bytes, so its range is proven and the server counts
 three `slice` sites, not four.
