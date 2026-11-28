@@ -139,7 +139,14 @@ import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
 import { builtinAnswerTop } from "./members"
 import { parseIntegerLiteral } from "./constants"
-import { ATOM_AT_END, ATOM_NEGATIVE, ATOM_PAST_END, ATOM_PAST_REST, ATOM_WIDTH, isCallerContract } from "./caller-contract"
+import {
+  ATOM_AT_END,
+  ATOM_NEGATIVE,
+  ATOM_PAST_END,
+  ATOM_PAST_REST,
+  ATOM_WIDTH,
+  isCallerContract,
+} from "./caller-contract"
 import { CheckContext } from "./context"
 import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
@@ -5715,7 +5722,8 @@ export const analyzeBounds = (ctx: CheckContext, body: Node): BoundsWalk => {
  * called on: an element access, a call spelled `.charCodeAt(...)`,
  * `.substring(...)`, `.pop()`, `.spawn(...)`, `.slice(...)`, `.set(...)` or
  * `.fromBytes(...)` whatever its receiver, an atomic array's element method,
- * a buffer call, a call into a window guard or forward, a foreign call, a `new`, a
+ * a buffer call, a call into a window guard or forward or a caller contract,
+ * a foreign call, a `new`, a
  * division, or a value entering a range. Read
  * off the syntax and the entries the checker recorded, so it answers `true`
  * for more than the walk judges, never less.
@@ -5741,11 +5749,14 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
       return true
     }
     // An array's `slice`, once the checker has rewritten it into a template call.
-    // A window contract's call, whose window `judgeRangeCheck` proves (#2296).
+    // A window or caller contract's call, whose check `judgeRangeCheck` proves (#2296).
     const target = ctx.program.nodeCallees[node.id]
     if (
       target !== null &&
-      (isArraySliceInstance(target) || isAtomicArrayMethod(target) || target.window.length === 3)
+      (isArraySliceInstance(target) ||
+        isAtomicArrayMethod(target) ||
+        target.window.length === 3 ||
+        isCallerContract(target))
     ) {
       return true
     }

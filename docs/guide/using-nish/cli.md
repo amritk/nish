@@ -847,7 +847,13 @@ leaves the IR unchanged.
   guard shape the compiler reads moves that check to each call, so a caller
   that has proved `off` and `len` inside `buf` calls it under the default
   ([Panic sites](../../reference/language/semantics-decisions.md#panic-sites),
-  `window`).
+  `window`). So does a function or method whose first statements are
+  `if (…) { panic(m) }` guards comparing its own integer parameters with `0`,
+  each other or an array's `toI32(b.length)`: a call whose arguments you have
+  proved make each comparison false is accepted, once every call to it in
+  the program is
+  ([Panic sites](../../reference/language/semantics-decisions.md#panic-sites),
+  `contract`).
 - **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`
   list in your `package.json`'s `"nish"` field names are still held to no
   panic, and with no list, none is. **`--deny-panics`** spells the default

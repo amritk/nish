@@ -32,14 +32,7 @@
 
 import { AnalysisUnit, constructorOf, FactsTable, FunctionFacts } from "./attributes"
 import { literalValue, unwrapBoundsParens, vectorAccessLanes } from "./bounds"
-import {
-  ATOM_AT_END,
-  ATOM_NEGATIVE,
-  ATOM_PAST_END,
-  ATOM_PAST_REST,
-  ATOM_WIDTH,
-  isCallerContract,
-} from "./caller-contract"
+import { isCallerContract } from "./caller-contract"
 import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { intrinsicType } from "./emit-util"
@@ -142,9 +135,11 @@ export const PANIC_FAULT: i32 = 20
 /**
  * #2296: a call into a function or method whose first statements are
  * `if (test) { panic(m) }` on its own parameters (`src/caller-contract.ts`).
- * Those panics are the callers': the callee lists them as proven, and each
- * call holds them as this site, proven where `src/bounds.ts` proves every
- * comparison false from the call's arguments.
+ * Each call holds them as this site, proven where `src/bounds.ts` proves
+ * every comparison false from the call's arguments, and when every call into
+ * the callee is proven, the callee lists those panics as proven. Only proven
+ * sites of this kind are kept: a call nothing proves reaches the callee's own
+ * `panic`, as before (`holdCallerContracts`).
  */
 export const PANIC_CONTRACT: i32 = 21
 
@@ -431,15 +426,19 @@ export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable, stri
 }
 
 /**
- * A caller contract's panics are its callers' (#2296): each call into it
- * holds them as a `contract` site, so the callee lists them as proven and a
- * call's route through it passes over them. Only while every route in is such
- * a call: never for a function a host calls by its symbol, one taken as a
- * value or dispatched to, or one some function reaches with no call of its
- * own that names it (a routed `nish/map` method).
+ * A caller contract's panics are its callers' (#2296), once every call into
+ * it is proven: each call holds them as a proven `contract` site, so the
+ * callee lists them as proven and a call's route through it passes over them.
+ * One call nothing proves keeps them the callee's: that call reaches its
+ * `panic` as any call does, and its own unproven `contract` site is dropped,
+ * so a contract never adds a site to a program. Never held for a function a
+ * host calls by its symbol, one taken as a value or dispatched to, or one some
+ * function reaches with no call of its own that names it (a routed `nish/map`
+ * method).
  */
 const holdCallerContracts = (units: AnalysisUnit[], facts: FactsTable, strictExports: boolean): void => {
   const unnamed = new StringSet()
+  const unproven = new StringSet()
   for (const f of facts.list) {
     let c = 0
     while (c < f.callees.size()) {
@@ -449,6 +448,15 @@ const holdCallerContracts = (units: AnalysisUnit[], facts: FactsTable, strictExp
       }
       c = c + 1
     }
+    const kept: PanicSite[] = []
+    for (const site of f.panicSites) {
+      if (site.kind === PANIC_CONTRACT && !site.proven) {
+        unproven.add(calleeAt(f.panicSites, site.node))
+      } else {
+        kept.push(site)
+      }
+    }
+    f.panicSites = kept
   }
   for (const unit of units) {
     const program = unit.program
@@ -460,6 +468,7 @@ const holdCallerContracts = (units: AnalysisUnit[], facts: FactsTable, strictExp
         sig.refHidden ||
         sig.dispatcher ||
         unnamed.has(sig.name) ||
+        unproven.has(sig.name) ||
         hostCalls(program, strictExports, sig)
       ) {
         continue
@@ -475,6 +484,16 @@ const holdCallerContracts = (units: AnalysisUnit[], facts: FactsTable, strictExp
       }
     }
   }
+}
+
+/** The callee of the plain call `noteCall` lists at `node` beside its `contract` site. */
+const calleeAt = (sites: PanicSite[], node: Node): string => {
+  for (const site of sites) {
+    if (isCallSite(site) && site.node === node) {
+      return site.callee
+    }
+  }
+  return ""
 }
 
 /** Whether `node` lies in one of `sig`'s caller-contract branches. */
@@ -1123,8 +1142,6 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       return windowAdvice(program, node)
     case PANIC_FAULT:
       return faultAdvice(program, table, node)
-    case PANIC_CONTRACT:
-      return contractAdvice(program, node)
     case PANIC_REGION:
       return (
         "`nish:region` checks the handle at every call, and stops the program on one that is freed, entered " +
@@ -1242,54 +1259,6 @@ const faultAdvice = (program: CheckedProgram, table: TypeTable, call: Node): str
     `just before the call, write \`const fault = ${fault.sourceName}(${arg})\` and ` +
     `\`if (fault.length > 0) { return ... }\`, with \`${arg}\` a parameter or \`const\` that nothing between writes`
   )
-}
-
-/**
- * A call into a caller contract (`PANIC_CONTRACT`) panics unless each of the
- * callee's first tests is false for the call's arguments, and `src/bounds.ts`
- * credits a caller whose own tests, or whose arguments' shapes, prove each
- * comparison's opposite (`provesPrecondition`). The facts are spelled over
- * the call's arguments, with the parameter's name where an argument has none.
- */
-const contractAdvice = (program: CheckedProgram, call: Node): string => {
-  const target = program.nodeCallees[call.id]
-  const name = calledName(program, call)
-  const what = name.length > 0 ? `\`${name}\`` : "this call"
-  if (target === null || target.preconditionAtoms.length === 0) {
-    return `${what} panics when its arguments fail its first checks, and nothing proves they pass here`
-  }
-  const shift = target.paramNames.length > 0 && target.paramNames[0] === "this" ? 1 : 0
-  const atoms = target.preconditionAtoms
-  const facts: string[] = []
-  let k = 0
-  while (k + ATOM_WIDTH <= atoms.length) {
-    const p = contractArgument(program, call, target, atoms[k + 1], shift)
-    const q = contractArgument(program, call, target, atoms[k + 2], shift)
-    const b = contractArgument(program, call, target, atoms[k + 3], shift)
-    const shape = atoms[k]
-    if (shape === ATOM_NEGATIVE) {
-      facts.push(`${p} >= 0`)
-    } else if (shape === ATOM_PAST_END) {
-      facts.push(`${p} <= ${b}.length`)
-    } else if (shape === ATOM_AT_END) {
-      facts.push(`0 <= ${p} < ${b}.length`)
-    } else if (shape === ATOM_PAST_REST) {
-      facts.push(`0 <= ${q} <= ${q} + ${p} <= ${b}.length`)
-    } else {
-      facts.push(`${q} <= ${p}`)
-    }
-    k = k + ATOM_WIDTH
-  }
-  return (
-    `${what} panics unless \`${facts.join("`, `")}\` for its arguments, and nothing proves it here: ` +
-    `test each before the call and leave when one fails, or pass values that hold by their shape`
-  )
-}
-
-/** The call argument for `target`'s parameter `k` (`shift` is 1 past a method's `this`), by name. */
-const contractArgument = (program: CheckedProgram, call: Node, target: FunctionSig, k: i32, shift: i32): string => {
-  const fallback = k >= 0 && k < target.paramNames.length ? target.paramNames[k] : "value"
-  return argumentName(program, call, k - shift, fallback)
 }
 
 /**

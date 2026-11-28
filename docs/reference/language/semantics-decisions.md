@@ -1603,6 +1603,32 @@ followed as any call's is
   `handlerLimitsFault` first and leaves on a fault (a failed `pollCreate`
   returns between), proves the limit check of the handler it makes
 
+**`contract`**: a call to a function or method whose first statements are
+`if (test) { panic(m) }`, each test an `||` of comparisons on its own
+parameters, with arguments that make one of them true. The comparisons read
+are `p < 0`, `p > toI32(b.length)`, `p >= toI32(b.length)`,
+`p > toI32(b.length) - q` and `p < q` (or `q > p`, with
+`p > toI32(b.length)` held too), `p` and `q` `i32` parameters and `b` an
+array or string one. The run stops at the first statement that is not one of
+these; what follows is the function's own. A task, a generator, a function
+with a default or rest parameter, and a window or fault guard hold no such
+contract
+
+- *What proves it away:* the caller's own proof that each comparison is
+  false for the arguments it passes: literals into a buffer whose length a
+  literal fixes, `toI32(b.length)` itself, or a range behind
+  `start >= 0 && start <= end && end <= b.length`
+  (`tests/link/caller_contract_proven`, `tests/cases/deny_panics_caller`).
+  The callee's `panic` is held only when every call into it is proven and it
+  is not exported to a host, passed as a value or dispatched: then it is
+  listed proven at its own line and a call answers for it only through its
+  `contract` site. One call nothing proves leaves the `panic` the callee's,
+  and every call reaches it as any call does
+  (`tests/link/caller_contract_unproven`). A root program's call into `std/`
+  that proves the guard builds under `--deny-panics` (the `tests/run.js`
+  checks "caller contract: …" on `routerDecode`); std's own counts in
+  `tests/std-panics.json` do not move
+
 **`ffi-nul`**: a `string` argument to a [`declare function`](declarations.md#calling-c) that
 holds a NUL byte, which C would read as the end of the string:
 `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string ``
@@ -1856,7 +1882,8 @@ refused (NL2458), and the same `panic` in a module of the scope is NL2457. A
 caller in the scope calls the checked twin where there is one, or proves the
 contract at the call where the site is the caller's own, as a
 [`spawn-slot`](#panic-sites), a [`parallel-length`](#panic-sites), a
-[`window`](#panic-sites) or a [`fault`](#panic-sites) is.
+[`window`](#panic-sites), a [`fault`](#panic-sites) or a
+[`contract`](#panic-sites) is.
 
 ## The compatibility dialect
 

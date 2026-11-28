@@ -3676,7 +3676,11 @@ export const at = (xs: i32[], i: i32): i32 => xs[i];
 
 A call into the standard library or a dependency that may panic is refused at
 the call (NL2458), because only its own author can prove it: call a function
-that cannot panic. The standard library is not yet panic-free, so `Map`,
+that cannot panic. The exception is a function whose first statements are
+`if (start < 0 || end > toI32(buf.length)) { panic(m) }`-style guards on its
+own parameters (a [`contract`](LANGUAGE.md#panic-sites) site): a call whose
+arguments the caller proves in range passes, as with `routerDecode(t, 0,
+toI32(t.length), out)`, when every call to it in the program is proven. The standard library is not yet panic-free, so `Map`,
 `Set`, `split` and the `JSON` reads are refused in the scope for now;
 a program that needs them builds with `--allow-panics`, and says why where it
 is built.

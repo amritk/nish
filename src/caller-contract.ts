@@ -5,8 +5,9 @@
 // with its own arguments has proved the panic away. Each call into such a
 // function holds those tests as a `contract` site of its own (`PANIC_CONTRACT`
 // in `src/panics.ts`), proven where `src/bounds.ts` proves each comparison
-// false at the call, and the callee lists the panics behind them as proven,
-// so a call reaches them through its `contract` site and never twice.
+// false at the call. When every call is proven, the callee lists the panics
+// behind them as proven, so a call reaches them through its `contract` site
+// and never twice; one call nothing proves leaves them the callee's.
 //
 // The comparisons read, with `p` and `q` `i32` parameters and `b` an array or
 // string parameter whose length is `toI32(b.length)`:
@@ -37,7 +38,7 @@ export const ATOM_AT_END: i32 = 2
 /** `p > toI32(b.length) - q`. */
 export const ATOM_PAST_REST: i32 = 3
 /** `p < q`: `b` is the buffer a held `p > toI32(b.length)` names. */
-export const ATOM_BEFORE: i32 = 4
+const ATOM_BEFORE: i32 = 4
 
 /** The number of entries one comparison takes in `FunctionSig.preconditionAtoms`: shape, `p`, `q`, `b`. */
 export const ATOM_WIDTH: i32 = 4
