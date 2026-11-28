@@ -1,1 +1,3 @@
 hashing data[1 .. 2^31) of a 3-byte buffer
+accepted: false
+digest is SHA-256("abc"): true

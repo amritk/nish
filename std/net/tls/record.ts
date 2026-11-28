@@ -325,13 +325,15 @@ export class TlsRecordReader {
   /**
    * Copies as many of `data[off .. off + len)` as fit and answers how many,
    * after moving what is held to the front. A window outside `data` is
-   * `-TLS_ALERT_INTERNAL_ERROR`, and nothing is copied.
+   * `-TLS_ALERT_INTERNAL_ERROR`, and nothing is copied; so is a first byte
+   * that finds a shared pool (`borrowFrom`) with every buffer lent.
    *
    * @param data The array that holds the bytes read from the stream.
    * @param off Where in `data` the new bytes start.
    * @param len How many bytes, from `off`, to offer.
    * @returns How many of the bytes were taken, from 0 (the buffer is full) up to `len`; the caller offers the
-   *     rest again once a record is consumed. `-TLS_ALERT_INTERNAL_ERROR` for a window outside `data`.
+   *     rest again once a record is consumed. `-TLS_ALERT_INTERNAL_ERROR` for a window outside `data`
+   *     or a spent shared pool.
    */
   push(data: u8[], off: i32, len: i32): i32 {
     if (!tlsRecordWindowFits(toI32(data.length), off, len)) {
@@ -341,7 +343,12 @@ export class TlsRecordReader {
       return 0
     }
     if (this.buffer.length === 0) {
-      this.buffer = this.pool.take()
+      // A shared pool with every buffer lent leaves this reader nothing to read into.
+      const taken: u8[] | null = this.pool.tryTake()
+      if (taken === null) {
+        return -TLS_ALERT_INTERNAL_ERROR
+      }
+      this.buffer = taken
     }
     const buffer: u8[] = this.buffer
     let start: i32 = this.start

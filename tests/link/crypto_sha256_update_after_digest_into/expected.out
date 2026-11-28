@@ -1,1 +1,3 @@
 digestInto: done
+update after digestInto: false
+digest is unchanged: true

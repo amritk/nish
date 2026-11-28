@@ -210,7 +210,9 @@ export const hkdfExpandSha256 = (prk: u8[], info: u8[], length: i32): u8[] | nul
       counter[0] = toU8(i)
     }
     mac.update(counter, HKDF_FROM, counterLength)
-    const block: u8[] = mac.digest()
+    // A fresh `mac` each block, its tag not yet taken: `digest` past its test.
+    const block: u8[] = new Array<u8>(SHA256_SIZE)
+    mac.tagInto(block, HKDF_FROM)
     wipe(previous)
     previous = block
     at = hkdfAppend(out, at, previous)
@@ -257,7 +259,8 @@ export const hkdfExpandSha384 = (prk: u8[], info: u8[], length: i32): u8[] | nul
       counter[0] = toU8(i)
     }
     mac.update(counter, HKDF_FROM, counterLength)
-    const block: u8[] = mac.digest()
+    // A fresh `mac` each block, its tag not yet taken: `digest` past its test.
+    const block: u8[] = mac.tag()
     wipe(previous)
     previous = block
     at = hkdfAppend(out, at, previous)
@@ -652,7 +655,12 @@ const hkdfWipe = (s: HkdfScratch, hashLength: i32): void => {
   }
 }
 
-/** Keys the scratch's HMAC for `hashLength` with `key[off .. off + len)`. */
+/**
+ * Keys the scratch's HMAC for `hashLength` with `key[off .. off + len)`. The
+ * HMAC's answers are dropped here and in the three helpers below: every
+ * caller passes a whole array or a window it has checked, after a `begin`, so
+ * each answer is `true`.
+ */
 const hkdfMacBegin = (s: HkdfScratch, hashLength: i32, key: u8[], off: i32, len: i32): void => {
   if (hashLength === SHA384_SIZE) {
     s.sha384.begin(key, off, len)

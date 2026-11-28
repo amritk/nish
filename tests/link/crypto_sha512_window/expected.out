@@ -1,1 +1,3 @@
-in bounds: accepted
+in bounds: true
+a negative length: false
+digest is SHA-512("bc"): true

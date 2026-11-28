@@ -151,6 +151,11 @@ export const HTTP1_E_INFORMATIONAL_LIMIT: i32 = 17
  * phrase and fields.
  */
 export const HTTP1_E_MEMORY_LIMIT: i32 = 18
+/**
+ * `error`: a `feed` whose window `data[off .. off + len)` is not inside
+ * `data`, a mistake of the program rather than of the server.
+ */
+export const HTTP1_E_WINDOW: i32 = 19
 
 // --- The writer -------------------------------------------------------------
 
@@ -825,7 +830,7 @@ export class Http1ResponseParser {
 
   /**
    * Appends `data[off .. off + len)` to the input. A window outside `data`
-   * panics. After `finish()`, or once the parser has closed or refused, the
+   * is refused with `HTTP1_E_WINDOW`, as final as any refusal. After `finish()`, or once the parser has closed or refused, the
    * input is dropped; in a tunnel it is kept for `tunnelBytes()`. Input that
    * would leave more than 2^30 bytes fed and not read is refused with
    * `HTTP1_E_MEMORY_LIMIT`.
@@ -835,10 +840,11 @@ export class Http1ResponseParser {
    */
   feed(data: u8[], off: i32, len: i32): void {
     const size: i32 = toI32(data.length)
-    if (off < 0 || len < 0 || off > size || len > size - off) {
-      panic("Http1ResponseParser: the window is outside the buffer")
-    }
     if (this.closed || this.state === HTTP1_CLIENT_S_CLOSED || this.state === HTTP1_CLIENT_S_ERROR) {
+      return
+    }
+    if (off < 0 || len < 0 || off > size || len > size - off) {
+      http1ClientFail(this, HTTP1_E_WINDOW, "a feed window outside its buffer")
       return
     }
     if (!http1ClientReserve(this, len) || !tryCopyBytes(this.buf, this.end, data, off, len)) {

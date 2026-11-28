@@ -1,1 +1,2 @@
-tag written
+accepted after the tag: false
+tag is hmacSha256(key, "abc"): true

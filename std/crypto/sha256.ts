@@ -460,8 +460,8 @@ const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
  * the digest does not depend on where the message was split. `digest` pads the
  * message (§5.1.1), runs the last block or two, and ends the computation: the
  * padding is written into this hasher's own state, so a later `update` would
- * carry the padding as message, and it panics instead of answering a wrong
- * value. A second `digest` answers the same digest again, and a `copy` of a
+ * carry the padding as message, and it answers `false` and absorbs nothing
+ * instead of answering a wrong value. A second `digest` answers the same digest again, and a `copy` of a
  * finished hasher is finished too. `copy` first when the computation has to go
  * on.
  */
@@ -515,21 +515,19 @@ export class Sha256 {
   }
 
   /**
-   * Absorbs `data[off .. off + len)`. A window outside `data` panics rather
-   * than hashing a short read, since a digest over the wrong bytes looks
-   * exactly like a digest over the right ones.
+   * Absorbs `data[off .. off + len)`. A window outside `data`, or an update
+   * after `digest`, answers `false` and absorbs nothing rather than hashing a
+   * short read: check it, since a digest over the wrong bytes looks exactly
+   * like a digest over the right ones.
    *
    * @param data The buffer holding the window; it is read, not kept.
    * @param off Where the window starts in `data`.
    * @param len How many bytes to absorb; 0 absorbs nothing.
+   * @returns `true` once the window is absorbed; `false`, absorbing nothing,
+   *   for a window outside `data` or a hasher already digested.
    */
-  update(data: u8[], off: i32, len: i32): void {
-    if (this.finished) {
-      panic("Sha256: update after digest")
-    }
-    if (!sha256Absorb(this, data, off, len)) {
-      panic("Sha256: the window is outside the buffer")
-    }
+  update(data: u8[], off: i32, len: i32): boolean {
+    return !this.finished && sha256Absorb(this, data, off, len)
   }
 
   /**
@@ -537,20 +535,19 @@ export class Sha256 {
    * `update`. A longer one (possible under `--number-mode f64`, where `toI32`
    * of its length would saturate and leave a prefix) is walked with a `number`
    * offset instead, a block at a time through `block`, so it is absorbed
-   * whole. After `digest` it panics, as `update` does.
+   * whole. After `digest` it answers `false` and absorbs nothing, as `update`
+   * does.
    *
    * @param data The message, or the rest of it; it is read, not kept.
+   * @returns `true` once `data` is absorbed; `false`, absorbing nothing, for a
+   *   hasher already digested.
    */
-  updateAll(data: u8[]): void {
-    const n: number = data.length
-    if (this.finished || n <= 2147483647) {
-      // A finished hasher panics in `update` before it reads the window, so
-      // the saturated length of a longer array is never used.
-      const from: i32 = 0
-      this.update(data, from, toI32(n))
-      return
+  updateAll(data: u8[]): boolean {
+    if (this.finished) {
+      return false
     }
-    sha256AbsorbLong(this, data)
+    sha256AbsorbWhole(this, data)
+    return true
   }
 
   /**
@@ -604,7 +601,7 @@ export class Sha256 {
    * hasher as it was and answers `false`, rather than writing the part of the
    * digest that fits. Once finished, the hash value is the digest, so a second
    * `digest` or `digestInto` writes the same 32 bytes again; an `update` after
-   * it panics.
+   * it answers `false`.
    *
    * @param out The caller's array the digest is written into.
    * @param at Where the 32 digest bytes start in `out`.
@@ -748,7 +745,8 @@ const sha256AbsorbWhole = (h: Sha256, data: u8[]): void => {
   const n: number = data.length
   if (n <= 2147483647) {
     // The window is the whole array, so it always lies inside it.
-    sha256Absorb(h, data, 0, toI32(n))
+    const from: i32 = 0
+    sha256Absorb(h, data, from, toI32(n))
   } else {
     sha256AbsorbLong(h, data)
   }

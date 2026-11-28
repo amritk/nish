@@ -374,14 +374,16 @@ class Sha512Engine {
     }
   }
 
-  /** @internal Called by `Sha512` and `Sha384`, which hold the engine. */
-  absorb(data: u8[], off: i32, len: i32): void {
-    if (this.finished) {
-      panic("sha512: update after digest")
-    }
+  /**
+   * Absorbs `data[off .. off + len)`: `false`, absorbing nothing, for a window
+   * outside `data` or an engine `finish` has ended.
+   *
+   * @internal Called by `Sha512` and `Sha384`, which hold the engine.
+   */
+  absorb(data: u8[], off: i32, len: i32): boolean {
     const size: i32 = toI32(data.length)
-    if (off < 0 || len < 0 || off > size - len) {
-      panic("sha512: the window is outside the buffer")
+    if (this.finished || off < 0 || len < 0 || off > size - len) {
+      return false
     }
     this.count = this.count + toU64(len)
     const block: u8[] = this.block
@@ -401,7 +403,7 @@ class Sha512Engine {
       }
       if (fill < SHA512_BLOCK) {
         this.filled = fill
-        return
+        return true
       }
       this.compress(block, OFFSET_ZERO)
     }
@@ -417,6 +419,7 @@ class Sha512Engine {
       at += 1
     }
     this.filled = fill
+    return true
   }
 
   /**
@@ -424,17 +427,18 @@ class Sha512Engine {
    * `absorb`. A longer one (possible under `--number-mode f64`, where `toI32`
    * of its length would saturate and leave a prefix) is walked with a `number`
    * offset instead, a block at a time through `block`, so it is absorbed
-   * whole. After `finish` it panics, as `absorb` does.
+   * whole. After `finish` it answers `false`, absorbing nothing, as `absorb`
+   * does; otherwise `true`.
    *
    * @internal Called by `sha512`, `sha384` and `nish/crypto/hmac`.
    */
-  absorbAll(data: u8[]): void {
+  absorbAll(data: u8[]): boolean {
     const n: number = data.length
-    if (this.finished || n <= 2147483647) {
-      // A finished engine panics in `absorb` before it reads the window, so
-      // the saturated length of a longer array is never used.
-      this.absorb(data, OFFSET_ZERO, toI32(n))
-      return
+    if (this.finished) {
+      return false
+    }
+    if (n <= 2147483647) {
+      return this.absorb(data, OFFSET_ZERO, toI32(n))
     }
     this.count += toU64(toI64(n))
     const block: u8[] = this.block
@@ -449,7 +453,7 @@ class Sha512Engine {
       }
       if (fill < SHA512_BLOCK) {
         this.filled = fill
-        return
+        return true
       }
       this.compress(block, OFFSET_ZERO)
       fill = 0
@@ -482,13 +486,34 @@ class Sha512Engine {
   /**
    * Pads (§5.1.2), compresses what is left, and writes the first
    * `out.length / 8` words of H(N) (§6.4.2, §6.5), at most eight, into `out`.
+   * A second call writes the same words: the padding is absorbed once.
    *
    * @internal Called by `Sha512` and `Sha384`, which hold the engine.
    */
   finish(out: u8[]): void {
-    if (this.finished) {
-      panic("sha512: digest taken twice")
+    if (!this.finished) {
+      this.pad()
     }
+    // Both sizes are whole words, so the digest is the first `out.length / 8`.
+    const state: u64[] = this.state
+    const size: i32 = toI32(out.length)
+    let p: i32 = 0
+    for (let i: i32 = 0; i < 8 && i < toI32(state.length) && p < size - 7; i++) {
+      const word: u64 = state[i]
+      out[p] = toU8(word >> 56)
+      out[p + 1] = toU8(word >> 48)
+      out[p + 2] = toU8(word >> 40)
+      out[p + 3] = toU8(word >> 32)
+      out[p + 4] = toU8(word >> 24)
+      out[p + 5] = toU8(word >> 16)
+      out[p + 6] = toU8(word >> 8)
+      out[p + 7] = toU8(word)
+      p += 8
+    }
+  }
+
+  /** Appends the padding and the length (§5.1.2) and compresses them: `finish`'s first call. */
+  private pad(): void {
     this.finished = true
     const block = this.block
     const room: i32 = toI32(block.length)
@@ -514,29 +539,14 @@ class Sha512Engine {
       shift += 8
     }
     this.compress(block, OFFSET_ZERO)
-    // Both sizes are whole words, so the digest is the first `out.length / 8`.
-    const state: u64[] = this.state
-    const size: i32 = toI32(out.length)
-    let p: i32 = 0
-    for (let i: i32 = 0; i < 8 && i < toI32(state.length) && p < size - 7; i++) {
-      const word: u64 = state[i]
-      out[p] = toU8(word >> 56)
-      out[p + 1] = toU8(word >> 48)
-      out[p + 2] = toU8(word >> 40)
-      out[p + 3] = toU8(word >> 32)
-      out[p + 4] = toU8(word >> 24)
-      out[p + 5] = toU8(word >> 16)
-      out[p + 6] = toU8(word >> 8)
-      out[p + 7] = toU8(word)
-      p += 8
-    }
   }
 }
 
 /**
  * A streaming SHA-512 hasher. `update` takes a window `(data, off, len)`;
- * `digest` answers a fresh 64-byte array, after which the hasher is spent and
- * another `update` or `digest` panics.
+ * `digest` answers a fresh 64-byte array and ends the message: a later
+ * `update` answers `false` and absorbs nothing, and a later `digest` answers
+ * the same digest.
  */
 export class Sha512 {
   /**
@@ -556,14 +566,17 @@ export class Sha512 {
 
   /**
    * Absorbs `data[off .. off + len)`. A window outside `data`, or an update
-   * after `digest`, panics.
+   * after `digest`, answers `false` and absorbs nothing: check it, since a
+   * digest over the wrong bytes looks exactly like one over the right ones.
    *
    * @param data The buffer holding the window; it is read, not kept.
    * @param off Where the window starts in `data`.
    * @param len How many bytes to absorb; 0 absorbs nothing.
+   * @returns `true` once the window is absorbed; `false`, absorbing nothing,
+   *   for a window outside `data` or a hasher already digested.
    */
-  update(data: u8[], off: i32, len: i32): void {
-    this.engine.absorb(data, off, len)
+  update(data: u8[], off: i32, len: i32): boolean {
+    return this.engine.absorb(data, off, len)
   }
 
   /**
@@ -581,7 +594,7 @@ export class Sha512 {
 
   /**
    * Pads the message (§5.1.2) and answers its digest. Ends the computation: a
-   * second `digest` panics.
+   * second `digest` answers the same digest.
    *
    * @returns A fresh 64-byte digest, which the caller owns.
    */
@@ -614,14 +627,17 @@ export class Sha384 {
 
   /**
    * Absorbs `data[off .. off + len)`. A window outside `data`, or an update
-   * after `digest`, panics.
+   * after `digest`, answers `false` and absorbs nothing: check it, since a
+   * digest over the wrong bytes looks exactly like one over the right ones.
    *
    * @param data The buffer holding the window; it is read, not kept.
    * @param off Where the window starts in `data`.
    * @param len How many bytes to absorb; 0 absorbs nothing.
+   * @returns `true` once the window is absorbed; `false`, absorbing nothing,
+   *   for a window outside `data` or a hasher already digested.
    */
-  update(data: u8[], off: i32, len: i32): void {
-    this.engine.absorb(data, off, len)
+  update(data: u8[], off: i32, len: i32): boolean {
+    return this.engine.absorb(data, off, len)
   }
 
   /**
@@ -639,7 +655,8 @@ export class Sha384 {
 
   /**
    * Pads the message (§5.1.2) and answers its digest, the first 48 bytes of the
-   * final hash value (§6.5). Ends the computation: a second `digest` panics.
+   * final hash value (§6.5). Ends the computation: a second `digest` answers
+   * the same digest.
    *
    * @returns A fresh 48-byte digest, which the caller owns.
    */

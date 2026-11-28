@@ -1,1 +1,6 @@
 keying with key[1 .. 4) of a 3-byte key
+keyed: false
+tag written: false
+keyed: true
+tag written: true
+tag is hmacSha256(key, "abc"): true

@@ -1,1 +1,4 @@
 writing a 48-byte tag into 47 bytes
+tag written: false
+tag written: true
+tag is hmacSha384(key, "abc"): true

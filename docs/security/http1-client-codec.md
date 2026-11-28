@@ -12,8 +12,8 @@ starts from evidence. It names functions rather than lines, so it holds at any c
 **Result.** Every response-smuggling shape RFC 9112 names is refused, never
 repaired, with its own `HTTP1_E_` code, and a refusal is final. The events,
 the de-chunked body and the error code are the same however the input is cut.
-A panic is only ever the program's own mistake, a `feed` window outside its
-buffer. More than 2^30 bytes fed and not read, or kept of one head, is the
+The parser has no panic site: the program's own mistake, a `feed` window
+outside its buffer, is the refusal `HTTP1_E_WINDOW`. More than 2^30 bytes fed and not read, or kept of one head, is the
 refusal `HTTP1_E_MEMORY_LIMIT`.
 
 Every cap is a number the program passes to the constructor, or a constant of
@@ -242,14 +242,18 @@ sharing one 64 MiB value, past 2^31 in all).
 The server parser of `nish/net/http1-codec` reads what the writer writes (`the
 server parser reads the head`).
 
-**A window outside the buffer panics.** `feed` with a window outside its
-array is the program's mistake and panics before anything is read, whichever
-bound it breaks: past the end (`tests/link/net_http1_client_feed_window`), a
-negative offset whose end is inside the array
-(`tests/link/net_http1_client_feed_window_off`) and a negative length
-(`tests/link/net_http1_client_feed_window_len`), each run as
-`link/<name>: exits with 1 and stdout matches expected.out`, with the panic's
-text pinned by its `expected.stderr`.
+**A window outside the buffer is refused.** `feed` with a window outside its
+array is the program's mistake. It is refused with `HTTP1_E_WINDOW` (19)
+before anything is read, and the refusal is final: a whole response fed after
+it is dropped and `next()` answers `HTTP1_ERROR` with nothing buffered. That
+holds whichever bound the window breaks: past the end
+(`tests/link/net_http1_client_feed_window`), a negative offset whose end is
+inside the array (`tests/link/net_http1_client_feed_window_off`) and a
+negative length (`tests/link/net_http1_client_feed_window_len`), each run as
+`link/<name>: exits with 0 and stdout matches expected.out`. Each fails to
+build without the window test, which proves the copy's range. It used to
+panic, a site every program that fed the parser carried
+(`examples/http-get-json.ts` among them).
 
 **What no check reaches.** Every branch of `std/net/http1-client-codec.ts` is run
 by the checks above but these, measured with V8 coverage on the module's

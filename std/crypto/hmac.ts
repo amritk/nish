@@ -261,24 +261,30 @@ export class HmacSha256 {
   }
 
   /**
-   * Absorbs `data[off .. off + len)`; a window outside `data` panics in
-   * `Sha256.update`.
+   * Absorbs `data[off .. off + len)`. A window outside `data`, or any window
+   * once the tag is taken, absorbs nothing and answers `false`, as
+   * `Sha256.update` does.
    *
    * @param data The buffer holding the window; it is read, not kept.
    * @param off Where the window starts in `data`.
    * @param len How many bytes to absorb; 0 absorbs nothing.
+   * @returns `true` once the window is absorbed; `false`, with nothing absorbed, for a window outside `data` or a computation whose tag is taken.
    */
-  update(data: u8[], off: i32, len: i32): void {
-    this.inner.update(data, off, len)
+  update(data: u8[], off: i32, len: i32): boolean {
+    return this.inner.update(data, off, len)
   }
 
   /**
    * Ends the computation and wipes both hashers and the inner digest. The tag
-   * is the one allocation.
+   * is the one allocation. A second `digest` or `digestInto` panics: the
+   * hashers are wiped, and what they would answer is no tag.
    *
    * @returns A fresh 32-byte tag, which the caller owns.
    */
   digest(): u8[] {
+    if (this.inner.finished) {
+      panic("HmacSha256: the tag is already taken")
+    }
     const tag: u8[] = new Array<u8>(SHA256_SIZE)
     this.tagInto(tag, HMAC_FROM)
     return tag
@@ -288,7 +294,7 @@ export class HmacSha256 {
    * Writes the 32-byte tag at `out[at .. at + 32)`, ends the computation and
    * wipes both hashers and the inner digest, with nothing allocated. A window
    * outside `out` panics before anything is written; so does a second
-   * `digest` or `digestInto`, in the outer hasher's `update`.
+   * `digest` or `digestInto`.
    *
    * @param out The caller's array the tag is written into.
    * @param at Where the 32 tag bytes start in `out`.
@@ -297,18 +303,22 @@ export class HmacSha256 {
     if (!hmacWindowFits(toI32(out.length), at, SHA256_SIZE)) {
       panic("HmacSha256: the tag window is outside its array")
     }
+    if (this.inner.finished) {
+      panic("HmacSha256: the tag is already taken")
+    }
     this.tagInto(out, at)
   }
 
   /**
-   * `digestInto` past its window test, for `digest`, whose fresh 32 bytes
-   * always fit. The outer hasher's `digestInto` re-tests the window and writes
-   * nothing outside it.
+   * @internal `digestInto` past its tests, for `digest`, `hmacSha256` and
+   * `hkdfExpandSha256`, each on a computation whose tag it has not taken and
+   * with 32 bytes free at `at`. The hashers' `digestInto` re-test the window
+   * and write nothing outside it.
    *
    * @param out The array the tag is written into, with 32 bytes free at `at`.
    * @param at Where the 32 tag bytes start in `out`.
    */
-  private tagInto(out: u8[], at: i32): void {
+  tagInto(out: u8[], at: i32): void {
     this.inner.digestInto(this.innerDigest, HMAC_FROM)
     this.outer.update(this.innerDigest, HMAC_FROM, SHA256_SIZE)
     wipe(this.innerDigest)
@@ -342,23 +352,39 @@ export class HmacSha384 {
   }
 
   /**
-   * Absorbs `data[off .. off + len)`; a window outside `data` panics in
-   * `Sha384.update`.
+   * Absorbs `data[off .. off + len)`. A window outside `data`, or any window
+   * once the tag is taken, absorbs nothing and answers `false`, as
+   * `Sha384.update` does.
    *
    * @param data The buffer holding the window; it is read, not kept.
    * @param off Where the window starts in `data`.
    * @param len How many bytes to absorb; 0 absorbs nothing.
+   * @returns `true` once the window is absorbed; `false`, with nothing absorbed, for a window outside `data` or a computation whose tag is taken.
    */
-  update(data: u8[], off: i32, len: i32): void {
-    this.inner.update(data, off, len)
+  update(data: u8[], off: i32, len: i32): boolean {
+    return this.inner.update(data, off, len)
   }
 
   /**
-   * Ends the computation and wipes both hashers.
+   * Ends the computation and wipes both hashers. A second `digest` panics:
+   * the hashers are wiped, and what they would answer is no tag.
    *
    * @returns A fresh 48-byte tag, which the caller owns.
    */
   digest(): u8[] {
+    if (this.inner.engine.finished) {
+      panic("HmacSha384: the tag is already taken")
+    }
+    return this.tag()
+  }
+
+  /**
+   * @internal `digest` past its test, for `digest`, `hmacSha384` and the HKDF
+   * expansion, each on a computation whose tag it has not taken.
+   *
+   * @returns A fresh 48-byte tag, which the caller owns.
+   */
+  tag(): u8[] {
     const innerDigest: u8[] = this.inner.digest()
     this.outer.update(innerDigest, HMAC_FROM, SHA384_SIZE)
     wipe(innerDigest)
@@ -393,23 +419,39 @@ export class HmacSha512 {
   }
 
   /**
-   * Absorbs `data[off .. off + len)`; a window outside `data` panics in
-   * `Sha512.update`.
+   * Absorbs `data[off .. off + len)`. A window outside `data`, or any window
+   * once the tag is taken, absorbs nothing and answers `false`, as
+   * `Sha512.update` does.
    *
    * @param data The buffer holding the window; it is read, not kept.
    * @param off Where the window starts in `data`.
    * @param len How many bytes to absorb; 0 absorbs nothing.
+   * @returns `true` once the window is absorbed; `false`, with nothing absorbed, for a window outside `data` or a computation whose tag is taken.
    */
-  update(data: u8[], off: i32, len: i32): void {
-    this.inner.update(data, off, len)
+  update(data: u8[], off: i32, len: i32): boolean {
+    return this.inner.update(data, off, len)
   }
 
   /**
-   * Ends the computation and wipes both hashers.
+   * Ends the computation and wipes both hashers. A second `digest` panics:
+   * the hashers are wiped, and what they would answer is no tag.
    *
    * @returns A fresh 64-byte tag, which the caller owns.
    */
   digest(): u8[] {
+    if (this.inner.engine.finished) {
+      panic("HmacSha512: the tag is already taken")
+    }
+    return this.tag()
+  }
+
+  /**
+   * @internal `digest` past its test, for `digest`, `hmacSha512` and the HKDF
+   * expansion, each on a computation whose tag it has not taken.
+   *
+   * @returns A fresh 64-byte tag, which the caller owns.
+   */
+  tag(): u8[] {
     const innerDigest: u8[] = this.inner.digest()
     this.outer.update(innerDigest, HMAC_FROM, SHA512_SIZE)
     wipe(innerDigest)
@@ -435,7 +477,9 @@ export class HmacSha512 {
 export const hmacSha256 = (key: u8[], data: u8[]): u8[] => {
   const mac = new HmacSha256(key)
   mac.inner.updateAll(data)
-  return mac.digest()
+  const tag: u8[] = new Array<u8>(SHA256_SIZE)
+  mac.tagInto(tag, HMAC_FROM)
+  return tag
 }
 
 /**
@@ -449,7 +493,7 @@ export const hmacSha256 = (key: u8[], data: u8[]): u8[] => {
 export const hmacSha384 = (key: u8[], data: u8[]): u8[] => {
   const mac = new HmacSha384(key)
   mac.inner.engine.absorbAll(data)
-  return mac.digest()
+  return mac.tag()
 }
 
 /**
@@ -463,7 +507,7 @@ export const hmacSha384 = (key: u8[], data: u8[]): u8[] => {
 export const hmacSha512 = (key: u8[], data: u8[]): u8[] => {
   const mac = new HmacSha512(key)
   mac.inner.engine.absorbAll(data)
-  return mac.digest()
+  return mac.tag()
 }
 
 /**
@@ -609,8 +653,10 @@ export const hmacCopySha384 = (from: Sha384, to: Sha384): void => {
  *
  * The key block is wiped with `secureZero` once both hashers have absorbed
  * it, and so is every digest on the way; `wipe` zeroes the hashers too, for a
- * caller done with the key. A key or tag window outside its array panics, as
- * a message window does in `Sha256.update`.
+ * caller done with the key. A key, message or tag window outside its array
+ * does nothing and answers `false`, as a message window does in
+ * `Sha256.update`, and after a key window that does not fit, `finishInto`
+ * answers `false` until a `begin` succeeds.
  */
 export class HmacSha256Scratch {
   /** H(K XOR ipad, …): keyed by `begin`, fed the message by `update`. */
@@ -621,6 +667,8 @@ export class HmacSha256Scratch {
   private fresh: Sha256
   /** One key block XOR a pad, wiped as soon as it is absorbed. */
   private pad: u8[]
+  /** Whether the last `begin` keyed the hashers: `finishInto` writes no tag until one has. */
+  private ready: boolean = false
   /** The SHA-256 of a key longer than a block, which RFC 2104 §2 keys with instead; wiped once used. */
   private keyHash: u8[]
 
@@ -642,14 +690,17 @@ export class HmacSha256Scratch {
    * @param key The buffer holding the key; it is read, not kept.
    * @param off Where the key starts in `key`.
    * @param len The key's length in bytes.
+   * @returns `true` once the hashers are keyed; `false` for a key window outside `key`, after which `finishInto` writes no tag until a `begin` succeeds.
    */
-  begin(key: u8[], off: i32, len: i32): void {
+  begin(key: u8[], off: i32, len: i32): boolean {
     if (!hmacWindowFits(toI32(key.length), off, len)) {
-      panic("HmacSha256Scratch: the key window is outside its array")
+      this.ready = false
+      return false
     }
+    this.ready = true
     if (len <= SHA256_BLOCK) {
       this.keyBlocks(key, off, len)
-      return
+      return true
     }
     hmacCopySha256(this.fresh, this.inner)
     this.inner.update(key, off, len)
@@ -660,6 +711,7 @@ export class HmacSha256Scratch {
     secureZero(digest)
     this.keyBlocks(this.keyHash, HMAC_FROM, SHA256_SIZE)
     secureZero(this.keyHash)
+    return true
   }
 
   /**
@@ -684,27 +736,28 @@ export class HmacSha256Scratch {
   }
 
   /**
-   * Absorbs `data[off .. off + len)`; a window outside `data` panics in
-   * `Sha256.update`.
+   * Absorbs `data[off .. off + len)`, as `Sha256.update` does.
    *
    * @param data The buffer holding the window; it is read, not kept.
    * @param off Where the window starts in `data`.
    * @param len How many bytes to absorb; 0 absorbs nothing.
+   * @returns `true` once the window is absorbed; `false`, with nothing absorbed, for a window outside `data` or a computation already finished.
    */
-  update(data: u8[], off: i32, len: i32): void {
-    this.inner.update(data, off, len)
+  update(data: u8[], off: i32, len: i32): boolean {
+    return this.inner.update(data, off, len)
   }
 
   /**
-   * Writes the 32-byte tag at `out[at]` and ends the computation; a window
-   * outside `out` panics.
+   * Writes the 32-byte tag at `out[at]` and ends the computation; a second
+   * `finishInto` writes the same tag again.
    *
    * @param out The caller's array the tag is written into.
    * @param at Where the 32 tag bytes start in `out`.
+   * @returns `true` once the tag is written; `false`, with `out` untouched, for a window outside `out` or when no `begin` has keyed the hashers.
    */
-  finishInto(out: u8[], at: i32): void {
-    if (!hmacWindowFits(toI32(out.length), at, SHA256_SIZE)) {
-      panic("HmacSha256Scratch: the tag window is outside its array")
+  finishInto(out: u8[], at: i32): boolean {
+    if (!this.ready || !hmacWindowFits(toI32(out.length), at, SHA256_SIZE)) {
+      return false
     }
     const innerDigest: u8[] = this.inner.digest()
     this.outer.update(innerDigest, HMAC_FROM, SHA256_SIZE)
@@ -720,6 +773,7 @@ export class HmacSha256Scratch {
       p += 1
     }
     secureZero(tag)
+    return true
   }
 
   /** Zeroes both keyed hashers, for a caller done with the key; `begin` starts again. */
@@ -742,6 +796,8 @@ export class HmacSha384Scratch {
   private fresh: Sha384
   /** One key block XOR a pad, wiped as soon as it is absorbed. */
   private pad: u8[]
+  /** Whether the last `begin` keyed the hashers: `finishInto` writes no tag until one has. */
+  private ready: boolean = false
   /** The SHA-384 of a key longer than a block; wiped once used. */
   private keyHash: u8[]
 
@@ -763,14 +819,17 @@ export class HmacSha384Scratch {
    * @param key The buffer holding the key; it is read, not kept.
    * @param off Where the key starts in `key`.
    * @param len The key's length in bytes.
+   * @returns `true` once the hashers are keyed; `false` for a key window outside `key`, after which `finishInto` writes no tag until a `begin` succeeds.
    */
-  begin(key: u8[], off: i32, len: i32): void {
+  begin(key: u8[], off: i32, len: i32): boolean {
     if (!hmacWindowFits(toI32(key.length), off, len)) {
-      panic("HmacSha384Scratch: the key window is outside its array")
+      this.ready = false
+      return false
     }
+    this.ready = true
     if (len <= SHA512_BLOCK) {
       this.keyBlocks(key, off, len)
-      return
+      return true
     }
     hmacCopySha384(this.fresh, this.inner)
     this.inner.update(key, off, len)
@@ -781,6 +840,7 @@ export class HmacSha384Scratch {
     secureZero(digest)
     this.keyBlocks(this.keyHash, HMAC_FROM, SHA384_SIZE)
     secureZero(this.keyHash)
+    return true
   }
 
   /**
@@ -805,27 +865,28 @@ export class HmacSha384Scratch {
   }
 
   /**
-   * Absorbs `data[off .. off + len)`; a window outside `data` panics in the
-   * hasher.
+   * Absorbs `data[off .. off + len)`, as `Sha384.update` does.
    *
    * @param data The buffer holding the window; it is read, not kept.
    * @param off Where the window starts in `data`.
    * @param len How many bytes to absorb; 0 absorbs nothing.
+   * @returns `true` once the window is absorbed; `false`, with nothing absorbed, for a window outside `data` or a computation already finished.
    */
-  update(data: u8[], off: i32, len: i32): void {
-    this.inner.update(data, off, len)
+  update(data: u8[], off: i32, len: i32): boolean {
+    return this.inner.update(data, off, len)
   }
 
   /**
-   * Writes the 48-byte tag at `out[at]` and ends the computation; a window
-   * outside `out` panics.
+   * Writes the 48-byte tag at `out[at]` and ends the computation; a second
+   * `finishInto` writes the same tag again.
    *
    * @param out The caller's array the tag is written into.
    * @param at Where the 48 tag bytes start in `out`.
+   * @returns `true` once the tag is written; `false`, with `out` untouched, for a window outside `out` or when no `begin` has keyed the hashers.
    */
-  finishInto(out: u8[], at: i32): void {
-    if (!hmacWindowFits(toI32(out.length), at, SHA384_SIZE)) {
-      panic("HmacSha384Scratch: the tag window is outside its array")
+  finishInto(out: u8[], at: i32): boolean {
+    if (!this.ready || !hmacWindowFits(toI32(out.length), at, SHA384_SIZE)) {
+      return false
     }
     const innerDigest: u8[] = this.inner.digest()
     this.outer.update(innerDigest, HMAC_FROM, SHA384_SIZE)
@@ -841,6 +902,7 @@ export class HmacSha384Scratch {
       p += 1
     }
     secureZero(tag)
+    return true
   }
 
   /** Zeroes both keyed hashers, for a caller done with the key; `begin` starts again. */

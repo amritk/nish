@@ -41,6 +41,7 @@ import {
   HTTP1_E_INFORMATIONAL_LIMIT,
   HTTP1_E_LENGTH,
   HTTP1_E_MEMORY_LIMIT,
+  HTTP1_E_WINDOW,
   HTTP1_E_NONE,
   HTTP1_E_STATUS_LINE,
   HTTP1_E_STATUS_LINE_LIMIT,
@@ -1185,6 +1186,7 @@ export const http1ClientChecks = (): i32 => {
     `true, error ${HTTP1_E_MEMORY_LIMIT}, 0 buffered`
   );
   t.eqI32("HTTP1_E_MEMORY_LIMIT is 18, after every older code", HTTP1_E_MEMORY_LIMIT, toI32(18));
+  t.eqI32("HTTP1_E_WINDOW is 19, after every older code", HTTP1_E_WINDOW, toI32(19));
 
   // --- The writer ------------------------------------------------------------
   const none: i64 = toI64(HTTP1_NO_BODY);

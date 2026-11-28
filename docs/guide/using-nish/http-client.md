@@ -542,6 +542,7 @@ constant of `nish/net/http1-client-codec`:
 | 16 | `HTTP1_E_CHUNK_LINE_LIMIT` | a chunk-size line over `HTTP1_MAX_CHUNK_LINE` (4,096 bytes) |
 | 17 | `HTTP1_E_INFORMATIONAL_LIMIT` | more than `HTTP1_MAX_INFORMATIONAL` (32) interim responses to one request |
 | 18 | `HTTP1_E_MEMORY_LIMIT` | more than 2^30 bytes fed and not read, or of one head kept |
+| 19 | `HTTP1_E_WINDOW` | a `feed` window outside its buffer: the program's mistake, not the server's |
 
 After an error the connection cannot be trusted: close it.
 

@@ -1,8 +1,8 @@
 // A second `HmacSha384.digest` would pad an already padded inner hash and answer
-// a tag of nothing the caller sent. It panics in the inner `Sha384` instead
-// ("sha512: digest taken twice", on stderr): exit 1, and stdout stops at the line
-// printed after the first digest. The link harness compares stdout and the
-// exit code only, so the message is named here rather than pinned.
+// a tag of nothing the caller sent. It panics instead
+// ("HmacSha384: the tag is already taken", on stderr): exit 1, and stdout stops
+// at the line printed after the first digest. expected.stderr pins the message,
+// so another guard firing fails the test.
 import { HmacSha384 } from "nish/crypto/hmac";
 
 export const main = (): i32 => {

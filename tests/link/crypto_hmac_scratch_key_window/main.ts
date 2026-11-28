@@ -1,15 +1,35 @@
-// A key window that runs past its array panics in `HmacSha256Scratch.begin`
-// ("HmacSha256Scratch: the key window is outside its array", on stderr)
+// A key window that runs past its array is refused by `HmacSha256Scratch.begin`
 // rather than keying HMAC with the bytes that are there: a tag under a short
-// key looks exactly like a tag under the right one. Exit 1, and nothing on
-// stdout after the line printed before the misuse.
-import { HmacSha256Scratch } from "nish/crypto/hmac";
+// key looks exactly like a tag under the right one. `begin` answers `false`,
+// and `finishInto` then writes no tag (it answers `false` too) until a `begin`
+// succeeds. After a good `begin` the tag is hmacSha256(key, "abc"). Without the
+// checks the short key would be used and the tag would differ.
+import { HmacSha256Scratch, hmacSha256 } from "nish/crypto/hmac";
+
+const same = (a: u8[], b: u8[]): boolean => {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i: i32 = 0; i < toI32(a.length); i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+};
 
 export const main = (): i32 => {
   const key: u8[] = [1, 2, 3];
+  const data: u8[] = [97, 98, 99];
+  const start: i32 = 0;
+  const tag: u8[] = new Array<u8>(32);
   const mac = new HmacSha256Scratch();
   console.log("keying with key[1 .. 4) of a 3-byte key");
-  mac.begin(key, toI32(1), toI32(3));
-  console.log("unreachable: an out-of-range key window was accepted");
+  console.log(`keyed: ${mac.begin(key, toI32(1), toI32(3))}`);
+  console.log(`tag written: ${mac.finishInto(tag, start)}`);
+  console.log(`keyed: ${mac.begin(key, start, toI32(key.length))}`);
+  mac.update(data, start, toI32(data.length));
+  console.log(`tag written: ${mac.finishInto(tag, start)}`);
+  console.log(`tag is hmacSha256(key, "abc"): ${same(tag, hmacSha256(key, data))}`);
   return 0;
 };

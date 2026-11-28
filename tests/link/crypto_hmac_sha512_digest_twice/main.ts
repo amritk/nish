@@ -1,6 +1,6 @@
 // `HmacSha512.digest` ends the computation, as `HmacSha256`'s does: a second
-// one panics in the inner `Sha512` ("sha512: digest taken twice", on stderr)
-// rather than answering a tag of nothing the caller sent. The first digest
+// one panics ("HmacSha512: the tag is already taken", on stderr, pinned by
+// expected.stderr) rather than answering a tag of nothing the caller sent. The first digest
 // wipes both hashers and leaves them finished, so the wipe must not have made
 // the hasher look fresh again: exit 1, and stdout stops at the line printed
 // after the first digest.

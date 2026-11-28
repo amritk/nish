@@ -18,7 +18,8 @@
  *   what preallocating every slot would have cost, so a full server behaves as
  *   it did before and a `take` can never fail for want of memory. Reaching it
  *   therefore means some buffer was not given back, and `take` panics rather
- *   than allocating past it.
+ *   than allocating past it; `tryTake` answers `null` there, for a borrower
+ *   that can refuse its own work.
  * - **Give-back zeroes what was used.** The borrower says how far into the
  *   buffer it wrote, and `give` zeroes `[0, used)` before the buffer goes on
  *   the free list, so nothing one connection wrote is readable by the next one
@@ -72,21 +73,15 @@ export class BufferPool {
   /**
    * An empty pool: it makes nothing until the first `take`. `name` is what
    * its panics print (the owner's type and field reads best,
-   * `"Http2TlsServer.output"`). Panics, naming the pool, unless `size` is
-   * above 0 and `ceiling` at least 1: a pool of neither makes a buffer
-   * nobody can use or none at all.
+   * `"Http2TlsServer.output"`). A `size` of 0 lends empty buffers. A
+   * `ceiling` at or below 0, or a `size` below 0, lends none: every
+   * `tryTake` answers `null`, and `take` panics as it does at the ceiling.
    *
    * @param name the label every panic of this pool prints, to say whose buffer leaked
    * @param size how many bytes each buffer holds, the same for every buffer the pool lends
    * @param ceiling the most buffers the pool may ever make, sized to what every slot holding one at once would need
    */
   constructor(name: string, size: i32, ceiling: i32) {
-    if (size <= 0) {
-      panic(`BufferPool ${name}: a buffer size of ${size} bytes is not above 0`)
-    }
-    if (ceiling < 1) {
-      panic(`BufferPool ${name}: a ceiling of ${ceiling} buffers is below 1`)
-    }
     this.name = name
     this.size = size
     this.ceiling = ceiling
@@ -101,11 +96,26 @@ export class BufferPool {
    *
    * Panics when all `ceiling` buffers are lent: the ceiling is what every
    * slot holding a buffer at once would need, so one more means a buffer was
-   * never given back.
+   * never given back. `tryTake` answers `null` there instead.
    *
    * @returns a buffer of `size` bytes the caller now borrows until it hands it back through `give` or `giveSecret`
    */
   take(): u8[] {
+    const buf: u8[] | null = this.tryTake()
+    if (buf === null) {
+      panic(`BufferPool ${this.name}: all ${this.ceiling} buffers are lent, so one was never given back`)
+    }
+    return buf
+  }
+
+  /**
+   * `take` for a borrower that can refuse its own work: a buffer as `take`
+   * lends it, or `null` when all `ceiling` buffers are lent or `size` is
+   * below 0, with nothing made.
+   *
+   * @returns a buffer of `size` bytes the caller now borrows, as from `take`, or `null` when the pool has none to lend
+   */
+  tryTake(): u8[] | null {
     const free: u8[][] = this.free
     const count: i32 = toI32(free.length)
     // The same test twice: the prover reads the first as covering the index
@@ -119,11 +129,12 @@ export class BufferPool {
     // the ceiling once the test has passed.
     const made: i32 = this.made
     const ceiling: i32 = this.ceiling
-    if (made >= ceiling) {
-      panic(`BufferPool ${this.name}: all ${ceiling} buffers are lent, so one was never given back`)
+    const size: i32 = this.size
+    if (made >= ceiling || size < 0) {
+      return null
     }
     this.made = made + 1
-    return new Array<u8>(this.size)
+    return new Array<u8>(size)
   }
 
   /**

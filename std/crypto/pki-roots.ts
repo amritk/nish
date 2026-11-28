@@ -58,7 +58,11 @@ export class PkiRoots {
   roots: X509Certificate[]
   /** Every file that was read, in order, whether or not it held a root. */
   sources: string[]
-  /** The PEM blocks that were not a root, and the files too large or past the cap to read. */
+  /**
+   * The PEM blocks that were not a root, and the files too large or past the
+   * cap to read. The count stops at `PKI_ROOTS_MAX_SKIPPED`: a value there
+   * means at least that many were skipped.
+   */
   skipped: i32 = 0
 
   /** An empty load: no roots, no sources, nothing skipped. */
@@ -87,11 +91,18 @@ export const pkiSystemBundles = (): string[] => [
   "/etc/ssl/cert.pem",
 ]
 
+/** Where `PkiRoots.skipped` stops counting, 2^31 − 1: a value there means at least that many. */
+export const PKI_ROOTS_MAX_SKIPPED: i32 = 2147483647
+
 /** The directory read beside the system bundle. */
 export const PKI_SYSTEM_DIR: string = "/etc/ssl/certs"
 
-/** What one load has read so far, and the DER already kept. */
-class PkiRootsLoad {
+/**
+ * What one load has read so far, and the DER already kept.
+ *
+ * @internal
+ */
+export class PkiRootsLoad {
   /** @internal */
   out: PkiRoots
   /** @internal */
@@ -99,6 +110,7 @@ class PkiRootsLoad {
   /** @internal */
   files: i32 = 0
 
+  /** A load that has read nothing: no roots, no sources, nothing skipped. */
   constructor() {
     this.out = new PkiRoots()
     this.seen = new Set<string>()
@@ -106,12 +118,20 @@ class PkiRootsLoad {
 }
 
 /**
- * Counts one PEM block or file skipped. The count is not capped: past
- * `PKI_ROOTS_MAX_FILES` a trust directory's entries are each counted without
- * a read, so no bound below 2^31 holds for it (PKI-R8).
+ * Counts one PEM block or file skipped, up to `PKI_ROOTS_MAX_SKIPPED`. Past
+ * `PKI_ROOTS_MAX_FILES` a trust directory's entries are each counted without a
+ * read, so no smaller bound holds; the count stops there rather than wrapping
+ * or panicking, and the field's doc says what a value at the cap means
+ * (PKI-R8).
+ *
+ * @internal
+ * @param load the load whose `out.skipped` counts one more skip
  */
-const pkiRootsSkip = (load: PkiRootsLoad): void => {
-  load.out.skipped = load.out.skipped + 1
+export const pkiRootsSkip = (load: PkiRootsLoad): void => {
+  const skipped: i32 = load.out.skipped
+  if (skipped < PKI_ROOTS_MAX_SKIPPED) {
+    load.out.skipped = skipped + 1
+  }
 }
 
 /**

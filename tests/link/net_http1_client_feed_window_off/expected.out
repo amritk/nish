@@ -1,1 +1,2 @@
 feeding bytes -1 to 1 of a 3-byte array
+refused: true, window error: true, 0 buffered
