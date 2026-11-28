@@ -1846,6 +1846,8 @@ makes its own may use it freely; one shared between tasks would be a write
 they all see, and is refused. See [Random numbers](../../reference/language/declarations.md#random-numbers-rng-in-nishrandom)
 in the reference.
 
+<a id="random-bytes-for-keys-cryptotrygetrandomvalues"></a>
+
 ## Random bytes for keys: `crypto.tryGetRandomValues`
 
 Keys, salts and nonces come from the system's random source, not from
@@ -1880,7 +1882,7 @@ export const main = (): i32 => {
 
 On `false` some of the bytes may already be written: they are not a key, and
 nothing weaker is tried in their place. Neither builtin exists on a wasm32
-build. See [the host](../../LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals)
+build. See [the host](../../reference/language/builtins.md#the-host-the-wall-clock-entropy-file-times-and-signals)
 in the language reference.
 
 ## `nish/cli`
