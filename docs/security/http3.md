@@ -392,7 +392,7 @@ without the sites the prover discharges:
 
 | File | Before | After | What is left |
 | --- | --- | --- | --- |
-| `std/net/http3-frame.ts` | 21 | 3 | `h3CheckWindow`: a window outside the caller's buffer, and the two exported forwarders' calls of it (`Http3FrameHeader.read`, `h3WindowEnd`) |
+| `std/net/http3-frame.ts` | 21 | 4 | `h3CheckWindow`: a window outside the caller's buffer, and the three exported readers' calls of it (`h3ReadFrameHeader`, `h3ReadSettings`, `h3ReadIdPayload`), which each pass the window on to their caller; `std/net/http3.ts` and `std/net/webtransport.ts` prove theirs |
 | `std/net/qpack.ts` | 38 | 3 | `qpackCheckWindow`, `qpackPushStreamCancellation`'s stream ID, `QpackDecoder`'s construction limit |
 | `std/net/http3.ts` | 248 | 4 | `http3CheckCap` and three checks of `Http3Connection`'s configuration |
 | `std/net/http3-server.ts` | 153 | 8 | three checks of `Http3Server`'s configuration; three `udpSendTo`/`udpRecvFrom` buffer range checks; two runtime exits when `crypto.getRandomValues` fails |

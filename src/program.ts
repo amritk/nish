@@ -231,15 +231,18 @@ export class FunctionSig {
   restIndex: i32
   /**
    * #2296: for a window guard (`src/window-contract.ts`), the positions of its
-   * buffer, offset and count parameters; for a method that forwards to one,
-   * the call arguments (`this` left out) its guard checks; else empty.
+   * buffer, offset and count parameters; for a method or function that
+   * forwards to one, the call arguments (a method's leave `this` out) its
+   * guard checks, the count -1 when the forward passes a literal; else empty.
    */
   window: i32[]
+  /** #2296: the literal count a forward passes its guard (`window[2]` is then -1), else -1. */
+  windowCount: i32
   /** #2296: a window guard's branch, the part that runs when the window is outside its buffer. */
   windowCheck: Node | null
-  /** #2296: the guard a forwarding method hands its window to, else null (a guard has none). */
+  /** #2296: the guard a forwarding method or function hands its window to, else null (a guard has none). */
   windowGuard: FunctionSig | null
-  /** #2296: the forwarding method's call into its guard. */
+  /** #2296: the forwarding method's or function's call into its guard. */
   windowForward: Node | null
   /**
    * #2296: for a fault guard (`src/fault-contract.ts`), the function whose
@@ -404,6 +407,7 @@ export class FunctionSig {
     this.countedNames = []
     this.restIndex = -1
     this.window = []
+    this.windowCount = -1
     this.windowCheck = null
     this.windowGuard = null
     this.windowForward = null

@@ -144,6 +144,7 @@ import {
   h3Greased,
   h3PutFrameHeader,
   h3PutVarint,
+  h3ReadFrameHeader,
   h3ReadVarint,
   h3VarintLength,
   Http3FrameHeader,
@@ -1610,7 +1611,7 @@ export class WebTransport {
           return this.malformed(w, H3_DATAGRAM_ERROR) // never: `have` was below `head.length`
         }
         const start: i32 = 0
-        if (this.header.read(head, start, filled) === 0) {
+        if (h3ReadFrameHeader(this.header, head, start, filled) === 0) {
           continue
         }
         w.capHeadLen = 0

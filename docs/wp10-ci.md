@@ -198,17 +198,25 @@ macOS. Every lane runs on:
 - a change to `.github/**`, any `package.json` or `package-lock.json`, or
   `scripts/ci-scope.mjs` itself.
 
-`lint` is not a lane and does not wait for `scope`. The `test` shards and
-`examples` wait for its `suite` output and skip only when it is `false`: a
-pull request every changed path of which is one the whole suite never reads
-(`SUITE_UNREAD` in `scripts/ci-scope.mjs`, today `.claude/plans/**`). Such a
-pull request runs `lint` (docs/check-links.mjs reads every Markdown file),
-and `ci-gate` expects the two skips; any other change, event or label runs
-both. `node tests/run.js ci-scope` fails if any file of tests/, scripts/,
-bench/, src/, std/ or .github/ names a path under it outside a comment. A
-path joins that list only with the same proof: the suite reads docs/,
-CLAUDE.md and most of `.claude/` (its checks compile the guide's examples
-and pin rules' text), so a docs change runs it.
+The `test` shards, `examples` and `lint` are not lanes and do not wait for
+`scope`. The shards and `examples` skip every step after their first only
+for a pull request every changed path of which is one the whole suite never
+reads (`SUITE_UNREAD` in `scripts/ci-scope.mjs`, today `.claude/plans/**`),
+and still report green under their names. Each decides that in the step
+after its checkout (`node scripts/ci-scope.mjs --suite`, which reads the
+pull request's number from the event payload and its labels and files from
+the API), and every later step is gated on it. A job-level `needs: scope`
+did the same with no runner at all, but a job that needs another is created
+only once that one ends, so on a full queue every pull request's shards
+waited for `scope`'s own runner first: in run 46097423926 `scope` waited 12
+minutes and the shards were created after it. Such a pull request runs
+`lint` (docs/check-links.mjs reads every Markdown file); any other change,
+event or label runs both. `node tests/run.js ci-scope` fails if any file of
+tests/, scripts/, bench/, src/, std/ or .github/ names a path under it
+outside a comment, or if a step of either job after the decision is
+ungated. A path joins that list only with the same proof: the suite reads
+docs/, CLAUDE.md and most of `.claude/` (its checks compile the guide's
+examples and pin rules' text), so a docs change runs it.
 
 **`ci-gate`** needs every other job, runs `if: always()`, and fails unless each
 one succeeded or was skipped by its own `if:` on this run (`runtime-net`, and

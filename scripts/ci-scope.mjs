@@ -26,6 +26,7 @@
 //   node scripts/ci-scope.mjs --backtest [<file>] # replay merged PRs
 //
 //   node scripts/ci-scope.mjs --gate              # in the `ci-gate` job (env below)
+//   node scripts/ci-scope.mjs --suite [--files <file>]  # first step of `test` and `examples`
 //
 // The `scope` job's environment: GITHUB_EVENT_NAME, GITHUB_REPOSITORY,
 // GITHUB_TOKEN, PR_NUMBER, PR_LABELS (a JSON array of names) and
@@ -290,9 +291,12 @@ export const DEFERRED =
 /**
  * Paths the whole suite never reads: no file of tests/, scripts/, bench/,
  * src/, std/ or .github/ names them (`node tests/run.js ci-scope` greps for
- * it). A pull request every one of whose changed paths is here skips the
- * `test` shards and `examples` (`suite=false`); `lint` still runs, since
- * docs/check-links.mjs reads every Markdown file.
+ * it). A pull request every one of whose changed paths is here skips every
+ * step of the `test` shards and `examples` after the first (`--suite`, which
+ * each runs itself rather than waiting on the `scope` job: a job that needs
+ * another is created only once that one ends, and on a full queue that wait
+ * was every pull request's); `lint` still runs, since docs/check-links.mjs
+ * reads every Markdown file.
  */
 export const SUITE_UNREAD = [".claude/plans/**"]
 
@@ -787,21 +791,26 @@ const main = async () => {
   } catch {
     labels = ["ci:full"] // unparseable labels: run everything
   }
+  // `--suite`: write `suite=` alone, for the first step of a job that runs
+  // the suite, and say in its summary why it skips when it does.
+  const suiteOnly = args[0] === "--suite"
+  const out = suiteOnly ? emitSuite : emit
+  const rest = suiteOnly ? args.slice(1) : args
   const base = { event: env.GITHUB_EVENT_NAME ?? "", labels, mode: env.NISH_CI_SCOPE ?? "" }
-  if (args[0] === "--files") {
+  if (rest[0] === "--files") {
     const files = fs
-      .readFileSync(args[1], "utf8")
+      .readFileSync(rest[1], "utf8")
       .split("\n")
       .filter(Boolean)
       .map((p) => ({ path: p, status: "modified" }))
-    emit(decide({ ...base, event: base.event || "pull_request", files }))
+    out(decide({ ...base, event: base.event || "pull_request", files }))
     return
   }
   let fetched = { files: null, truncated: false }
   if (SCOPED_EVENTS.has(base.event)) {
     try {
       const repo = env.GITHUB_REPOSITORY ?? ""
-      const pr = env.PR_NUMBER ?? ""
+      const pr = env.PR_NUMBER || payloadPr(env.GITHUB_EVENT_PATH)
       const token = env.GITHUB_TOKEN ?? ""
       base.labels = [...base.labels, ...(await fetchLabels(repo, pr, token))]
       fetched = await fetchFiles(repo, pr, token)
@@ -810,7 +819,42 @@ const main = async () => {
       console.error(`ci-scope: ${err.message}; every lane runs`)
     }
   }
-  emit(decide({ ...base, ...fetched }))
+  out(decide({ ...base, ...fetched }))
+}
+
+/**
+ * The pull request's number from the event payload the runner wrote, so a
+ * step needs no `${{ github.event... }}` of its own; empty when there is none.
+ *
+ * @param {string | undefined} file GITHUB_EVENT_PATH
+ * @returns {string} the number, or ""
+ */
+const payloadPr = (file) => {
+  try {
+    return String(JSON.parse(fs.readFileSync(file ?? "", "utf8"))?.pull_request?.number ?? "")
+  } catch {
+    return ""
+  }
+}
+
+/**
+ * Writes `suite=` alone, for `--suite`, and one summary line when it is false.
+ *
+ * @param {ReturnType<typeof decide>} result the decision
+ * @returns {void}
+ */
+const emitSuite = ({ suite }) => {
+  const line = `suite=${suite}`
+  if (process.env.GITHUB_OUTPUT) {
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, `${line}\n`)
+  }
+  if (!suite && process.env.GITHUB_STEP_SUMMARY) {
+    fs.appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `### Not run: the suite\n\nEvery changed path is one the suite never reads (${SUITE_UNREAD.join(", ")}), so every step after this one was skipped. Add the ci:full label and use Re-run all jobs to run it.\n`
+    )
+  }
+  console.log(line)
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

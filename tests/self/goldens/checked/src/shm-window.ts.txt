@@ -18,7 +18,7 @@ function shmWindowRole(program: CheckedProgram, sig: FunctionSig): i32 -> @shmWi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn isShmSource nish_str_eq
   pointer program: size=928 writesThrough=false captured=false passedTo=isShmSource#0
-  pointer sig: size=296 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
+  pointer sig: size=304 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   callee +0:6 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee +1:6 isShmSource -> @isShmSource
@@ -26,6 +26,6 @@ function isShmWindowIntrinsic(program: CheckedProgram, sig: FunctionSig): boolea
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: shmWindowRole
   pointer program: size=928 writesThrough=false captured=false passedTo=shmWindowRole#0
-  pointer sig: size=296 writesThrough=false captured=false passedTo=shmWindowRole#1
+  pointer sig: size=304 writesThrough=false captured=false passedTo=shmWindowRole#1
   stackSites=0 stackLocals=0
   callee +0:3 shmWindowRole -> @shmWindowRole

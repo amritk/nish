@@ -1360,7 +1360,13 @@ export class Http3Connection {
       }
       have = have + n
       headLens[k] = have
-      if (h3ReadFrameHeader(this.header, this.head, base, have) > 0) {
+      const end: i32 = base + have
+      const head: u8[] = this.head
+      // Never: slot `k`'s H3_HEAD bytes lie inside `head`, which nothing resizes.
+      if (base < 0 || base > end || end > toI32(head.length)) {
+        return H3_ZERO
+      }
+      if (h3ReadFrameHeader(this.header, head, base, end - base) > 0) {
         if (k < toI32(headLens.length)) {
           headLens[k] = 0
         }
@@ -1565,8 +1571,14 @@ export class Http3Connection {
 
   /** Acts on a whole control frame of `type` in `control[0 .. controlFill)`. */
   private controlFrame(type: i64): i32 {
+    const control: u8[] = this.control
+    const fill: i32 = this.controlFill
+    // Never: `controlStep` keeps `controlFill` within `control`, which nothing resizes.
+    if (fill < 0 || fill > toI32(control.length)) {
+      return this.fail(H3_INTERNAL_ERROR)
+    }
     if (type === H3_FRAME_SETTINGS) {
-      const result: i64 = h3ReadSettings(this.peer, this.control, H3_ZERO, this.controlFill)
+      const result: i64 = h3ReadSettings(this.peer, control, 0, fill)
       if (result !== H3_SETTINGS_OK) {
         return this.fail(result)
       }
@@ -1595,7 +1607,7 @@ export class Http3Connection {
     if (type === H3_SKIP_TYPE) {
       return H3_NEED_MORE
     }
-    const value: i64 = h3ReadIdPayload(this.control, H3_ZERO, this.controlFill)
+    const value: i64 = h3ReadIdPayload(control, 0, fill)
     if (value < 0) {
       return this.fail(H3_FRAME_ERROR)
     }

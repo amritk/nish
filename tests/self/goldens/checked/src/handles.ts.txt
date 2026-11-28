@@ -488,7 +488,7 @@ function HandleWalk.closeOf(this: HandleWalk, sig: FunctionSig): StructInfo | nu
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=104 writesThrough=false captured=false
-  pointer sig: size=296 writesThrough=false captured=false
+  pointer sig: size=304 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 i: i32 (let)
 function HandleWalk.isAdmitted(this: HandleWalk, node: Node): boolean -> @HandleWalk.isAdmitted [method]
@@ -820,7 +820,7 @@ function signatureNamesHandle(program: CheckedProgram, table: TypeTable, sig: Fu
   calls: signatureHandle
   pointer program: size=928 writesThrough=false captured=false passedTo=signatureHandle#0 signatureHandle#0
   pointer table: size=176 writesThrough=false captured=false passedTo=signatureHandle#1 signatureHandle#1
-  pointer sig: size=296 writesThrough=false captured=false
+  pointer sig: size=304 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
   callee +4:7 signatureHandle -> @signatureHandle

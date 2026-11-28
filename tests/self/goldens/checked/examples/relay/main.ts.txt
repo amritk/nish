@@ -22432,7 +22432,6 @@ const H3_FRAME_ZERO: i32 = 0
 struct Http3FrameHeader (class) size=16 align=8 exported
   field type: i64 index=0 offset=0 initialized
   field length: i64 index=1 offset=8 initialized
-  method read -> @nish.Http3FrameHeader.read
 struct Http3Settings (class) size=88 align=8 exported
   field unknownIds: i64[] index=0 offset=0
   field unknownValues: i64[] index=1 offset=8
@@ -22450,16 +22449,6 @@ struct Http3Settings (class) size=88 align=8 exported
   method reset -> @nish.Http3Settings.reset
   method unknown -> @nish.Http3Settings.unknown
   method take -> @nish.Http3Settings.take
-function Http3FrameHeader.read(this: Http3FrameHeader, buf: u8[], off: i32, len: i32): i32 -> @nish.Http3FrameHeader.read [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.h3FrameHeaderIn
-  escaping: len off
-  calls: nish.h3CheckWindow nish.h3FrameHeaderIn
-  pointer this: size=16 writesThrough=true captured=false passedTo=nish.h3FrameHeaderIn#0
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.h3FrameHeaderIn#1
-  stackSites=0 stackLocals=0
-  callee +0:5 h3CheckWindow -> @nish.h3CheckWindow
-  callee +1:12 h3FrameHeaderIn -> @nish.h3FrameHeaderIn
 function Http3Settings.constructor(this: Http3Settings): void -> @nish.Http3Settings.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=88 writesThrough=true captured=false
@@ -22495,13 +22484,6 @@ function h3CheckWindow(what: string, buf: u8[], off: i32, len: i32): void -> @ni
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 size: i32 (const)
-function h3WindowEnd(what: string, buf: u8[], off: i32, len: i32): i32 -> @nish.h3WindowEnd
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: len off what
-  calls: nish.h3CheckWindow
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1
-  stackSites=0 stackLocals=0
-  callee +0:3 h3CheckWindow -> @nish.h3CheckWindow
 function h3VarintEnd(buf: u8[], at: i32, end: i32): i32 -> @nish.h3VarintEnd
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
@@ -22554,22 +22536,14 @@ function h3FrameHeaderSize(type: i64, length: i64): i32 -> @nish.h3FrameHeaderSi
   callee +1:18 quicVarintSize -> @nish.quicVarintSize
 function h3ReadFrameHeader(h: Http3FrameHeader, buf: u8[], off: i32, len: i32): i32 -> @nish.h3ReadFrameHeader [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.h3FrameHeaderIn
-  escaping: len off
-  calls: nish.h3FrameHeaderIn nish.h3WindowEnd
-  pointer h: size=16 writesThrough=true captured=false passedTo=nish.h3FrameHeaderIn#0
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3FrameHeaderIn#1 nish.h3WindowEnd#1
-  stackSites=0 stackLocals=0
-  callee +0:3 h3FrameHeaderIn -> @nish.h3FrameHeaderIn
-  callee +0:32 h3WindowEnd -> @nish.h3WindowEnd
-function h3FrameHeaderIn(h: Http3FrameHeader, buf: u8[], off: i32, end: i32): i32 -> @nish.h3FrameHeaderIn
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  escaping: end off
-  calls: nish.h3VarintEnd nish.quicVarintRead
+  escaping: len off
+  calls: nish.h3CheckWindow nish.h3VarintEnd nish.quicVarintRead
   pointer h: size=16 writesThrough=true captured=false
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.quicVarintRead#0 nish.h3VarintEnd#0 nish.quicVarintRead#0 nish.h3VarintEnd#0
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.quicVarintRead#0 nish.h3VarintEnd#0 nish.quicVarintRead#0 nish.h3VarintEnd#0
   stackSites=0 stackLocals=0
+  callee -12:3 h3CheckWindow -> @nish.h3CheckWindow
+  local -11:9 end: i32 (const)
   local -10:9 type: i64 (const)
   callee -10:21 quicVarintRead -> @nish.quicVarintRead
   local -9:9 at: i32 (const)
@@ -22600,24 +22574,24 @@ function h3ReadSettings(s: Http3Settings, buf: u8[], off: i32, len: i32): i64 ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http3Settings.reset
   escaping: len off
-  calls: nish.Http3Settings.reset nish.Http3Settings.take nish.h3VarintEnd nish.h3WindowEnd nish.quicVarintRead
+  calls: nish.Http3Settings.reset nish.Http3Settings.take nish.h3CheckWindow nish.h3VarintEnd nish.quicVarintRead
   pointer s: size=88 writesThrough=true captured=false passedTo=nish.Http3Settings.reset#0 nish.Http3Settings.take#0
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3WindowEnd#1 nish.quicVarintRead#0 nish.h3VarintEnd#0 nish.quicVarintRead#0 nish.h3VarintEnd#0
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.quicVarintRead#0 nish.h3VarintEnd#0 nish.quicVarintRead#0 nish.h3VarintEnd#0
   stackSites=0 stackLocals=0
-  local +0:9 end: i32 (const)
-  callee +0:20 h3WindowEnd -> @nish.h3WindowEnd
-  callee +1:3 Http3Settings.reset -> @nish.Http3Settings.reset
-  local +2:7 at: i32 (let)
-  local +4:11 id: i64 (const)
-  callee +4:21 quicVarintRead -> @nish.quicVarintRead
-  local +5:11 idEnd: i32 (const)
-  callee +5:24 h3VarintEnd -> @nish.h3VarintEnd
-  local +9:11 value: i64 (const)
-  callee +9:24 quicVarintRead -> @nish.quicVarintRead
-  local +10:11 valueEnd: i32 (const)
-  callee +10:27 h3VarintEnd -> @nish.h3VarintEnd
-  local +15:11 result: i64 (const)
-  callee +15:25 Http3Settings.take -> @nish.Http3Settings.take
+  callee +0:3 h3CheckWindow -> @nish.h3CheckWindow
+  local +1:9 end: i32 (const)
+  callee +2:3 Http3Settings.reset -> @nish.Http3Settings.reset
+  local +3:7 at: i32 (let)
+  local +5:11 id: i64 (const)
+  callee +5:21 quicVarintRead -> @nish.quicVarintRead
+  local +6:11 idEnd: i32 (const)
+  callee +6:24 h3VarintEnd -> @nish.h3VarintEnd
+  local +10:11 value: i64 (const)
+  callee +10:24 quicVarintRead -> @nish.quicVarintRead
+  local +11:11 valueEnd: i32 (const)
+  callee +11:27 h3VarintEnd -> @nish.h3VarintEnd
+  local +16:11 result: i64 (const)
+  callee +16:25 Http3Settings.take -> @nish.Http3Settings.take
 function h3PutSettings(buf: u8[], at: i32, end: i32, ids: i64[], values: i64[]): i32 -> @nish.h3PutSettings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.h3PutFrameHeader
@@ -22655,14 +22629,14 @@ function h3PutIdFrame(buf: u8[], at: i32, end: i32, type: i64, id: i64): i32 -> 
 function h3ReadIdPayload(buf: u8[], off: i32, len: i32): i64 -> @nish.h3ReadIdPayload [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
-  calls: nish.h3VarintEnd nish.h3WindowEnd nish.quicVarintRead
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3WindowEnd#1 nish.quicVarintRead#0 nish.h3VarintEnd#0
+  calls: nish.h3CheckWindow nish.h3VarintEnd nish.quicVarintRead
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.quicVarintRead#0 nish.h3VarintEnd#0
   stackSites=0 stackLocals=0
-  local +0:9 end: i32 (const)
-  callee +0:20 h3WindowEnd -> @nish.h3WindowEnd
-  local +1:9 id: i64 (const)
-  callee +1:19 quicVarintRead -> @nish.quicVarintRead
-  callee +2:21 h3VarintEnd -> @nish.h3VarintEnd
+  callee +0:3 h3CheckWindow -> @nish.h3CheckWindow
+  local +1:9 end: i32 (const)
+  local +2:9 id: i64 (const)
+  callee +2:19 quicVarintRead -> @nish.quicVarintRead
+  callee +3:21 h3VarintEnd -> @nish.h3VarintEnd
 module std/net/qpack.ts [package nish]
 import HPACK_OK from "nish/net/hpack" -> const HPACK_OK
 import HpackHuffman from "nish/net/hpack" -> struct HpackHuffman
@@ -29385,7 +29359,9 @@ function Http3Connection.readHeader(this: Http3Connection, k: i32, id: i64): i32
   callee -16:35 h3VarintLength -> @nish.h3VarintLength
   local -9:13 n: i32 (const)
   callee -9:22 QuicConnection.streamRead -> @nish.QuicConnection.streamRead
-  callee +1:11 h3ReadFrameHeader -> @nish.h3ReadFrameHeader
+  local +1:13 end: i32 (const)
+  local +2:13 head: u8[] (const)
+  callee +7:11 h3ReadFrameHeader -> @nish.h3ReadFrameHeader
 function Http3Connection.uniStep(this: Http3Connection, k: i32, id: i64): i32 -> @nish.Http3Connection.uniStep [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:13
@@ -29460,8 +29436,11 @@ function Http3Connection.controlFrame(this: Http3Connection, type: i64): i32 -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http3Connection.fail nish.Http3Connection.stepAgain nish.QuicStreams.slotOf nish.h3ReadIdPayload nish.h3ReadSettings
-  pointer this: size=536 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.stepAgain#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0
+  pointer this: size=536 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.stepAgain#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0
   stackSites=0 stackLocals=0
+  local -15:11 control: u8[] (const)
+  local -14:11 fill: i32 (const)
+  callee -11:14 Http3Connection.fail -> @nish.Http3Connection.fail
   local -8:13 result: i64 (const)
   callee -8:27 h3ReadSettings -> @nish.h3ReadSettings
   callee -6:16 Http3Connection.fail -> @nish.Http3Connection.fail
@@ -49491,6 +49470,7 @@ import h3Count from "nish/net/http3-frame" -> function @nish.h3Count
 import h3Greased from "nish/net/http3-frame" -> function @nish.h3Greased
 import h3PutFrameHeader from "nish/net/http3-frame" -> function @nish.h3PutFrameHeader
 import h3PutVarint from "nish/net/http3-frame" -> function @nish.h3PutVarint
+import h3ReadFrameHeader from "nish/net/http3-frame" -> function @nish.h3ReadFrameHeader
 import h3ReadVarint from "nish/net/http3-frame" -> function @nish.h3ReadVarint
 import h3VarintLength from "nish/net/http3-frame" -> function @nish.h3VarintLength
 import Http3FrameHeader from "nish/net/http3-frame" -> struct Http3FrameHeader
@@ -50289,7 +50269,7 @@ function WebTransport.timeOut(this: WebTransport, w: WebTransportSession, state:
 function WebTransport.capsules(this: WebTransport): i32 -> @nish.WebTransport.capsules [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.Http3FrameHeader.read nish.WebTransport.at nish.WebTransport.capsule nish.WebTransport.malformed nish.tryCopyBytes nish.wtAdd nish.wtSub
+  calls: nish.WebTransport.at nish.WebTransport.capsule nish.WebTransport.malformed nish.h3ReadFrameHeader nish.tryCopyBytes nish.wtAdd nish.wtSub
   pointer this: size=296 writesThrough=true captured=false passedTo=nish.WebTransport.at#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.capsule#0
   stackSites=0 stackLocals=0
   local -2:11 w: WebTransportSession | null (const)
@@ -50305,7 +50285,7 @@ function WebTransport.capsules(this: WebTransport): i32 -> @nish.WebTransport.ca
   local +21:15 filled: i32 (const)
   callee +23:18 WebTransport.malformed -> @nish.WebTransport.malformed
   local +25:15 start: i32 (const)
-  callee +26:13 Http3FrameHeader.read -> @nish.Http3FrameHeader.read
+  callee +26:13 h3ReadFrameHeader -> @nish.h3ReadFrameHeader
   local +30:15 type: i64 (const)
   local +31:15 length: i64 (const)
   callee +33:18 WebTransport.malformed -> @nish.WebTransport.malformed

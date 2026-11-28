@@ -1649,6 +1649,9 @@ const s1PanicFree = byFinding(S1_PANIC_FREE)
 /** The changelog words of WP87 S2, which makes std's math, base64, random, regex, release, sqlite, testing and text modules panic-free. */
 const S2_REST_PANIC_FREE = "the remaining std modules panic-free"
 const s2RestPanicFree = byFinding(S2_REST_PANIC_FREE)
+/** The changelog words of WP86 S1, which makes std's JSON helpers, yaml-lines, yaml-write and yaml-json panic-free. */
+const WP86_S1_PANIC_FREE = "the JSON helpers and the YAML loader and writer panic-free"
+const wp86S1PanicFree = byFinding(WP86_S1_PANIC_FREE)
 /** WP87 S2's programs whose only move is testing.ll: `Suite` stops its tallies at the largest `i32` through `testingCount`. */
 const S2_REST_TESTING = [
   "bench/quic-goodput.ts",
@@ -11784,6 +11787,8 @@ const wp91s1 = byFinding(WP91_S1)
 /** The changelog words of WP90 S1, the multipart/form-data reader. */
 const MULTIPART_BODIES = "multipart/form-data bodies"
 
+/** The release-note words of WP80 S10, window contracts forwarded from free functions, arrow consts and literal counts. */
+const WINDOW_FORWARD = "window contracts forward from free functions, arrow consts and literal lengths"
 /** WP91 S4: the cast wraps in std/net's HTTP, HPACK, URL and server modules, spelled. */
 const WP91_S4_NET_HTTP = "std/net HTTP, HPACK, URL and the server stack"
 
@@ -24733,6 +24738,19 @@ const DECLARED = [
       "tests/link/sync_shm_window/main.ts": ["testing.ll"],
     }
   ),
+  ...wp86S1PanicFree(
+    "std/json-value gains `JsonDocument.keys` and drops its array-length panic, std/json-number gains `jsonNumberDifference`, and std/json-equal walks object keys through `keys`, so the JSON helpers' modules move (WP86 S1)",
+    {
+      "bench/std-json-equal.ts": ["json-equal.ll", "json-number.ll", "json-tokenizer.ll", "json-value.ll", "std-json-equal.ll"],
+    }
+  ),
+  ...wp86S1PanicFree(
+    "std/yaml-lines stops its columns at the largest `i32` (returning -1 past it), and std/yaml-json and std/yaml-write prove their counts and indexes, so the yaml modules and the JSON modules they reach move (WP86 S1)",
+    {
+      "bench/std-yaml-json.ts": ["json-tokenizer.ll", "json-value.ll", "std-yaml-json.h", "std-yaml-json.ll", "yaml-json.ll", "yaml-lines.ll", "yaml-write.ll"],
+      "tests/link/std_yaml_json/main.ts": ["yaml-lines.ll"],
+    }
+  ),
   // `jsonPutString` is exported from std/json.ts and its walk is lowered to
   // the runtime's `nish_json_put_string`, so every json.ll a program writes
   // declares the kernel and defines the new function, and the module moves.
@@ -24826,7 +24844,7 @@ const DECLARED = [
   },
   // examples-strict S8: std/net/http3-frame.ts's `h3CheckWindow` becomes a window guard, the HTTP/3 writes answer H3_INVALID, and qpack.ts's integer writer cannot panic
   ...byFinding(S8_RELAY_STD)(
-    "std/net/http3-frame.ts rewrites `h3CheckWindow` in the window guard's shape and adds `Http3FrameHeader.read`, std/net/http3.ts's writes answer H3_INVALID for a window outside their buffer, and std/net/qpack.ts's `qpackPushInteger` takes its prefix as a literal mask and a `u64` and no longer panics (the stream-ID check moves to `qpackPushStreamCancellation`), so http3-frame.ll, http3.ll, qpack.ll and every module that declares `Http3FrameHeader`'s methods move",
+    "std/net/http3-frame.ts rewrites `h3CheckWindow` in the window guard's shape and has its three readers call it first, std/net/http3.ts's writes answer H3_INVALID for a window outside their buffer and its reads prove their windows, and std/net/qpack.ts's `qpackPushInteger` takes its prefix as a literal mask and a `u64` and no longer panics (the stream-ID check moves to `qpackPushStreamCancellation`), so http3-frame.ll, http3.ll, qpack.ll and the modules that call them move",
     {
       "bench/httparena/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
       "tests/link/httparena_entry/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
@@ -25185,6 +25203,21 @@ const DECLARED = [
     file: "exit",
     changelog: MULTIPART_BODIES,
     why: "the case is new with this change and imports nish/net/multipart, which the seed does not ship, so the reference refuses it",
+  },
+  ...[
+    "tests/link/window_contract_arrow_literal/main.ts",
+    "tests/link/window_contract_value_forward/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: WINDOW_FORWARD,
+    why: "the case is new with this change: its reader calls a window guard with a literal count, so the candidate proves the reads `b[off]` to `b[off + count - 1]` after the call and drops their bounds checks, which the seed keeps",
+  })),
+  {
+    program: "tests/link/window_contract_guard_facts/main.ts",
+    file: "main.ll",
+    changelog: WINDOW_FORWARD,
+    why: "the case is new with this change: each function calls a window guard as a statement, so the candidate proves the reads inside the guarded window (`b[off]` to `b[off + 3]`, and loops bounded by `len` or `off`) and drops their bounds checks, which the seed keeps",
   },
 ]
 

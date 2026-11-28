@@ -255,7 +255,7 @@ namespace (`docs/wp26-stdlib.md` §3e).
 
 Panics unless `[off, off + len)` lies inside `buf`: a window outside its buffer is the program's mistake.
 A window guard (`docs/LANGUAGE.md`, `window`), so a caller that proves the window in range removes the
-panic site, and a method whose first statement hands it its own window passes that proof to its callers.
+panic site, and a function whose first statement hands it its own window passes that proof to its callers.
 
 ```ts
 const h3CheckWindow: (
@@ -799,7 +799,6 @@ class Http3FrameHeader
 | `new Http3FrameHeader()` |  |
 | `length: i64` | The payload's length in bytes, 0 to 2^62 - 1, set with `type`; the payload itself is not read here. |
 | `type: i64` | The frame type, 0 to 2^62 - 1, any value: set by each `h3ReadFrameHeader` that answers above 0. |
-| `read(buf: u8[], off: i32, len: i32): i32` | Reads a frame header from `buf[off, off + len)` into this one, as `h3ReadFrameHeader` does. Its first statement hands the window to `h3CheckWindow`, so a caller that proves the window inside `buf` reaches no panic. |
 
 ### Http3Settings
 
