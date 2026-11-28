@@ -667,8 +667,6 @@ export class HmacSha256Scratch {
   private fresh: Sha256
   /** One key block XOR a pad, wiped as soon as it is absorbed. */
   private pad: u8[]
-  /** Whether the last `begin` keyed the hashers: `finishInto` writes no tag until one has. */
-  private ready: boolean = false
   /** The SHA-256 of a key longer than a block, which RFC 2104 §2 keys with instead; wiped once used. */
   private keyHash: u8[]
 
@@ -681,6 +679,8 @@ export class HmacSha256Scratch {
     this.fresh = new Sha256()
     this.pad = new Array<u8>(SHA256_BLOCK)
     this.keyHash = new Array<u8>(SHA256_SIZE)
+    // Unkeyed until `begin`: `finishInto` refuses a finished outer hasher.
+    this.outer.finished = true
   }
 
   /**
@@ -694,10 +694,11 @@ export class HmacSha256Scratch {
    */
   begin(key: u8[], off: i32, len: i32): boolean {
     if (!hmacWindowFits(toI32(key.length), off, len)) {
-      this.ready = false
+      // A finished outer hasher is what `finishInto` refuses: no tag until a
+      // `begin` succeeds.
+      this.outer.finished = true
       return false
     }
-    this.ready = true
     if (len <= SHA256_BLOCK) {
       this.keyBlocks(key, off, len)
       return true
@@ -749,14 +750,15 @@ export class HmacSha256Scratch {
 
   /**
    * Writes the 32-byte tag at `out[at]` and ends the computation; a second
-   * `finishInto` writes the same tag again.
+   * `finishInto` writes nothing and answers `false` until a `begin` keys the
+   * hashers again.
    *
    * @param out The caller's array the tag is written into.
    * @param at Where the 32 tag bytes start in `out`.
-   * @returns `true` once the tag is written; `false`, with `out` untouched, for a window outside `out` or when no `begin` has keyed the hashers.
+   * @returns `true` once the tag is written; `false`, with `out` untouched, for a window outside `out` or when no `begin` has keyed the hashers since the last tag, `wipe` or refused key window.
    */
   finishInto(out: u8[], at: i32): boolean {
-    if (!this.ready || !hmacWindowFits(toI32(out.length), at, SHA256_SIZE)) {
+    if (this.outer.finished || !hmacWindowFits(toI32(out.length), at, SHA256_SIZE)) {
       return false
     }
     const innerDigest: u8[] = this.inner.digest()
@@ -796,8 +798,6 @@ export class HmacSha384Scratch {
   private fresh: Sha384
   /** One key block XOR a pad, wiped as soon as it is absorbed. */
   private pad: u8[]
-  /** Whether the last `begin` keyed the hashers: `finishInto` writes no tag until one has. */
-  private ready: boolean = false
   /** The SHA-384 of a key longer than a block; wiped once used. */
   private keyHash: u8[]
 
@@ -810,6 +810,8 @@ export class HmacSha384Scratch {
     this.fresh = new Sha384()
     this.pad = new Array<u8>(SHA512_BLOCK)
     this.keyHash = new Array<u8>(SHA384_SIZE)
+    // Unkeyed until `begin`: `finishInto` refuses a finished outer hasher.
+    this.outer.engine.finished = true
   }
 
   /**
@@ -823,10 +825,11 @@ export class HmacSha384Scratch {
    */
   begin(key: u8[], off: i32, len: i32): boolean {
     if (!hmacWindowFits(toI32(key.length), off, len)) {
-      this.ready = false
+      // A finished outer hasher is what `finishInto` refuses: no tag until a
+      // `begin` succeeds.
+      this.outer.engine.finished = true
       return false
     }
-    this.ready = true
     if (len <= SHA512_BLOCK) {
       this.keyBlocks(key, off, len)
       return true
@@ -878,14 +881,15 @@ export class HmacSha384Scratch {
 
   /**
    * Writes the 48-byte tag at `out[at]` and ends the computation; a second
-   * `finishInto` writes the same tag again.
+   * `finishInto` writes nothing and answers `false` until a `begin` keys the
+   * hashers again.
    *
    * @param out The caller's array the tag is written into.
    * @param at Where the 48 tag bytes start in `out`.
-   * @returns `true` once the tag is written; `false`, with `out` untouched, for a window outside `out` or when no `begin` has keyed the hashers.
+   * @returns `true` once the tag is written; `false`, with `out` untouched, for a window outside `out` or when no `begin` has keyed the hashers since the last tag, `wipe` or refused key window.
    */
   finishInto(out: u8[], at: i32): boolean {
-    if (!this.ready || !hmacWindowFits(toI32(out.length), at, SHA384_SIZE)) {
+    if (this.outer.engine.finished || !hmacWindowFits(toI32(out.length), at, SHA384_SIZE)) {
       return false
     }
     const innerDigest: u8[] = this.inner.digest()
