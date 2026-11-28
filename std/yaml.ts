@@ -3126,7 +3126,7 @@ class YamlParser {
     if (explicitIndent > 0 && explicitIndent < 16) {
       if (parentIndent <= 0) {
         contentIndent = explicitIndent
-      } else if (parentIndent < 268435455) {
+      } else if (parentIndent < YAML_MAX_BLOCK_INDENT) {
         contentIndent = parentIndent + explicitIndent
       } else {
         // Too deep for the node to keep: the packing below reports it.
@@ -3190,7 +3190,7 @@ class YamlParser {
     yamlPut(this.stream.firsts, node, bodyStart)
     yamlPut(this.stream.counts, node, this.pos)
     let packed: i32 = chomp
-    if (contentIndent >= -1 && contentIndent < 268435455) {
+    if (contentIndent >= -1 && contentIndent < YAML_MAX_BLOCK_INDENT) {
       // Bit fields: the column above bit 3, the indicator flag at bit 2 and the
       // chomping mode (0 to 2) in bits 0 and 1.
       const flag: i32 = explicitIndent > 0 ? 4 : 0
