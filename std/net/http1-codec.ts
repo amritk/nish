@@ -2691,10 +2691,12 @@ export const http1TryWriteChunk = (out: u8[], at: i32, data: readonly u8[], off:
     return HTTP1_NO_ROOM
   }
   let v: i32 = len
-  // The digits are written last first, `out[k - 1]` each time.
-  for (let k: i32 = end; k > 0 && k > at && k <= toI32(out.length); k -= 1) {
+  // The digits are written last first, `out[j]` each time. `end32` is at
+  // least `digits`, which is at least 1, so `last32` is exact.
+  const last32: u32 = end32 - toU32(1)
+  for (let j: i32 = toI32(last32); j >= at && j >= 0 && j < outLength; j -= 1) {
     const d: i32 = v & 15
-    out[k - 1] = toU8(d < 10 ? 48 + d : 87 + d)
+    out[j] = toU8(d < 10 ? 48 + d : 87 + d)
     v = v >> 4
   }
   http1PutCrlf(out, end)
