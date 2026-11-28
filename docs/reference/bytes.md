@@ -258,7 +258,7 @@ The first index in `[from, to)` whose byte a JSON writer cannot copy as itself �
 
 <scalar-card title="try​Get​U32​LE" icon="phosphor/regular/function" href="#trygetu32le">
 
-`getU32LE` that answers an offset whose four bytes do not all lie in `b` as `Err`, where `getU32LE` panics `index`: the form a strict module reads a record it did not size itself with.
+`getU32LE` that answers an offset whose four bytes do not all lie in `b` as `Err`, where `getU32LE` panics: the form a strict module reads a record it did not size itself with.
 
 </scalar-card>
 
@@ -309,22 +309,17 @@ significant.** The widths are `u16`, `u32` and `u64`, the signed `i32` and
 bytes are its IEEE 754 bits (`f64ToBits`). There is no `f32`: the language
 has no bit cast for one.
 
-<scalar-detail title="Each access is an ordinary index">
+<scalar-detail title="Each function checks its whole window once, first, through `bytesWindow`">
 
-**Each access is an ordinary index**, so an offset whose bytes do not all lie
-in the array panics `index`, naming the first byte that does not.
-
-A guard in the caller does not yet remove these checks: in a loop guarded by
-`off + 3 < b.length`, the checker proves an index it can see but not one
-inside a call, and after `getU32LE` inlines, LLVM keeps the checks on `off +
-1` to `off + 3`, because the guard compares the length truncated to `i32` and
-the checks compare it unsigned at 64 bits. A loop that needs them gone
-indexes the bytes itself.
-
-`getU64BE`, and with it `getI64BE` and `getF64BE`, is the exception: it
-checks the whole range once and reads the eight bytes unchecked, which lowers
-to one load and a byte swap. An offset outside the range still goes byte by
-byte, so it panics as the others do.
+**Each function checks its whole window once, first, through `bytesWindow`**,
+so an offset whose bytes do not all lie in the array panics before any byte
+is read or written, naming the function, the offset and the array's length.
+The check is a window contract (docs/LANGUAGE.md, "Panic sites", `window`):
+it is recorded at each call, so a caller whose own test holds the window,
+such as `off >= 0 && off + 4 <= b.length` before a `getU32LE`, proves it
+there, and a `--deny-panics` program that tests its offsets needs no
+opt-out. Inside, every byte the window covers is proven, so the eight-byte
+reads lower to one load (and, big-endian, a byte swap).
 
 </scalar-detail>
 
@@ -449,7 +444,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -476,7 +472,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -503,7 +500,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+  `b[off + 3]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -530,7 +528,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+  `b[off + 3]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -557,7 +556,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -584,7 +584,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -611,7 +612,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 1]`, and a byte of those outside `b` panics `index`.
+  `b[off + 1]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -638,7 +640,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 1]`, and a byte of those outside `b` panics `index`.
+  `b[off + 1]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -665,7 +668,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+  `b[off + 3]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -692,7 +696,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+  `b[off + 3]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -705,9 +710,8 @@ The number read.
 ### getU64BE
 
 The `u64` whose bytes, most significant first, are `b[off]` to `b[off + 7]`.
-The fast path's ors are grouped in pairs, which LLVM folds into one load and
-a `bswap`; a flat chain of eight `or`s stayed byte by byte. The byte loop is
-its own function so its last load is not merged with the fast path's.
+The ors are grouped in pairs, which LLVM folds into one load and a `bswap`;
+a flat chain of eight `or`s stayed byte by byte.
 
 ```ts
 const getU64BE: (b: u8[], off: i32) => u64
@@ -722,7 +726,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -749,7 +754,8 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -776,7 +782,8 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -803,7 +810,8 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -830,7 +838,8 @@ The bytes written into; only the four at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+  `b[off + 3]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -858,7 +867,8 @@ The bytes written into; only the four at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+  `b[off + 3]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -886,7 +896,8 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -914,7 +925,8 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -942,7 +954,8 @@ The bytes written into; only the two at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 1]`, and a byte of those outside `b` panics `index`.
+  `b[off + 1]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -969,7 +982,8 @@ The bytes written into; only the two at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 1]`, and a byte of those outside `b` panics `index`.
+  `b[off + 1]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -996,7 +1010,8 @@ The bytes written into; only the four at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+  `b[off + 3]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -1023,7 +1038,8 @@ The bytes written into; only the four at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 3]`, and a byte of those outside `b` panics `index`.
+  `b[off + 3]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -1050,7 +1066,8 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -1077,7 +1094,8 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and a byte of those outside `b` panics `index`.
+  `b[off + 7]`, and an offset whose
+  bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -1370,7 +1388,7 @@ The number read, from -2^63 to 2^63 - 1, or `Err` naming the
 ### tryGetU32LE
 
 `getU32LE` that answers an offset whose four bytes do not all lie in `b`
-as `Err`, where `getU32LE` panics `index`: the form a strict module reads a
+as `Err`, where `getU32LE` panics: the form a strict module reads a
 record it did not size itself with.
 
 ```ts
