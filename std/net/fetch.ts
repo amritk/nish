@@ -2009,7 +2009,10 @@ const httpClientConnectHead = (host: string, port: i32, proxy: Url, fault: HttpC
   const values: string[] = [authority]
   const auth: string | null = httpClientProxyAuth(proxy)
   if (auth === null) {
-    fault.fail(HTTP_E_PROXY, "the proxy's user name or password is not valid percent-encoding")
+    fault.fail(
+      HTTP_E_PROXY,
+      "the proxy's user name or password is not valid percent-encoding, or too long to encode"
+    )
     return null
   }
   if (auth !== "") {
@@ -2242,7 +2245,10 @@ const httpClientRequestHead = (
     const proxy: Url | null = httpClientProxyUrl(httpProxy)
     const auth: string | null = proxy !== null ? httpClientProxyAuth(proxy) : ""
     if (auth === null) {
-      fault.fail(HTTP_E_PROXY, "the proxy's user name or password is not valid percent-encoding")
+      fault.fail(
+        HTTP_E_PROXY,
+        "the proxy's user name or password is not valid percent-encoding, or too long to encode"
+      )
       return null
     }
     if (auth !== "" && !hasProxyAuth) {

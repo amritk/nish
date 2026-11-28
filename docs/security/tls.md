@@ -445,6 +445,20 @@ KeyUpdate's next secret over both hashes match Python's `cryptography` and
   signature when none is due, a P-256 key that is not one, and a `TlsServer`
   that already refused its configuration or randomness. A handshake that
   fails before its ServerHello wipes the ephemeral key it never used.
+- *A spent pool or an HKDF refusal is `internal_error`, not a panic*
+  (examples-strict S7b). A `TlsRecordReader` that borrows from a shared pool
+  whose buffers are all lent answers `-TLS_ALERT_INTERNAL_ERROR` from `push`
+  and takes nothing, through `BufferPool.tryTake`; once a buffer comes back
+  the same push is taken (`tests/link/net_tls_record_pool_spent`, "exits with
+  0 and stdout matches expected.out"; without the test in `push` the pool
+  panics and the program exits 1). The schedule's held forms
+  (`tlsDeriveSecretHeld`, `tlsHandshakeSecretHeld`, `tlsMasterSecretHeld`,
+  `tlsFinishedVerifyDataHeld`) answer `false` or `null` for an argument out of
+  range instead of panicking, and `TlsClient` turns that into
+  `internal_error`. **Untested:** the client passes them only the pool's own
+  secrets and its own transcript hash, so no check reaches that arm through a
+  handshake; the held forms' own refusals are pinned by
+  `crypto_hkdf_held_into_hash`, `_into_output` and `crypto_hkdf_held_label`.
 
 **The handshake goes on records the way RFC 8446 puts it there.** The flight
 waits for the signature and goes out as one record; everything after the

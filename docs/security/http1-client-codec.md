@@ -13,8 +13,8 @@ starts from evidence. It names functions rather than lines, so it holds at any c
 repaired, with its own `HTTP1_E_` code, and a refusal is final. The events,
 the de-chunked body and the error code are the same however the input is cut.
 The parser has no panic site: the program's own mistake, a `feed` window
-outside its buffer, is the refusal `HTTP1_E_WINDOW`. More than 2^30 bytes fed and not read, or kept of one head, is the
-refusal `HTTP1_E_MEMORY_LIMIT`.
+outside its buffer, is the refusal `HTTP1_E_WINDOW`. More than 2^30 bytes fed
+and not read, or kept of one head, is the refusal `HTTP1_E_MEMORY_LIMIT`.
 
 Every cap is a number the program passes to the constructor, or a constant of
 the module. The writer counts and checks the whole head before it writes a

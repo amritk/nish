@@ -106,8 +106,8 @@ was verified instead, each with the test that now pins it.
 | SHA-256's bit length is right past 2^29, 2^31, 2^32 and up to 2^61 − 1 bytes, in both number modes | `total` is an `i64` and the length is `toU64(total) << 3`, so no counter is `number`-typed | `tests/link/crypto_sha2_lengths`, `crypto_sha2_lengths_f64` (6 SHA-256 cases, two with the length in a second block) |
 | SHA-512 and SHA-384's 128-bit length is right past 2^29, 2^32, 2^61 and at 2^64 − 1 bytes, in both modes | `count` is a `u64`, and the length is `count >> 61` then `count << 3` | the same two programs (6 cases each) |
 | Padding at the block boundaries (55/56/63/64/65 bytes; 111/112/127/128/129) | §5.1.1 / §5.1.2 | existing `crypto_sha256`, `crypto_sha512` and their `_f64` twins |
-| A window with a negative offset or length, or one past the end, panics before anything is hashed, and so does one whose `off + len` would wrap an `i32` | `len > size - off` (`Sha256`) and `off > size - len` (`Sha512Engine`), with both operands non-negative first, cannot overflow | existing `crypto_sha256_window`, `crypto_sha512_window`, `crypto_hmac_sha*_window`; new `crypto_sha256_window_wrap`, `crypto_sha512_window_wrap` |
-| A digest ends the computation for SHA-512, SHA-384 and the HMACs: a second `digest` or a later `update` panics, and a `Sha512`/`Sha384` copy of a spent hasher is itself spent. A `Sha256` digest ends only its input: a later `update` panics, while a second `digest` or `digestInto` answers the same digest and a `copy` of a finished hasher is finished with the same state (WP83 S1). An `HmacSha256`'s second digest panics in its outer hasher's `update`, after the inner `Sha256` answers the digest of its wiped state | `finished` is checked first in `update` and in the SHA-512 engine; `Sha256.digestInto` pads only while `finished` is false, then writes the stored state | panic: `crypto_sha256_update_after_digest`, `_update_after_digest_into`, `crypto_sha512_digest_twice`, `crypto_sha512_spent`, `crypto_hmac_sha256_digest_twice`, `_digest_into_twice`, `_update_after_digest`, `_update_after_digest_into`, `crypto_hmac_sha384_digest_twice`, `_update_after_digest`, `crypto_hmac_sha512_digest_twice`; same digest, exit 0: `crypto_sha256_digest_twice`, `_digest_into_after_digest`, `_copy_after_digest` |
+| A window with a negative offset or length, or one past the end, is refused before anything is hashed: `update` answers `false` (a panic before examples-strict S7b), and so it does for one whose `off + len` would wrap an `i32` | `len > size - off` (`Sha256`) and `off > size - len` (`Sha512Engine`), with both operands non-negative first, cannot overflow | existing `crypto_sha256_window`, `crypto_sha512_window`, `crypto_hmac_sha*_window`; new `crypto_sha256_window_wrap`, `crypto_sha512_window_wrap` |
+| A digest ends a hasher's input: a later `update` answers `false` and absorbs nothing, and a second `digest` of a `Sha256`, `Sha512` or `Sha384` answers the same digest, so a copy of a finished hasher is finished with the same state (WP83 S1 for SHA-256; SHA-512 and SHA-384 and the `false` answers since examples-strict S7b, where each was a panic). An HMAC's tag is taken once: a later `update` answers `false`, and a second `digest` or `digestInto` panics with "HmacSha256: the tag is already taken" (`HmacSha384`, `HmacSha512` alike), since the wiped hashers hold no tag to answer; the panic is a `kept` entry of `tests/std-panics.json` | `finished` is checked first in `update` and in the SHA-512 engine, and each HMAC `digest` tests its inner hasher's `finished` first; `Sha256.digestInto` and the SHA-512 engine pad only while `finished` is false, then write the stored state | panic: `crypto_hmac_sha256_digest_twice`, `_digest_into_twice`, `crypto_hmac_sha384_digest_twice`, `crypto_hmac_sha512_digest_twice`; `false`, exit 0: `crypto_sha256_update_after_digest`, `_update_after_digest_into`, `crypto_sha512_spent`, `crypto_hmac_sha256_update_after_digest`, `_update_after_digest_into`, `crypto_hmac_sha384_update_after_digest`; same digest, exit 0: `crypto_sha256_digest_twice`, `_digest_into_after_digest`, `_copy_after_digest`, `crypto_sha512_digest_twice` |
 | HMAC hashes a key longer than the block, and only then: 64/65 bytes for SHA-256, 128/129 for SHA-384 | `toI32(key.length) > SHA256_BLOCK` / `> SHA512_BLOCK` | existing `crypto_hmac` (RFC 4231 cases 6 and 7, and the block-boundary keys checked against Python) |
 | The verifiers refuse every wrong tag: truncated, one byte longer with the right prefix, empty, one byte, the other hash's tag, and each of the 256 (SHA-256) and 384 (SHA-384) single-bit flips | `timingSafeEqual` compares lengths first and every byte after | existing `crypto_hmac`; new `crypto_hmac_k1_verify`, `crypto_hmac_k1_verify_f64` |
 | HKDF-Expand refuses L < 0, L > 255 × HashLen, and the `i32` extremes; L = 0 is empty | the bound is a comparison, not a sum | existing `crypto_hkdf`; new `crypto_hkdf_k1_bounds` and `_f64` |
@@ -318,6 +318,44 @@ stores), so the assembly check reads the code that ships, and
 `crypto_base64url_k1_copies` holds it to the module on 4,000 generated
 groups. The short final group is not in the fixture; it is listed above with
 what the fixtures do not reach.
+
+## Addendum: the panics `examples/http-get-json.ts` reached (examples-strict S7b)
+
+A TLS fetch reached every panic the hashes, HMACs and HKDF stated as their
+API. Each such failure is now an answer, and `tests/std-panics.json` counts no
+site in `sha256.ts`, `sha512.ts` or the HKDF forms the TLS schedule calls:
+
+- `Sha256.update`, `Sha512.update`, `Sha384.update` and the HMACs' `update`
+  answer `false`, absorbing nothing, for a window outside `data` or after the
+  digest. The `crypto_sha*_window*`, `_update_after_digest*` and
+  `crypto_sha512_spent` programs print the `false` and exit 0; before, they
+  exited 1 on the panic. A second SHA-512 or SHA-384 `digest` answers the
+  first (`crypto_sha512_digest_twice`).
+- `HmacSha256Scratch` and `HmacSha384Scratch` answer `false` from `begin`,
+  `update` and `finishInto` for a window outside its array, and `finishInto`
+  writes no tag until a `begin` has succeeded
+  (`crypto_hmac_scratch_key_window`, `_sha384_key_window`, `_tag_window`,
+  `_sha384_tag_window`).
+- `hkdfExpandLabelInto` and the held forms answer `false` or `null` where
+  `hkdfExpandLabelSha256` panics: a length, label or context outside the
+  refusal table above, a secret shorter than HashLen, a bad hash length or an
+  output window outside its array (`crypto_hkdf_scratch_label_*`,
+  `crypto_hkdf_held_into_*`, `crypto_hkdf_held_label`). The plain
+  `hkdfExpandLabelSha256` and `hkdfExpandLabelSha384` keep their panics,
+  which the table's tests pin.
+- The one panic left on this path is an HMAC's second digest, which is a
+  call-order mistake of the caller, not of the input: the wiped hashers have
+  no tag to answer. It moved from `Sha256.update`, where `HmacSha256` used to
+  reach it, into each HMAC's `digest`, as three `kept` entries.
+
+The TLS schedule, which calls the held forms, turns a `false` into the
+internal-error alert; `docs/security/tls.md` records that arm as untested.
+The wipe counts `tests/wipes/crypto.js` pins for the held roots fall
+(`hkdfExpandLabelSha256Held` 31 to 16, `tlsDeriveSecretHeld` 62 to 32, and
+the rest of that list), because `opt` now folds each root's constant hash
+length and keeps only that hash's Expand. Every Expand still wipes what it
+did, and a deleted wipe still fails its count: the comment above that list
+gives each root's count.
 
 ## Addendum: panic sites (WP83 S1, #2147)
 

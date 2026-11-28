@@ -356,6 +356,14 @@ the proxy in place of the userinfo's`); a proxy setting an error names is its
 scheme, host, port and path alone, and one that does not parse or has no host
 is not echoed (HF-8).
 
+A proxy URL's `user:password` too long to encode in base64, past 1,610,612,733
+bytes, is `HTTP_E_PROXY` too, where `base64Encode` used to panic
+(examples-strict S7b: `httpClientProxyAuth` sizes its output and calls
+`base64EncodeIfFits`). **Untested:** reaching it needs a proxy URL of more than
+1.6 GB in the environment, which no check builds; the encoding of a short
+pair is pinned by `net_http_fetch_tls`'s "and the CONNECT carries the
+proxy URL's user and password".
+
 **https.** The checks are in `tests/link/net_http_fetch_tls/main.ts`, run as
 `link/net_http_fetch_tls: exits with 0 and stdout matches expected.out`. Its
 servers are loopback TLS 1.3 servers over certificates made for the test and

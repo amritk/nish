@@ -67,7 +67,7 @@ the record that found it. The notes below the table name each such finding.
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 1 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
-| PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
+| PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 6 | 0 / 0 / 1 / 8 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²² |
 | JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²⁵ |
@@ -409,10 +409,11 @@ the record that found it. The notes below the table name each such finding.
     fixed +1 Low, by COMP-20: open +1 Low, and by COMP-21: fixed +1 Low.
 20. P384-1 to P384-3 are properties checked and recorded, not findings: high
     `s` accepted, variable time on public input, and digest truncation.
-21. PKI-R6 to PKI-R8 (Low) are accepted, with the reason in their record, and
-    are not counted: the size cap and file-type check that a descriptor-based
-    builtin would tighten, the macOS Keychain the loader does not read, and
-    the overflow check the uncapped `skipped` count keeps.
+21. PKI-R6 and PKI-R7 (Low) are accepted, with the reason in their record,
+    and are not counted: the size cap and file-type check that a
+    descriptor-based builtin would tighten, and the macOS Keychain the loader
+    does not read. PKI-R8 (Low), the overflow check the uncapped `skipped`
+    count kept, is fixed: the count stops at `PKI_ROOTS_MAX_SKIPPED`.
     PKI-R1 to PKI-R5 are properties checked and found to hold.
 22. DNS-1 to DNS-4 (Low) are accepted, with the reason in their record, and
     are not counted: DNS-1 to DNS-3 are the trust a stub resolver places in

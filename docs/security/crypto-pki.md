@@ -32,9 +32,10 @@ Accepted and not counted:
 
 - the size cap is checked after the read, and there is a window between the
   file-type check and the open (PKI-R6);
-- the macOS Keychain gap (PKI-R7);
-- the `skipped` count, which is not capped and keeps the module's one
-  panic site (PKI-R8).
+- the macOS Keychain gap (PKI-R7).
+
+Fixed: the `skipped` count's overflow check, the module's last panic site,
+is gone; the count stops at `PKI_ROOTS_MAX_SKIPPED` (PKI-R8).
 
 ## Scope
 
@@ -321,22 +322,23 @@ link. Closing this gap is a separate stage. Until then, a macOS program that
 must honour the machine's trust settings sets `SSL_CERT_FILE` to an export it
 keeps current. The gap is also in the module's user-guide row.
 
-### PKI-R8 (Low): the `skipped` count keeps an overflow check
+### PKI-R8 (Low, fixed): the `skipped` count stops at a cap
 
-`std/crypto/pki-roots.ts` keeps one panic site under the no-panic check, the
-overflow check of the `+ 1` in `pkiRootsSkip`, which every skipped block, file
-and directory entry goes through. Every other index, sum and copy in the module
-is proven in range or guarded since #2150 (WP83 S4), and `tests/std-panics.json`
-counts this one alone (`overflow: 1`).
+**Before.** `std/crypto/pki-roots.ts` kept one panic site under the no-panic
+check, the overflow check of the `+ 1` in `pkiRootsSkip`, which every skipped
+block, file and directory entry goes through, and `tests/std-panics.json`
+counted it (`overflow: 1`). Past `PKI_ROOTS_MAX_FILES` a trust directory's
+entries are each counted as skipped without a read, so no bound below 2^31
+holds for the count, and reaching the check needed 2^31 − 1 skipped entries.
 
-The count is not capped on purpose. Past `PKI_ROOTS_MAX_FILES` a trust
-directory's entries are each counted as skipped without a read, so the count
-is bounded by the entries the listings hold, not by a constant below 2^31. A
-cap would report a smaller number of skips than happened, which is a made-up
-value. Reaching the check needs 2^31 − 1 skipped entries across the trust
-paths, and so someone who can write them; by the threat model that someone
-already decides what is trusted. The check panics rather than wrapping, so the
-count is never wrong.
+**After** (examples-strict S7b). `pkiRootsSkip` stops the count at
+`PKI_ROOTS_MAX_SKIPPED`, 2^31 − 1, and the doc of `PkiRoots.skipped` says that
+a value there means at least that many were skipped, so the number a caller
+reads is still true. `node tests/run.js std-panics` counts no site in the
+module. `tests/link/crypto_pki_roots_skipped_cap` starts a load one below the
+cap and skips twice; it prints that both leave the count at the cap and exits
+0 ("exits with 0 and stdout matches expected.out"). Without the test in
+`pkiRootsSkip` the second `+ 1` overflows and the program panics with exit 1.
 
 ## Path validation (`nish/crypto/pki`)
 
