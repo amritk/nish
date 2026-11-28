@@ -188,8 +188,8 @@ export const isArrayWriteMethod = (name: string): boolean =>
 /**
  * The parameters of the builtin a call reaches, in `netSignature`'s letters,
  * or "" for a call that writes no argument's elements: the argument-side twin
- * of `isArrayWriteMethod`. `crypto.getRandomValues(bytes)` (WP34 N3) and
- * `secureZero(bytes)` (#385) are `w`;
+ * of `isArrayWriteMethod`. `crypto.getRandomValues(bytes)` (WP34 N3), its
+ * twin `crypto.tryGetRandomValues(bytes)` and `secureZero(bytes)` (#385) are `w`;
  * a `nish:net` call (WP34 N5) is its signature, whose `w` arguments are
  * `netAddress`'s `out`, `tcpAccept`'s `peer`, `netRead`'s `buf` and
  * `udpRecvFrom`'s `buf` and `from`, and whose `m` arguments are
@@ -230,8 +230,10 @@ export const builtinArgumentLetters = (program: CheckedProgram, call: Node): str
     }
     return name === "secureZero" || name === "uncheckedSet" ? "w" : bufferSignature(name)
   }
+  const dotted = dottedName(callee)
   const fills =
-    dottedName(callee) === "crypto.getRandomValues" && !receiverIsValue(program, callee.children[0])
+    (dotted === "crypto.getRandomValues" || dotted === "crypto.tryGetRandomValues") &&
+    !receiverIsValue(program, callee.children[0])
   return fills ? "w" : ""
 }
 

@@ -73,25 +73,41 @@ static NISH_COLD void nish_entropy_fail(uint64_t asked) {
    API's limit of 65,536 bytes a call is kept, so a program behaves the same
    under Node. `getrandom` without flags blocks only until the pool is first
    initialised at boot and can return short or be interrupted, so it loops;
-   `getentropy` fills at most 256 bytes a call and retries nothing itself. */
-void nish_random_fill(nish_array *bytes) {
+   `getentropy` fills at most 256 bytes a call and retries nothing itself.
+   The fill both builtins share: true when every byte of `bytes` came from the
+   source, false past the limit or when the source fails, which may leave a
+   prefix written. */
+static bool nish_random_draw(nish_array *bytes) {
   uint64_t n = bytes->len;
   char *p = bytes->data;
-  if (n > 65536) nish_entropy_fail(n);
+  if (n > 65536) return false;
   while (n > 0) {
 #if defined(__linux__)
     ssize_t got = getrandom(p, n, 0);
     if (got < 0) {
       if (errno == EINTR) continue;
-      nish_entropy_fail(0);
+      return false;
     }
 #else
     size_t got = n < 256 ? n : 256;
-    if (getentropy(p, got) != 0) nish_entropy_fail(0);
+    if (getentropy(p, got) != 0) return false;
 #endif
     p += got;
     n -= (uint64_t)got;
   }
+  return true;
+}
+
+void nish_random_fill(nish_array *bytes) {
+  if (!nish_random_draw(bytes)) nish_entropy_fail(bytes->len);
+}
+
+/* `crypto.tryGetRandomValues(bytes)`: the same fill, answering whether it
+   happened instead of exiting, so a program built without `--allow-panics`
+   can turn a failing source into its own error. Nothing weaker is tried
+   either: on false the bytes are not a key and the caller is told so. */
+bool nish_random_try_fill(nish_array *bytes) {
+  return nish_random_draw(bytes);
 }
 
 /* `statMtimeSync(path)`: the modification time in milliseconds, with the

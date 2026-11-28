@@ -2491,7 +2491,7 @@ interface DateConstructor {
   now(): number;
 }
 
-/** The system's random source, with its one member. */
+/** The system's random source, with its one member and that member's answering twin. */
 declare var crypto: {
   /**
    * Every byte of `bytes` from the kernel's CSPRNG (`getrandom(2)` on Linux,
@@ -2507,7 +2507,7 @@ declare var crypto: {
    * panic, `crypto.getRandomValues: <n> bytes asked for, and one call fills at
    * most 65536`, exit 1. A source that fails is a panic too; nothing weaker is
    * ever substituted. It is the source for a key. `crypto` has no other member
-   * (NL2403, for example `crypto.randomUUID`). Refused at compile time on
+   * but its twin `tryGetRandomValues` (NL2403, for example `crypto.randomUUID`). Refused at compile time on
    * wasm32 and the WASI profile (NL2404). Under Node the prelude fills a plain
    * `u8[]` too and panics past 65,536 with the same words; without the prelude
    * it takes only a typed array. Capability: entropy.
@@ -2515,6 +2515,21 @@ declare var crypto: {
    * @param bytes the buffer filled.
    */
   getRandomValues(bytes: u8[]): void;
+  /**
+   * `getRandomValues`'s twin for code built without `--allow-panics`: the same
+   * fill from the same source under the same rules (a `u8[]` only, written,
+   * refused on wasm32 and the WASI profile, capability entropy), but where
+   * `getRandomValues` exits it answers `false`: more than 65,536 bytes, or a
+   * source that fails, which may leave a prefix of `bytes` written. Nothing
+   * weaker is ever substituted. An expression, so a caller can turn the
+   * `false` into its own `Result`; it is no panic site. `--emit-ts` writes it
+   * as a length test and the runtime's fill; the Node prelude that runs a
+   * source file as TypeScript does not define it.
+   *
+   * @param bytes the buffer filled.
+   * @returns `true` when every byte of `bytes` was filled, `false` otherwise.
+   */
+  tryGetRandomValues(bytes: u8[]): boolean;
 };
 
 // ---- The builtin modules (`nish:`) ---------------------------------------------

@@ -182,7 +182,7 @@ export class CheckContext {
   /**
    * The build is for wasm: `--target wasm32…` or `--profile wasi`, the test
    * `src/visibility.ts` makes. The WP34 N3 host builtins (`Date.now`,
-   * `crypto.getRandomValues`, `statMtimeSync`, `signalFd`, `readSignal`) read
+   * `crypto.getRandomValues` and its twin, `statMtimeSync`, `signalFd`, `readSignal`) read
    * it to refuse themselves there, since `runtime-host.c` is empty on that
    * target; set by the driver after construction, and false everywhere else.
    */

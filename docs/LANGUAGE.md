@@ -11899,6 +11899,7 @@ Reference: [`nish:fs`](reference/nish-fs.md), [`nish:process`](reference/nish-pr
 | --- | --- | --- | --- |
 | `Date.now` | nothing | `f64` | write |
 | `crypto.getRandomValues` | `u8[]` | `void` | write |
+| `crypto.tryGetRandomValues` | `u8[]` | `boolean` | write |
 | `statMtimeSync` | `string` | `f64` | write |
 | `signalFd` | nothing | `i32` | write |
 | `readSignal` | `i32` | `i32` | write |
@@ -11932,6 +11933,28 @@ substituted.
   `reject_os_random_readonly`, `reject_os_random_value`,
   `reject_os_random_arity`, `reject_os_crypto_member`,
   `reject_os_crypto_value`, `reject_thread_region_random`.
+
+**`crypto.tryGetRandomValues(bytes: u8[]): boolean`** is its twin for code
+held to [no panic](#the-no-panic-scope): the same fill from the same source
+under the same rules, a `u8[]` only, written, and at most 65,536 bytes, but
+**where `getRandomValues` exits it answers `false`**: past the limit, and when
+the source fails, which may leave a prefix of `bytes` written. It answers
+`true` when every byte was filled. Nothing weaker is substituted on `false`
+either; the bytes are not a key, and the caller is told so. It is an
+expression, not a statement, so a caller turns the `false` into its own
+error, and it is **no panic site**: `getRandomValues` is an `io-exit` site,
+refused under the no-panic default with advice naming the twin, and the twin
+is not (`tests/link/deny_panics_entropy`). It is named `try…` and answers a
+`boolean` as the standard library's fill twins do (`tryCopyBytes`,
+`trySetU32LE`): an `…OrNull` twin answers a value, and the value here would
+be a second name for the caller's buffer.
+
+- *Lowering:* `nish_random_try_fill`, the fill `nish_random_fill` shares,
+  answering `zeroext i1`.
+- *Tests:* `os_random_try` (built with `--deny-panics`; 65,537 bytes answer
+  `false`), the `os_` block's run with `getrandom` failing under a seccomp
+  filter, where `getRandomValues` exits 1 and the twin answers `false`;
+  `reject_os_random_try_wasm`.
 
 **`statMtimeSync(path: string): f64`** answers the modification time in
 milliseconds since the epoch, **with the sub-millisecond fraction** kept. It
@@ -11977,7 +12000,9 @@ member is `Date.now()`, the wall clock in milliseconds `` (NL2401;
 named `Date` shadows the global as any local does, so calling it is the
 ordinary `` Unknown function `Date` `` (`reject_os_date_shadowed`). **`crypto`
 has one member** the same way: `` `crypto.randomUUID` is refused: the one
-`crypto` member is `crypto.getRandomValues(bytes)` `` (NL2403). The array
+`crypto` member is `crypto.getRandomValues(bytes)`, with its twin
+`crypto.tryGetRandomValues(bytes)`, which answers `false` instead of exiting ``
+(NL2403). The array
 `getRandomValues` fills is written, so a `readonly u8[]` is refused as a store
 through it is, a parameter it fills is never `readonly` in the IR, and inside a
 scope's region it is refused on an array a task may read, as `fill` is. Anything
@@ -11996,10 +12021,11 @@ caught signal to its default (`os_signal`). Signals other than SIGTERM and
 SIGINT are not in the language.
 
 **On wasm.** A `wasm32` target and the `wasi` profile have no host for these to
-reach, and `runtime-host.c` is empty there, so all five are refused by the
+reach, and `runtime-host.c` is empty there, so all six are refused by the
 checker: `` `Date.now` reaches the operating system, and a wasm32 build has none
 to reach `` (NL2404; `reject_os_now_wasm`, `reject_os_random_wasm`,
-`reject_os_mtime_wasm`, `reject_os_signal_fd_wasm`, `reject_os_read_signal_wasm`).
+`reject_os_mtime_wasm`, `reject_os_signal_fd_wasm`, `reject_os_read_signal_wasm`,
+`reject_os_random_try_wasm`).
 
 **The TypeScript reading** ([wp33-round-trip.md](wp33-round-trip.md) §2).
 `Date.now` is **class A**: Node's is the same floored `CLOCK_REALTIME`, and the
@@ -12012,7 +12038,11 @@ native build and the prelude both to print Node's `mtimeMs` for it.
 it: Node's own takes only a typed array and a `u8[]` is a plain `Array` there,
 so the prelude replaces the method on Node's `crypto` with one that fills a
 plain array too and panics past 65,536 with the native words; `os_random` and
-`os_random_limit` run unmodified under it. `signalFd` and `readSignal` are
+`os_random_limit` run unmodified under it. `crypto.tryGetRandomValues` is
+**class C**: the prelude does not define it, and `--emit-ts` writes it as the
+length test and the runtime's fill, `bytes.length <= 65536 &&
+getRandomValues(bytes) === bytes`, since a JavaScript host's source reports no
+failure but the limit. `signalFd` and `readSignal` are
 **class C**, with no synchronous reading at all: Node delivers a signal only to
 its event loop, which a blocking `readSignal` never returns to, so the prelude's
 versions throw rather than answer. The row in
@@ -14920,7 +14950,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | Capability | Builtins |
 | --- | --- |
 | `clock` | `Date.now`, `monotonicNanos`, `wallClockNanos`, `statMtimeSync` (`tests/cases/caps_clock`) |
-| `entropy` | `crypto.getRandomValues`, `Math.random` (`caps_entropy`) |
+| `entropy` | `crypto.getRandomValues`, `crypto.tryGetRandomValues`, `Math.random` (`caps_entropy`) |
 | `env` | `getenv`, `geteuid` (`caps_env`) |
 | `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |
 | `ffi` | any call to a `declare function` (`caps_ffi`) |
@@ -16920,7 +16950,9 @@ integer, a `u32` under `--number-mode i32`)
 `crypto.getRandomValues`, which exit inside the runtime on failure
 
 - *What proves it away:* nothing; `readFileSyncOrNull` is the twin that
-  answers `null` instead (`tests/cases/panics_io_exit`)
+  answers `null` instead (`tests/cases/panics_io_exit`), and
+  `crypto.tryGetRandomValues` the one that answers `false`
+  (`tests/link/deny_panics_entropy`)
 
 **`parallel-length`**: a `parallelMapInto` call whose `dst` is shorter than
 its `src`
