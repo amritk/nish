@@ -12333,6 +12333,8 @@ const checkedConfig = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: CHECKED_CONFIG, why }))
   )
+/** WP91 S6's release-note words: std/crypto drops its cast wraps. The PR title, which the squash merge lands, carries them verbatim. */
+const WP91_S6 = "WP91 S6 — std/crypto"
 /** WP91 S5's release-note words: std/net drops its cast wraps. The change's commit subject carries them verbatim. */
 const WRAP_CASTS_NET = "std/net TLS, QUIC, PostgreSQL and DNS"
 /** Why each std/net module WP91 S5 rewrites writes different IR. */
@@ -24803,6 +24805,69 @@ const DECLARED = [
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
   },
+  // WP91 S6: Sha256's byte count is a `u64` that wraps by its type instead of
+  // an `i64` summed through a split `u64` cast, so the struct a C header
+  // declares for it changes type.
+  ...[
+    "tests/link/chacha20_hw_agree/main.ts",
+    "tests/link/crypto_hmac/main.ts",
+    "tests/link/crypto_hmac_f64/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_negative/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_past_end/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_short/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_twice/main.ts",
+    "tests/link/crypto_hmac_sha256_update_after_digest_into/main.ts",
+    "tests/link/crypto_p256_scratch/main.ts",
+    "tests/link/crypto_p384/main.ts",
+    "tests/link/crypto_sha256/main.ts",
+    "tests/link/crypto_sha256_copy_after_digest/main.ts",
+    "tests/link/crypto_sha256_digest_into_after_digest/main.ts",
+    "tests/link/crypto_sha256_digest_into_negative/main.ts",
+    "tests/link/crypto_sha256_digest_into_short/main.ts",
+    "tests/link/crypto_sha256_digest_into_window/main.ts",
+    "tests/link/crypto_sha256_digest_twice/main.ts",
+    "tests/link/crypto_sha256_f64/main.ts",
+    "tests/link/crypto_sha256_long_f64/main.ts",
+    "tests/link/crypto_sha256_update_after_digest/main.ts",
+    "tests/link/crypto_sha256_update_after_digest_into/main.ts",
+    "tests/link/crypto_sha256_window/main.ts",
+    "tests/link/crypto_sha256_window_wrap/main.ts",
+    "tests/link/net_http3_malformed/main.ts",
+    "tests/link/sha256_hw_agree/main.ts",
+    "tests/link/std_scram/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: WP91_S6,
+    why: "`Sha256.total` is a `u64` rather than an `i64`, so the header declares it `uint64_t` instead of `int64_t`; its size and every offset stay as they were",
+  })),
+  ...[
+    "bench/std-net-quic-packet.ts",
+  ].map((program) => ({
+    program,
+    file: "std-net-quic-packet.h",
+    changelog: WP91_S6,
+    why: "`Sha256.total` is a `u64` rather than an `i64`, so the header declares it `uint64_t` instead of `int64_t`; its size and every offset stay as they were",
+  })),
+  ...[
+    "bench/std-net-tls-record.ts",
+  ].map((program) => ({
+    program,
+    file: "std-net-tls-record.h",
+    changelog: WP91_S6,
+    why: "`Sha256.total` is a `u64` rather than an `i64`, so the header declares it `uint64_t` instead of `int64_t`; its size and every offset stay as they were",
+  })),
+  ...[
+    "tests/link/crypto_jwt/main.ts",
+    "tests/link/crypto_jwt_f64/main.ts",
+    "tests/link/crypto_sha2_lengths/main.ts",
+    "tests/link/crypto_sha2_lengths_f64/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: WP91_S6,
+    why: "the case sets `Sha256.total` with `toU64`, and the seed's `Sha256.total` is an `i64`, so the reference refuses the assignment",
+  })),
   ...Object.entries(WRAP_CASTS_NET_WHY).flatMap(([file, why]) =>
     byFinding(WRAP_CASTS_NET)(
       why,
