@@ -97,6 +97,7 @@
  */
 
 import { Secret, exposeWith, secret, wipe } from "nish:secret"
+import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe"
 
 /** The length in bytes of a scalar, a u-coordinate and an X25519 output. */
 export const X25519_SIZE: i32 = 32
@@ -105,12 +106,12 @@ export const X25519_SIZE: i32 = 32
 const X25519_A24: i64 = 121665
 
 /**
- * `a + b` on limbs: the `u64` sum, read back as `i64`; `f25519Sub64` and
- * `f25519Mul64` are its difference and product. Every bound this module states
- * keeps the true result inside `i64`, so the answer is the signed one bit for
- * bit; the arithmetic is unsigned because signed arithmetic is checked for an
- * overflow, and a check is a branch on a secret limb. Each is one
- * instruction once LLVM inlines it.
+ * `a + b` on limbs, through `wrappingAdd`; `f25519Sub64` and `f25519Mul64` are
+ * its difference and product, through `wrappingSub` and `wrappingMul`. Every
+ * bound this module states keeps the true result inside `i64`, so the wrap
+ * never happens and the answer is the signed one; the wrapping call is there
+ * because plain signed arithmetic is checked for an overflow, and a check is a
+ * branch on a secret limb. Each is one instruction once LLVM inlines it.
  *
  * @param a The first limb.
  * @param b The second limb.
@@ -118,9 +119,9 @@ const X25519_A24: i64 = 121665
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
-export const f25519Add64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
+export const f25519Add64 = (a: i64, b: i64): i64 => wrappingAdd(a, b)
 /**
- * `a - b` on limbs, unsigned and read back as `i64`, as `f25519Add64` explains.
+ * `a - b` on limbs, through `wrappingSub`, as `f25519Add64` explains.
  *
  * @param a The limb subtracted from.
  * @param b The limb subtracted.
@@ -128,9 +129,9 @@ export const f25519Add64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
-export const f25519Sub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
+export const f25519Sub64 = (a: i64, b: i64): i64 => wrappingSub(a, b)
 /**
- * `a * b` on limbs, unsigned and read back as `i64`, as `f25519Add64` explains.
+ * `a * b` on limbs, through `wrappingMul`, as `f25519Add64` explains.
  *
  * @param a The first limb.
  * @param b The second limb.
@@ -138,7 +139,7 @@ export const f25519Sub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
  *
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
-export const f25519Mul64 = (a: i64, b: i64): i64 => toI64(toU64(a) * toU64(b))
+export const f25519Mul64 = (a: i64, b: i64): i64 => wrappingMul(a, b)
 
 /** The width of limb `i`: 26 bits for an even limb, 25 for an odd one. */
 const f25519Width = (i: i32): i64 => {
