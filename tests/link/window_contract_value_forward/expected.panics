@@ -1,0 +1,7 @@
+{"functions":[
+{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_contract_value_forward/main.ts","line":10,"panics":[{"kind":"overflow","line":12,"column":49,"proven":true},{"kind":"panic","line":13,"column":5,"proven":true},{"kind":"oom","line":13,"column":11,"allowed":true}]},
+{"name":"readU16","symbol":"readU16","module":"tests/link/window_contract_value_forward/main.ts","line":17,"panics":[{"kind":"window","line":18,"column":3,"proven":true},{"kind":"index","line":19,"column":16,"proven":true},{"kind":"index","line":19,"column":33,"proven":true},{"kind":"overflow","line":19,"column":35,"proven":true}]},
+{"name":"main","symbol":"nish_main","module":"tests/link/window_contract_value_forward/main.ts","line":24,"panics":[{"kind":"oom","line":26,"column":15,"allowed":true},{"kind":"call","line":26,"column":18,"callee":"apply<readU16>","via":"window"}]},
+{"name":"apply<readU16>","symbol":"apply$fn.7.readU16","module":"tests/link/window_contract_value_forward/main.ts","line":22,"panics":[{"kind":"window","line":22,"column":73,"proven":false}]},
+{"name":"done","symbol":"done","module":"tests/link/window_contract_value_forward/done.ts","line":1,"panics":[]}
+]}

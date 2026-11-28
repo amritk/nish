@@ -7,44 +7,45 @@ import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 unsafe import 31:10 uncheckedGet from "nish:unsafe"
 unsafe import 31:24 uncheckedSet from "nish:unsafe"
 unsafe import 31:38 wrappingAdd from "nish:unsafe"
-unsafe call 71:31 uncheckedGet (node 354)
-unsafe call 75:7 uncheckedSet (node 377)
-unsafe call 76:11 wrappingAdd (node 404)
-unsafe call 87:43 uncheckedGet (node 448)
-unsafe call 88:43 uncheckedGet (node 468)
-unsafe call 89:43 uncheckedGet (node 488)
-unsafe call 90:43 uncheckedGet (node 508)
-unsafe call 93:3 uncheckedSet (node 565)
-unsafe call 94:3 uncheckedSet (node 579)
-unsafe call 95:3 uncheckedSet (node 596)
-function base64urlRangeMask(c: i32, lo: i32, hi: i32): i32 -> @base64urlRangeMask
+unsafe call 77:31 uncheckedGet (node 330)
+unsafe call 81:7 uncheckedSet (node 353)
+unsafe call 82:11 wrappingAdd (node 380)
+unsafe call 93:43 uncheckedGet (node 424)
+unsafe call 94:43 uncheckedGet (node 444)
+unsafe call 95:43 uncheckedGet (node 464)
+unsafe call 96:43 uncheckedGet (node 484)
+unsafe call 99:3 uncheckedSet (node 541)
+unsafe call 100:3 uncheckedSet (node 555)
+unsafe call 101:3 uncheckedSet (node 572)
+function base64urlRangeMask(c: i32, lo: integer<0, 255>, hi: integer<0, 255>): i32 -> @base64urlRangeMask
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+  local +0:9 d: i32 (const)
 function base64urlCharOf(v: i32): i32 -> @base64urlCharOf [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: v
   calls: base64urlRangeMask
   stackSites=0 stackLocals=0
-  callee +0:13 base64urlRangeMask -> @base64urlRangeMask
-  callee +1:13 base64urlRangeMask -> @base64urlRangeMask
-  callee +2:13 base64urlRangeMask -> @base64urlRangeMask
-  callee +3:13 base64urlRangeMask -> @base64urlRangeMask
-function base64urlSextetOf(c: i32): i32 -> @base64urlSextetOf [exported]
+  local +0:9 s: i32 (const)
+  callee +4:6 base64urlRangeMask -> @base64urlRangeMask
+  callee +5:6 base64urlRangeMask -> @base64urlRangeMask
+  callee +6:6 base64urlRangeMask -> @base64urlRangeMask
+  callee +7:6 base64urlRangeMask -> @base64urlRangeMask
+function base64urlSextetOf(code: i32): i32 -> @base64urlSextetOf [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: c
   calls: base64urlRangeMask
   stackSites=0 stackLocals=0
-  local +0:9 upper: i32 (const)
-  callee +0:22 base64urlRangeMask -> @base64urlRangeMask
-  local +1:9 lower: i32 (const)
+  local +0:9 c: i32 (const)
+  local +1:9 upper: i32 (const)
   callee +1:22 base64urlRangeMask -> @base64urlRangeMask
-  local +2:9 digit: i32 (const)
+  local +2:9 lower: i32 (const)
   callee +2:22 base64urlRangeMask -> @base64urlRangeMask
-  local +3:9 dash: i32 (const)
-  callee +3:21 base64urlRangeMask -> @base64urlRangeMask
-  local +4:9 underscore: i32 (const)
-  callee +4:27 base64urlRangeMask -> @base64urlRangeMask
-  local +5:9 value: i32 (const)
+  local +3:9 digit: i32 (const)
+  callee +3:22 base64urlRangeMask -> @base64urlRangeMask
+  local +4:9 dash: i32 (const)
+  callee +4:21 base64urlRangeMask -> @base64urlRangeMask
+  local +5:9 underscore: i32 (const)
+  callee +5:27 base64urlRangeMask -> @base64urlRangeMask
+  local +6:9 value: i32 (const)
 function base64urlEncodeGroup(data: u8[], out: u8[]): void -> @base64urlEncodeGroup [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

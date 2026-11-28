@@ -50,7 +50,7 @@ const pow2Less = (k: i64, less: i64): i64 => (toI64(1) << k) - less;
 /** SHA-256 of `tail` after a counter set to `absorbed` bytes. */
 const sha256After = (absorbed: i64, tailLength: i32): string => {
   const h = new Sha256();
-  h.total = absorbed;
+  h.total = toU64(absorbed);
   const tail: u8[] = lengthsTail(tailLength);
   h.update(tail, toI32(0), toI32(tail.length));
   return lengthsHex(h.digest());

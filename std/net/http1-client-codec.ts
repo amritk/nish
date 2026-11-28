@@ -166,13 +166,40 @@ const http1ClientDigits = (n: i64): i32 => {
   return toI32(digits)
 }
 
+/**
+ * `off + len` when `bytes[off, off + len)` lies inside `bytes`, else -1. Each
+ * step subtracts a non-negative value from one that is no larger than
+ * `bytes.length`, so the bounds prover sees no sum that can overflow.
+ */
+const http1ClientWindowEnd = (bytes: u8[], off: i32, len: i32): i32 => {
+  if (off < 0 || len < 0) {
+    return -1
+  }
+  const size: i32 = toI32(bytes.length)
+  const room: i32 = size - off
+  if (room < 0) {
+    return -1
+  }
+  const gap: i32 = room - len
+  let end: i32 = -1
+  if (gap >= 0) {
+    end = size - gap
+  }
+  return end
+}
+
 /** Writes the decimal digits of `n`, which is not negative, at `out[at ..)`, which holds them, and answers where they end. */
 const http1ClientPutDecimal = (out: u8[], at: i32, n: i64): i32 => {
-  // Unsigned sums: the caller counted room for the digits at `at`, so `end`
-  // is at most `out.length`, and `end - 1` is at least `at - 1`.
-  const end: i32 = toI32(toU32(at) + toU32(http1ClientDigits(n)))
+  // An `i64` has 1 to 19 digits, and the caller counted room for them at
+  // `at`, inside an array, so `at` is far below 2^31 - 20. The tests restate
+  // both for the bounds proof; a call outside them writes nothing.
+  const digits: i32 = http1ClientDigits(n)
+  if (digits < 1 || digits > 19 || at < 0 || at > 2147483628) {
+    return at
+  }
+  const end: i32 = at + digits
   let v: i64 = n
-  for (let k: i32 = toI32(toU32(end) - toU32(1)); k >= at && k >= 0 && k < toI32(out.length); k -= 1) {
+  for (let k: i32 = end - 1; k >= at && k >= 0 && k < toI32(out.length); k -= 1) {
     // `v % 10` is a digit, 0 to 9, so adding '0' cannot wrap.
     out[k] = toU8(toU32(toI32(v % toI64(10))) + toU32(48))
     v = v / toI64(10)
@@ -584,6 +611,8 @@ const HTTP1_CLIENT_LINE: i32 = -1
 
 /** The largest `maxBody`: 2^53, so that sums of it cannot overflow an `i64`. */
 const HTTP1_CLIENT_MAX_BODY: i64 = 9007199254740992
+/** 2^62 - 1, over any body total: so that adding an `i32` to one cannot overflow. */
+const HTTP1_CLIENT_TOTAL_MASK: i64 = HTTP1_CLIENT_MAX_BODY * 512 - 1
 
 /** `limit` clamped into 0 to 2^30. */
 const http1ClientClamp = (limit: i32): i32 => {
@@ -820,8 +849,14 @@ export class Http1ResponseParser {
       http1ClientFail(this, HTTP1_E_MEMORY_LIMIT, "more than 2^30 bytes fed and not read")
       return
     }
-    // Unsigned: the copy above fit `len` bytes after `end` inside `buf`.
-    this.end = toI32(toU32(this.end) + toU32(len))
+    // The copy above fit `len` bytes after `end` inside `buf`, so the window
+    // end is always found; it is asked again so the sum is proven.
+    const to: i32 = http1ClientWindowEnd(this.buf, this.end, len)
+    if (to < 0) {
+      http1ClientFail(this, HTTP1_E_MEMORY_LIMIT, "more than 2^30 bytes fed and not read")
+      return
+    }
+    this.end = to
   }
 
   /**
@@ -933,8 +968,15 @@ export class Http1ResponseParser {
    * @returns The count of unread input bytes.
    */
   buffered(): i32 {
-    // Unsigned: the parser keeps `start <= end`, so the difference cannot wrap.
-    return toI32(toU32(this.end) - toU32(this.start))
+    // The parser keeps `0 <= start <= end`, so the count is `end - start`;
+    // the test restates that for the bounds proof.
+    const start: i32 = this.start
+    const end: i32 = this.end
+    let count: i32 = 0
+    if (end > start && start >= 0) {
+      count = end - start
+    }
+    return count
   }
 
   /**
@@ -991,9 +1033,13 @@ const http1ClientReserve = (p: Http1ResponseParser, len: i32): boolean => {
     return false
   }
   p.buf = buf
-  // Unsigned: `scan` and `start` move down together, and `scan` is past `start`
-  // whenever it is read.
-  p.scan = toI32(toU32(p.scan) - toU32(from))
+  // `scan` and `start` move down together, and `scan` is past `start`
+  // whenever it is read. `scan` is an offset into `buf`, never negative, and
+  // `from` was asked above not to be, so the difference fits.
+  const scan: i32 = p.scan
+  if (scan >= 0) {
+    p.scan = scan - from
+  }
   p.start = 0
   p.end = toI32(live)
   return true
@@ -1195,11 +1241,13 @@ const http1ClientFieldLine = (p: Http1ResponseParser, keep: boolean): i32 => {
       return http1ClientFail(p, HTTP1_E_FIELD, "a control character in a field value")
     }
   }
-  // Counting stops at the limit (at most 2^31 - 1), so the sum does not wrap.
-  p.fieldCount = toI32(toU32(p.fieldCount) + toU32(1))
-  if (p.fieldCount > p.maxHeaders) {
+  // A count already at the limit refuses the field before it is counted, so
+  // the count stays below `maxHeaders` and the sum cannot overflow.
+  const fields: i32 = p.fieldCount
+  if (fields >= p.maxHeaders) {
     return http1ClientFail(p, HTTP1_E_COUNT_LIMIT, "more fields than the limit")
   }
+  p.fieldCount = fields + 1
   // A trailer is checked and counted, but not kept: nothing here reads one.
   if (keep) {
     let valueStart: i32 = nameEnd + 1
@@ -1257,19 +1305,23 @@ const http1ClientLengthList = (head: u8[], from: i32, to: i32, seen: i64): i64 =
       if (a === b) {
         return toI64(-1)
       }
-      let v: i64 = toI64(0)
+      // The digits gather in a `u64`, as the other digit loops in `std/`
+      // do. The test keeps the value at most 2^53, so it never wraps, and
+      // the bounds proof, which bounds no product past 2^31, has no signed
+      // multiply to check.
+      let u: u64 = toU64(0)
       for (let j: i32 = a; j >= 0 && j < b && j < toI32(head.length); j += 1) {
         const c: i32 = toI32(head[j])
         if (c < 48 || c > 57) {
           return toI64(-1)
         }
-        if (v <= (HTTP1_CLIENT_MAX_BODY - toI64(c - 48)) / toI64(10)) {
-          // Unsigned: `v` starts at 0 and the test keeps it at most 2^53.
-          v = toI64(toU64(v) * toU64(10) + toU64(c - 48))
+        if (u <= toU64(HTTP1_CLIENT_MAX_BODY - toI64(c - 48)) / toU64(10)) {
+          u = u * toU64(10) + toU64(c - 48)
         } else {
-          v = HTTP1_CLIENT_MAX_BODY + toI64(1)
+          u = toU64(HTTP1_CLIENT_MAX_BODY) + toU64(1)
         }
       }
+      const v: i64 = toI64(u)
       if (found >= toI64(0) && (found !== v || v > HTTP1_CLIENT_MAX_BODY)) {
         return toI64(-2)
       }
@@ -1377,7 +1429,7 @@ const http1ClientKeep = (p: Http1ResponseParser, buf: u8[], a: i32, b: i32, lowe
   }
   // Unsigned, as are the sizes below: `a <= b` and `at <= used` were just
   // asked, and `size` starts at `used` or more, so no difference wraps.
-  const n: i32 = toI32(toU32(b) - toU32(a))
+  const n: i32 = b - a
   if (toU32(n) > toU32(used) - toU32(at)) {
     let size: u32 = used < 256 ? toU32(256) : toU32(used)
     while (size - toU32(at) < toU32(n)) {
@@ -1395,8 +1447,12 @@ const http1ClientKeep = (p: Http1ResponseParser, buf: u8[], a: i32, b: i32, lowe
   if (!tryCopyBytes(p.head, at, buf, a, n)) {
     return -1
   }
-  // Unsigned: the copy above fit `n` bytes after `at` inside `head`.
-  const stop: i32 = toI32(toU32(at) + toU32(n))
+  // The copy above fit `n` bytes after `at` inside `head`, so the window end
+  // is always found; it is asked again so the sum is proven.
+  const stop: i32 = http1ClientWindowEnd(p.head, at, n)
+  if (stop < 0) {
+    return -1
+  }
   if (lower) {
     const head: u8[] = p.head
     for (let k: i32 = at; k >= 0 && k < stop && k < toI32(head.length); k += 1) {
@@ -1413,9 +1469,14 @@ const http1ClientKeep = (p: Http1ResponseParser, buf: u8[], a: i32, b: i32, lowe
 /** Records the field whose name starts at `name` and whose value is `head[value .. valueEnd)`. */
 const http1ClientSpan = (p: Http1ResponseParser, name: i32, value: i32, valueEnd: i32): void => {
   const spans: i32[] = p.spans
-  // Unsigned: `spans` holds 4 entries a field, so `spanCount * 4` fits an
-  // `i32` length and neither the product nor the count wraps.
-  const at: i32 = toI32(toU32(p.spanCount) * toU32(4))
+  // `spans` holds 4 entries a field, so `spanCount * 4` fits an `i32` length:
+  // `spanCount` is at most 2^29 - 1, which the test restates for the bounds
+  // proof. A count outside it would only append.
+  const count: i32 = p.spanCount
+  let at: i32 = -1
+  if (count >= 0 && count <= 536870911) {
+    at = count * 4
+  }
   if (at >= 0 && at <= toI32(spans.length) - 4) {
     spans[at] = name
     spans[at + 1] = value
@@ -1427,7 +1488,11 @@ const http1ClientSpan = (p: Http1ResponseParser, name: i32, value: i32, valueEnd
     spans.push(value)
     spans.push(valueEnd)
   }
-  p.spanCount = toI32(toU32(p.spanCount) + toU32(1))
+  // For the same reason the count never reaches 2^31 - 1; the test restates
+  // that for the bounds proof.
+  if (count < 2147483647) {
+    p.spanCount = count + 1
+  }
 }
 
 /** Whether `head[a .. b)` is `word`, byte for byte. */
@@ -1631,7 +1696,10 @@ const http1ClientChunkSize = (p: Http1ResponseParser): i32 => {
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < toI32(buf.length) ? p.lineEnd : toI32(buf.length)
   const room: i64 = http1ClientRoom(p)
-  let size: i64 = toI64(0)
+  // The size gathers in a `u64`, as the other digit loops in `std/` do. The
+  // test below keeps it at most `room`, so it never wraps, and the bounds
+  // proof, which bounds no product past 2^31, has no signed multiply to check.
+  let size: u64 = toU64(0)
   let over: boolean = false
   let i: i32 = a
   while (i >= 0 && i < b && i < toI32(buf.length)) {
@@ -1640,12 +1708,12 @@ const http1ClientChunkSize = (p: Http1ResponseParser): i32 => {
       break
     }
     if (!over) {
-      // Unsigned: the first test leaves `digit` at most `room`.
-      if (toI64(digit) > room || size > toI64(toU64(room) - toU64(toI64(digit))) / toI64(16)) {
+      // The first two tests leave `digit` at most `room`, so the difference
+      // fits and is not negative.
+      if (room < 0 || toI64(digit) > room || size > toU64(room - toI64(digit)) / toU64(16)) {
         over = true
       } else {
-        // Unsigned: `size` starts at 0 and the test keeps it at most `room`.
-        size = toI64(toU64(size) * toU64(16) + toU64(digit))
+        size = size * toU64(16) + toU64(digit)
       }
     }
     i += 1
@@ -1678,8 +1746,8 @@ const http1ClientChunkSize = (p: Http1ResponseParser): i32 => {
   if (over) {
     return http1ClientFail(p, HTTP1_E_BODY_LIMIT, "a chunked body over the limit")
   }
-  p.left = size
-  p.state = size === toI64(0) ? HTTP1_CLIENT_S_TRAILERS : HTTP1_CLIENT_S_CHUNK_DATA
+  p.left = toI64(size)
+  p.state = size === toU64(0) ? HTTP1_CLIENT_S_TRAILERS : HTTP1_CLIENT_S_CHUNK_DATA
   p.sectionBytes = 0
   return HTTP1_NEED_MORE
 }
@@ -1699,15 +1767,34 @@ const http1ClientBodyWindow = (p: Http1ResponseParser, after: i32): i32 => {
   const ready: i32 = end - start
   const left: i64 = p.left
   const take: i32 = toI64(ready) < left ? ready : toI32(left)
+  // `left` only falls from a length, a chunk size or the room, none of them
+  // negative, and by at most itself; `take` is at most `ready` and `left`;
+  // `bodyTotal` grows from 0 by what `maxBody` (at most 2^53) allows. The
+  // tests restate that for the bounds proof, so none of the sums below
+  // overflows.
+  const total: i64 = p.bodyTotal
+  if (left < 0 || take < 0 || take > ready || total < 0 || total > HTTP1_CLIENT_TOTAL_MASK) {
+    return http1ClientFail(p, HTTP1_E_BODY_LIMIT, "a body over the limit")
+  }
+  // What stays buffered: not negative, as `take` is at most `ready`, and at
+  // most `ready`, so at most `end`. The test restates the last for the
+  // bounds proof, which keeps no relation between `ready` and `end`.
+  const rest: i32 = ready - take
+  if (rest < 0 || rest > end) {
+    return http1ClientFail(p, HTTP1_E_BODY_LIMIT, "a body over the limit")
+  }
   p.body = p.buf
   p.bodyOff = start
   p.bodyLen = take
-  // Unsigned: `take` is at most `ready`, `left`, and the room under
-  // `maxBody` (at most 2^53), so none of these wraps.
-  p.start = toI32(toU32(start) + toU32(take))
+  // `end - rest` is `start + take`, spelled as a difference of values that
+  // are not negative.
+  p.start = end - rest
   p.scan = p.start
-  p.left = toI64(toU64(left) - toU64(toI64(take)))
-  p.bodyTotal = toI64(toU64(p.bodyTotal) + toU64(toI64(take)))
+  p.left = left - toI64(take)
+  // `total` is at most the mask, tested above, so the mask changes nothing:
+  // it is how the bounds proof learns that top, which it keeps from no
+  // comparison past 2^31.
+  p.bodyTotal = (total & HTTP1_CLIENT_TOTAL_MASK) + toI64(take)
   if (p.left === toI64(0)) {
     p.state = after
   }
@@ -1716,9 +1803,19 @@ const http1ClientBodyWindow = (p: Http1ResponseParser, after: i32): i32 => {
 
 /**
  * The body bytes `maxBody` still allows: `maxBody - bodyTotal`, negative
- * when a caller lowered `maxBody` under it (unsigned, then read signed).
+ * when a caller lowered `maxBody` under it. Both are kept at or above 0, so
+ * the difference fits; were either negative, the answer is -1, which every
+ * caller reads as no room, as it reads any negative room.
  */
-const http1ClientRoom = (p: Http1ResponseParser): i64 => toI64(toU64(p.maxBody) - toU64(p.bodyTotal))
+const http1ClientRoom = (p: Http1ResponseParser): i64 => {
+  const max: i64 = p.maxBody
+  const total: i64 = p.bodyTotal
+  let room: i64 = toI64(-1)
+  if (max >= 0 && total >= 0) {
+    room = max - total
+  }
+  return room
+}
 
 /** A body read until the server closes: every byte fed, up to `maxBody`. */
 const http1ClientCloseBody = (p: Http1ResponseParser): i32 => {

@@ -3354,6 +3354,24 @@ const provesRange = (walk: BoundsWalk, state: State, w: Local, from: Node, to: N
   provesOrdered(walk, state, from, to, w)
 
 /**
+ * Whether `[off, off + count)` is inside `w` for a constant `count`, `off`
+ * already known quiet and non-negative: a count of 0 needs `off <= w.length`,
+ * a constant `off` a known minimum length, and an index `off` a recorded
+ * `off + count - 1 < w.length`, which `off + count <= w.length` records.
+ */
+const provesCount = (walk: BoundsWalk, state: State, w: Local, off: Node, count: i32): boolean => {
+  if (count === 0) {
+    return provesWithin(walk, state, off, w)
+  }
+  const start = constantValue(walk, off)
+  if (start >= 0) {
+    return toI64(start) + toI64(count) < I32_MAX && knownMinLength(state, w, start + count)
+  }
+  const v = indexLocal(walk.ctx, off)
+  return v !== null && belowReach(state, v, w) >= count - 1
+}
+
+/**
  * `0 <= off` and `off + len <= w.length` with `len >= 0`, the window
  * `[off, off + len)` a buffer call checks (`emitNetCall`): `off` is 0 and
  * `len` within the length, `len` is a literal `off` reaches that far below
@@ -3371,15 +3389,8 @@ const provesWindow = (walk: BoundsWalk, state: State, w: Local, off: Node, len: 
     return impliesNonNegative(walk, state, len) && provesWithin(walk, state, len, w)
   }
   const count = constantValue(walk, len)
-  if (count === 0) {
-    return provesWithin(walk, state, off, w)
-  }
-  if (count > 0) {
-    if (start > 0) {
-      return toI64(start) + toI64(count) < I32_MAX && knownMinLength(state, w, start + count)
-    }
-    const v = indexLocal(ctx, off)
-    return v !== null && belowReach(state, v, w) >= count - 1
+  if (count >= 0) {
+    return provesCount(walk, state, w, off, count)
   }
   const rest = unwrapBoundsParens(len)
   if (rest.kind !== NodeKind.Binary || rest.text !== "-" || !checksOverflow(ctx.program, ctx.table, rest)) {
@@ -3452,6 +3463,64 @@ const windowCallName = (ctx: CheckContext, call: Node): string => {
   return netRangeBuffer(name) >= 0 ? name : ""
 }
 
+/** Whether a call with `count` arguments passes every window argument of `target`; a literal count (-1) is none. */
+const windowArgsFit = (target: FunctionSig, count: i32): boolean => {
+  for (const at of target.window) {
+    if (at >= count) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * A call into a window guard (#2296) that returns leaves `[off, off + len)`
+ * inside `buf`: the guard returns exactly when `0 <= off`, `0 <= len` and
+ * `off + len <= buf.length`. So a statement call on an index local `off`
+ * records `off >= 0`, and a constant count `n` from 1 up records
+ * `off + n - 1 < buf.length`, which proves `buf[off]` to `buf[off + n - 1]`;
+ * any other count records `off <= buf.length`, and an index local one
+ * `len <= buf.length` too. A guard's arguments that may change
+ * anything record nothing, and so does a call into a forwarder: its body may
+ * change `buf` after its guard returns, so only the guard's own call is read.
+ */
+const noteGuardedWindow = (walk: BoundsWalk, state: State, expr: Node): void => {
+  const call = unwrapBoundsParens(expr)
+  if (call.kind !== NodeKind.Call) {
+    return
+  }
+  const ctx = walk.ctx
+  const target = ctx.program.nodeCallees[call.id]
+  const args = call.children[1].children
+  // A guard checks a window of its own and hands it to no guard (`isWindowGuard`).
+  if (
+    target === null ||
+    target.window.length !== 3 ||
+    target.windowGuard !== null ||
+    !windowArgsFit(target, args.length) ||
+    !quietFrom(ctx.program, call, 0)
+  ) {
+    return
+  }
+  const at = target.window
+  const w = holderOf(walk, args[at[0]])
+  const off = indexLocal(ctx, args[at[1]])
+  if (w === null || off === null) {
+    return
+  }
+  addFact(state, new Fact(FACT_NON_NEGATIVE, off, null, 0))
+  const count = constantValue(walk, args[at[2]])
+  if (count > 0) {
+    addFact(state, new Fact(FACT_BELOW, off, w, count - 1))
+    return
+  }
+  addFact(state, new Fact(FACT_AT_MOST, off, w, 0))
+  const len = indexLocal(ctx, args[at[2]])
+  if (len !== null) {
+    addFact(state, new Fact(FACT_AT_MOST, len, w, 0))
+  }
+}
+
 /**
  * Record a range check the caller proves, judged once every argument has run,
  * where the emitter compares: `String.fromBytes`, an array's `set`, a string's
@@ -3513,14 +3582,21 @@ const judgeRangeCheck = (walk: BoundsWalk, state: State, call: Node): void => {
     return
   }
   // A window contract's buffer, offset and count (#2296, `src/window-contract.ts`).
-  if (target !== null && target.window.length === 3 && args.length > target.window[2]) {
+  if (target !== null && target.window.length === 3 && windowArgsFit(target, args.length)) {
     const at = target.window
     const w = holderOf(walk, args[at[0]])
-    const first = Math.min(at[0], Math.min(at[1], at[2]))
+    // A literal count is the forward's own (`windowCount`), not an argument.
+    const literal = at[2] < 0
+    const first = literal ? Math.min(at[0], at[1]) : Math.min(at[0], Math.min(at[1], at[2]))
+    const off = args[at[1]]
     if (
       w !== null &&
       quietFrom(ctx.program, call, first + 1) &&
-      provesWindow(walk, state, w, args[at[1]], args[at[2]])
+      (literal
+        ? isQuietBound(walk, off) &&
+          impliesNonNegative(walk, state, off) &&
+          provesCount(walk, state, w, off, target.windowCount)
+        : provesWindow(walk, state, w, off, args[at[2]]))
     ) {
       noteProof(walk, call)
     }
@@ -5364,6 +5440,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
       return false
     }
     walkExpression(walk, state, stmt.children[0])
+    noteGuardedWindow(walk, state, stmt.children[0])
     return terminatesControlFlow(walk.ctx, stmt.children[0])
   }
 

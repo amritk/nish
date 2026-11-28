@@ -1,0 +1,6 @@
+reject_ffi_handle_owner_cycle.ts:7:15: error: Handle class `A`
+reject_ffi_handle_owner_cycle.ts:9:5: error: The field `b` of handle class `A` owns a handle and is written only once, by `this.b = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there
+reject_ffi_handle_owner_cycle.ts:9:14: error: A `B` cannot be used here
+reject_ffi_handle_owner_cycle.ts:14:15: error: Handle class `B`
+reject_ffi_handle_owner_cycle.ts:16:5: error: The field `a` of handle class `B` owns a handle and is written only once, by `this.a = p` as a statement at the top of the constructor, where `p` is a parameter of its type or a handle opened right there
+reject_ffi_handle_owner_cycle.ts:16:14: error: A `A` cannot be used here

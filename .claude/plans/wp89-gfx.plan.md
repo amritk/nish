@@ -119,7 +119,7 @@ stages:
   - id: s8-game-layer
     title: WP89 S8 — std/gfx, the app runner, input, SpriteBatch and framebuffer present
     goal: A 2D game is written against step, update and draw hooks, input and a batched sprite renderer, and the same source runs natively and in the browser
-    verification: examples/gfx/sprites.ts runs on both backends in CI, game-starter runs natively through framebuffer present, and the runner's step accounting is pinned by a Nish test
+    verification: examples/gfx/sprites.ts runs on both backends in CI, game-starter runs natively through framebuffer present, and the runner's step accounting and wait-for-events frame accounting are pinned by Nish tests
     issue: 2243
     todos:
       - id: s8-runner
@@ -137,10 +137,13 @@ stages:
       - id: s8-examples-guide
         content: Add examples/gfx/sprites.ts and docs/guide/using-nish/gfx-games.md with its scalar.config.json route — see WP89 S8
         status: pending
+      - id: s8-idle
+        content: Add the wait-for-events mode and requestRedraw to std/gfx/app.ts and nish/page/gfx, and its section in docs/wp89-gfx.md — see WP89 S8
+        status: pending
   - id: s9-performance
     title: WP89 S9 — auto-scaling, present-mode choice and the sprite bench
     goal: The runner holds the display rate by scaling internal resolution, picks the fastest present mode, and the 10,000-sprite cost is pinned and measured
-    verification: The controller test converges under synthetic load, the CI bench stays inside its pinned CPU budget per frame, and docs/BENCHMARKS.md records a real-GPU run at 60 FPS or better
+    verification: The controller test converges under synthetic load, the CI sprite and idle benches stay inside their pinned budgets, and docs/BENCHMARKS.md records a real-GPU run at 60 FPS or better
     issue: 2244
     todos:
       - id: s9-controller
@@ -151,6 +154,9 @@ stages:
         status: pending
       - id: s9-bench
         content: Add bench/gfx-sprites with a pinned CPU budget per frame in CI and a real-GPU record in docs/BENCHMARKS.md — see WP89 S9
+        status: pending
+      - id: s9-idle-bench
+        content: Add bench/gfx-idle measuring idle CPU and redraw latency in wait-for-events mode, with pinned bounds — see WP89 S9
         status: pending
   - id: s10-windows
     title: WP89 S10 — Windows, once WP79 ships its core runtime
@@ -339,6 +345,13 @@ The milestone is `examples/gfx/triangle.ts`: an indexed, coloured triangle from 
   - a ring vertex buffer sized for `framesInFlight`;
   - sorting by texture, an orthographic `Camera2D`, and `TextureAtlas`.
 - **`std/gfx/framebuffer.ts`** presents a `nish/raster` `Int32Array` framebuffer as a nearest-sampled texture. `examples/game-starter` gains a native entry built on it.
+- **Wait-for-events mode** (`runApp({ ..., mode: RunMode.WaitEvents })`, default `RunMode.Continuous`), for WP92's std/ui:
+  - Natively, when nothing has asked for a frame, the runner blocks in `SDL_WaitEventTimeout` (the timeout is the next timer, or none) instead of spinning.
+  - In the browser, `nish/page/gfx` stops requesting animation frames and resumes on an input event or a `requestRedraw`.
+  - Any input event, a resize, or a `requestRedraw()` call (exported from `std/gfx/app.ts`, callable from any hook) schedules exactly one frame. Several requests before it coalesce into one.
+  - The accumulator is reset on wake, so a long idle never runs a burst of `step` calls.
+  - A Nish test with the fake clock pins it: no frames while idle, one frame per coalesced request, and no step burst after a wake.
+  - `docs/wp89-gfx.md` §4 gains the mode.
 - **`examples/gfx/sprites.ts`:** bouncing sprites on both backends.
 - **`docs/guide/using-nish/gfx-games.md`**, with its route in `scalar.config.json`, linked from the browser-games page. `docs/reference/` is regenerated for `std/gfx`.
 
@@ -349,6 +362,11 @@ The milestone is `examples/gfx/triangle.ts`: an indexed, coloured triangle from 
 - **`bench/gfx-sprites`.** 10,000 sprites, measuring CPU time per frame and allocations per frame.
   - CI pins a CPU budget under lavapipe, and fails over it.
   - A real-GPU run is recorded in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md). It names the commit, the machine and the FPS, and gives each figure's noise band, per the CLAUDE.md benchmark rules. The commit carries a `Measured:` trailer with the same figures.
+
+- **`bench/gfx-idle`.** An app in wait-for-events mode with one button.
+  - It measures CPU time over 10 idle seconds and the latency from a synthetic input event (or `requestRedraw`) to the presented frame.
+  - CI pins both bounds under lavapipe and fails over either.
+  - WP92 S4 reads these figures for std/ui.
 
 ### Decided
 

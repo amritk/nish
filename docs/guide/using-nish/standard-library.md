@@ -669,8 +669,7 @@ number, `true`, `false` or `null`. It reads a window of a `u8[]` and
 allocates nothing per token, so one tokenizer, `reset` for each new body,
 serves a whole connection.
 
-<!-- allow-panics: calls `std/json-tokenizer.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_TOK_END, JSON_TOK_KEY, JSON_TOK_NUMBER, JsonLimits, JsonTokenizer } from "nish/json-tokenizer";
 
@@ -1144,8 +1143,7 @@ do not know — a configuration file, a body you pass on after changing one
 field, a tool that prints whatever it is given — parse the document into a
 `JsonDocument` and walk it.
 
-<!-- allow-panics: calls `std/json-value.ts` code that keeps panic sites no proof removes yet; calls `std/json-value.ts` code that reaches `std/json-tokenizer.ts` panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JSON_VALUE_NUMBER, JsonDocument } from "nish/json-value";
@@ -1173,7 +1171,8 @@ export const main = (): i32 => {
 A value is a `JsonValue`, a handle into the document that made it, and every
 reader is a method of the document: `kind`, then `boolean`, `string`,
 `numberText`, `length`, `at` (an element, or an object's member by position),
-`keyAt` and `get` (a member by key). A handle that names nothing answers an
+`keyAt`, `keys` (every key of an object, in order) and `get` (a member by
+key). A handle that names nothing answers an
 empty value rather than panicking: `get` of a missing key is `-1`, and `kind(-1)`
 is `JSON_VALUE_NONE`.
 
@@ -1278,7 +1277,7 @@ that does not calls `parse`; it should not mix the two to save the ranges'
 cost on the documents that turn out valid.
 
 Objects keep their members in order, and `get` looks a key up by scanning
-them, so walk a large object once with `keyAt` and `at` rather than calling
+them, so walk a large object once with `keys` (or `keyAt`) and `at` rather than calling
 `get` for each of many keys. Under Node, where a string is UTF-16,
 `parseText` and the builders take one byte per character, so non-ASCII text
 differs from the native build there; `parse` over bytes reads the same both
@@ -1342,8 +1341,7 @@ are equal, and its rule is not JavaScript's: numbers are equal by value, so
 `1` and `1.0` are, objects are equal whatever the order of their members, and
 `true` is not `1`.
 
-<!-- allow-panics: calls `std/json-equal.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { jsonEqual, jsonEqualCanonical, jsonEqualFirstDuplicate } from "nish/json-equal";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1624,7 +1622,7 @@ Because the ranges are byte offsets into the text either way, one
 `YamlLineIndex` turns them into `line:column` whether the document came from
 JSON or from YAML:
 
-<!-- allow-panics: calls `std/yaml-json.ts`, `std/yaml-lines.ts` and `std/yaml.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1673,7 +1671,7 @@ and `false` plain, a number as its JSON text, and a trailing newline. It
 answers `""` for a handle that names no value and for a tree deeper than
 `JSON_WRITER_MAX_DEPTH`, the limit `stringify` keeps.
 
-<!-- allow-panics: calls `std/yaml-write.ts` and `std/yaml.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";

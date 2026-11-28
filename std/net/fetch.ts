@@ -125,6 +125,7 @@ import {
   tcpConnect,
 } from "nish:net"
 import { cancelled, readable, readableWithin, sleep, writable, writableWithin } from "nish:async"
+import { wrappingAdd } from "nish:unsafe"
 import { getenv, monotonicNanos, wallClockNanos } from "nish:process"
 import { PkiRoots, pkiLoadRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots"
 import { TlsClient, TlsClientConfig, tlsClientIsIpLiteral } from "nish/net/tls/client"
@@ -194,6 +195,8 @@ const HTTP_CLIENT_NS_PER_MS: i64 = 1000000
 const HTTP_CLIENT_ASYNC_BODY_MAX: i64 = 2147483647
 /** A deadline that never comes: 146 years of monotonic nanoseconds, far below the overflow of a sum with a timeout. */
 const HTTP_CLIENT_NEVER: i64 = 4611686018 * 1000000000
+/** 2^62 - 1, over `HTTP_CLIENT_NEVER` and so over any deadline: so that adding a timeout to one cannot overflow. */
+const HTTP_CLIENT_LOW62: i64 = 2147483648 * 2147483648 - 1
 /** netRead's and netWrite's answer when the socket has nothing ready. */
 const HTTP_CLIENT_WOULD_BLOCK: i32 = -11
 /** pollAdd's events: readable, writable. */
@@ -547,8 +550,9 @@ export class FetchSyncClient {
       // An unread body is still on the wire ahead of the next response.
       this.drop()
     }
-    // Only compared for equality, so wrapping past 2^32 responses is harmless.
-    this.generation = toI32(toU32(this.generation) + toU32(1))
+    // A generation is only compared for equality, so it counts mod 2^32: a
+    // wrap after 2^32 responses is the counter's answer, not an overflow.
+    this.generation = wrappingAdd(this.generation, 1)
     this.deadline = httpClientDeadline(this.options)
     const fault: HttpClientFault = new HttpClientFault()
     let url: Url | null = httpClientTarget(req.url, this.options, fault)
@@ -979,8 +983,13 @@ export class FetchSyncClient {
     while (left > 0 && at >= 0) {
       const n: i32 = conn.write(bytes, at, left)
       if (n > 0 && n <= left) {
-        // At most `off + len`, inside `bytes`, so the unsigned sum cannot wrap.
-        at = toI32(toU32(at) + toU32(n))
+        // At most `off + len`, inside `bytes`, so the window always has an
+        // end; the helper measures it so that the sum is proven to fit.
+        at = httpClientWindowEnd(bytes, at, n)
+        if (at < 0) {
+          this.fail(HTTP_E_IO, "the bytes to write lie outside their buffer")
+          return false
+        }
         left -= n
       } else if (n > 0 || n !== TLS_RECORD_AGAIN || conn.outputEnd === conn.outputStart) {
         this.lost = true
@@ -1009,8 +1018,13 @@ export class FetchSyncClient {
       }
       const n: i32 = netWrite(this.fd, bytes, at, left)
       if (n > 0 && n <= left) {
-        // At most `off + len`, inside `bytes`, so the unsigned sum cannot wrap.
-        at = toI32(toU32(at) + toU32(n))
+        // At most `off + len`, inside `bytes`, so the window always has an
+        // end; the helper measures it so that the sum is proven to fit.
+        at = httpClientWindowEnd(bytes, at, n)
+        if (at < 0) {
+          this.fail(HTTP_E_IO, "the bytes to write lie outside their buffer")
+          return false
+        }
         left -= n
       } else if (n === HTTP_CLIENT_WOULD_BLOCK || n === 0) {
         const waited: i32 = this.wait(this.fd, HTTP_CLIENT_WRITABLE, this.readDeadline(), HTTP_E_READ_TIMEOUT)
@@ -1054,8 +1068,13 @@ export class FetchSyncClient {
     const one: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
     let last: i32 = 0
     for (let i: i32 = 0; i < usable && i < DNS_RESOLVE_MAX_ADDRESSES; i += 1) {
-      // i < DNS_RESOLVE_MAX_ADDRESSES, so the unsigned product stays inside addresses.
-      copyBytes(one, 0, addresses, toI32(toU32(i) * toU32(DNS_ADDRESS_BYTES)), DNS_ADDRESS_BYTES)
+      // `i` is below `DNS_RESOLVE_MAX_ADDRESSES` (16), so the product stays
+      // inside `addresses`; the test restates that with the literal the
+      // bounds proof reads.
+      if (i > 15) {
+        break
+      }
+      copyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)
       const fd: i32 = tcpConnect(one)
       if (fd < 0) {
         last = fd
@@ -1252,10 +1271,16 @@ export class FetchSyncClient {
     }
     const take: i32 = n < this.pendLen ? n : this.pendLen
     copyBytes(buf, off, this.parser.body, this.pendOff, take)
-    // take <= pendLen, and pendOff + pendLen ends inside the parser's body,
-    // so neither unsigned step can wrap.
-    this.pendOff = toI32(toU32(this.pendOff) + toU32(take))
-    this.pendLen = toI32(toU32(this.pendLen) - toU32(take))
+    // The copy above fit `take` bytes at `pendOff` inside the parser's body,
+    // so the window has an end, and `take` is at most `pendLen`. The helper
+    // and the test restate both for the bounds proof.
+    const pendEnd: i32 = httpClientWindowEnd(this.parser.body, this.pendOff, take)
+    const pendLen: i32 = this.pendLen
+    if (pendEnd < 0 || take < 0 || take > pendLen) {
+      return -HTTP_E_IO
+    }
+    this.pendOff = pendEnd
+    this.pendLen = pendLen - take
     return take
   }
 
@@ -1462,16 +1487,40 @@ export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): bool
 // --- helpers -----------------------------------------------------------------
 
 /**
+ * `off + len` when `bytes[off, off + len)` lies inside `bytes`, else -1. Each
+ * step subtracts a value that is not negative from one that is no larger than
+ * `bytes.length`, so the bounds proof sees no sum that can overflow.
+ */
+const httpClientWindowEnd = (bytes: u8[], off: i32, len: i32): i32 => {
+  if (off < 0 || len < 0) {
+    return -1
+  }
+  const size: i32 = toI32(bytes.length)
+  const room: i32 = size - off
+  if (room < 0) {
+    return -1
+  }
+  const gap: i32 = room - len
+  let end: i32 = -1
+  if (gap >= 0) {
+    end = size - gap
+  }
+  return end
+}
+
+/**
  * `ms` milliseconds after `start` on the monotonic clock, or
  * `HTTP_CLIENT_NEVER` for a `start` outside [0, 2^62] or a negative `ms`,
  * which the clock and the options never give.
  */
 const httpClientAfter = (start: i64, ms: i32): i64 => {
-  if (start < toI64(0) || start > HTTP_CLIENT_NEVER || ms < 0) {
+  if (start < 0 || start > HTTP_CLIENT_NEVER || ms < 0) {
     return HTTP_CLIENT_NEVER
   }
-  // start <= 2^62 and the product < 2^51, so the unsigned sum cannot wrap.
-  return toI64(toU64(start) + toU64(toI64(ms) * toI64(1000000)))
+  // `start` is at most `HTTP_CLIENT_NEVER`, under 2^62, so the mask changes
+  // nothing: it is how the bounds proof learns that top, which it keeps from
+  // no comparison past 2^31. The product is under 2^51, so the sum fits.
+  return (start & HTTP_CLIENT_LOW62) + toI64(ms) * toI64(1000000)
 }
 
 /**
@@ -1482,15 +1531,17 @@ const httpClientWaitMs = (end: i64, now: i64): i64 => {
   if (end <= now) {
     return toI64(0)
   }
-  if (now < toI64(0) || end > HTTP_CLIENT_NEVER) {
+  if (now < 0 || end > HTTP_CLIENT_NEVER) {
     return HTTP_CLIENT_MAX_WAIT_MS
   }
-  // 0 <= now < end <= 2^62, so the unsigned difference cannot wrap.
-  const left: i64 = toI64(toU64(end) - toU64(now))
+  // 0 <= now < end, so the difference fits.
+  const left: i64 = end - now
   let ms: i64 = left / toI64(1000000)
-  if (left % toI64(1000000) > toI64(0)) {
-    // At most 2^62 / 10^6, far from wrapping.
-    ms = toI64(toU64(ms) + toU64(1))
+  // A wait of `HTTP_CLIENT_MAX_WAIT_MS` (3600000) or more is cut to that
+  // below whether it is rounded up or not, so only a shorter one is, and the
+  // literal bound proves the step fits.
+  if (left % toI64(1000000) > toI64(0) && ms < 3600000) {
+    ms = ms + toI64(1)
   }
   return ms > HTTP_CLIENT_MAX_WAIT_MS ? HTTP_CLIENT_MAX_WAIT_MS : ms
 }
@@ -1584,8 +1635,14 @@ const httpClientDropField = (names: string[], values: string[], lower: string): 
         names[keep] = name
         values[keep] = value
       }
-      // keep <= i, so the unsigned step cannot wrap.
-      keep = toI32(toU32(keep) + toU32(1))
+      // `keep` is at most `i`, below the length, so the step fits. Where
+      // they are equal it is written `i + 1`, the form the bounds proof
+      // reads from the loop test.
+      if (keep < i) {
+        keep = keep + 1
+      } else {
+        keep = i + 1
+      }
     }
   }
   while (toI32(names.length) > keep && toI32(names.length) > 0) {
@@ -2210,9 +2267,9 @@ const httpClientResolve = (
   fault: HttpClientFault
 ): i32 => {
   let lookupMs: i64 = toI64(0)
-  if (start >= toI64(0) && start < until && until <= HTTP_CLIENT_NEVER) {
-    // 0 <= start < until <= 2^62, so the unsigned difference cannot wrap.
-    lookupMs = toI64(toU64(until) - toU64(start)) / HTTP_CLIENT_NS_PER_MS
+  if (start >= 0 && start < until && until <= HTTP_CLIENT_NEVER) {
+    // 0 <= start < until, so the difference fits.
+    lookupMs = (until - start) / HTTP_CLIENT_NS_PER_MS
   }
   if (lookupMs < toI64(1)) {
     lookupMs = toI64(1)
@@ -2409,8 +2466,11 @@ export class FetchPool {
     let count: i32 = 0
     for (let i: i32 = 0; i < FETCH_POOL_SLOTS && i < toI32(fds.length); i += 1) {
       if (fds[i] >= 0) {
-        // At most i, so the unsigned step cannot wrap.
-        count = toI32(toU32(count) + toU32(1))
+        // At most `i`, below `FETCH_POOL_SLOTS`, so the step fits; the test
+        // restates that for the bounds proof.
+        if (count < i + 1) {
+          count = count + 1
+        }
       }
     }
     return count
@@ -2458,8 +2518,11 @@ export class FetchPool {
       if (fds[i] < 0) {
         free = free < 0 ? i : free
       } else if (routes[i] === route) {
-        // At most i, so the unsigned step cannot wrap.
-        same = toI32(toU32(same) + toU32(1))
+        // At most `i`, below `FETCH_POOL_SLOTS`, so the step fits; the test
+        // restates that for the bounds proof.
+        if (same < i + 1) {
+          same = same + 1
+        }
       }
     }
     // free, when found, is an index of both arrays; said again for the prover.
@@ -2745,8 +2808,13 @@ const httpClientWriteRawAsync = async (
     }
     const n: i32 = netWrite(conn.fd, bytes, at, left)
     if (n > 0 && n <= left) {
-      // At most `off + len`, inside `bytes`, so the unsigned sum cannot wrap.
-      at = toI32(toU32(at) + toU32(n))
+      // At most `off + len`, inside `bytes`, so the window always has an
+      // end; the helper measures it so that the sum is proven to fit.
+      at = httpClientWindowEnd(bytes, at, n)
+      if (at < 0) {
+        conn.fault.fail(HTTP_E_IO, "the bytes to write lie outside their buffer")
+        return false
+      }
       left -= n
     } else if (n === HTTP_CLIENT_WOULD_BLOCK || n === 0) {
       const ready = await httpClientWaitPeerAsync(conn, true)
@@ -2962,8 +3030,13 @@ const httpClientWriteAsync = async (conn: HttpClientConn, bytes: u8[]): Promise<
   while (left > 0 && at >= 0) {
     const n: i32 = tls.write(bytes, at, left)
     if (n > 0 && n <= left) {
-      // At most `bytes.length`, so the unsigned sum cannot wrap.
-      at = toI32(toU32(at) + toU32(n))
+      // At most `bytes.length`, so the window always has an end; the helper
+      // measures it so that the sum is proven to fit.
+      at = httpClientWindowEnd(bytes, at, n)
+      if (at < 0) {
+        conn.fault.fail(HTTP_E_IO, "the bytes to write lie outside their buffer")
+        return false
+      }
       left -= n
     } else if (n > 0 || n !== TLS_RECORD_AGAIN || tls.outputEnd === tls.outputStart) {
       conn.lost = true
@@ -3084,8 +3157,12 @@ const httpClientLookupAsync = async (
     }
     client.tick(after)
     status = client.result(lookup, addresses, ttls)
-    // slice stays within 1 to HTTP_CLIENT_DNS_SLICE_MS, so doubling it cannot wrap.
-    const twice: i32 = toI32(toU32(slice) * toU32(2))
+    // `slice` stays within 1 to `HTTP_CLIENT_DNS_SLICE_MS` (16), so doubling
+    // it fits; the test restates that with the literal the bounds proof reads.
+    let twice: i32 = HTTP_CLIENT_DNS_SLICE_MS
+    if (slice >= 0 && slice <= 16) {
+      twice = slice * 2
+    }
     slice = twice < HTTP_CLIENT_DNS_SLICE_MS ? twice : HTTP_CLIENT_DNS_SLICE_MS
   }
   netClose(loop)
@@ -3120,8 +3197,13 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
   const one: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
   let last: i32 = 0
   for (let i: i32 = 0; i < usable && i < DNS_RESOLVE_MAX_ADDRESSES; i += 1) {
-    // i < DNS_RESOLVE_MAX_ADDRESSES, so the unsigned product stays inside addresses.
-    copyBytes(one, 0, addresses, toI32(toU32(i) * toU32(DNS_ADDRESS_BYTES)), DNS_ADDRESS_BYTES)
+    // `i` is below `DNS_RESOLVE_MAX_ADDRESSES` (16), so the product stays
+    // inside `addresses`; the test restates that with the literal the bounds
+    // proof reads.
+    if (i > 15) {
+      break
+    }
+    copyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)
     const fd: i32 = tcpConnect(one)
     if (fd < 0) {
       last = fd

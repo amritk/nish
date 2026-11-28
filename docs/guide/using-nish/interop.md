@@ -1323,8 +1323,66 @@ export const main = (): i32 => {
 -1
 ```
 
-A handle is never copied, stored or returned: you call its methods, or lend
-it to a parameter of its own type. Several declarators in one `using` open
+A handle is never copied into a local or captured: you call its methods,
+lend it to a parameter of its own type, or hand it on to something that owns
+it. A class may own several native objects — `CPtr` fields, opaque
+`declare class` pointers, `HostHandle`s — and other handle classes, and a
+library module can export it, with a top-level factory that returns it as
+the class, `| null`, or a `Result`, and functions that borrow it. Mark the
+class and those functions `export` in that module, not in your program's
+entry: the entry's exports are C symbols, and a C caller handed a handle
+would never close it, so the compiler refuses a handle there. The library
+module's handle class and the functions that take or give one still link to
+the modules that import them, but `--emit-header`, `--emit-dts` and
+`--emit-napi` leave them out:
+
+<!-- nish:ok -->
+```ts
+declare function slot_open(): CPtr;
+declare function slot_close(p: CPtr): i32;
+declare function slot_read(p: CPtr): i32;
+
+class Pair {
+  readonly first: CPtr;
+  readonly second: CPtr;
+  constructor() {
+    this.first = slot_open();
+    this.second = slot_open();
+  }
+  read(): i32 {
+    return slot_read(this.second);
+  }
+  [Symbol.dispose](): void {
+    slot_close(this.second);
+    slot_close(this.first);
+  }
+}
+
+class Stack {
+  readonly pair: Pair;
+  readonly top: CPtr;
+  constructor(pair: Pair) {
+    this.pair = pair;
+    this.top = slot_open();
+  }
+  [Symbol.dispose](): void {
+    slot_close(this.top);
+  }
+}
+
+function openStack(): Stack {
+  return new Stack(new Pair());
+}
+
+const depth = (s: Stack): i32 => s.pair.read();
+```
+
+A caller in another module writes `using s = openStack()`. At every exit
+`Stack` closes its fields in reverse declaration order: its dispose closes
+`top`, and then the `Pair` it owns closes `second` and `first`. A handle a
+class owns is closed in its field's place in that order, so a `Stack` that
+declared `top` before `pair` would close the `Pair` first. `s.pair.read()` is one load of the field and the C
+call. Several declarators in one `using` open
 one at a time, so an `orReturn()` in a later initialiser closes the ones
 before it. Falling off the end, `break` and `continue` close them in reverse
 order beside an `arena()`, a `scope()` or a lock.
