@@ -12,6 +12,7 @@ import {
   HANDLER_MAX_ADDED,
   HANDLER_MAX_WATCHED,
   HANDLER_NEXT,
+  HANDLER_NO_LOOP,
   HANDLER_SENT,
   HandlerLimits,
   HttpHandler,
@@ -48,7 +49,7 @@ while (true) {
 
 <scalar-card title="open​Http​Handler" icon="phosphor/regular/function" href="#openhttphandler">
 
-A handler as `new HttpHandler(limits, listener, router)` makes one, with what that constructor panics on answered as an `Err`: limits below their least, or a readiness loop `pollCreate` could not make.
+A handler as `new HttpHandler(limits, listener, router)` makes one, with limits below their least, which that constructor panics on, answered as an `Err`, and a readiness loop `pollCreate` could not make, which would leave that constructor's handler dead, answered as an `Err` too.
 
 </scalar-card>
 
@@ -173,8 +174,9 @@ implementation.
 ### openHttpHandler
 
 A handler as `new HttpHandler(limits, listener, router)` makes one, with
-what that constructor panics on answered as an `Err`: limits below their
-least, or a readiness loop `pollCreate` could not make.
+limits below their least, which that constructor panics on, answered as an
+`Err`, and a readiness loop `pollCreate` could not make, which would leave
+that constructor's handler dead, answered as an `Err` too.
 
 ```ts
 const openHttpHandler: (
@@ -404,6 +406,16 @@ An answer for a request whose connection closed first: nothing was sent.
 `HANDLER_NEXT: i32`
 
 `before` and `after`: every step bound to the request's route has run, and the request is still the program's to answer.
+
+</scalar-card>
+
+<scalar-card title="-25" icon="phosphor/regular/hash">
+
+`HANDLER_NO_LOOP: i32`
+
+`wait`: the handler has no readiness loop, because its constructor was
+given a failed `pollCreate`, so no socket can ever be ready. Stop calling
+`wait`; a loop that keeps calling it only spins.
 
 </scalar-card>
 
