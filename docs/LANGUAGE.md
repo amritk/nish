@@ -11943,8 +11943,9 @@ the source fails, which may leave a prefix of `bytes` written. It answers
 either; the bytes are not a key, and the caller is told so. It is an
 expression, not a statement, so a caller turns the `false` into its own
 error, and it is **no panic site**: `getRandomValues` is an `io-exit` site,
-refused under the no-panic default with advice naming the twin, and the twin
-is not (`tests/link/deny_panics_entropy`). It is named `try…` and answers a
+refused under the no-panic default with advice naming the twin
+(`tests/link/deny_panics_entropy`), and the twin is not
+(`tests/link/deny_panics_entropy_try`). It is named `try…` and answers a
 `boolean` as the standard library's fill twins do (`tryCopyBytes`,
 `trySetU32LE`): an `…OrNull` twin answers a value, and the value here would
 be a second name for the caller's buffer.
@@ -16952,7 +16953,7 @@ integer, a `u32` under `--number-mode i32`)
 - *What proves it away:* nothing; `readFileSyncOrNull` is the twin that
   answers `null` instead (`tests/cases/panics_io_exit`), and
   `crypto.tryGetRandomValues` the one that answers `false`
-  (`tests/link/deny_panics_entropy`)
+  (`tests/link/deny_panics_entropy_try`)
 
 **`parallel-length`**: a `parallelMapInto` call whose `dst` is shorter than
 its `src`

@@ -1518,7 +1518,7 @@ integer, a `u32` under `--number-mode i32`)
 - *What proves it away:* nothing; `readFileSyncOrNull` is the twin that
   answers `null` instead (`tests/cases/panics_io_exit`), and
   `crypto.tryGetRandomValues` the one that answers `false`
-  (`tests/link/deny_panics_entropy`)
+  (`tests/link/deny_panics_entropy_try`)
 
 **`parallel-length`**: a `parallelMapInto` call whose `dst` is shorter than
 its `src`

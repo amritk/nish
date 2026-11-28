@@ -1452,7 +1452,7 @@ const tryRandom = () =>
   [
     "tests/cases/os_random_try.ts",
     "docs/cookbook/builtin-host-entropy-try.ts",
-    "tests/link/deny_panics_entropy/main.ts",
+    "tests/link/deny_panics_entropy_try/main.ts",
   ].map((program) => ({
     program,
     file: "exit",
