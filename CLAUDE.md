@@ -85,6 +85,12 @@ registry code is provoked". A changed diagnostic message is grepped across
 the whole repo (`expected.err`, `expected.json`, the pinned negative cases)
 before pushing.
 
+**A new error path lands with the check that provokes it.** A `std/` change
+that adds an error code or a new failing return lands with a `tests/link`
+case or `tests/run.js` check that reaches it and fails when its guard is
+removed; one no test can reach is named as untested in the PR body and in
+its area's `docs/security/` record.
+
 **A record states only what its code or its recorded run does.** In
 `docs/security/*.md` and `docs/BENCHMARKS.md`, check each "only", "cannot"
 and "never" against the code's real match (a seccomp row matches syscall
