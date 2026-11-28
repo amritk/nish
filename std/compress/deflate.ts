@@ -4371,6 +4371,8 @@ export class Inflater {
     const inEnd: i32 = toI32(src.length) - inGap
     const end: i32 = toI32(out.length) - outGap
     this.reset()
+    // The tests above put both windows inside their arrays, so `inflateAll`
+    // answers no `DEFLATE_ERR_WINDOW` here.
     const r: i32 = this.inflateAll(src, off, inEnd, out, at, end)
     const pos: i32 = this.inPos
     if (pos < 0) {
