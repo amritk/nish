@@ -619,13 +619,17 @@ export class Http1Parser {
    * @returns a copy the caller owns of the bytes that belong to the next protocol, empty when none arrived yet
    */
   upgradeBytes(): u8[] {
-    const buf: u8[] = this.buf
-    const to: i32 = this.end
-    // Built by `push`, so no length is computed for `new Array`.
-    const out: u8[] = []
-    for (let k: i32 = this.start; k >= 0 && k < toI32(buf.length) && k < to; k += 1) {
-      out.push(buf[k])
+    const from: i32 = this.start
+    const to: i32 = this.end < toI32(this.buf.length) ? this.end : toI32(this.buf.length)
+    if (from < 0 || to <= from) {
+      return []
     }
+    const count: i32 = to - from
+    if (count <= 0) {
+      return []
+    }
+    const out: u8[] = new Array<u8>(count)
+    tryCopyBytes(out, 0, this.buf, from, count)
     return out
   }
 
@@ -774,10 +778,10 @@ const http1Reserve = (p: Http1Parser, len: i32): boolean => {
 }
 
 /**
- * A buffer of `size` bytes whose first `live` are `old[from ..]`. A size past
- * a `u16` is built by `push`, so no unchecked length reaches `new Array`; the
- * first input buffer, `HTTP1_FIRST_INPUT` bytes, is the common one and copies
- * nothing.
+ * A buffer of `size` bytes whose first `live` are `old[from ..]`: one zeroed
+ * allocation and one bulk copy. The first input buffer, `HTTP1_FIRST_INPUT`
+ * bytes, is the common one and copies nothing. Its callers cap `size` below
+ * 2^31 (`HTTP1_MOST_INPUT`), so the empty answer past that is never taken.
  */
 const http1Grown = (old: u8[], from: i32, live: u32, size: u32): u8[] => {
   if (old.length === 0 && size === toU32(HTTP1_FIRST_INPUT)) {
@@ -786,25 +790,20 @@ const http1Grown = (old: u8[], from: i32, live: u32, size: u32): u8[] => {
   if (old.length === 0 && size === toU32(HTTP1_FIRST_HEAD)) {
     return new Array<u8>(HTTP1_FIRST_HEAD)
   }
+  if (size > toU32(2147483647)) {
+    return []
+  }
+  const n: i32 = toI32(size)
+  if (n <= 0) {
+    return []
+  }
+  const buf: u8[] = new Array<u8>(n)
   // `live` is the count from `from` to the end of the bytes in `old`, so the
-  // window always fits and `to` is its end; -1 would copy nothing.
+  // window always fits and `to` is its end; -1 copies nothing.
   const to: i32 = http1WindowEnd(old, from, toI32(live))
-  if (size <= toU32(65535)) {
-    // A size that fits a `u16` is one allocation whose length needs no check.
-    const sized: u8[] = new Array<u8>(toU16(toI32(size)))
-    let at: i32 = 0
-    for (let k: i32 = from; k >= 0 && k < toI32(old.length) && k < to && at < toI32(sized.length); k += 1) {
-      sized[at] = old[k]
-      at += 1
-    }
-    return sized
-  }
-  const buf: u8[] = []
-  for (let k: i32 = from; k >= 0 && k < toI32(old.length) && k < to; k += 1) {
-    buf.push(old[k])
-  }
-  while (toU32(buf.length) < size) {
-    buf.push(0)
+  if (from >= 0 && to > from) {
+    const count: i32 = to - from
+    tryCopyBytes(buf, 0, old, from, count < n ? count : n)
   }
   return buf
 }
@@ -1246,15 +1245,20 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
 const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
   if (at >= toI32(p.spans.length)) {
     const old: i32[] = p.spans
-    // Built by `push`, so no length is computed for `new Array`; `at` counts
-    // four spans a field, far below 2^31, so the u32 size does not wrap.
-    const size: u32 = at < HTTP1_FIRST_SPANS ? toU32(HTTP1_FIRST_SPANS) : toU32(at) * toU32(2) + toU32(4)
-    const grown: i32[] = []
-    for (let k: i32 = 0; k < toI32(old.length); k += 1) {
-      grown.push(old[k])
+    // `at` counts four spans a field, far below 2^30, so the size fits an i32;
+    // the guard is what proves the allocation's length.
+    const wide: i64 = at < HTTP1_FIRST_SPANS ? toI64(HTTP1_FIRST_SPANS) : toI64(at) * toI64(2) + toI64(4)
+    if (wide > toI64(2147483647)) {
+      return
     }
-    while (toU32(grown.length) < size) {
-      grown.push(0)
+    const size: i32 = toI32(wide)
+    if (size <= 0) {
+      return
+    }
+    const grown: i32[] = new Array<i32>(size)
+    // The prover does not carry `grown.length === size` from `new Array`.
+    if (toI32(old.length) <= toI32(grown.length)) {
+      grown.set(old, 0)
     }
     p.spans = grown
   }

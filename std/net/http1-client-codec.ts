@@ -990,11 +990,12 @@ export class Http1ResponseParser {
     if (this.state !== HTTP1_CLIENT_S_TUNNEL || from < 0 || to <= from || to > toI32(this.buf.length)) {
       return []
     }
-    const buf: u8[] = this.buf
-    const out: u8[] = []
-    for (let k: i32 = from; k >= 0 && k < to && k < toI32(buf.length); k += 1) {
-      out.push(buf[k])
+    const count: i32 = to - from
+    if (count <= 0) {
+      return []
     }
+    const out: u8[] = new Array<u8>(count)
+    tryCopyBytes(out, 0, this.buf, from, count)
     return out
   }
 }

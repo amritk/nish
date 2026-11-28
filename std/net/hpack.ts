@@ -1356,11 +1356,12 @@ export class HpackWork {
     }
     // `classOf` answers below `HPACK_FIELD_CLASSES`, so the room is at most 2^23 and an unsigned shift holds it.
     const room: u32 = toU32(1) << toU32(j)
-    // A length is made at most 65535 at once; a larger class's room is filled out by pushes, which leave the same room.
-    const made: u8[] = new Array<u8>(toU16(room < toU32(65535) ? room : toU32(65535)))
-    while (toU32(made.length) < room) {
-      made.push(0)
+    // One allocation of the class's room; the guard proves its length.
+    const size: i32 = room < toU32(8388609) ? toI32(room) : 0
+    if (size <= 0) {
+      return []
     }
+    const made: u8[] = new Array<u8>(size)
     hpackEmpty(made)
     return made
   }

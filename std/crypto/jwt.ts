@@ -239,9 +239,14 @@ const jwtSignatureSize = (key: JwtKey): i32 => {
 }
 
 const jwtCopy = (a: u8[]): u8[] => {
-  const out: u8[] = []
-  for (let k: i32 = 0; k < toI32(a.length); k += 1) {
-    out.push(a[k])
+  const n: i32 = toI32(a.length)
+  if (n <= 0) {
+    return []
+  }
+  const out: u8[] = new Array<u8>(n)
+  // The prover does not carry `out.length === n` from `new Array`.
+  if (toI32(a.length) <= toI32(out.length)) {
+    out.set(a, 0)
   }
   return out
 }

@@ -2652,19 +2652,14 @@ const pgAsyncLabel = (out: u8[], name: i32): void => {
 }
 
 /**
- * A zeroed byte array of `n` bytes, or an empty one for a negative `n`. Up to
- * 64 KiB it is one `new Array` of a `u16` length, which needs no check; a
- * longer one, the rare buffer for a message past that, is built by `push`.
+ * A zeroed byte array of `n` bytes, or an empty one for a negative `n`: one
+ * allocation, its length proven non-negative by the guard.
  */
 const pgAsyncZeroed = (n: i32): u8[] => {
-  if (n >= 0 && n <= 65535) {
-    return new Array<u8>(toU16(n))
+  if (n < 0) {
+    return []
   }
-  const out: u8[] = []
-  while (toI32(out.length) < n) {
-    out.push(0)
-  }
-  return out
+  return new Array<u8>(n)
 }
 
 /** `s`'s UTF-8 bytes, or null when one is zero, which a C string in the protocol cannot hold. */

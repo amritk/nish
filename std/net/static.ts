@@ -60,7 +60,7 @@
  */
 
 import { realpathSync, statMtimeSync } from "nish:fs"
-import { copyBytes } from "nish/bytes"
+import { copyBytes, tryCopyBytes } from "nish/bytes"
 import { HANDLER_SENT, HttpHandler, HttpRequest } from "nish/net/handler"
 import { HTTP_DATE_SIZE, httpDateWrite, httpFieldBytes } from "nish/net/http-fields"
 import { HttpServer, HttpServerRequest } from "nish/net/http-server"
@@ -539,10 +539,12 @@ const staticQ = (b: u8[], start: i32, end: i32): i32 => {
 
 /** A new array of `src[0 .. length)`. */
 const staticCut = (src: u8[], length: i32): u8[] => {
-  const out: u8[] = []
-  for (let k: i32 = 0; k < length && k < toI32(src.length); k++) {
-    out.push(src[k])
+  const n: i32 = length < toI32(src.length) ? length : toI32(src.length)
+  if (n <= 0) {
+    return []
   }
+  const out: u8[] = new Array<u8>(n)
+  tryCopyBytes(out, 0, src, 0, n)
   return out
 }
 
