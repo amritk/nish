@@ -30404,7 +30404,9 @@ if (dealtHere("releaseChecks")) {
   // the checker reads no guard a reader would write there (a clause ending
   // ` yet`), or the language has no guard for the site (a clause ending
   // `which nothing proves away`). A snippet whose own code still panics names
-  // one of the last three.
+  // one of the last three. A reason names, in backticks, every `std/` file
+  // whose panic site the strict build reports, so it moves when a fix moves
+  // the site the call reaches.
   // A marked fence with a path after its language (```ts geometry.ts) is one file
   // of a program of several, and the site shows the path as its title: a run of
   // them in one section (no heading between them) is written out as one
@@ -30468,6 +30470,19 @@ if (dealtHere("releaseChecks")) {
       reason
         .split("; ")
         .some((clause) => clause.startsWith("shows ") || (!clause.includes("`std/") && / yet$/.test(clause)) || clause.endsWith("which nothing proves away"))
+    /**
+     * The `std/` files whose panic sites the strict build's messages name and
+     * the opt-out's reason does not, so a reason cannot go on blaming a module
+     * a fix has left behind while the site that is left goes unnamed. Only
+     * this direction is checked: the compiler names one site per call, so a
+     * file the reason names that no message shows may still be reached behind
+     * the one it does.
+     */
+    const unnamedStdSites = (reason, messages) => {
+      const named = new Set([...reason.matchAll(/`(std\/[^`]+\.ts)`/g)].map((m) => m[1]))
+      const reached = new Set(messages.flatMap((m) => [...m.matchAll(/ site at (std\/[\w./-]+\.ts):\d+:\d+/g)].map((x) => x[1])))
+      return [...reached].filter((file) => !named.has(file)).sort()
+    }
     const MARKED_FENCE = /^```(ts|json)(?:\s+(\S+))?\s*$/
 
     /**
@@ -30880,6 +30895,17 @@ if (dealtHere("releaseChecks")) {
         verdicts.join(",") === "true,true,true,false,false,false",
         verdicts.join(",")
       )
+      const unnamed = unnamedStdSites("calls `std/net/handler.ts` code that reaches the `std/compress/gzip.ts` panic site no proof removes yet", [
+        "This call to `HttpHandler.wait` may panic: it reaches the `panic` site at std/compress/gzip.ts:97:5, outside the no-panic scope this call is in",
+        "This call to `HttpHandler.field` may panic: it reaches the `panic` site at std/net/handler.ts:1895:7, outside the no-panic scope this call is in",
+        "This call to `Response.text` may panic: it reaches the `panic` site at std/bytes.ts:526:5, outside the no-panic scope this call is in",
+        "`index` may panic here, and a module of this package, held to no panic by default",
+      ])
+      check(
+        "docs: an opt-out reason that leaves out a std/ file whose panic site the build reaches is reported",
+        unnamed.join(",") === "std/bytes.ts",
+        unnamed.join(",")
+      )
     }
 
     for (const page of docPages) {
@@ -30953,6 +30979,15 @@ if (dealtHere("releaseChecks")) {
               `${rel}:${s.line}: its own code is held to no panic, or its reason says why no guard fits`,
               own.length === 0 || excusesOwnPanic(reason),
               `NL2457 at ${[...new Set(own.map((e) => `${e.file ? path.basename(e.file) : ""}:${e.line} ${/^`([^`]+)`/.exec(e.message)?.[1] ?? ""}`))].join(", ")}: guard the site, or give a reason clause starting \`shows \`, ending \` yet\` or ending \`which nothing proves away\``
+            )
+            const unnamedSites = unnamedStdSites(
+              reason,
+              bare.flatMap((b) => b.errors.filter((e) => NO_PANIC_CODES.includes(e.code)).map((e) => e.message))
+            )
+            check(
+              `${rel}:${s.line}: its reason names every std/ file whose panic site the build reaches`,
+              unnamedSites.length === 0,
+              `the build reaches panic sites in ${unnamedSites.join(", ")}: name them in the \`<!-- allow-panics: -->\` line above its marker`
             )
           }
         } else {

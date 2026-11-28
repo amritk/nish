@@ -82,7 +82,7 @@ ASCII case. Write each origin as a browser sends it: scheme, host and a port
 that is not the scheme's default, with no path or trailing slash
 (`https://example.com`, `http://localhost:8080`). Refuse the rest with a 403.
 
-<!-- allow-panics: calls `std/crypto/base64url.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/http1-server.ts` code that reaches `std/crypto/base64url.ts` and `std/net/http1-codec.ts` panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Http1Connection } from "nish/net/http1-server";
@@ -140,7 +140,7 @@ The client's side is six steps over a connection you opened:
 
 Over TLS, with `tlsConnect`:
 
-<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; calls `std/net/websocket.ts` and `std/net/tls-tcp.ts` code that keeps panic sites, and reaches those of `std/crypto/base64url.ts`, `std/crypto/pki-roots.ts` and `std/crypto/sha256.ts`, that no proof removes yet -->
+<!-- allow-panics: calls `crypto.getRandomValues`, which exits on failure and which nothing proves away; calls `std/net/websocket.ts`, `std/net/tls-tcp.ts` and `std/net/http1-client-codec.ts` code that keeps panic sites, and reaches those of `std/crypto/base64url.ts`, `std/crypto/pki-roots.ts` and `std/crypto/sha256.ts`, that no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { netAddress } from "nish:net";
