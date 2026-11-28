@@ -17844,6 +17844,15 @@ const DECLARED = [
       why: "std/raster.ts's RasterTrail and RasterParticles constructors floor their capacity with a test instead of Math.max, so the prover sees each new Array length is positive, the length check and its panic block leave raster.ll, and a caller's declarations of the constructors change attributes",
     }))
   ),
+  // examples-strict S6: Framebuffer's constructor and resize floor the array
+  // length with a test, so its length check and panic block leave
+  // term-pixels.ll, and scaleFramebuffer states resize's size check at the call.
+  {
+    program: "tests/link/std_term_pixels_try/main.ts",
+    file: "term-pixels.ll",
+    changelog: "break-web builds without --allow-panics",
+    why: "std/term-pixels.ts's Framebuffer constructor and resize floor their array length with a test the prover reads, so the length check and its panic block leave term-pixels.ll, and scaleFramebuffer gains the size check resize makes, stated before its call",
+  },
   // forEach on an array, a Map or a Set is new, so the seed refuses the
   // programs that call it.
   ...[
