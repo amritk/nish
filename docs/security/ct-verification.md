@@ -428,15 +428,22 @@ Signed `+ - *` became a checked panic after this record was written
 (`docs/LANGUAGE.md`, "Semantics decisions"), and the check is a conditional
 branch, on a secret when the operands are secret.
 
-So the constant-time code does its arithmetic where nothing is checked: secret
-sums and products in `u32` or `u64`, which wrap by definition and have the bits
-the old signed arithmetic had wherever it did not overflow —
-`base64urlRangeMask`, which both base64 alphabets' character maps in
-`std/crypto/base64url.ts` share (x509's own copy, `x509RangeMask`, went when
-its padded base64 moved there), those maps, and x25519's limbs through
-`f25519Add64`, `f25519Sub64` and `f25519Mul64`, whose bounds the module already
-proves in its comments — and the public offsets of the loads and stores the
-fixtures read (`at + k`) in `u32` too.
+So the constant-time code does its arithmetic where no check is emitted, in
+one of three ways. The base64 character maps in `std/crypto/base64url.ts`
+(both alphabets, and `base64urlRangeMask` they share; x509's own copy,
+`x509RangeMask`, went when its padded base64 moved there) stay plain `i32`:
+each masks its input, a sextet to 6 bits and a character code to 16, and the
+range bounds are `integer<0, 255>`, so `src/bounds.ts` proves every sum and
+no check is emitted; the `ct_asm_k1_base64url` rows, "no branch, call,
+secret-indexed access or secret-dependent latency", fail if one is. x25519's
+limbs go through `f25519Add64`, `f25519Sub64` and `f25519Mul64`, which are
+`wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe`: they wrap
+and carry no check, and their bounds are the ones the module proves in its
+comments. Values that are `u32` or `u64` all the way through, P-256's Fiat
+limbs among them, wrap by their type. The public offsets of the loads and
+stores the fixtures read (`at + k`) go through `wrappingAdd` in the AES,
+ChaCha and base64url fixtures; elsewhere a check left on one branches on a
+public value, which the "branches on public values only" rows allow.
 
 Every fixture's copy changed with its module, and each still passes its link
 test against the module. A check the compiler proves away — a loop counter, a

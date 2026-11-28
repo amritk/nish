@@ -189,38 +189,42 @@ interface BcryptParsed {
 
 /**
  * All ones when `lo <= c <= hi`, else zero, without a branch: the encoding
- * reads the digest, which is the stored hash when the password is right. The
- * sums are in `u32`, as in `base64urlRangeMask` (std/crypto/base64url.ts), so
- * no overflow check branches on them.
+ * reads the digest, which is the stored hash when the password is right. As in
+ * `base64urlRangeMask` (std/crypto/base64url.ts), `c` is narrowed to the
+ * character codes it is, below 2^16, so the compiler proves both subtractions
+ * fit; a checked subtraction it could not prove would branch on `c`.
  */
-const bcryptRangeMask = (c: i32, lo: i32, hi: i32): i32 =>
-  toI32((toU32(lo) - 1 - toU32(c)) & (toU32(c) - toU32(hi) - 1)) >> 31
+const bcryptRangeMask = (c: i32, lo: integer<0, 255>, hi: integer<0, 255>): i32 => {
+  const d: i32 = c & 0xffff
+  return ((lo - 1 - d) & (d - hi - 1)) >> 31
+}
 
 /**
- * The bcrypt alphabet's character for the sextet `v`, `./A-Za-z0-9`: `.` + `v`,
- * plus the step to each range `v` has reached (2 lands on `A`, 28 on `a`, 54
- * on `0`).
+ * The bcrypt alphabet's character for the sextet `v` (every caller passes `0 <=
+ * v <= 63`; it is masked to six bits, so a wider value aliases): `.` + `v`, plus
+ * the step to each range `v` has reached (2 lands on `A`, 28 on `a`, 54 `0`).
  */
-const bcryptCharOf = (v: i32): u8 =>
-  toU8(
-    46 +
-      toU32(v) +
-      toU32(bcryptRangeMask(v, 2, 63) & 17) +
-      toU32(bcryptRangeMask(v, 28, 63) & 6) -
-      toU32(bcryptRangeMask(v, 54, 63) & 75)
+const bcryptCharOf = (v: i32): u8 => {
+  // Narrowed to the sextet it is, so the compiler proves the sum fits.
+  const s: i32 = v & 63
+  return toU8(
+    s +
+      46 +
+      (bcryptRangeMask(s, 2, 63) & 17) +
+      (bcryptRangeMask(s, 28, 63) & 6) -
+      (bcryptRangeMask(s, 54, 63) & 75)
   )
+}
 
 /** The sextet of a bcrypt alphabet character, or -1 for any other byte, without a branch. */
-const bcryptSextetOf = (c: i32): i32 => {
+const bcryptSextetOf = (c: integer<0, 65535>): i32 => {
   const punct: i32 = bcryptRangeMask(c, 46, 47)
   const upper: i32 = bcryptRangeMask(c, 65, 90)
   const lower: i32 = bcryptRangeMask(c, 97, 122)
   const digit: i32 = bcryptRangeMask(c, 48, 57)
-  const value: i32 =
-    (punct & toI32(toU32(c) - 46)) |
-    (upper & toI32(toU32(c) - 63)) |
-    (lower & toI32(toU32(c) - 69)) |
-    (digit & toI32(toU32(c) + 6))
+  // `c` is a character code, so each offset is proven to fit and no overflow
+  // check branches on it.
+  const value: i32 = (punct & (c - 46)) | (upper & (c - 63)) | (lower & (c - 69)) | (digit & (c + 6))
   return value | ~(punct | upper | lower | digit)
 }
 

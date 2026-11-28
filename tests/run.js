@@ -6990,18 +6990,27 @@ if (dealtHere("stdPanics")) {
       same.status === 0 && planted.status === 1 && planted.stderr.includes("std/compress/deflate.ts"),
       `${shown(same)}\n${shown(planted)}`
     )
-    let dropped = ""
-    const removed = onCopy("removed", (dir) => {
+    // The baseline may hold no line at all, so the copy brings its own: a
+    // file with one cast wrap and the line that allows it, which must pass,
+    // and the same file without that line, which must fail.
+    const plantedFile = "std/compress/wrap-casts-baselined.ts"
+    const plantedLine = `1 ${plantedFile}`
+    const withLine = (keep) => (dir) => {
+      fs.writeFileSync(
+        path.join(dir, plantedFile),
+        "export const baselinedWrap = (a: u32, b: u32): i32 => toI32(toU32(a) + toU32(b))\n"
+      )
       const file = path.join(dir, "scripts", "wrap-casts.txt")
-      const lines = fs.readFileSync(file, "utf8").split("\n")
-      const at = lines.findIndex((l) => /^\d+ \S+$/.test(l))
-      dropped = lines[at] ?? ""
-      fs.writeFileSync(file, lines.filter((_, k) => k !== at).join("\n"))
-    })
+      if (keep) {
+        fs.appendFileSync(file, `${plantedLine}\n`)
+      }
+    }
+    const kept = onCopy("kept", withLine(true))
+    const removed = onCopy("removed", withLine(false))
     check(
-      `std-panics: scripts/wrap-casts.mjs --root fails on a baseline with a line removed (${dropped || "none found"})`,
-      dropped !== "" && removed.status === 1,
-      shown(removed)
+      `std-panics: scripts/wrap-casts.mjs --root fails on a baseline with a line removed (${plantedLine}), and passes it with the line`,
+      kept.status === 0 && removed.status === 1 && removed.stderr.includes(plantedFile),
+      `${shown(kept)}\n${shown(removed)}`
     )
   }
   const baselineName = "tests/std-panics.json"
@@ -9696,7 +9705,9 @@ if (dealtHere("selfHosting")) {
   const simdSteps = testJobText
     .split(/\n(?= {6}- name: )/)
     .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32|adler32) kernel: /.test(step))
-  const strayed = simdSteps.filter((step) => !step.includes(`if: matrix.shard == ${simdShard}\n`))
+  const strayed = simdSteps.filter(
+    (step) => !step.includes(`if: matrix.shard == ${simdShard} && steps.suite.outputs.suite != 'false'\n`)
+  )
   check(
     `ci.yml: the \`test\` job's ${simdSteps.length} steps that read the simd group run in its shard, ${simdShard}`,
     simdSteps.length > 0 && strayed.length === 0,
@@ -44244,14 +44255,61 @@ if (selects("ci-scope", "ci.yml")) {
     ciScope.SUITE_UNREAD.join() === ".claude/plans/**" && codeFiles.length > 1000 && namesPlans.length === 0,
     `files that name it: ${namesPlans.map((f) => path.relative(root, f)).join(", ") || "none"} (of ${codeFiles.length})`
   )
-  // ci.yml: `test` and `examples` wait on scope for it, and ci-gate expects
-  // their skip exactly when it is false.
-  const suiteIf = (job) => [...ciJob(ciYmlText, job).matchAll(/^ {4}(needs|if): (.*)$/gm)].map((m) => `${m[1]}: ${m[2]}`).join("; ")
+  // ci.yml: `test` and `examples` wait on no job: each decides `suite` in
+  // the step after its checkout, and every later step is gated on it, so a
+  // plans-only pull request runs none of them and any other runs all of
+  // them. A `needs: scope` here put scope's own queue time in front of every
+  // pull request's shards (run 46097423926: 12 minutes).
+  const gateOn = "steps.suite.outputs.suite != 'false'"
+  const suiteWiring = (job) => {
+    const text = ciJob(ciYmlText, job)
+    const jobSteps = text.split(/\n {6}- /).slice(1)
+    const decideAt = jobSteps.findIndex((st) => /^ {8}id: suite$/m.test(st))
+    const ungated = jobSteps
+      .slice(decideAt + 1)
+      .filter((st) => {
+        const cond = /^ {8}if: (.*)$/m.exec(st)?.[1] ?? ""
+        return !(cond === gateOn || cond.endsWith(` && ${gateOn}`) || cond.endsWith(` && ${gateOn} }}`))
+      })
+      .map((st) => st.split("\n")[0])
+    return {
+      jobLevel: [...text.matchAll(/^ {4}(needs|if): (.*)$/gm)].map((m) => m[0].trim()),
+      decide: decideAt === 1 && /^ {8}run: node scripts\/ci-scope\.mjs --suite$/m.test(jobSteps[1] ?? ""),
+      first: /^uses: actions\/checkout@/.test(jobSteps[0] ?? ""),
+      ungated,
+    }
+  }
+  const wiring = Object.fromEntries(["test", "examples"].map((job) => [job, suiteWiring(job)]))
   check(
-    "ci.yml: `test` and `examples` skip only when scope says suite=false, and ci-gate expects that skip",
-    ["test", "examples"].every((job) => suiteIf(job) === "needs: scope; if: needs.scope.outputs.suite != 'false'") &&
-      ciJob(ciYmlText, "ci-gate").includes(`\${{ needs.scope.outputs.suite == 'false' && ', "test", "examples"' || '' }}]`),
-    `test: ${suiteIf("test")}\nexamples: ${suiteIf("examples")}`
+    "ci.yml: `test` and `examples` need no job, decide suite in the step after their checkout, and gate every later step on it",
+    Object.values(wiring).every((w) => w.jobLevel.length === 0 && w.decide && w.first && w.ungated.length === 0) &&
+      !ciJob(ciYmlText, "ci-gate").includes("outputs.suite"),
+    JSON.stringify(wiring, null, 2)
+  )
+  // `--suite` writes `suite=` alone: false for a plans-only list, true for
+  // another, and a push runs it whatever it changes.
+  const suiteDir = fs.mkdtempSync(path.join(os.tmpdir(), "ci-suite-"))
+  const suiteOf = (files, event) => {
+    const list = path.join(suiteDir, "files.txt")
+    const output = path.join(suiteDir, "output.txt")
+    fs.writeFileSync(list, files.join("\n"))
+    fs.writeFileSync(output, "")
+    const ran = spawnSync(process.execPath, [path.join(root, "scripts", "ci-scope.mjs"), "--suite", "--files", list], {
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_EVENT_NAME: event, NISH_CI_SCOPE: "", GITHUB_STEP_SUMMARY: "", PR_LABELS: "[]", GITHUB_OUTPUT: output },
+    })
+    return `${ran.status} ${fs.readFileSync(output, "utf8").trim()}`
+  }
+  const suiteRuns2 = {
+    plans: suiteOf([".claude/plans/a.plan.md"], "pull_request"),
+    src: suiteOf(["src/compile.ts"], "pull_request"),
+    push: suiteOf([".claude/plans/a.plan.md"], "push"),
+  }
+  fs.rmSync(suiteDir, { recursive: true, force: true })
+  check(
+    "ci-scope: --suite writes suite=false for a plans-only pull request alone, and suite=true for another change or a push",
+    suiteRuns2.plans === "0 suite=false" && suiteRuns2.src === "0 suite=true" && suiteRuns2.push === "0 suite=true",
+    JSON.stringify(suiteRuns2)
   )
 
   const unknownPath = on(["somewhere/new.txt"])
@@ -44686,13 +44744,13 @@ if (selects("link-results", "ci.yml")) {
     "link-results-2-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}"
   check(
     "ci.yml: the `test` job restores the link programs' results on a pull request alone, by its shard's prefix, hands the suite its shard's file, and saves it under the same key on a pull request or a push to main",
-    /^ {8}if: github\.event_name == 'pull_request'$/m.test(restore) &&
+    /^ {8}if: github\.event_name == 'pull_request' && steps\.suite\.outputs\.suite != 'false'$/m.test(restore) &&
       cacheKey(restore) === shardKey &&
       cacheKey(save) === shardKey &&
       prefix === "link-results-2-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-" &&
       /--link-results "build\/cache\/link-results\/shard-\$SHARD\.json"/.test(suite) &&
       save.includes(
-        "if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && hashFiles('build/cache/link-results/*.json') != '' }}"
+        "if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && hashFiles('build/cache/link-results/*.json') != '' && steps.suite.outputs.suite != 'false' }}"
       ) &&
       testJobSteps.indexOf(restore) < testJobSteps.indexOf(suite) &&
       testJobSteps.indexOf(suite) < testJobSteps.indexOf(save),
@@ -45103,8 +45161,8 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   // `--delegate-bench-timing` (DELEGATE_BENCH_TIMING): the crypto twins'
   // timed portable proofs run in the push-to-main run of this same job. That
   // holds while ci.yml runs on a push to main, the `test` job's one
-  // job-level `if:` is `suite`'s (which a push never turns off) and its Test
-  // step has none, and the flag is honoured
+  // job has no job-level `if:`, its Test step's one `if:` is the `suite`
+  // gate (which a push never turns off), and the flag is honoured
   // on a `pull_request` event alone, so the push run times them.
   {
     const runSrc = fs.readFileSync(path.join(root, "tests", "run.js"), "utf8")
@@ -45115,11 +45173,12 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
       testJob !== "" &&
         (!testJob.includes("--delegate-bench-timing") ||
           (/^on:\n {2}push:\n {4}branches: \[main\]$/m.test(ciYmlText) &&
-            [...testJob.matchAll(/^ {4}if: (.*)$/gm)].every((m) => m[1] === "needs.scope.outputs.suite != 'false'") &&
+            !/^ {4}if:/m.test(testJob) &&
             ciScope.decide({ event: "push", files: [{ path: ciScope.SUITE_UNREAD[0].replace("**", "x.md"), status: "modified" }] })
               .suite === true &&
             testStep !== "" &&
-            !/^ {8}(?:if|continue-on-error):/m.test(testStep) &&
+            !/^ {8}continue-on-error:/m.test(testStep) &&
+            [...testStep.matchAll(/^ {8}if: (.*)$/gm)].map((m) => m[1]).join() === "steps.suite.outputs.suite != 'false'" &&
             honoured.test(runSrc))),
       `Test step:\n${testStep || "(not found)"}`
     )
@@ -45271,12 +45330,12 @@ if (selects("ci.yml", "ci-verdict", "release.yml")) {
     (l) => l === "PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}",
     // The link programs' results are restored on a pull request alone, so a
     // dispatched run builds every program, as the tag's would.
-    (l) => l === "if: github.event_name == 'pull_request'",
+    (l) => l === "if: github.event_name == 'pull_request' && steps.suite.outputs.suite != 'false'",
     // ...and saved on a pull request or a push to main alone, which a
     // dispatched run's verdict does not read.
     (l) =>
       l ===
-      "if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && hashFiles('build/cache/link-results/*.json') != '' }}",
+      "if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && hashFiles('build/cache/link-results/*.json') != '' && steps.suite.outputs.suite != 'false' }}",
   ]
   const unknownRefReads = refReads.filter((l) => !knownRefReads.some((known) => known(l)))
   check(
@@ -45401,7 +45460,7 @@ if (selects("ci.yml", "ci-test-summary")) {
   check(
     "ci.yml: the Test summary step follows the Test step in every shard, after a failure too",
     steps.indexOf(summaryStep) === steps.indexOf(testStep) + 1 &&
-      /^ {8}if: \$\{\{ !cancelled\(\) \}\}$/m.test(summaryStep) &&
+      /^ {8}if: \$\{\{ !cancelled\(\) && steps\.suite\.outputs\.suite != 'false' \}\}$/m.test(summaryStep) &&
       (summaryStep.match(/^ {8}if:/gm) ?? []).length === 1 &&
       /^ {8}run: node scripts\/ci-test-summary\.mjs "\$RUNNER_TEMP\/test\.log" "\$RUNNER_TEMP\/test\.status"$/m.test(
         summaryStep

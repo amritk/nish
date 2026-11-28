@@ -2,82 +2,106 @@
 
 define internal noundef i32 @base64urlRangeMask(i32 noundef %c, i32 noundef %lo, i32 noundef %hi) #0 {
 entry:
-  %0 = sub i32 %lo, 1
-  %1 = sub i32 %0, %c
-  %2 = sub i32 %c, %hi
-  %3 = sub i32 %2, 1
-  %4 = and i32 %1, %3
-  %5 = ashr i32 %4, 31
-  ret i32 %5
+  %d.addr = alloca i32, align 4
+  %0 = and i32 %c, 65535
+  store i32 %0, i32* %d.addr, align 4
+  %1 = sub nsw i32 %lo, 1
+  %2 = load i32, i32* %d.addr, align 4
+  %3 = sub nsw i32 %1, %2
+  %4 = load i32, i32* %d.addr, align 4
+  %5 = sub nsw i32 %4, %hi
+  %6 = sub nsw i32 %5, 1
+  %7 = and i32 %3, %6
+  %8 = ashr i32 %7, 31
+  ret i32 %8
 }
 
 define noundef i32 @base64urlCharOf(i32 noundef %v) #0 {
 entry:
-  %0 = add i32 65, %v
-  %1 = call i32 @base64urlRangeMask(i32 %v, i32 26, i32 63)
-  %2 = and i32 %1, 6
-  %3 = add i32 %0, %2
-  %4 = call i32 @base64urlRangeMask(i32 %v, i32 52, i32 63)
-  %5 = and i32 %4, 75
-  %6 = sub i32 %3, %5
-  %7 = call i32 @base64urlRangeMask(i32 %v, i32 62, i32 63)
-  %8 = and i32 %7, 13
-  %9 = sub i32 %6, %8
-  %10 = call i32 @base64urlRangeMask(i32 %v, i32 63, i32 63)
-  %11 = and i32 %10, 49
-  %12 = add i32 %9, %11
-  ret i32 %12
+  %s.addr = alloca i32, align 4
+  %0 = and i32 %v, 63
+  store i32 %0, i32* %s.addr, align 4
+  %1 = load i32, i32* %s.addr, align 4
+  %2 = add nsw i32 %1, 65
+  %3 = load i32, i32* %s.addr, align 4
+  %4 = call i32 @base64urlRangeMask(i32 %3, i32 26, i32 63)
+  %5 = and i32 %4, 6
+  %6 = add nsw i32 %2, %5
+  %7 = load i32, i32* %s.addr, align 4
+  %8 = call i32 @base64urlRangeMask(i32 %7, i32 52, i32 63)
+  %9 = and i32 %8, 75
+  %10 = sub nsw i32 %6, %9
+  %11 = load i32, i32* %s.addr, align 4
+  %12 = call i32 @base64urlRangeMask(i32 %11, i32 62, i32 63)
+  %13 = and i32 %12, 13
+  %14 = sub nsw i32 %10, %13
+  %15 = load i32, i32* %s.addr, align 4
+  %16 = call i32 @base64urlRangeMask(i32 %15, i32 63, i32 63)
+  %17 = and i32 %16, 49
+  %18 = add nsw i32 %14, %17
+  ret i32 %18
 }
 
-define noundef i32 @base64urlSextetOf(i32 noundef %c) #0 {
+define noundef i32 @base64urlSextetOf(i32 noundef %code) #0 {
 entry:
+  %c.addr = alloca i32, align 4
   %upper.addr = alloca i32, align 4
   %lower.addr = alloca i32, align 4
   %digit.addr = alloca i32, align 4
   %dash.addr = alloca i32, align 4
   %underscore.addr = alloca i32, align 4
   %value.addr = alloca i32, align 4
-  %0 = call i32 @base64urlRangeMask(i32 %c, i32 65, i32 90)
-  store i32 %0, i32* %upper.addr, align 4
-  %1 = call i32 @base64urlRangeMask(i32 %c, i32 97, i32 122)
-  store i32 %1, i32* %lower.addr, align 4
-  %2 = call i32 @base64urlRangeMask(i32 %c, i32 48, i32 57)
-  store i32 %2, i32* %digit.addr, align 4
-  %3 = call i32 @base64urlRangeMask(i32 %c, i32 45, i32 45)
-  store i32 %3, i32* %dash.addr, align 4
-  %4 = call i32 @base64urlRangeMask(i32 %c, i32 95, i32 95)
-  store i32 %4, i32* %underscore.addr, align 4
-  %5 = load i32, i32* %upper.addr, align 4
-  %6 = sub i32 %c, 65
-  %7 = and i32 %5, %6
-  %8 = load i32, i32* %lower.addr, align 4
-  %9 = sub i32 %c, 71
-  %10 = and i32 %8, %9
-  %11 = or i32 %7, %10
-  %12 = load i32, i32* %digit.addr, align 4
-  %13 = add i32 %c, 4
-  %14 = and i32 %12, %13
-  %15 = or i32 %11, %14
-  %16 = load i32, i32* %dash.addr, align 4
-  %17 = and i32 %16, 62
-  %18 = or i32 %15, %17
-  %19 = load i32, i32* %underscore.addr, align 4
-  %20 = and i32 %19, 63
-  %21 = or i32 %18, %20
-  store i32 %21, i32* %value.addr, align 4
-  %22 = load i32, i32* %value.addr, align 4
-  %23 = load i32, i32* %upper.addr, align 4
-  %24 = load i32, i32* %lower.addr, align 4
-  %25 = or i32 %23, %24
-  %26 = load i32, i32* %digit.addr, align 4
-  %27 = or i32 %25, %26
-  %28 = load i32, i32* %dash.addr, align 4
-  %29 = or i32 %27, %28
-  %30 = load i32, i32* %underscore.addr, align 4
-  %31 = or i32 %29, %30
-  %32 = xor i32 %31, -1
-  %33 = or i32 %22, %32
-  ret i32 %33
+  %0 = and i32 %code, 65535
+  store i32 %0, i32* %c.addr, align 4
+  %1 = load i32, i32* %c.addr, align 4
+  %2 = call i32 @base64urlRangeMask(i32 %1, i32 65, i32 90)
+  store i32 %2, i32* %upper.addr, align 4
+  %3 = load i32, i32* %c.addr, align 4
+  %4 = call i32 @base64urlRangeMask(i32 %3, i32 97, i32 122)
+  store i32 %4, i32* %lower.addr, align 4
+  %5 = load i32, i32* %c.addr, align 4
+  %6 = call i32 @base64urlRangeMask(i32 %5, i32 48, i32 57)
+  store i32 %6, i32* %digit.addr, align 4
+  %7 = load i32, i32* %c.addr, align 4
+  %8 = call i32 @base64urlRangeMask(i32 %7, i32 45, i32 45)
+  store i32 %8, i32* %dash.addr, align 4
+  %9 = load i32, i32* %c.addr, align 4
+  %10 = call i32 @base64urlRangeMask(i32 %9, i32 95, i32 95)
+  store i32 %10, i32* %underscore.addr, align 4
+  %11 = load i32, i32* %upper.addr, align 4
+  %12 = load i32, i32* %c.addr, align 4
+  %13 = sub nsw i32 %12, 65
+  %14 = and i32 %11, %13
+  %15 = load i32, i32* %lower.addr, align 4
+  %16 = load i32, i32* %c.addr, align 4
+  %17 = sub nsw i32 %16, 71
+  %18 = and i32 %15, %17
+  %19 = or i32 %14, %18
+  %20 = load i32, i32* %digit.addr, align 4
+  %21 = load i32, i32* %c.addr, align 4
+  %22 = add nsw i32 %21, 4
+  %23 = and i32 %20, %22
+  %24 = or i32 %19, %23
+  %25 = load i32, i32* %dash.addr, align 4
+  %26 = and i32 %25, 62
+  %27 = or i32 %24, %26
+  %28 = load i32, i32* %underscore.addr, align 4
+  %29 = and i32 %28, 63
+  %30 = or i32 %27, %29
+  store i32 %30, i32* %value.addr, align 4
+  %31 = load i32, i32* %value.addr, align 4
+  %32 = load i32, i32* %upper.addr, align 4
+  %33 = load i32, i32* %lower.addr, align 4
+  %34 = or i32 %32, %33
+  %35 = load i32, i32* %digit.addr, align 4
+  %36 = or i32 %34, %35
+  %37 = load i32, i32* %dash.addr, align 4
+  %38 = or i32 %36, %37
+  %39 = load i32, i32* %underscore.addr, align 4
+  %40 = or i32 %38, %39
+  %41 = xor i32 %40, -1
+  %42 = or i32 %31, %41
+  ret i32 %42
 }
 
 define void @base64urlEncodeGroup(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %data, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out) #1 {

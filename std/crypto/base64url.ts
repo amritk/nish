@@ -47,50 +47,51 @@
  */
 
 /**
- * All ones when `lo <= c <= hi`, else zero, without a branch. `c` is a byte or
- * a sextet, so neither subtraction could leave `i32`; they are written in
- * `u32`, which wraps by definition, because a signed one would be checked for
- * an overflow it cannot have, and the check is a branch on the secret. The
- * sign bit `>> 31` reads is the same either way. `base64urlCharOf` and
- * `base64urlSextetOf` do their sums in `u32` for the same reason.
+ * All ones when `lo <= c <= hi`, else zero, without a branch. `c` is a
+ * character code or a sextet, below 2^16; `d` is `c` narrowed to that so the
+ * compiler proves neither subtraction leaves `i32`. A checked subtraction it
+ * could not prove would be a branch on the secret. `base64urlCharOf` and
+ * `base64urlSextetOf` narrow their argument the same way.
  */
-const base64urlRangeMask = (c: i32, lo: i32, hi: i32): i32 =>
-  toI32((toU32(lo) - 1 - toU32(c)) & (toU32(c) - toU32(hi) - 1)) >> 31
+const base64urlRangeMask = (c: i32, lo: integer<0, 255>, hi: integer<0, 255>): i32 => {
+  const d: i32 = c & 0xffff
+  return ((lo - 1 - d) & (d - hi - 1)) >> 31
+}
 
 /**
- * The URL-alphabet character for the sextet `v` (`0 <= v <= 63`).
- *
+ * The URL-alphabet character for the sextet `v`. Every caller passes `0 <= v
+ * <= 63`; `v` is masked to its low six bits, so a wider value aliases.
  * It starts from `'A' + v` and adds, for each range `v` has passed, the step
  * from the previous range's first character to this one's: 26 lands on `a`, 52
  * on `0`, 62 on `-` and 63 on `_`.
  */
-const base64urlCharOf = (v: i32): i32 =>
-  toI32(
+const base64urlCharOf = (v: i32): i32 => {
+  const s: i32 = v & 63
+  return (
+    s +
     65 +
-      toU32(v) +
-      toU32(base64urlRangeMask(v, 26, 63) & 6) -
-      toU32(base64urlRangeMask(v, 52, 63) & 75) -
-      toU32(base64urlRangeMask(v, 62, 63) & 13) +
-      toU32(base64urlRangeMask(v, 63, 63) & 49)
+    (base64urlRangeMask(s, 26, 63) & 6) -
+    (base64urlRangeMask(s, 52, 63) & 75) -
+    (base64urlRangeMask(s, 62, 63) & 13) +
+    (base64urlRangeMask(s, 63, 63) & 49)
   )
+}
 
 /**
- * The sextet the byte `c` stands for, or `-1` when `c` is not in the alphabet.
- * Each range contributes its value under its own mask, and a byte in none of
- * them has every bit set by the final OR.
+ * The sextet the character code `code` (a `charCodeAt` or a byte, below 2^16:
+ * it is masked to 16 bits, so a wider value aliases) stands for, or `-1`. Each
+ * range adds its value under its own mask; none of them sets every bit.
  */
-const base64urlSextetOf = (c: i32): i32 => {
+const base64urlSextetOf = (code: i32): i32 => {
+  // A character code is 16 bits: the mask proves each sum below in range.
+  const c: i32 = code & 0xffff
   const upper: i32 = base64urlRangeMask(c, 65, 90)
   const lower: i32 = base64urlRangeMask(c, 97, 122)
   const digit: i32 = base64urlRangeMask(c, 48, 57)
   const dash: i32 = base64urlRangeMask(c, 45, 45)
   const underscore: i32 = base64urlRangeMask(c, 95, 95)
   const value: i32 =
-    (upper & toI32(toU32(c) - 65)) |
-    (lower & toI32(toU32(c) - 71)) |
-    (digit & toI32(toU32(c) + 4)) |
-    (dash & 62) |
-    (underscore & 63)
+    (upper & (c - 65)) | (lower & (c - 71)) | (digit & (c + 4)) | (dash & 62) | (underscore & 63)
   return value | ~(upper | lower | digit | dash | underscore)
 }
 
@@ -244,32 +245,31 @@ export const base64urlDecode = (text: string): u8[] | null => {
 // ---------------------------------------------------------------------------
 
 /**
- * The standard-alphabet character for the sextet `v`: the same steps as
- * `base64urlCharOf` until 62, which lands on `+` and 63 on `/`.
+ * The standard-alphabet character for the sextet `v` (`0 <= v <= 63`, masked as
+ * `base64urlCharOf` masks it): its steps until 62, which lands on `+`, 63 `/`.
  */
-const base64StdPadCharOf = (v: i32): i32 =>
-  toI32(
+const base64StdPadCharOf = (v: i32): i32 => {
+  const s: i32 = v & 63
+  return (
+    s +
     65 +
-      toU32(v) +
-      toU32(base64urlRangeMask(v, 26, 63) & 6) -
-      toU32(base64urlRangeMask(v, 52, 63) & 75) -
-      toU32(base64urlRangeMask(v, 62, 63) & 15) +
-      toU32(base64urlRangeMask(v, 63, 63) & 3)
+    (base64urlRangeMask(s, 26, 63) & 6) -
+    (base64urlRangeMask(s, 52, 63) & 75) -
+    (base64urlRangeMask(s, 62, 63) & 15) +
+    (base64urlRangeMask(s, 63, 63) & 3)
   )
+}
 
-/** The sextet the byte `c` stands for in standard base64, or `-1` when it is not in the alphabet. */
-const base64StdPadSextetOf = (c: i32): i32 => {
+/** The sextet the character code `code` (below 2^16, masked as `base64urlSextetOf` masks it) stands for in standard base64, or `-1`. */
+const base64StdPadSextetOf = (code: i32): i32 => {
+  // A character code is 16 bits: the mask proves each sum below in range.
+  const c: i32 = code & 0xffff
   const upper: i32 = base64urlRangeMask(c, 65, 90)
   const lower: i32 = base64urlRangeMask(c, 97, 122)
   const digit: i32 = base64urlRangeMask(c, 48, 57)
   const plus: i32 = base64urlRangeMask(c, 43, 43)
   const slash: i32 = base64urlRangeMask(c, 47, 47)
-  const value: i32 =
-    (upper & toI32(toU32(c) - 65)) |
-    (lower & toI32(toU32(c) - 71)) |
-    (digit & toI32(toU32(c) + 4)) |
-    (plus & 62) |
-    (slash & 63)
+  const value: i32 = (upper & (c - 65)) | (lower & (c - 71)) | (digit & (c + 4)) | (plus & 62) | (slash & 63)
   return value | ~(upper | lower | digit | plus | slash)
 }
 
@@ -327,13 +327,11 @@ export const base64StdPadEncodeInto = (data: u8[], start: i32, length: i32, out:
   if (start < 0 || length < 0 || start > toI32(data.length) - length || length > 1610612733) {
     panic("base64StdPadEncodeInto: bytes outside their buffer")
   }
-  // The text's length, and the room after `at`, as `u32`s: exact, since
-  // `length` is at most 1610612733 and `at` at most `out.length`.
-  const textLength: u32 = ((toU32(length) + 2) / 3) * 4
-  if (at < 0 || at > toI32(out.length) || textLength > toU32(toI32(out.length)) - toU32(at)) {
+  // The text's length fits an `i32`, since `length` is at most 1610612733.
+  const textLength: i32 = ((length + 2) / 3) * 4
+  if (at < 0 || at > toI32(out.length) || textLength > toI32(out.length) - at) {
     panic("base64StdPadEncodeInto: text that does not fit its buffer")
   }
-  const end: i32 = toI32(toU32(at) + textLength)
   // `k` runs through `data[start .. start + length)` and `j` through the text;
   // the bounds on them only let the prover see what the tests above checked.
   let j: i32 = at
@@ -352,11 +350,14 @@ export const base64StdPadEncodeInto = (data: u8[], start: i32, length: i32, out:
   if (bits > 0) {
     j = base64Put(out, j, toU8(base64StdPadCharOf((acc << toI32(6 - bits)) & 63)))
   }
-  while (j >= 0 && j < end && j < toI32(out.length)) {
+  // The `=`s that bring the text to a multiple of four characters: two after
+  // one byte left over, one after two, none after none.
+  const padCount: i32 = ((length % 3) * 2) % 3
+  for (let q: i32 = 0; q < padCount && j >= 0 && j < toI32(out.length); q++) {
     out[j] = 61
     j += 1
   }
-  return end
+  return j
 }
 
 /**
@@ -376,21 +377,25 @@ export const base64StdPadDecodedLength = (text: u8[], start: i32, length: i32): 
   if (text.length > 2147483647) {
     panic("base64StdPadDecodedLength: a buffer longer than 2^31 - 1 bytes")
   }
-  if (start < 0 || length < 0 || start > toI32(text.length) - length) {
+  // The room before the range's end; a negative `length` panics below.
+  const before: i32 = length < 0 ? -1 : toI32(text.length) - length
+  if (start < 0 || length < 0 || start > before) {
     panic("base64StdPadDecodedLength: text outside its buffer")
   }
-  if ((length & 3) !== 0) {
+  // What follows the range in `text`, never negative after the test above.
+  const rest: i32 = before - start
+  if ((length & 3) !== 0 || rest < 0) {
     return -1
   }
-  // The text's last character, a `u32` sum that is exact once the range is
-  // inside `text`; a length that is a multiple of four and not 0 is at least 4,
+  // The text's last character, `start + length - 1` counted back from the
+  // buffer's end; a length that is a multiple of four and not 0 is at least 4,
   // so the character before it is in the range too.
-  const last: i32 = toI32(toU32(start) + toU32(length) - 1)
-  let pad: u32 = 0
+  const last: i32 = toI32(text.length) - rest - 1
+  let pad: integer<0, 2> = 0
   if (length > 0 && last >= 1 && last < toI32(text.length) && toI32(text[last]) === 61) {
     pad = toI32(text[last - 1]) === 61 ? 2 : 1
   }
-  const chars: i32 = toI32(toU32(length) - pad)
+  const chars: i32 = length - pad
   let bad: i32 = 0
   let acc: i32 = 0
   let bits: u32 = 0
@@ -409,7 +414,7 @@ export const base64StdPadDecodedLength = (text: u8[], start: i32, length: i32): 
   if (bad !== 0) {
     return -1
   }
-  return toI32(toU32(length >> 2) * 3 - pad)
+  return (length >> 2) * 3 - pad
 }
 
 /**
@@ -435,12 +440,12 @@ export const base64StdPadDecode = (text: string): u8[] | null => {
     return null
   }
   // A length that is a multiple of four and not 0 is at least 4.
-  let pad: u32 = 0
+  let pad: integer<0, 2> = 0
   if (n >= 4 && toI32(text.charCodeAt(n - 1)) === 61) {
     pad = toI32(text.charCodeAt(n - 2)) === 61 ? 2 : 1
   }
-  const chars: i32 = toI32(toU32(n) - pad)
-  const out: u8[] = new Array<u8>(toU32(n >> 2) * 3 - pad)
+  const chars: i32 = n - pad
+  const out: u8[] = new Array<u8>(toU32((n >> 2) * 3 - pad))
   let bad: i32 = 0
   let acc: i32 = 0
   let bits: u32 = 0
