@@ -4410,23 +4410,23 @@ function http1TryWriteChunk(out: u8[], at: i32, data: readonly u8[], off: i32, l
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off
-  calls: nish.http1HexDigits nish.http1Less nish.http1PutCrlf nish.tryCopyBytes
+  calls: nish.http1HexDigits nish.http1PutCrlf nish.tryCopyBytes
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tryCopyBytes#0 nish.http1PutCrlf#0 nish.http1PutCrlf#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
   stackSites=0 stackLocals=0
-  local -29:9 size: i32 (const)
-  local -22:9 digits: i32 (const)
-  callee -22:23 http1HexDigits -> @nish.http1HexDigits
-  local -21:9 outLength: i32 (const)
-  local -19:9 need: u64 (const)
-  local -13:9 end32: u32 (const)
-  local -12:9 headEnd32: u32 (const)
-  local -11:9 end: i32 (const)
-  local -10:9 headEnd: i32 (const)
-  callee -7:8 tryCopyBytes -> @nish.tryCopyBytes
-  local -4:7 v: i32 (let)
+  local -31:9 size: i32 (const)
+  local -24:9 digits: i32 (const)
+  callee -24:23 http1HexDigits -> @nish.http1HexDigits
+  local -23:9 outLength: i32 (const)
+  local -21:9 need: u64 (const)
+  local -15:9 end32: u32 (const)
+  local -14:9 headEnd32: u32 (const)
+  local -13:9 end: i32 (const)
+  local -12:9 headEnd: i32 (const)
+  callee -9:8 tryCopyBytes -> @nish.tryCopyBytes
+  local -6:7 v: i32 (let)
+  local -3:9 last32: u32 (const)
   local -2:12 j: i32 (let)
-  callee -2:21 http1Less -> @nish.http1Less
   local -1:11 d: i32 (const)
   callee +3:3 http1PutCrlf -> @nish.http1PutCrlf
   local +4:9 tail32: u32 (const)
