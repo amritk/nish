@@ -48341,8 +48341,8 @@ function Http3Connection.readHeader(this: Http3Connection, k: i32, id: i64): i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: id k
-  calls: nish.QuicConnection.streamRead nish.h3ReadFrameHeader nish.h3VarintLength
-  pointer this: size=536 writesThrough=false captured=false
+  calls: nish.Http3Connection.fail nish.QuicConnection.streamRead nish.h3ReadFrameHeader nish.h3VarintLength
+  pointer this: size=536 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0
   stackSites=0 stackLocals=0
   local -34:11 headLens: i32[] (const)
   local -30:11 base: i32 (const)
@@ -48356,7 +48356,8 @@ function Http3Connection.readHeader(this: Http3Connection, k: i32, id: i64): i32
   callee -9:22 QuicConnection.streamRead -> @nish.QuicConnection.streamRead
   local +1:13 end: i32 (const)
   local +2:13 head: u8[] (const)
-  callee +7:11 h3ReadFrameHeader -> @nish.h3ReadFrameHeader
+  callee +6:9 Http3Connection.fail -> @nish.Http3Connection.fail
+  callee +9:11 h3ReadFrameHeader -> @nish.h3ReadFrameHeader
 function Http3Connection.uniStep(this: Http3Connection, k: i32, id: i64): i32 -> @nish.Http3Connection.uniStep [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:13
