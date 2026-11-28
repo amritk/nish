@@ -44587,9 +44587,9 @@ if (selects("link-results", "ci.yml")) {
   put("nish-capabilities.lock.json", "{}\n")
   put("README.md", "read me\n")
   put("tests/json-suite/cases.txt", "1\n")
-  put("tests/link/prog/main.ts", 'import { x } from "../lib/x"\n// std/elsewhere.ts in prose is not a read\nexport function main(): void {}\n')
+  put("tests/link/prog/main.ts", 'import { x } from "../lib/x"\n// std/elsewhere.ts in prose is not a read\nexport const main = (): void => {}\n')
   put("tests/link/lib/x.ts", "export const x = 1\n")
-  put("tests/link/other/main.ts", "export function main(): void {}\n")
+  put("tests/link/other/main.ts", "export const main = (): void => {}\n")
   put("nish", "compiler one")
   put("out/main.ll", `source_filename = "${at("tests/link/prog/main.ts")}"\n`)
   put("out/x.ll", `source_filename = "${at("tests/link/lib/x.ts")}"\n`)
@@ -44742,7 +44742,7 @@ if (selects("link-results", "ci.yml")) {
     "a template literal": program2("tmpl", "const f = `tests/json-suite/${name}`\n"),
     "a relative path": program2("rel", 'const f = "../../../README.md"\n'),
     "a root-level file": program2("root", "const f = 'README.md'\n"),
-    "a word of args": program2("args", "export function main(): void {}\n", { args: "--read tests/json-suite/cases.txt\n" }),
+    "a word of args": program2("args", "export const main = (): void => {}\n", { args: "--read tests/json-suite/cases.txt\n" }),
   }
   const accepted = Object.entries(refusals).filter(([, why]) => typeof why !== "string" || why === "").map(([n]) => n)
   const admits = {
