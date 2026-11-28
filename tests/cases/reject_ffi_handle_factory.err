@@ -1,0 +1,3 @@
+reject_ffi_handle_factory.ts:21:10: error: A `Slot` cannot be used here
+reject_ffi_handle_factory.ts:25:11: error: `Slot` is a handle class, and its name may be written only as the type of a parameter that borrows one, of a field of a handle class that owns one, or of the result of a top-level function that opens one
+reject_ffi_handle_factory.ts:30:13: error: A `Slot` cannot be used here

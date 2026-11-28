@@ -30,6 +30,7 @@
 //     parameters at `emitFunction`, the `!dbg` location around every statement
 //     and expression, and an `llvm.dbg.declare` beside each local's alloca.
 
+import { ownedCloses } from "./handles"
 import { RootTraces } from "./emit-root"
 import { emitWipeBody } from "./emit-secret"
 import { SECRET_WIPE, secretRoleOf } from "./secret"
@@ -359,6 +360,8 @@ export class Emitter {
    * the object every exit closes the pointer of; `null` for the rest.
    */
   openScopeHandles: (StructInfo | null)[]
+  /** WP89 S5a: whether each open handle's local may be `null`, which its close tests first. */
+  openScopeNullable: boolean[]
   /** WP29 P3: for a scope, the `state` word of each channel it seals before it joins; empty for the rest. */
   openScopeSeals: string[][]
   /** Alloca slots of the locals of the function being emitted, by identity. */
@@ -468,6 +471,7 @@ export class Emitter {
     this.openScopeArenas = []
     this.openScopeLocks = []
     this.openScopeHandles = []
+    this.openScopeNullable = []
     this.openScopeSeals = []
     this.slotLocals = []
     this.slotNames = []
@@ -694,6 +698,7 @@ export class Emitter {
     this.openScopeArenas = []
     this.openScopeLocks = []
     this.openScopeHandles = []
+    this.openScopeNullable = []
     this.openScopeSeals = []
     this.current = facts
     this.currentSig = sig
@@ -1104,6 +1109,19 @@ export class Emitter {
     // `declare`d here for the same reason an imported class's are.
     for (const index of this.program.reachableStructs) {
       this.declareAll(structFunctions(this.program.structList[index]), seen)
+    }
+    // WP89 S5a: a `using` of a handle class another module declares calls the
+    // closes that module's dispose names, at every exit of its block.
+    for (const info of this.program.structList) {
+      if (info.handle && info.origin !== this.program.source) {
+        const closes: FunctionSig[] = []
+        for (const close of ownedCloses(info)) {
+          if (!close.definedIn(this.program.source)) {
+            closes.push(close)
+          }
+        }
+        this.declareAll(closes, seen)
+      }
     }
   }
 

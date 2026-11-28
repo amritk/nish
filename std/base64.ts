@@ -21,6 +21,8 @@
  * - `base64EncodeInto(src, off, len, dst, at)` writes the encoding of
  *   `src[off..off+len)` into `dst` from `at` and allocates nothing, so a frame
  *   can be encoded chunk by chunk straight into its output buffer.
+ * - `base64EncodeIfFits(src, off, len, dst, at)` is the same write, answering
+ *   -1 with nothing written where `base64EncodeInto` panics on its range.
  * - `base64Encode(bytes)` is the whole array as a string.
  *
  * **This module only encodes**: what it is for writes base64 and never reads it
@@ -66,7 +68,8 @@ export const base64EncodedLength = (n: i32): i32 => {
  * answer the index just past the last character written, which is
  * `at + base64EncodedLength(len)`. Nothing is allocated. Panics when the source
  * range is not inside `src` or the encoding does not fit in `dst` from `at`;
- * both are checked before anything is written.
+ * both are checked before anything is written. `base64EncodeIfFits` answers -1
+ * for those instead.
  *
  * @param src The bytes to encode from; only `src[off..off+len)` is read.
  * @param off Where in `src` the bytes to encode start.
@@ -91,6 +94,76 @@ export const base64EncodeInto = (src: u8[], off: i32, len: i32, dst: u8[], at: i
   const need: i32 = base64EncodedLength(len)
   if (at < 0 || need > dstLength - at) {
     panic("base64EncodeInto: the encoding does not fit in the destination")
+  }
+  // A local, so that `abc.length >= 64` below is a fact about the string each
+  // character is read from.
+  const abc: string = BASE64_ALPHABET
+  let i: i32 = off
+  let o: i32 = at
+  let rest: i32 = len
+  // The checks above make every term after the first true; they are written out
+  // because they are what proves the loop's accesses in range.
+  while (rest >= 3 && i >= 0 && i < srcLength - 2 && o >= 0 && o < dstLength - 3 && abc.length >= 64) {
+    const group: i32 = (toI32(src[i]) << 16) | (toI32(src[i + 1]) << 8) | toI32(src[i + 2])
+    dst[o] = toU8(abc.charCodeAt((group >> 18) & 63))
+    dst[o + 1] = toU8(abc.charCodeAt((group >> 12) & 63))
+    dst[o + 2] = toU8(abc.charCodeAt((group >> 6) & 63))
+    dst[o + 3] = toU8(abc.charCodeAt(group & 63))
+    i = i + 3
+    o = o + 4
+    rest = rest - 3
+  }
+  // A short final group of one or two bytes, padded. As in the loop, the
+  // checks above make every term after the first false.
+  if (rest === 0 || i < 0 || i >= srcLength || o < 0 || o >= dstLength - 3 || abc.length < 64) {
+    return o
+  }
+  let group: i32 = toI32(src[i]) << 16
+  if (rest === 2 && i < srcLength - 1) {
+    group = group | (toI32(src[i + 1]) << 8)
+  }
+  dst[o] = toU8(abc.charCodeAt((group >> 18) & 63))
+  dst[o + 1] = toU8(abc.charCodeAt((group >> 12) & 63))
+  dst[o + 2] = rest === 2 ? toU8(abc.charCodeAt((group >> 6) & 63)) : toU8(BASE64_PAD)
+  dst[o + 3] = toU8(BASE64_PAD)
+  return o + 4
+}
+
+/**
+ * `base64EncodeInto` for a caller that has an answer for a range that does not
+ * fit: the same bytes written to the same place, or -1, with nothing written,
+ * when `src[off..off+len)` is not inside `src`, the encoding does not fit in
+ * `dst` from `at`, or either array is longer than 2^31 - 1 bytes. It never
+ * panics.
+ *
+ * @param src The bytes to encode from; only `src[off..off+len)` is read.
+ * @param off Where in `src` the bytes to encode start.
+ * @param len How many bytes of `src` to encode; zero writes nothing and
+ *   answers `at` when `at` is inside `dst` or just past it.
+ * @param dst The buffer the characters are written into, one ASCII byte per
+ *   character; bytes outside the written range are left as they were.
+ * @param at Where in `dst` the first character goes.
+ * @returns The index in `dst` just past the last character written, or -1
+ *   when the range does not fit.
+ */
+export const base64EncodeIfFits = (src: u8[], off: i32, len: i32, dst: u8[], at: i32): i32 => {
+  // Refused before `toI32`, as in `base64EncodeInto`.
+  if (src.length > 2147483647 || dst.length > 2147483647) {
+    return -1
+  }
+  const srcLength: i32 = toI32(src.length)
+  const dstLength: i32 = toI32(dst.length)
+  if (off < 0 || len < 0 || off > srcLength - len) {
+    return -1
+  }
+  // Past this many bytes the encoding is longer than 2^31 - 1 characters, as
+  // in `base64EncodedLength`, which this restates without its panics.
+  if (len > 1610612733) {
+    return -1
+  }
+  const need: i32 = toI32((len + 2) / 3) * 4
+  if (at < 0 || need > dstLength - at) {
+    return -1
   }
   // A local, so that `abc.length >= 64` below is a fact about the string each
   // character is read from.

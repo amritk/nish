@@ -781,7 +781,7 @@ export const dnsLookupWith = (
   const begun: i64 = monotonicNanos()
   // The budget and the time spent are kept apart, where `begun` plus the
   // budget could overflow: `now >= end` is `spent >= budget`. The clock only
-  // moves on, so `spent` is its true value, which `u64` holds exactly.
+  // moves on, so `spent` is its true value.
   const budget: i64 = toI64(timeoutMs) * 1000000
   const lookup: i32 = client.start(name, port, begun)
   if (lookup < 0) {
@@ -792,7 +792,8 @@ export const dnsLookupWith = (
   let status: i32 = client.result(lookup, out, ttls)
   while (status === DNS_RESOLVE_PENDING) {
     const now: i64 = monotonicNanos()
-    const spent: i64 = toI64(toU64(now) - toU64(begun))
+    // The clock counts up from boot; a reading behind `begun` has spent none.
+    const spent: i64 = begun >= 0 && now >= 0 && now >= begun ? now - begun : 0
     if (spent >= budget) {
       if (client.settle(lookup, now)) {
         status = client.result(lookup, out, ttls)

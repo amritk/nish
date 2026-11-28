@@ -59,15 +59,21 @@ const ANSWER_BYTES: i32 = 12 // [seq i32][value i64]
 const ANSWER_SLOTS: i32 = WINDOW
 const ANSWER_SLOT: i32 = 16 // a slot holds one answer, rounded up to 8
 const WAIT_MS: i32 = 1000 // how long a worker waits on an empty ring
-// The sum is a `u32`, whose arithmetic wraps rather than panics: `worker` is 1
-// to 5 and the region is some tens of kilobytes, far below 4294967295.
-const answersAt = (worker: i32): i32 =>
-  toI32(
-    toU32(JOBS_AT) +
-      toU32(mpscRingBytes(JOB_SLOTS, JOB_BYTES)) +
-      (toU32(worker) - 1) * toU32(mpscRingBytes(ANSWER_SLOTS, ANSWER_SLOT))
-  )
-const regionBytes = (): i32 => answersAt(CLIENTS + 1)
+/**
+ * Where worker `worker`'s answer ring starts: after the totals, the job ring
+ * and the rings of the workers before it. The ring sizes are some hundreds of
+ * bytes and `worker` is 1 to 5, which the guard states where the prover reads
+ * it, so the sum is proven to fit; a shape past those bounds is refused.
+ */
+const answersAt = (worker: i32): Result<i32, string> => {
+  const jobs: i32 = mpscRingBytes(JOB_SLOTS, JOB_BYTES)
+  const each: i32 = mpscRingBytes(ANSWER_SLOTS, ANSWER_SLOT)
+  if (jobs < 0 || jobs > 65536 || each < 0 || each > 65536 || worker < 1 || worker > 64) {
+    return Err(`no answer ring ${worker} in rings of ${jobs} and ${each} bytes`)
+  }
+  return Ok(JOBS_AT + jobs + (worker - 1) * each)
+}
+const regionBytes = (): Result<i32, string> => answersAt(CLIENTS + 1)
 
 /**
  * The next record, sleeping on the doorbell when there is none; polling off
@@ -94,7 +100,12 @@ const owner = (region: SharedRegion): i32 => {
   }
   const answers: MpscRing[] = []
   for (let c: i32 = 0; c < CLIENTS; c++) {
-    const ring = attachMpscRing(region, answersAt(c + 1))
+    const at = answersAt(c + 1)
+    if (at.isErr()) {
+      console.error(`an answer ring: ${at.error}`)
+      return 1
+    }
+    const ring = attachMpscRing(region, at.value)
     if (ring.isErr()) {
       console.error(`an answer ring: ${ring.error}`)
       return 1
@@ -160,7 +171,12 @@ const client = (region: SharedRegion, me: i32): i32 => {
     console.error(`the job ring: ${jobs.error}`)
     return 1
   }
-  const answers = attachMpscRing(region, answersAt(me))
+  const at = answersAt(me)
+  if (at.isErr()) {
+    console.error(`my answer ring: ${at.error}`)
+    return 1
+  }
+  const answers = attachMpscRing(region, at.value)
   if (answers.isErr()) {
     console.error(`my answer ring: ${answers.error}`)
     return 1
@@ -208,7 +224,16 @@ const client = (region: SharedRegion, me: i32): i32 => {
   for (let k: i32 = 0; k < 1000000 && jobs.value.offer(job, toI32(0), JOB_BYTES) !== 0; k++) {
     // full: the owner is behind, so spin a while
   }
-  region.addI32(FAILURES_AT, toI32(wrong + (toU32(JOBS) - got)), SEQ_CST)
+  // Wrong answers plus the jobs never answered. Neither count passes `JOBS`,
+  // 10000, which the guard writes out where the prover reads it; one that did
+  // would be a broken ring, counted as every job failed.
+  const bad: i32 = toI32(wrong)
+  const answered: i32 = toI32(got)
+  let failures: i32 = JOBS
+  if (bad >= 0 && bad <= 10000 && answered >= 0 && answered <= 10000) {
+    failures = bad + (JOBS - answered)
+  }
+  region.addI32(FAILURES_AT, failures, SEQ_CST)
   return 0
 }
 
@@ -218,7 +243,12 @@ const supervise = (name: string): i32 => {
   if (stale.isErr()) {
     // None: the usual case.
   }
-  const created = createRegion(name, regionBytes())
+  const bytes = regionBytes()
+  if (bytes.isErr()) {
+    console.error(`the region: ${bytes.error}`)
+    return 1
+  }
+  const created = createRegion(name, bytes.value)
   if (created.isErr()) {
     console.error(`the region: ${created.error.message}`)
     return 1
@@ -230,7 +260,12 @@ const supervise = (name: string): i32 => {
     return 1
   }
   for (let c: i32 = 0; c < CLIENTS; c++) {
-    const ring = tryInitMpscRing(region, answersAt(c + 1), ANSWER_SLOTS, ANSWER_SLOT, true)
+    const at = answersAt(c + 1)
+    if (at.isErr()) {
+      console.error(`an answer ring: ${at.error}`)
+      return 1
+    }
+    const ring = tryInitMpscRing(region, at.value, ANSWER_SLOTS, ANSWER_SLOT, true)
     if (ring.isErr()) {
       console.error(`an answer ring: ${ring.error}`)
       return 1

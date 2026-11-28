@@ -1,0 +1,9 @@
+ok 3×2/6
+ok 0×5/0
+err tryFramebuffer: a negative size, -1 × 2
+err tryFramebuffer: a negative size, 2 × -1
+err tryFramebuffer: 65536 × 65536 is more than 2^31 - 1 pixels
+same true 2×2/4 0
+grown true 4×3/12
+negative Framebuffer.tryResize: a negative size, -3 × 1 4×3/12 65280
+huge Framebuffer.tryResize: 46341 × 46341 is more than 2^31 - 1 pixels 4×3/12 65280
