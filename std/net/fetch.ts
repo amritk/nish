@@ -83,7 +83,7 @@
  * Written from RFC 9110 and RFC 9112, not ported from another implementation.
  */
 import { base64Encode } from "nish/base64"
-import { copyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import {
   HTTP1_BODY,
   HTTP1_CLOSED,
@@ -901,14 +901,26 @@ export class FetchSyncClient {
    */
   private readRaw(want: i32): i32 {
     const until: i64 = this.readDeadline()
-    let n: i32 = netRead(this.fd, this.rbuf, 0, want)
+    const rbuf: u8[] = this.rbuf
+    // Every caller asks for at most `HTTP_CLIENT_READ_BYTES`, the buffer's
+    // size; tested before each read, since a call between takes what the
+    // prover knew of the length.
+    if (want < 0 || want > toI32(rbuf.length)) {
+      this.fail(HTTP_E_IO, "a read asked for more than the read buffer holds")
+      return -1
+    }
+    let n: i32 = netRead(this.fd, rbuf, 0, want)
     while (n === HTTP_CLIENT_WOULD_BLOCK) {
       const waited: i32 = this.wait(this.fd, HTTP_CLIENT_READABLE, until, HTTP_E_READ_TIMEOUT)
       if (waited !== HTTP_E_NONE) {
         this.failWait(waited, `the server sent nothing for ${this.options.readTimeoutMs} ms`)
         return -1
       }
-      n = netRead(this.fd, this.rbuf, 0, want)
+      if (want < 0 || want > toI32(rbuf.length)) {
+        this.fail(HTTP_E_IO, "a read asked for more than the read buffer holds")
+        return -1
+      }
+      n = netRead(this.fd, rbuf, 0, want)
     }
     if (n >= 0) {
       return n
@@ -1005,27 +1017,33 @@ export class FetchSyncClient {
 
   /** Writes `bytes[off, off + len)` to `fd`, waiting up to `readTimeoutMs` each time it is full. */
   private writeRaw(bytes: u8[], off: i32, len: i32): boolean {
-    if (off < 0 || len < 0 || len > toI32(bytes.length) - off) {
+    // Where the window ends, or -1 when it does not lie inside `bytes`.
+    const end: i32 = httpClientWindowEnd(bytes, off, len)
+    if (end < 0) {
       this.fail(HTTP_E_IO, "the bytes to write lie outside their buffer")
       return false
     }
     let at: i32 = off
-    let left: i32 = len
     // `at >= 0` is the loop's own, since the prover does not carry it round.
-    while (left > 0 && at >= 0) {
+    while (at < end && at >= 0) {
       if (this.overdue()) {
         return false
       }
-      const n: i32 = netWrite(this.fd, bytes, at, left)
-      if (n > 0 && n <= left) {
-        // At most `off + len`, inside `bytes`, so the window always has an
-        // end; the helper measures it so that the sum is proven to fit.
+      // The window's test again, after the calls that took what the prover
+      // knew of it; it passes wherever the first one did.
+      if (at < 0 || at > end || end > toI32(bytes.length)) {
+        this.fail(HTTP_E_IO, "the bytes to write lie outside their buffer")
+        return false
+      }
+      const n: i32 = netWrite(this.fd, bytes, at, end - at)
+      if (n > 0 && n <= end - at) {
+        // Short of `end`, inside `bytes`; the helper measures it so that the
+        // sum is proven to fit.
         at = httpClientWindowEnd(bytes, at, n)
         if (at < 0) {
           this.fail(HTTP_E_IO, "the bytes to write lie outside their buffer")
           return false
         }
-        left -= n
       } else if (n === HTTP_CLIENT_WOULD_BLOCK || n === 0) {
         const waited: i32 = this.wait(this.fd, HTTP_CLIENT_WRITABLE, this.readDeadline(), HTTP_E_READ_TIMEOUT)
         if (waited !== HTTP_E_NONE) {
@@ -1074,7 +1092,10 @@ export class FetchSyncClient {
       if (i > 15) {
         break
       }
-      copyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)
+      // An address the list does not hold all of is one past its end.
+      if (!tryCopyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)) {
+        break
+      }
       const fd: i32 = tcpConnect(one)
       if (fd < 0) {
         last = fd
@@ -1270,7 +1291,12 @@ export class FetchSyncClient {
       }
     }
     const take: i32 = n < this.pendLen ? n : this.pendLen
-    copyBytes(buf, off, this.parser.body, this.pendOff, take)
+    // `read` checked the caller's window and the parser keeps its body
+    // window inside its buffer, so the copy fits; one that did not would be
+    // a client out of step with its parser, answered as the test below is.
+    if (!tryCopyBytes(buf, off, this.parser.body, this.pendOff, take)) {
+      return -HTTP_E_IO
+    }
     // The copy above fit `take` bytes at `pendOff` inside the parser's body,
     // so the window has an end, and `take` is at most `pendLen`. The helper
     // and the test restate both for the bounds proof.
@@ -1946,9 +1972,13 @@ const httpClientTlsVerify = (
  */
 const httpClientTlsClose = (conn: TlsRecordClient, fd: i32): void => {
   conn.close()
-  const len: i32 = httpClientTlsPending(conn)
-  if (fd >= 0 && len > 0) {
-    netWrite(fd, conn.output, conn.outputStart, len)
+  const output: u8[] = conn.output
+  const start: i32 = conn.outputStart
+  const end: i32 = conn.outputEnd
+  // The pending window, tested as `httpClientTlsPending` does; one outside
+  // the buffer is nothing to send.
+  if (fd >= 0 && start >= 0 && start < end && end <= toI32(output.length)) {
+    netWrite(fd, output, start, end - start)
   }
   conn.wipe()
 }
@@ -3203,7 +3233,10 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
     if (i > 15) {
       break
     }
-    copyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)
+    // An address the list does not hold all of is one past its end.
+    if (!tryCopyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)) {
+      break
+    }
     const fd: i32 = tcpConnect(one)
     if (fd < 0) {
       last = fd
@@ -3377,7 +3410,11 @@ const httpClientBodyAsync = async (conn: HttpClientConn, res: FetchResponse, lim
       while (toI32(buf.length) < want) {
         buf.push(0)
       }
-      copyBytes(buf, len, conn.parser.body, conn.parser.bodyOff, take)
+      // The parser lent take bytes at bodyOff; a span its body does not hold is its fault, not the peer's.
+      if (!tryCopyBytes(buf, len, conn.parser.body, conn.parser.bodyOff, take)) {
+        conn.fault.fail(HTTP_E_IO, "the body bytes lie outside the parser's buffer")
+        return -1
+      }
       len = want
     }
     event = await httpClientPumpAsync(conn)
