@@ -6960,65 +6960,56 @@ if (dealtHere("stdPanics")) {
   // CLAUDE.md's "A wrap is spelled, never cast": scripts/wrap-casts.mjs (in
   // `npm run lint`) finds each `toI32(...)` with a `toU32(...)` operand of
   // `+`, `-` or `*` (and the `toI64`/`toU64` form) in every std/, src/ and
-  // examples/ file, against scripts/wrap-casts.txt, whose counts only fall.
-  // WP84 S3 and WP91 S1 took std/compress, src/ and examples/ to none. This
-  // runs the script on the tree, then on a copy with one cast planted in
-  // std/compress/deflate.ts and on a copy whose baseline lost a line: each
-  // copy must fail, by the script's exit status, or the check is no guard.
+  // examples/ file and fails on any, with no baseline: WP91 took every file
+  // to none. This runs the script on the tree, then on copies with one cast
+  // planted in std/compress/deflate.ts, src/ or examples/: each copy must
+  // fail, by the script's exit status, or the check is no guard. A baseline
+  // file, or an `--update` that writes one, must not come back.
   {
     const wrapCasts = path.join(root, "scripts", "wrap-casts.mjs")
     const live = spawnSync(process.execPath, [wrapCasts], { cwd: root, encoding: "utf8" })
+    // The live run lists the tree with git, which no planted copy exercises: the count it reports per
+    // directory must match git's own, so a listing that found nothing cannot pass the tree.
+    const tracked = ["std", "src", "examples"].map(
+      (d) =>
+        `${spawnSync("git", ["ls-files", "--", `${d}/*.ts`], { cwd: root, encoding: "utf8" }).stdout.split("\n").filter((f) => f.endsWith(".ts")).length} ${d}/`
+    )
     check(
-      "std-panics: scripts/wrap-casts.mjs passes the tree, with no cast wrap in std/compress, src/ or examples/",
-      live.status === 0 &&
-        !/^\d+ (std\/compress\/|src\/|examples\/)/m.test(fs.readFileSync(path.join(root, "scripts", "wrap-casts.txt"), "utf8")),
+      "std-panics: scripts/wrap-casts.mjs passes the tree, with no cast wrap in std/, src/ or examples/",
+      live.status === 0 && live.stdout.includes(`no cast wrap in ${tracked.join(", ")} files`) && !tracked.some((t) => t.startsWith("0 ")),
       shown(live)
     )
-    /** A copy of the scanned tree and its baseline under build/, `edit`ed, and the script's run on it. */
-    const onCopy = (name, edit) => {
-      const dir = path.join(buildDir, "wrap_casts", name)
-      fs.rmSync(dir, { recursive: true, force: true })
-      for (const d of ["std", "src", "examples"]) {
-        fs.cpSync(path.join(root, d), path.join(dir, d), { recursive: true })
-      }
-      fs.mkdirSync(path.join(dir, "scripts"), { recursive: true })
-      fs.copyFileSync(path.join(root, "scripts", "wrap-casts.txt"), path.join(dir, "scripts", "wrap-casts.txt"))
-      edit(dir)
-      return spawnSync(process.execPath, [wrapCasts, "--root", dir], { cwd: root, encoding: "utf8" })
-    }
-    const same = onCopy("same", () => {})
-    const planted = onCopy("planted", (dir) =>
-      fs.appendFileSync(
-        path.join(dir, "std", "compress", "deflate.ts"),
-        "\nexport const plantedWrap = (a: u32, b: u32): i32 =>\n  toI32(toU32(a) +\n    toU32(b))\n"
-      )
-    )
+    const update = spawnSync(process.execPath, [wrapCasts, "--update"], { cwd: root, encoding: "utf8" })
     check(
-      "std-panics: scripts/wrap-casts.mjs --root fails on a cast wrap planted in std/compress/deflate.ts, and passes the unplanted copy",
-      same.status === 0 && planted.status === 1 && planted.stderr.includes("std/compress/deflate.ts"),
-      `${shown(same)}\n${shown(planted)}`
+      "std-panics: scripts/wrap-casts.mjs refuses the count-lowering flag it dropped, and no count file sits beside it",
+      update.status === 2 && !fs.existsSync(path.join(root, "scripts", "wrap-casts.txt")),
+      shown(update)
     )
-    // The baseline may hold no line at all, so the copy brings its own: a
-    // file with one cast wrap and the line that allows it, which must pass,
-    // and the same file without that line, which must fail.
-    const plantedFile = "std/compress/wrap-casts-baselined.ts"
-    const plantedLine = `1 ${plantedFile}`
-    const withLine = (keep) => (dir) => {
-      fs.writeFileSync(
-        path.join(dir, plantedFile),
-        "export const baselinedWrap = (a: u32, b: u32): i32 => toI32(toU32(a) + toU32(b))\n"
-      )
-      const file = path.join(dir, "scripts", "wrap-casts.txt")
-      if (keep) {
-        fs.appendFileSync(file, `${plantedLine}\n`)
-      }
+    // One copy of the scanned tree under build/; each cast is planted in it, scanned and taken out again.
+    const dir = path.join(buildDir, "wrap_casts")
+    fs.rmSync(dir, { recursive: true, force: true })
+    for (const d of ["std", "src", "examples"]) {
+      fs.cpSync(path.join(root, d), path.join(dir, d), { recursive: true })
     }
-    const kept = onCopy("kept", withLine(true))
-    const removed = onCopy("removed", withLine(false))
+    const scanCopy = () => spawnSync(process.execPath, [wrapCasts, "--root", dir], { cwd: root, encoding: "utf8" })
+    const same = scanCopy()
+    const plantedIn = ["std/compress/deflate.ts", "src/wrap-casts-planted.ts", "examples/wrap-casts-planted.ts"]
+    const planted = plantedIn.map((file) => {
+      const at = path.join(dir, file)
+      const before = fs.existsSync(at) ? fs.readFileSync(at) : undefined
+      fs.appendFileSync(at, "\nexport const plantedWrap = (a: u32, b: u32): i32 =>\n  toI32(toU32(a) +\n    toU32(b))\n")
+      const run = scanCopy()
+      if (before === undefined) {
+        fs.rmSync(at)
+      } else {
+        fs.writeFileSync(at, before)
+      }
+      return run
+    })
     check(
-      `std-panics: scripts/wrap-casts.mjs --root fails on a baseline with a line removed (${plantedLine}), and passes it with the line`,
-      kept.status === 0 && removed.status === 1 && removed.stderr.includes(plantedFile),
-      `${shown(kept)}\n${shown(removed)}`
+      "std-panics: scripts/wrap-casts.mjs --root fails on a cast wrap planted in std/compress/deflate.ts, src/ or examples/, and passes the unplanted copy",
+      same.status === 0 && planted.every((r, at) => r.status === 1 && r.stderr.includes(plantedIn[at])),
+      [same, ...planted].map(shown).join("\n")
     )
   }
   const baselineName = "tests/std-panics.json"
@@ -27801,7 +27792,7 @@ if (dealtHere("cliChecks")) {
       "zlib-each":
         "std/compress/deflate.ts:904:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
       "request-slot":
-        "std/net/http-server.ts:238:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 200 → 200 bytes",
+        "std/net/http-server.ts:246:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 224 → 224 bytes",
     }
     for (const [base, want] of Object.entries(holderWant)) {
       const file = `tests/layout/compact-bench/${base}.ts`
@@ -30038,6 +30029,47 @@ if (dealtHere("releaseChecks")) {
     } else {
       check("no-panic scope: tests/cases/deny_panics_clean.ll exists", false, "the golden is missing")
     }
+  }
+
+  // ---- The caller contract: a root call proves a std callee's leading guard (#2296) -------
+  // `routerDecode` starts with `if (start < 0 || end < 0 || end < start ||
+  // end > toI32(target.length)) { panic(...) }`. A call whose arguments make
+  // every comparison false is a proven `contract` site, so `--deny-panics`
+  // builds it; `[1, 5)` of a three-byte buffer is not proven and reaches the
+  // guard's `panic` in `std/net/router.ts` as any call does, and the call is refused.
+  if (!only || "caller contract std deny-panics".includes(only)) {
+    const contractRun = (name, start, end) => {
+      const src = path.join(buildDir, `caller_contract_${name}.ts`)
+      fs.writeFileSync(
+        src,
+        [
+          'import { routerDecode } from "nish/net/router"',
+          "export const main = (): i32 => {",
+          "  const t: u8[] = [47, 97, 98]",
+          "  const out: u8[] = [0, 0, 0]",
+          `  console.log(\`\${routerDecode(t, ${start}, ${end}, out)}\`)`,
+          "  return 0",
+          "}",
+          "",
+        ].join("\n")
+      )
+      return spawnNish([src, "-o", path.join(buildDir, `caller_contract_${name}`) + "/", "--deny-panics"], {
+        cwd: root,
+        encoding: "utf8",
+      })
+    }
+    const proven = contractRun("proven", "0", "toI32(t.length)")
+    check(
+      "caller contract: --deny-panics builds a call to routerDecode whose range the caller proves",
+      proven.status === 0,
+      shown(proven)
+    )
+    const unproven = contractRun("unproven", "1", "5")
+    check(
+      "caller contract: --deny-panics refuses routerDecode's [1, 5) of a three-byte buffer at its panic",
+      unproven.status === 1 && /This call to `routerDecode` may panic: it reaches the `panic` site at std\/net\/router\.ts:\d+:\d+/.test(String(unproven.stderr)),
+      shown(unproven)
+    )
   }
 
   // ---- `--allow-panics`: the way out of the default, where a compiler lists it -------------
@@ -45684,10 +45716,18 @@ if (selects("ci.yml", "ci-verdict", "release.yml")) {
     (l) =>
       l ===
       "if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && hashFiles('build/cache/link-results/*.json') != '' && steps.suite.outputs.suite != 'false' }}",
+    // The lint job's instruction-count step picks its base by event: a pull
+    // request's merge-base, any other run's parent commit. A dispatched
+    // `release/next` run and the tag's run both take the parent, and the
+    // Release PR does not touch bench/instructions.json, so both compare the
+    // same counts.
+    (l) => l === "EVENT: ${{ github.event_name }}",
+    (l) => l === "PR_BASE: ${{ github.event.pull_request.base.sha }}",
+    (l) => l === "PR_HEAD: ${{ github.event.pull_request.head.sha }}",
   ]
   const unknownRefReads = refReads.filter((l) => !knownRefReads.some((known) => known(l)))
   check(
-    "ci.yml: only the concurrency group, the `runner` job, the gate, the dispatch status, the scope job and the link results' restore read the ref or event",
+    "ci.yml: only the concurrency group, the `runner` job, the gate, the dispatch status, the scope job, the link results' restore and the instruction-count base read the ref or event",
     unknownRefReads.length === 0 && refReads.length === knownRefReads.length,
     `reads: ${refReads.length} of ${knownRefReads.length} expected\nunknown: ${unknownRefReads.join("\n") || "none"}`
   )

@@ -1477,8 +1477,7 @@ is about. A parse never fails and never panics on its input; a stream that is
 not valid YAML still answers its nodes, as the parser's best reading of it,
 beside the errors that say why.
 
-<!-- allow-panics: calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { YAML_INT, YAML_MAP, keyText, parseYaml, pathNode, yamlErrorName } from "nish/yaml";
 import { YamlLineIndex } from "nish/yaml-lines";
@@ -1558,8 +1557,7 @@ line that set it. A recursive alias ends the search. A `<<` whose value names
 no map is an error, `BAD_MERGE`. The nodes themselves are not changed: a map
 still holds the pairs it was written with.
 
-<!-- allow-panics: calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { parseYaml, pathNode, pathPair } from "nish/yaml";
 import { YamlLineIndex } from "nish/yaml-lines";
@@ -1597,7 +1595,8 @@ repeats a key is an error, `DUPLICATE_KEY`.
 **Options.** `parseYamlWith(text, options)` takes a `YamlOptions`:
 `maxDepth` (how deeply collections nest before `DEPTH_LIMIT`, 1000 by
 default; a value outside 1 to 1000 is a mistake in the program, so
-`parseYamlWith` panics on it), `uniqueKeys`, `merge` (whether a plain `<<`
+`parseYamlWith` panics on it; `parseYaml` has no such site, so it builds
+under `--deny-panics`), `uniqueKeys`, `merge` (whether a plain `<<`
 key is a merge key: exempt from the duplicate check, checked for `BAD_MERGE`
 and followed by paths; on by default), `keepComments` (keep every comment's
 range, for `commentCount` and `comment`) and `firstDocumentOnly` (warn
@@ -1622,8 +1621,7 @@ Because the ranges are byte offsets into the text either way, one
 `YamlLineIndex` turns them into `line:column` whether the document came from
 JSON or from YAML:
 
-<!-- allow-panics: calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -1671,8 +1669,7 @@ and `false` plain, a number as its JSON text, and a trailing newline. It
 answers `""` for a handle that names no value and for a tree deeper than
 `JSON_WRITER_MAX_DEPTH`, the limit `stringify` keeps.
 
-<!-- allow-panics: calls `std/yaml.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -3445,8 +3442,7 @@ if ((wants & TLS_RECORD_TICKET) !== 0) {
 }
 ```
 
-<!-- allow-panics: calls `std/net/http1-codec.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1-codec";
 

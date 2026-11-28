@@ -1,6 +1,9 @@
 {
   "outdir": "/reports/servers",
-  "servers": [{ "agent": "nish", "url": "ws://127.0.0.1:9001" }],
+  "servers": [
+    { "agent": "nish", "url": "ws://127.0.0.1:9001" },
+    { "agent": "nish-facade", "url": "ws://127.0.0.1:9002" }
+  ],
   "cases": ["*"],
   "exclude-cases": ["12.*", "13.*"],
   "exclude-agent-cases": {}

@@ -1,0 +1,5 @@
+{"functions":[
+{"name":"checked","symbol":"checked","module":"tests/link/panic_caller_unproven/main.ts","line":9,"panics":[{"kind":"panic","line":11,"column":5,"proven":false},{"kind":"overflow","line":13,"column":10,"proven":false}]},
+{"name":"main","symbol":"nish_main","module":"tests/link/panic_caller_unproven/main.ts","line":16,"panics":[{"kind":"oom","line":17,"column":3,"allowed":true},{"kind":"call","line":17,"column":15,"callee":"checked","via":"panic"},{"kind":"call","line":17,"column":23,"callee":"argument","via":"overflow"}]},
+{"name":"argument","symbol":"argument","module":"tests/link/panic_caller_unproven/input.ts","line":3,"panics":[{"kind":"overflow","line":3,"column":36,"proven":false}]}
+]}

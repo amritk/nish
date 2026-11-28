@@ -44,8 +44,10 @@
 #       shard), package-lock.json against package.json with no registry
 #       involved, `npm run lint` when package.json defines it (no-op
 #       otherwise), `npm run lint:dead`, shellcheck over the shell scripts,
-#       docs/check-links.mjs over every Markdown file, then
-#       `scripts/gen-reference.mjs --check` (docs/reference/ is not stale).
+#       docs/check-links.mjs over every Markdown file,
+#       `scripts/gen-reference.mjs --check` (docs/reference/ is not stale),
+#       then `scripts/instruction-raises.mjs` over bench/instructions.json
+#       against the merge-base's (a pull request) or the parent's.
 # scope + ci-gate: scoped lanes (docs/wp10-ci.md). `scope` runs
 #       scripts/ci-scope.mjs, which turns a side job off for a pull request
 #       only when every changed path is one that job is proven not to read;
@@ -2479,6 +2481,52 @@ jobs:
       # and docs/LANGUAGE.md; a page edited by hand or left behind fails here.
       - name: Docs (the library reference is regenerated)
         run: node scripts/gen-reference.mjs --check
+
+      # Every bench/instructions.json count against the commit this run starts
+      # from: a raise the head's `raises` does not record, or a row whose count
+      # the head drops, fails (bench/README.md, "Raising a baseline"). A pull
+      # request compares against the merge-base of its base and head, every
+      # other run against HEAD's first parent: the commit before a squash on
+      # main, the queue's base, the parent of a tag or the Release PR's commit.
+      # The job's checkout keeps actions/checkout's default depth of 1, which
+      # `--unshallow` needs (it fails on a complete clone), so this fetches the
+      # commit graph alone (`--filter=tree:0`) and the one file it reads on
+      # demand. On a pull request the head file compared is the checkout's,
+      # the pull request merged into its base's tip. A base with no
+      # bench/instructions.json has nothing to compare; one from before the
+      # file's `raises` reads as having none. The script writes the table to
+      # the step summary itself.
+      - name: Instruction counts (no unrecorded raise against the base)
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            git fetch --no-tags --unshallow --filter=tree:0 --quiet origin "$PR_BASE" "$PR_HEAD"
+            base=$(git merge-base "$PR_BASE" "$PR_HEAD")
+            what="the merge-base of the pull request's base ${PR_BASE:0:9} and head ${PR_HEAD:0:9} (the head file is from ${PR_HEAD:0:9} merged into ${PR_BASE:0:9})"
+          else
+            git fetch --no-tags --unshallow --filter=tree:0 --quiet origin "$GITHUB_SHA"
+            base=$(git rev-parse --verify --quiet "$GITHUB_SHA^1") || {
+              echo "### Instruction counts: $GITHUB_SHA has no parent to compare against" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            }
+            what="the parent of ${GITHUB_SHA:0:9}"
+          fi
+          # ls-tree fetches the tree it lists and fails when that fetch does,
+          # so only a base that really lacks the file skips.
+          listed=$(git ls-tree --name-only "$base" -- bench/instructions.json)
+          if [ -z "$listed" ]; then
+            echo "### Instruction counts: ${base:0:9}, $what, has no bench/instructions.json to compare against" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git show "$base:bench/instructions.json" > "$RUNNER_TEMP/instructions-base.json"
+          echo "Comparing against ${base:0:9}, $what."
+          status=0
+          node scripts/instruction-raises.mjs "$RUNNER_TEMP/instructions-base.json" bench/instructions.json || status=$?
+          echo "The base is ${base:0:9}, $what." >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
   # The one check branch protection needs (docs/wp10-ci.md, "Scoped lanes").
   # It runs whatever happened above and fails unless every job succeeded, or

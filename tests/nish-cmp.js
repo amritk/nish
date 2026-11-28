@@ -2031,6 +2031,8 @@ const COMPRESS_PANIC_FREE = "make checksum, zlib and gzip panic-free"
 const TERM_TS_PANIC_FREE = "std/term.ts panic-free"
 /** The changelog words of WP87 S1: std/temporal.ts proves or drops its panic sites and gains Result forms. */
 const TEMPORAL_PANIC_FREE = "std/temporal.ts panic-free"
+/** The changelog words of WP86 S2: std/yaml.ts proves its indexes and arithmetic, and parseYaml builds under the no-panic default. */
+const YAML_PANIC_FREE = "make std/yaml.ts panic-free"
 /** The changelog words of WP85 S2: std's term-pixels, term-io, term-rate and term-probe modules prove or drop their panic sites. */
 const TERM_PANIC_FREE = "term-pixels, term-io, term-rate and term-probe panic-free"
 /** The changelog words of examples-strict S4b: Framebuffer's Result-returning factory and resize. */
@@ -10668,6 +10670,18 @@ const serverH2cPrefaceDeclared = () =>
       )
     )
 
+/** The changelog words of WP39 G7, which takes WebSockets on nish/net/http-server's HTTP/1.1 listeners. */
+const SERVER_WEBSOCKET = "WebSocket on the nish/net/http-server façade's HTTP/1.1 listener"
+/** WP39 G7's WebSocket program reads `HttpServerRequest.socket`, which the seed's std/net does not have. */
+const serverWebSocketDeclared = () => [
+  {
+    program: "tests/link/net_http_server_ws/main.ts",
+    file: "exit",
+    changelog: SERVER_WEBSOCKET,
+    why: "the program reads HttpServerRequest.socket and calls HttpServer.acceptWebSocket, which the seed's std/net does not have, so only the candidate compiles it",
+  },
+]
+
 /** The changelog words of WP82 S6, which proves or removes the HTTP/3 stack's panic sites. */
 const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free"
 const http3PanicFree = (why, filesByProgram) =>
@@ -11779,11 +11793,15 @@ const JSON_PUT_STRING = "jsonPutString"
 const HTTP1_TICK = "Http1Server.tick"
 /** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
+/** The changelog words of examples-strict S8: std/net/http3-frame.ts's `h3CheckWindow` takes the window guard's shape and `Http3FrameHeader` gains `read`, so the HTTP/3 windows relay reaches are proven. The change's commit subject carries these words verbatim. */
+const S8_RELAY_STD = "std panic sites relay reaches"
 /** The changelog words of WP91 S1, which spells the cast wraps in std/compress, src/ and examples/. */
 const WP91_S1 = "compress, src/ and examples, and one check for every file"
 const wp91s1 = byFinding(WP91_S1)
 /** The changelog words of WP90 S1, the multipart/form-data reader. */
 const MULTIPART_BODIES = "multipart/form-data bodies"
+/** The changelog words of examples-strict S2 (#2296): a caller's proof discharges a std callee's leading contract guard. */
+const CALLER_CONTRACT = "a caller's proof discharges a std callee's contract panic"
 
 /** The release-note words of WP80 S10, window contracts forwarded from free functions, arrow consts and literal counts. */
 const WINDOW_FORWARD = "window contracts forward from free functions, arrow consts and literal lengths"
@@ -15281,6 +15299,7 @@ const DECLARED = [
   ...serverTrailersDeclared(),
   ...serverH1TlsDeclared(),
   ...serverH2cPrefaceDeclared(),
+  ...serverWebSocketDeclared(),
   ...http3PanicFree(
     "a probe new with this change: it feeds malformed frames to std/net's HTTP/3 frame and QPACK readers, whose proved indexes and Results differ from the seed's, so each module it writes differs, the std/crypto ones it reaches included",
     {
@@ -25248,6 +25267,15 @@ const DECLARED = [
     "the program calls tryPlainDate, tryPlainDateFrom and PlainDate.tryAdd, which are new in this release (WP87 S1), so the seed's standard library has no such exports and refuses it",
     { "tests/link/std_temporal_result/main.ts": ["exit"] }
   ),
+  // WP86 S2: std/yaml.ts proves its panic sites.
+  ...byFinding(YAML_PANIC_FREE)(
+    "a program new with this change: it pins that parseYaml builds under the no-panic default, and links std/yaml.ts, whose YamlStream and YamlFlowWriter the seed's copy lays out differently and whose functions this change gives other attribute groups, so the program's module and header move",
+    { "tests/link/std_yaml_strict/main.ts": ["main.h", "main.ll"] }
+  ),
+  ...byFinding(YAML_PANIC_FREE)(
+    "the yaml parse bench declares std/yaml.ts's YamlStream methods, which this change leaves with no panic site and so gives other attribute groups, so the program's module and the header that lists those functions move",
+    { "bench/std-yaml-parse.ts": ["std-yaml-parse.h", "std-yaml-parse.ll"] }
+  ),
   // WP85 S2: the term modules prove or drop their panic sites.
   ...byFinding(TERM_PANIC_FREE)(
     "std/term-rate.ts, std/term-io.ts and std/term-probe.ts prove or drop their panic sites (WP85 S2): `RateController` keeps its fastest, up and level rates as i32 fields and saturates its counters, and the modules' bodies change, so each program's copy of those modules moves",
@@ -25571,6 +25599,43 @@ const DECLARED = [
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
   },
+  // examples-strict S8: std/net/http3-frame.ts's `h3CheckWindow` becomes a window guard, the HTTP/3 writes answer H3_INVALID, and qpack.ts's integer writer cannot panic
+  ...byFinding(S8_RELAY_STD)(
+    "std/net/http3-frame.ts rewrites `h3CheckWindow` in the window guard's shape and has its three readers call it first, std/net/http3.ts's writes answer H3_INVALID for a window outside their buffer and its reads prove their windows, and std/net/qpack.ts's `qpackPushInteger` takes its prefix as a literal mask and a `u64` and no longer panics (the stream-ID check moves to `qpackPushStreamCancellation`), so http3-frame.ll, http3.ll, qpack.ll and the modules that call them move",
+    {
+      "bench/httparena/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/httparena_entry/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_grpc/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_grpc_interop/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http3_frame_bad_window/main.ts": ["main.ll"],
+      "tests/link/net_http_server_h1_tls/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll", "peer.ll"],
+      "tests/link/net_http_server_h1_tls_slots/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h1_tls_twice/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h1_tls_wait/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h2c_default_refused/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h2c_preface/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h2c_preface_drain/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h2c_preface_ended/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h2c_preface_full/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h2c_preface_h1/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h2c_preface_late/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h2c_preface_partial/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h2c_preface_pri/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_h2c_preface_silent/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_steps/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll", "net_http3_peer.ll"],
+      "tests/link/net_http_server_steps_full/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_steps_split/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_stream/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_trailers_after_end/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_trailers_ended/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_trailers_fields/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_trailers_h1/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_trailers_h3/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll", "net_http3_peer.ll"],
+      "tests/link/net_http_server_trailers_short/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_http_server_trailers_unstarted/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll"],
+      "tests/link/net_static/main.ts": ["http3-frame.ll", "http3.ll", "qpack.ll", "net_http3_peer.ll"],
+    }
+  ),
   // WP91 S4: std/net's HTTP modules drop their cast wraps for sums under
   // guards the prover reads, so their IR moves in every program reaching them.
   ...[
@@ -25959,6 +26024,96 @@ const DECLARED = [
     changelog: MULTIPART_BODIES,
     why: "the case is new with this change and imports nish/net/multipart, which the seed does not ship, so the reference refuses it",
   },
+  {
+    program: "tests/cases/deny_panics_caller.ts",
+    file: "exit",
+    changelog: CALLER_CONTRACT,
+    why: "the case is new with this change: under `--deny-panics` its callers prove `count`'s leading range guard, which the candidate records as proven at each call, where the reference keeps the guard's `panic` and refuses the program",
+  },
+  {
+    program: "tests/link/caller_contract_proven/main.ts",
+    file: "exit",
+    changelog: CALLER_CONTRACT,
+    why: "the case is new with this change: every call into `sum` and `Span.width` proves the callee's leading guard, which the candidate records as proven, where the reference keeps each guard's `panic` and refuses the program",
+  },
+  ...Object.entries({
+    "src/caller-contract.ts": [
+      "bounds.ll",
+      "constants.ll",
+      "emit-async.ll",
+      "expressions.ll",
+      "lexer.ll",
+      "map.ll",
+      "types.ll",
+    ],
+    "src/fault-contract.ts": ["constants.ll", "emit-async.ll", "expressions.ll", "map.ll", "types.ll"],
+    "src/window-contract.ts": ["constants.ll", "emit-async.ll", "expressions.ll", "map.ll", "types.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: CALLER_CONTRACT,
+      why: `the program compiles src/program.ts and src/bounds.ts, which this change edits to carry and prove caller contracts, so the ${file} module it writes drops the array-length and overflow checks the prover now discharges and renumbers its strings and attribute groups`,
+    }))
+  ),
+  ...Object.entries({
+    "bench/httparena/main.ts": ["buffer-pool.ll", "bytes.ll", "client.ll"],
+    "tests/link/httparena_entry/main.ts": [
+      "buffer-pool.ll",
+      "client.ll",
+      "net_tls_record_common_bytes.ll",
+      "std_bytes.ll",
+    ],
+  }).flatMap(([program, files]) =>
+    [
+      ...files,
+      "ct.ll",
+      "hkdf.ll",
+      "http3-frame.ll",
+      "http3.ll",
+      "p384.ll",
+      "qpack.ll",
+      "scram.ll",
+    ].map((file) => ({
+      program,
+      file,
+      changelog: CALLER_CONTRACT,
+      why: `the server's calls into std/bytes.ts, std/crypto and std/net prove the ranges their callees guard (copyBytes and the array-length checks), which src/bounds.ts now reads, so ${file} drops those guards' panic strings and renumbers its strings and attribute groups`,
+    }))
+  ),
+  ...Object.entries({
+    "tests/link/net_handler_pipelined_stream/main.ts": [
+      "buffer-pool.ll",
+      "client.ll",
+      "ct.ll",
+      "hkdf.ll",
+      "net_tls_record_common_bytes.ll",
+      "p384.ll",
+      "std_bytes.ll",
+    ],
+    "tests/link/std_compress_checked_sums/main.ts": ["bytes.ll"],
+    "tests/link/std_compress_sweep/main.ts": ["bytes.ll", "main.ll"],
+    "tests/link/std_term_decoder_bounds/main.ts": ["main.h", "main.ll", "testing.ll"],
+    "tests/link/window_near_other_array/main.ts": ["sink.ll"],
+  }).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: CALLER_CONTRACT,
+      why: `the program's calls prove the ranges their std callees guard, or index and size what an initializer or a guard bounds, which src/bounds.ts now reads, so ${file} drops those index, overflow and contract checks and renumbers its strings, types and attribute groups`,
+    }))
+  ),
+  ...[
+    "caller_contract_forward",
+    "caller_contract_forward_import",
+    "caller_contract_method_guard",
+    "caller_contract_shapes",
+  ].map((name) => ({
+    program: `tests/link/${name}/main.ts`,
+    file: "exit",
+    changelog: CALLER_CONTRACT,
+    why: "the case is new with this change: under `--deny-panics` its callers prove the callee's leading guard, which the candidate records as proven, where the reference keeps the guard's `panic` and refuses the program",
+  })),
   ...[
     "tests/link/window_contract_arrow_literal/main.ts",
     "tests/link/window_contract_value_forward/main.ts",

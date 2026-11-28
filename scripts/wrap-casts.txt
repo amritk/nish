@@ -1,3 +1,0 @@
-# The cast wraps (`toI32(toU32(a) + toU32(b))`, and toI64/toU64) that predate
-# CLAUDE.md's "A wrap is spelled, never cast", per file. Counts only fall:
-# lower them with `node scripts/wrap-casts.mjs --update`, never by hand.

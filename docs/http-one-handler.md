@@ -307,6 +307,31 @@ Merging the two types into one is follow-up work, for after wp34-finish and
 wp49 land. That follow-up is also where `serve` (the async layer) would sit
 over the façade.
 
+### 2.6 WebSocket on HTTP/1.1 (g7-websocket)
+
+A program upgrades a request it took with `acceptWebSocket(r, protocol)`.
+`Http1Connection` checks the opening handshake and queues the 101; the
+request becomes a WebSocket (`socket` set) and stays the program's until
+`closeWebSocket(r, code)` hands it back. It comes out of `take` again
+whenever one of three things holds:
+
+- `message`: a whole message is held. `opcode`, `messageData`,
+  `messageStart` and `messageLength` name it in the connection's own input,
+  so it is read with no copy; `received(r)` lets the next one in. The
+  connection reads nothing more until then, so a held message is never
+  overwritten.
+- `writable`: `sendFrame` answered `H1_AGAIN` and the output has room
+  again.
+- `closed`: the WebSocket is over, `closeCode` saying why: the peer's close
+  code (1005 when it carried none), 1002, 1007 or 1009 for a frame the
+  decoder refuses, 1006 when the connection ended without a close frame.
+
+`sendFrame(r, fin, opcode, buf, off, len)` writes one frame, copying the
+payload once into the connection's output. Neither direction allocates per
+message. Only HTTP/1.1 upgrades: `acceptWebSocket` answers `H1_INVALID` on
+an HTTP/2 or HTTP/3 request, as RFC 8441's extended CONNECT is not served,
+and the program answers that request as any other.
+
 ## 3. Mapping onto the carriers "without copying"
 
 ### 3.1 Request side: one copy in
@@ -466,6 +491,9 @@ two deadlines of its own, using its own clock and each carrier's
   h3 it calls `discardRequest` and resets the stream.
 - **`idleTimeout`:** how long an h2 or h2c connection may be open with no
   open stream.
+- **WebSockets (§2.6):** `bodyTimeout` does not apply to one. The
+  HTTP/1.1 slot's own `idleTimeout` (`Http1Config`) closes a WebSocket
+  nothing moves on, and the program sees it `closed` with 1006.
 
 `Http3Server` keeps QUIC's own idle timeout. Doing the timing in the façade
 avoids a change to `http2.ts`. Neither deadline is enforced when a program
@@ -811,7 +839,7 @@ a warmed run. For HTTP/3 that pin is new. Today `net_http3_server` pins only
 
 | Version | Not offered by G7 |
 | --- | --- |
-| HTTP/1.1 | `Upgrade` and WebSocket (stay on `Http1Server`, [WebSocket](guide/using-nish/websocket.md)); `Upgrade: h2c` (served as plain HTTP/1.1) |
+| HTTP/1.1 | `Upgrade` other than WebSocket (WebSocket is served by `acceptWebSocket`, §2.6); `Upgrade: h2c` (served as plain HTTP/1.1) |
 | HTTP/2 over TLS | HTTP/1.1 fallback on the port (F2); server push; extended CONNECT; the ALTSVC frame; RFC 9218 priorities |
 | h2c | `Upgrade: h2c` and 101; HTTP/1.1 on an h2c port (`listenHttp1` with `h2c` serves both, §4.3); any response to a bad preface; confidentiality of any kind |
 | HTTP/3 | WebTransport, datagrams and extended CONNECT; any ALPN but `h3` |
@@ -905,6 +933,25 @@ route in `scalar.config.json`), lands with g7-facade.
 | `drain` | open connections closed |
 | negative: a second `listenHttp1Tls`; `wait` with the listener; `slots` past 1048576 with `listenHttp1`'s | panics (`net_http_server_h1_tls_twice`, `_wait`, `_slots`) |
 
+### 8.4 `tests/link/net_http_server_ws` (g7-websocket)
+
+| Case | Expect |
+| --- | --- |
+| an opening handshake on the HTTP/1.1 listener | 101 with RFC 6455's accept value; a text message and a 300000-byte binary message in three fragments echo back whole |
+| a ping | a pong from the connection; the program never sees it |
+| a close with 1000 from the client | the close answered, the connection closed, the program sees `closed` with 1000 |
+| a client that stops reading while 64 KiB messages echo | the echo stalls on `H1_AGAIN`, goes on when `writable` comes, every message whole |
+| `closeWebSocket` from the program | a close with 1000, the connection closed; nothing comes back `closed` |
+| an unmasked client frame | close 1002, the connection closed; the program sees 1002 |
+| the client drops the connection | the program sees 1006; every request is handed back |
+| a pool of one request; 200 warmed round trips | three WebSockets served one after another; `Arena.used()` flat |
+| an upgrade on h2c; a GET with no `Upgrade` | `acceptWebSocket` answers `H1_INVALID`, the program answers 400 |
+| a WebSocket quiet past `bodyTimeout` | still open, still echoes |
+| a WebSocket quiet past `idleTimeout` | closed; the program sees 1006 and hands it back |
+
+The Autobahn fuzzing client runs against `autobahn.ts` in the `autobahn`
+job of `.github/workflows/interop.yml`.
+
 ## 9. Security
 
 Both modules read the network, so each lands with its record and index row
@@ -956,6 +1003,10 @@ in the same PR (`node scripts/security-scope.mjs`).
   so a client cannot steer other clients to a host.
 - **Timeouts:** `bodyTimeout` and `idleTimeout` (§3.4) bound what a silent
   h2 or h2c peer can hold.
+- **WebSockets (§2.6):** HTTPSRV-26 to HTTPSRV-29 in
+  [http-server.md](security/http-server.md): upgrade only on HTTP/1.1, the
+  request handed back on every end, `idleTimeout` and not `bodyTimeout`,
+  and the pool WebSockets can hold, bounded by `slots`, recorded open.
 
 [handler.md](security/handler.md), [router.md](security/router.md),
 [http3.md](security/http3.md), [quic.md](security/quic.md) and

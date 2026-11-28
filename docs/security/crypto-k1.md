@@ -356,14 +356,18 @@ finished too. `update` after `digest` still panics. Tests: the
 `crypto_sha256_digest_into_*` programs and `crypto_sha256_copy_after_digest`.
 
 Kept, because the prover cannot bound an array length wider than 16 bits
-without a change to `src/`:
+without a change to `src/`: the dk array in `pbkdf2HmacSha256Exposed`
+(`std/crypto/hmac.ts:898`). Its length is a `u32` computed from an `i32`, so
+it cannot be negative or past 2^31 − 1 elements. The site is the
+allocation's own length check.
 
-- the dk array in `pbkdf2HmacSha256Exposed` (`std/crypto/hmac.ts:898`);
-- the output array of `base64urlDecode` (`std/crypto/base64url.ts:182`);
-- the output array of `base64StdPadDecode` (`std/crypto/base64url.ts:443`).
-
-Each length is a `u32` computed from an `i32`, so it cannot be negative or
-past 2^31 − 1 elements. The site is the allocation's own length check.
+Proven since (examples-strict S8): the output arrays of `base64urlDecode`
+and `base64StdPadDecode`. Each is sized as a sum of two non-negative `i32`
+locals, the bytes of the whole quads and of the last partial one, which the
+prover bounds, so neither allocation is a panic site. `tests/std-panics.json`
+counts `std/crypto/base64url.ts` at no `array-length` site (2 before), and
+`node tests/run.js std-panics` fails if one comes back. The decoders' answers
+are unchanged: `test/spec/rfc4648-base64.ts` passes as before.
 
 Unchanged: every wipe (`tests/wipes/crypto.js` counts pass as before) and
 the constant-time property. `timingSafeEqual`, `timingSafeEqualAt` and

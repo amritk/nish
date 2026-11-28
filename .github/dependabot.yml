@@ -24,6 +24,12 @@ updates:
     commit-message:
       prefix: build
       include: scope
+    # typedoc 0.28, which scripts/gen-reference.mjs runs, accepts TypeScript
+    # up to 6.0, so a 7.x bump fails `npm ci` in every job. Drop this once a
+    # typedoc release accepts 7.
+    ignore:
+      - dependency-name: typescript
+        versions: [">=7"]
     groups:
       npm:
         patterns: ["*"]
