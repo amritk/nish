@@ -323,11 +323,11 @@ function rasterText(pixels: i32[], width: i32, height: i32, x: i32, y: i32, scal
   callee +35:15 rasterEdge -> @rasterEdge
   callee +36:15 rasterEdge -> @rasterEdge
 function RasterTrail.constructor(this: RasterTrail, capacity: i32): void -> @RasterTrail.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: llvm.smax.i32 nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: capacity
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +0:11 n: i32 (const)
+  local +0:9 n: i32 (let)
 function RasterTrail.clear(this: RasterTrail): void -> @RasterTrail.clear [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -374,11 +374,11 @@ function rasterTrail(pixels: i32[], width: i32, height: i32, trail: RasterTrail,
   local +34:17 cy: f64 (const)
   callee +35:11 rasterDisc -> @rasterDisc
 function RasterParticles.constructor(this: RasterParticles, capacity: i32): void -> @RasterParticles.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: llvm.smax.i32 nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: capacity
   pointer this: size=88 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +0:11 n: i32 (const)
+  local +0:9 n: i32 (let)
 function RasterParticles.capacity(this: RasterParticles): i32 -> @RasterParticles.capacity [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=88 writesThrough=false captured=false

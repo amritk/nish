@@ -2113,9 +2113,9 @@ function arpeggio(out: f64[], base: f64, a: i32, b: i32, c: i32, d: i32, each: f
   callee +18:5 synthSemitone -> @synthSemitone
   callee +19:5 synthSemitone -> @synthSemitone
 function voiceSamples(id: i32): f64[] -> @voiceSamples [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via synthTone
-  calls: arpeggio llvm.smax.i32 llvm.smin.i32 nish_panic_overflow pentatonic synthSemitone synthSilence synthTone
+  calls: arpeggio pentatonic synthSemitone synthSilence synthTone
   stackSites=0 stackLocals=0
   local +0:11 out: f64[] (const)
   callee +0:24 synthSilence -> @synthSilence
@@ -2162,11 +2162,11 @@ function voiceSamples(id: i32): f64[] -> @voiceSamples [exported]
   callee +63:24 synthSilence -> @synthSilence
   callee +64:5 synthTone -> @synthTone
   callee +65:5 synthTone -> @synthTone
-  local +69:9 step: i32 (const)
-  local +70:9 f: f64 (const)
-  callee +70:18 synthSemitone -> @synthSemitone
-  callee +70:40 pentatonic -> @pentatonic
-  local +71:9 out: f64[] (const)
-  callee +71:22 synthSilence -> @synthSilence
-  callee +72:3 synthTone -> @synthTone
-  callee +73:3 synthTone -> @synthTone
+  local +71:7 step: i32 (let)
+  local +77:9 f: f64 (const)
+  callee +77:18 synthSemitone -> @synthSemitone
+  callee +77:40 pentatonic -> @pentatonic
+  local +78:9 out: f64[] (const)
+  callee +78:22 synthSilence -> @synthSilence
+  callee +79:3 synthTone -> @synthTone
+  callee +80:3 synthTone -> @synthTone
