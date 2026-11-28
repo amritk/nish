@@ -30602,6 +30602,18 @@ attributes #1 = { nounwind "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-host-facts -->
 
+### `crypto.tryGetRandomValues`
+
+The answering twin of `crypto.getRandomValues`: the same fill, through
+`nish_random_try_fill`, declared `zeroext i1` and answered rather than ended in
+`nish_entropy_fail`. The call is a value, not a statement, and no panic site:
+the branch on its answer is the caller's own, so a module built with
+`--deny-panics` keeps it
+([LANGUAGE.md](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals)).
+
+<!-- cookbook:begin builtin-host-entropy-try -->
+<!-- cookbook:end builtin-host-entropy-try -->
+
 ### `nish:net`: `tcpListen`, `netRead` and `netWrite`
 
 Sockets (WP34 N5). Each function is one call into `runtime/runtime-net.c`
