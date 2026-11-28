@@ -1,0 +1,8 @@
+{"functions":[
+{"name":"cell","symbol":"cell","module":"tests/link/caller_contract_value_field/main.ts","line":9,"panics":[{"kind":"panic","line":11,"column":5,"proven":false}]},
+{"name":"Stage.constructor","symbol":"Stage.constructor","module":"tests/link/caller_contract_value_field/main.ts","line":18,"panics":[]},
+{"name":"Stage.run","symbol":"Stage.run","module":"tests/link/caller_contract_value_field/main.ts","line":21,"panics":[{"kind":"call","line":22,"column":12,"callee":"$ref.0.fr2.arr.i32.i32.i32.0","via":"panic"}]},
+{"name":"main","symbol":"nish_main","module":"tests/link/caller_contract_value_field/main.ts","line":26,"panics":[{"kind":"oom","line":29,"column":15,"allowed":true},{"kind":"call","line":29,"column":18,"callee":"cell","via":"panic"},{"kind":"call","line":29,"column":33,"callee":"Stage.run","via":"panic"}]},
+{"name":"$ref.0.fr2.arr.i32.i32.i32.0","symbol":"$ref.0.fr2.arr.i32.i32.i32.0","module":"tests/link/caller_contract_value_field/main.ts","line":1,"panics":[{"kind":"call","line":1,"column":1,"callee":"cell","via":"panic"}]},
+{"name":"done","symbol":"done","module":"tests/link/caller_contract_value_field/done.ts","line":1,"panics":[]}
+]}
