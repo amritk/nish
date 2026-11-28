@@ -418,26 +418,29 @@ const termFitRows = (w: integer<0, 4096>, h: integer<0, 4096>): integer<0, 4096>
 /** The cells of a `Screen` `w` by `h`, which `termFitRows` has kept within `TERM_MAX_CELLS`. */
 const termCellCount = (w: integer<0, 4096>, h: integer<0, 4096>): integer<0, 1048576> => termCellLimit(w * h)
 
-/** `n` cells of `value`: one allocation, filled once. */
+/**
+ * `n` cells of `value`. Built by `push` rather than `new Array<i32>(n)`, whose
+ * length check the declared range of `n` does not reach. A `resize` at the
+ * 1,048,576-cell cap, with its flush room, takes about 0.1 s, twice what
+ * `new Array` took.
+ */
 const termCells = (n: integer<0, 1048576>, value: i32): i32[] => {
-  const count: i32 = n
-  if (count <= 0) {
-    return []
-  }
-  const cells: i32[] = new Array<i32>(count)
-  if (value !== 0) {
-    cells.fill(value)
+  const cells: i32[] = []
+  for (let i: i32 = 0; i < n; i++) {
+    cells.push(value)
   }
   return cells
 }
 
 /** The zeroed room a flush of `cells` cells writes into: `TERM_CELL_BYTES` per cell and once more. */
 const termFlushRoom = (cells: integer<0, 1048576>): u8[] => {
-  const size: i32 = (cells + 1) * TERM_CELL_BYTES
-  if (size <= 0) {
-    return []
+  const room: u8[] = []
+  for (let i: i32 = 0; i <= cells; i++) {
+    for (let k: i32 = 0; k < TERM_CELL_BYTES; k++) {
+      room.push(0)
+    }
   }
-  return new Array<u8>(size)
+  return room
 }
 
 /** `n` held to the cells a `Screen` can have, 0 to `TERM_MAX_CELLS`. */
