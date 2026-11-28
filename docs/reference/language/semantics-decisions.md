@@ -1501,8 +1501,11 @@ integer, a `u32` under `--number-mode i32`)
 
 **`panic`**: `panic(message)`
 
-- *What proves it away:* nothing: a path the program never takes is still a
-  site (`tests/cases/panics_panic`)
+- *What proves it away:* a leading guard every call into its function proves
+  false, a [`contract`](#panic-sites) the callers hold
+  (`tests/cases/deny_panics_caller`); anywhere else, nothing: a path the
+  program never takes is still a site, and a guard one call leaves open
+  stays the callee's (`tests/link/panic_caller_unproven`)
 
 **`expect`**: `r.expect(message)` on an `Err`
 
