@@ -776,7 +776,7 @@ The arena the runtime allocates from, read.
 
 <scalar-card title="crypto" icon="phosphor/regular/cube" href="#crypto">
 
-The system's random source, with its one member.
+The system's random source, with its one member and that member's answering twin.
 
 </scalar-card>
 
@@ -5291,7 +5291,7 @@ const Arena: { ... }
 
 ### crypto
 
-The system's random source, with its one member.
+The system's random source, with its one member and that member's answering twin.
 
 ```ts
 const crypto: { ... }
@@ -5299,7 +5299,8 @@ const crypto: { ... }
 
 | Member | |
 | --- | --- |
-| `getRandomValues(bytes: u8[]): void` | Every byte of `bytes` from the kernel's CSPRNG (`getrandom(2)` on Linux, looping over `EINTR` and short reads; `getentropy(3)` in 256-byte chunks on macOS); at most 65,536 bytes a call. A `u8[]` only, where the Web API takes any integer typed array: the byte is the unit a key or a nonce is written in, and anything else is refused at compile time (NL2402). A statement, where the Web API also answers its argument, which the caller already holds. An empty array is filled with nothing.<br><br>The array is written, so a `readonly u8[]` is refused (and, inside a `scope()` region, an array a task may read). More than 65,536 bytes is a panic, `crypto.getRandomValues: <n> bytes asked for, and one call fills at most 65536`, exit 1. A source that fails is a panic too; nothing weaker is ever substituted. It is the source for a key. `crypto` has no other member (NL2403, for example `crypto.randomUUID`). Refused at compile time on wasm32 and the WASI profile (NL2404). Under Node the prelude fills a plain `u8[]` too and panics past 65,536 with the same words; without the prelude it takes only a typed array. Capability: entropy. |
+| `getRandomValues(bytes: u8[]): void` | Every byte of `bytes` from the kernel's CSPRNG (`getrandom(2)` on Linux, looping over `EINTR` and short reads; `getentropy(3)` in 256-byte chunks on macOS); at most 65,536 bytes a call. A `u8[]` only, where the Web API takes any integer typed array: the byte is the unit a key or a nonce is written in, and anything else is refused at compile time (NL2402). A statement, where the Web API also answers its argument, which the caller already holds. An empty array is filled with nothing.<br><br>The array is written, so a `readonly u8[]` is refused (and, inside a `scope()` region, an array a task may read). More than 65,536 bytes is a panic, `crypto.getRandomValues: <n> bytes asked for, and one call fills at most 65536`, exit 1. A source that fails is a panic too; nothing weaker is ever substituted. It is the source for a key. `crypto` has no other member but its twin `tryGetRandomValues` (NL2403, for example `crypto.randomUUID`). Refused at compile time on wasm32 and the WASI profile (NL2404). Under Node the prelude fills a plain `u8[]` too and panics past 65,536 with the same words; without the prelude it takes only a typed array. Capability: entropy. |
+| `tryGetRandomValues(bytes: u8[]): boolean` | `getRandomValues`'s twin for code built without `--allow-panics`: the same fill from the same source under the same rules (a `u8[]` only, written, refused on wasm32 and the WASI profile, capability entropy), but where `getRandomValues` exits it answers `false`: more than 65,536 bytes, or a source that fails, which may leave a prefix of `bytes` written. Nothing weaker is ever substituted. An expression, so a caller can turn the `false` into its own `Result`; it is no panic site. `--emit-ts` writes it as a length test and the runtime's fill; the Node prelude that runs a source file as TypeScript does not define it. |
 
 ## Types
 

@@ -30612,6 +30612,103 @@ the branch on its answer is the caller's own, so a module built with
 ([LANGUAGE.md](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals)).
 
 <!-- cookbook:begin builtin-host-entropy-try -->
+```ts
+// examples-strict S7e: the answering twin. The same fill as `getRandomValues`,
+// answered as an `i1` rather than ended in an exit, so a caller held to no
+// panic turns a failing source into its own `Err`.
+export const nonce = (bytes: u8[]): Result<i32, string> => {
+  if (!crypto.tryGetRandomValues(bytes)) {
+    return Err("no entropy")
+  }
+  return Ok(bytes.length)
+}
+```
+
+```llvm
+%struct.nish_result.i32.str = type { i1, i32, i8* }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c"no entropy\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare zeroext i1 @nish_random_try_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #0
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.str* @nonce(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %bytes) #0 {
+entry:
+  %0 = call zeroext i1 @nish_random_try_fill(%struct.nish_array* %bytes)
+  %1 = xor i1 %0, true
+  br i1 %1, label %if.then, label %if.end
+
+if.then:
+  %2 = call i8* @nish_alloc_struct(i64 16)
+  %3 = bitcast i8* %2 to %struct.nish_result.i32.str*
+  %4 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %3, i32 0, i32 0
+  store i1 false, i1* %4, align 1
+  %5 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %3, i32 0, i32 2
+  store i8* bitcast ({ i64, [11 x i8] }* @.str.0 to i8*), i8** %5, align 8
+  ret %struct.nish_result.i32.str* %3
+
+if.end:
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
+  %7 = load i64, i64* %6, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %8 = trunc i64 %7 to i32
+  %9 = call i8* @nish_alloc_struct(i64 16)
+  %10 = bitcast i8* %9 to %struct.nish_result.i32.str*
+  %11 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %10, i32 0, i32 0
+  store i1 true, i1* %11, align 1
+  %12 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %10, i32 0, i32 1
+  store i32 %8, i32* %12, align 4
+  ret %struct.nish_result.i32.str* %10
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
 <!-- cookbook:end builtin-host-entropy-try -->
 
 ### `nish:net`: `tcpListen`, `netRead` and `netWrite`
@@ -34791,6 +34888,7 @@ declare noundef i64 @nish_file_size(i32 noundef) #3
 declare noundef i32 @nish_file_close(i32 noundef) #3
 declare double @nish_date_now() #2
 declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #3
+declare zeroext i1 @nish_random_try_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #3
 declare void @nish_wipe(%struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare double @nish_stat_mtime(i8* noundef nonnull readonly align 8 nocapture) #2
 declare i64 @nish_lstat_owner_mode(i8* noundef nonnull readonly align 8 nocapture) #2

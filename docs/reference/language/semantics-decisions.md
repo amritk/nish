@@ -1516,7 +1516,9 @@ integer, a `u32` under `--number-mode i32`)
 `crypto.getRandomValues`, which exit inside the runtime on failure
 
 - *What proves it away:* nothing; `readFileSyncOrNull` is the twin that
-  answers `null` instead (`tests/cases/panics_io_exit`)
+  answers `null` instead (`tests/cases/panics_io_exit`), and
+  `crypto.tryGetRandomValues` the one that answers `false`
+  (`tests/link/deny_panics_entropy`)
 
 **`parallel-length`**: a `parallelMapInto` call whose `dst` is shorter than
 its `src`

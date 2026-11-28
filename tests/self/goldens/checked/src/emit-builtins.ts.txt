@@ -624,8 +624,8 @@ function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): string -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitConsoleLog
   calls: Emitter.declareType Emitter.emitExpression Emitter.useRuntime IRFunction.emit IRFunction.emitValue callIntrinsic emitConsoleError emitConsoleLog emitFromBytes emitFromCharCode emitMathAbs emitMathMinMax emitMathPow emitMathRound emitMathSign emitRounding f64UnaryIntrinsic firstArgument internalErrorFor nish_exit nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_new roundingCallee
-  pointer emitter: size=432 writesThrough=true captured=false passedTo=emitConsoleLog#0 emitConsoleError#0 emitFromCharCode#0 emitFromBytes#0 emitMathPow#0 emitMathRound#0 emitMathAbs#0 emitMathSign#0 emitMathMinMax#0 emitMathMinMax#0 Emitter.emitExpression#0 callIntrinsic#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 emitRounding#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=emitConsoleLog#1 emitConsoleError#1 emitFromCharCode#1 emitFromBytes#1 emitMathPow#1 emitMathRound#1 emitMathAbs#1 emitMathSign#1 emitMathMinMax#1 emitMathMinMax#1 firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0
+  pointer emitter: size=432 writesThrough=true captured=false passedTo=emitConsoleLog#0 emitConsoleError#0 emitFromCharCode#0 emitFromBytes#0 emitMathPow#0 emitMathRound#0 emitMathAbs#0 emitMathSign#0 emitMathMinMax#0 emitMathMinMax#0 Emitter.emitExpression#0 callIntrinsic#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 emitRounding#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=emitConsoleLog#1 emitConsoleError#1 emitFromCharCode#1 emitFromBytes#1 emitMathPow#1 emitMathRound#1 emitMathAbs#1 emitMathSign#1 emitMathMinMax#1 emitMathMinMax#1 firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0
   stackSites=0 stackLocals=0
   callee +0:12 emitConsoleLog -> @emitConsoleLog
   callee +3:12 emitConsoleError -> @emitConsoleError
@@ -673,7 +673,13 @@ function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): string -> 
   callee +68:42 firstArgument -> @firstArgument
   callee +69:5 IRFunction.emit -> @IRFunction.emit
   callee +69:34 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +72:16 internalErrorFor -> @internalErrorFor
+  callee +74:5 Emitter.declareType -> @Emitter.declareType
+  local +75:11 bytes: string (const)
+  callee +75:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +75:42 firstArgument -> @firstArgument
+  callee +76:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +77:26 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +80:16 internalErrorFor -> @internalErrorFor
 function builtinCalleesNamed(program: CheckedProgram, table: TypeTable, opts: Options, call: Node, name: string): string[] -> @builtinCalleesNamed [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via absIntrinsic
