@@ -2,6 +2,8 @@
 name: WP93 — stored callbacks for signals, by context argument and by inline-environment closure
 overview: A signals-based std/ui needs a derivation or handler stored in a reactive node and called later. This plan gives Nish two strict-mode forms that allocate nothing and keep WP51's escape proofs. One is a top-level function plus a typed context argument, through generic function-type aliases. The other is a capturing arrow whose `const` captures live inline in the slot that holds it. Each lands behind a measured dispatch gate on native and wasm32.
 spec: docs/wp93-closures.md
+priority: 270
+labels: [ready]
 stages:
   - id: s1-generic-fn-aliases
     title: WP93 S1 — generic function-type aliases, so a factory can store its function
