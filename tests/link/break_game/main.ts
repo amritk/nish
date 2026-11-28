@@ -96,6 +96,7 @@ import {
   brickAt,
   brickX,
   brickY,
+  capsuleRoll,
   drawBreakGame,
   drawnBallX,
   drawnBallY,
@@ -111,6 +112,7 @@ import {
   timeBonusFor,
   wallBottom
 } from "../../../src/break-game"
+import { Rng } from "../../../std/random"
 
 /** `t.eqF64`, as a function so its literal arguments are typed `f64` by the parameters. */
 const eqF = (t: Suite, name: string, actual: f64, expected: f64): boolean => t.eqF64(name, actual, expected)
@@ -1049,6 +1051,33 @@ const testSounds = (t: Suite): void => {
   t.ok("the wall coming down a row asks for the rumble", heard(wall, input, SOUND_ADVANCE, 12 * 120 + 1))
 }
 
+/**
+ * `capsuleRoll` is `Rng.nextInt(0, 13)` written out: two generators of one
+ * seed give the same rolls draw for draw, and leave their streams in step.
+ */
+const testCapsuleRoll = (t: Suite): void => {
+  let same: boolean = true
+  let seen: i32 = 0
+  for (let seed: i32 = -50; seed <= 50; seed++) {
+    const ours = new Rng(seed)
+    const theirs = new Rng(seed)
+    for (let i: i32 = 0; i < 2000; i++) {
+      const roll: i32 = capsuleRoll(ours)
+      if (roll !== theirs.nextInt(0, 13)) {
+        same = false
+      }
+      if (roll >= 0 && roll < 14) {
+        seen = seen | (1 << roll)
+      }
+    }
+    if (ours.nextI32() !== theirs.nextI32()) {
+      same = false
+    }
+  }
+  t.ok("capsuleRoll rolls what nextInt(0, 13) rolls, over 101 seeds of 2000 draws", same)
+  t.eqI32("and every roll from 0 to 13 comes up", seen, 16383)
+}
+
 export const main = (): i32 => {
   const t = new Suite("break-game")
   testLevels(t)
@@ -1057,6 +1086,7 @@ export const main = (): i32 => {
   testPaddle(t)
   testBricks(t)
   testPowers(t)
+  testCapsuleRoll(t)
   testLives(t)
   testClear(t)
   testWall(t)

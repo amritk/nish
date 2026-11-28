@@ -168,7 +168,14 @@ export const voiceSamples = (id: i32): f64[] => {
     return out
   }
   // A breaking brick, a step up the scale for each brick of the combo.
-  const step: i32 = Math.min(Math.max(id - SOUND_BREAK, 0), BREAK_PITCHES - 1)
+  // Ids below the first break sound take its pitch and ids past the last take
+  // the top one, so the step is found before any subtraction.
+  let step: i32 = 0
+  if (id >= SOUND_BREAK + BREAK_PITCHES - 1) {
+    step = BREAK_PITCHES - 1
+  } else if (id > SOUND_BREAK) {
+    step = id - SOUND_BREAK
+  }
   const f: f64 = synthSemitone(523.25, pentatonic(step))
   const out: f64[] = synthSilence(0.09, SAMPLE_RATE)
   synthTone(out, SAMPLE_RATE, 0.0, 0.09, f, f * 0.94, SYNTH_SQUARE, 0.24, 26.0)

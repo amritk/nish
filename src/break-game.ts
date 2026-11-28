@@ -217,6 +217,47 @@ export const MAX_LIVES: i32 = 9
 /** The highest combo multiplier. */
 export const MAX_COMBO: i32 = 8
 
+/** The largest `i32`, where the step counters stop. */
+const I32_MAX: i32 = 2147483647
+
+/**
+ * `n` plus one, held at the largest `i32`: a count of steps or of things
+ * stops there rather than wrapping negative. At 120 steps a second a counter
+ * reaches it after more than 200 days of play, so no game gets there.
+ */
+const countUp = (n: i32): i32 => {
+  if (n >= I32_MAX) {
+    return n
+  }
+  return n + 1
+}
+
+/** `n` less one, held at 0: a timer that has run out stays out. */
+const countDown = (n: i32): i32 => {
+  if (n <= 0) {
+    return 0
+  }
+  return n - 1
+}
+
+/**
+ * The most points the score holds. A full game of six walls scores far below
+ * it, so it never binds in play; it is the cap that lets each sum below be
+ * proved to fit an `i32`.
+ */
+const SCORE_MAX: i32 = 999999999
+
+/** `n` held between 0 and `SCORE_MAX`: what a score, a bonus or a gain adds up from. */
+const capped = (n: i32): i32 => {
+  if (n <= 0) {
+    return 0
+  }
+  if (n >= SCORE_MAX) {
+    return SCORE_MAX
+  }
+  return n
+}
+
 // ---- The world --------------------------------------------------------------
 
 /** One step in seconds. */
@@ -407,7 +448,7 @@ export class BreakGame {
   /** Each cell's hits left. */
   hits: i32[]
   /** Each cell's hits when the level began, which picks its colour and its points. */
-  fullHits: i32[]
+  fullHits: integer<0, 3>[]
   /** Seconds of white flash left on each cell since it was hit. */
   flashes: f64[]
   /** The paddle's centre now and a step ago. */
@@ -444,8 +485,8 @@ export class BreakGame {
   bricksLeft: i32
   score: i32
   lives: i32
-  /** Bricks broken since the ball last touched the paddle. */
-  combo: i32
+  /** Bricks broken since the ball last touched the paddle, counted to 1000. */
+  combo: integer<0, 1000>
   /** A `PHASE_*`. */
   phase: i32
   /** Steps since the phase began. */
@@ -500,7 +541,7 @@ export class BreakGame {
     this.kinds.fill(0)
     this.hits = new Array<i32>(cells)
     this.hits.fill(0)
-    this.fullHits = new Array<i32>(cells)
+    this.fullHits = new Array<integer<0, 3>>(cells)
     this.fullHits.fill(0)
     this.flashes = new Array<f64>(cells)
     this.flashes.fill(0.0)
@@ -571,8 +612,9 @@ export const loadLevel = (game: BreakGame, level: i32): void => {
   game.fullHits.fill(0)
   game.flashes.fill(0.0)
   game.bricksLeft = 0
-  const cells: i32 = game.rows * LEVEL_COLS
-  for (let i: i32 = 0; i < cells && i < map.length && i < game.kinds.length; i++) {
+  // `i / LEVEL_COLS < game.rows` is `i < game.rows * LEVEL_COLS` for the
+  // counts from 0 this loop takes, with no product to overflow.
+  for (let i: i32 = 0; i / LEVEL_COLS < game.rows && i < map.length && i < game.kinds.length; i++) {
     const c: i32 = toI32(map.charCodeAt(i))
     game.kinds[i] = brickKind(c)
     if (i < toI32(game.hits.length) && i < toI32(game.fullHits.length)) {
@@ -580,7 +622,7 @@ export const loadLevel = (game: BreakGame, level: i32): void => {
       game.fullHits[i] = brickHits(c)
     }
     if (breakable(game.kinds[i])) {
-      game.bricksLeft = game.bricksLeft + 1
+      game.bricksLeft = countUp(game.bricksLeft)
     }
   }
   game.speed = game.tuning.ballSpeed
@@ -621,20 +663,23 @@ const clearPowers = (game: BreakGame): void => {
 
 /** One ball on the paddle's centre, waiting for Space. */
 const serve = (game: BreakGame): void => {
+  let first: boolean = true
   for (const b of game.balls) {
     b.live = false
+    if (first) {
+      first = false
+      b.live = true
+      b.stuck = true
+      b.stickOffset = 0.0
+      b.x = game.paddleX
+      b.y = PADDLE_Y - BALL_R
+      b.prevX = b.x
+      b.prevY = b.y
+      b.dx = 0.0
+      b.dy = -1.0
+      b.trail.clear()
+    }
   }
-  const b: Ball = game.balls[0]
-  b.live = true
-  b.stuck = true
-  b.stickOffset = 0.0
-  b.x = game.paddleX
-  b.y = PADDLE_Y - BALL_R
-  b.prevX = b.x
-  b.prevY = b.y
-  b.dx = 0.0
-  b.dy = -1.0
-  b.trail.clear()
   game.launched = false
 }
 
@@ -662,7 +707,7 @@ export const liveBalls = (game: BreakGame): i32 => {
   let n: i32 = 0
   for (const b of game.balls) {
     if (b.live) {
-      n++
+      n = countUp(n)
     }
   }
   return n
@@ -670,8 +715,11 @@ export const liveBalls = (game: BreakGame): i32 => {
 
 /** The kind of the brick at `col`, `row`, or `BRICK_NONE` off the wall. */
 export const brickAt = (game: BreakGame, col: i32, row: i32): i32 => {
+  if (col < 0 || col >= LEVEL_COLS || row < 0 || row >= game.rows || row >= LEVEL_MAX_ROWS) {
+    return BRICK_NONE
+  }
   const i: i32 = row * LEVEL_COLS + col
-  if (col < 0 || col >= LEVEL_COLS || row < 0 || row >= game.rows || i >= toI32(game.kinds.length)) {
+  if (i >= toI32(game.kinds.length)) {
     return BRICK_NONE
   }
   return game.kinds[i]
@@ -679,8 +727,11 @@ export const brickAt = (game: BreakGame, col: i32, row: i32): i32 => {
 
 /** The hits the brick at `col`, `row` has left, or 0 off the wall. */
 export const hitsAt = (game: BreakGame, col: i32, row: i32): i32 => {
+  if (col < 0 || col >= LEVEL_COLS || row < 0 || row >= game.rows || row >= LEVEL_MAX_ROWS) {
+    return 0
+  }
   const i: i32 = row * LEVEL_COLS + col
-  if (col < 0 || col >= LEVEL_COLS || row < 0 || row >= game.rows || i >= toI32(game.hits.length)) {
+  if (i >= toI32(game.hits.length)) {
     return 0
   }
   return game.hits[i]
@@ -753,8 +804,8 @@ export const stepBreakGame = (game: BreakGame, input: StepInput): i32 => {
     stepPause(game, input)
     return game.result
   }
-  game.ticks = game.ticks + 1
-  game.phaseTime = game.phaseTime + 1
+  game.ticks = countUp(game.ticks)
+  game.phaseTime = countUp(game.phaseTime)
   remember(game)
   if (game.phase === PHASE_INTRO) {
     if (anyPress(input) || game.phaseTime >= INTRO_STEPS) {
@@ -789,7 +840,14 @@ const remember = (game: BreakGame): void => {
     f.prevY = f.y
   }
   const pool: RasterParticles = game.particles
-  for (let i: i32 = 0; i < toI32(pool.xs.length); i++) {
+  for (
+    let i: i32 = 0;
+    i < toI32(pool.xs.length) &&
+    i < toI32(pool.ys.length) &&
+    i < toI32(pool.prevXs.length) &&
+    i < toI32(pool.prevYs.length);
+    i++
+  ) {
     pool.prevXs[i] = pool.xs[i]
     pool.prevYs[i] = pool.ys[i]
   }
@@ -826,7 +884,7 @@ const stepPlay = (game: BreakGame, input: StepInput): void => {
   }
   stepCapsules(game)
   if (game.launched) {
-    game.playSteps = game.playSteps + 1
+    game.playSteps = countUp(game.playSteps)
   }
   stepWall(game)
   if (game.phase !== PHASE_PLAY) {
@@ -929,10 +987,10 @@ const steepen = (b: Ball): void => {
 }
 
 const stepPowers = (game: BreakGame): void => {
-  game.wideSteps = Math.max(game.wideSteps - 1, 0)
-  game.slowSteps = Math.max(game.slowSteps - 1, 0)
-  game.catchSteps = Math.max(game.catchSteps - 1, 0)
-  game.fireSteps = Math.max(game.fireSteps - 1, 0)
+  game.wideSteps = countDown(game.wideSteps)
+  game.slowSteps = countDown(game.slowSteps)
+  game.catchSteps = countDown(game.catchSteps)
+  game.fireSteps = countDown(game.fireSteps)
   const wide: f64 = game.wideSteps > 0 ? 1.5 : 1.0
   game.widthScale = game.widthScale + (wide - game.widthScale) * 0.15
   const slow: f64 = game.slowSteps > 0 ? game.tuning.slowFactor : 1.0
@@ -995,11 +1053,11 @@ const stepBall = (game: BreakGame, b: Ball): void => {
       }
     }
     // The bricks whose cells the swept ball's box overlaps.
-    const c0: i32 = cellIndex((Math.min(b.x, b.x + mx) - BALL_R - FIELD_LEFT) / BRICK_W, LEVEL_COLS)
-    const c1: i32 = cellIndex((Math.max(b.x, b.x + mx) + BALL_R - FIELD_LEFT) / BRICK_W, LEVEL_COLS)
+    const c0 = cellIndex((Math.min(b.x, b.x + mx) - BALL_R - FIELD_LEFT) / BRICK_W, LEVEL_COLS)
+    const c1 = cellIndex((Math.max(b.x, b.x + mx) + BALL_R - FIELD_LEFT) / BRICK_W, LEVEL_COLS)
     const top: f64 = BRICK_TOP + game.wallOffset
-    const r0: i32 = cellIndex((Math.min(b.y, b.y + my) - BALL_R - top) / BRICK_H, game.rows)
-    const r1: i32 = cellIndex((Math.max(b.y, b.y + my) + BALL_R - top) / BRICK_H, game.rows)
+    const r0 = cellIndex((Math.min(b.y, b.y + my) - BALL_R - top) / BRICK_H, game.rows)
+    const r1 = cellIndex((Math.max(b.y, b.y + my) + BALL_R - top) / BRICK_H, game.rows)
     for (let row: i32 = r0; row <= r1; row++) {
       for (let col: i32 = c0; col <= c1; col++) {
         const i: i32 = row * LEVEL_COLS + col
@@ -1071,7 +1129,8 @@ const stepBall = (game: BreakGame, b: Ball): void => {
       reflect(b, nx, ny)
     } else if (game.fireSteps > 0) {
       // A fireball breaks what it touches and carries on through, steel too.
-      if (breakable(game.kinds[id])) {
+      // `id` is a cell here, and `breakBrick` passes over one off the wall.
+      if (id >= 0 && id < toI32(game.kinds.length) && breakable(game.kinds[id])) {
         breakBrick(game, id)
       }
     } else {
@@ -1087,8 +1146,21 @@ const stepBall = (game: BreakGame, b: Ball): void => {
   rasterPushTrail(b.trail, b.x, b.y)
 }
 
-/** `x` floored to a cell index and held to 0..`count`-1. */
-const cellIndex = (x: f64, count: i32): i32 => toI32(clamp(Math.floor(x), 0.0, toF64(Math.max(count - 1, 0))))
+/**
+ * `x` floored to a cell index and held to 0..`count`-1. The count is the
+ * wall's columns or its rows, never more than `LEVEL_COLS`, so the index is
+ * at most 13 and the loops over a range of them have no sum to overflow.
+ */
+const cellIndex = (x: f64, count: i32): integer<0, 13> => {
+  const i: i32 = toI32(clamp(Math.floor(x), 0.0, Math.max(toF64(count) - 1.0, 0.0)))
+  if (i <= 0) {
+    return 0
+  }
+  if (i >= 13) {
+    return 13
+  }
+  return i
+}
 
 /** Send `b` away from a surface facing `nx`, `ny`. */
 const reflect = (b: Ball, nx: i32, ny: i32): void => {
@@ -1205,7 +1277,27 @@ const brickPoints = (game: BreakGame, i: i32): i32 => {
   if (kind === BRICK_MYSTERY) {
     return 15
   }
-  return 10 * Math.max(game.fullHits[i], 1)
+  const full = game.fullHits[i]
+  if (full <= 1) {
+    return 10
+  }
+  return 10 * full
+}
+
+/** What the combo multiplies a brick's points by: the combo itself, up to `MAX_COMBO`. */
+const comboMultiplier = (combo: integer<0, 1000>): i32 => {
+  if (combo >= MAX_COMBO) {
+    return MAX_COMBO
+  }
+  return combo
+}
+
+/** The sound of a brick broken at `combo`: a step up the scale a brick, up to the top pitch. */
+const breakSound = (combo: integer<0, 1000>): i32 => {
+  if (combo >= BREAK_PITCHES) {
+    return SOUND_BREAK + BREAK_PITCHES - 1
+  }
+  return SOUND_BREAK + combo - 1
 }
 
 /** A ball hit brick `i`: steel rings, a strong brick cracks, the last hit breaks it. */
@@ -1223,10 +1315,13 @@ const hitBrick = (game: BreakGame, i: i32): void => {
     queueSound(game, SOUND_STEEL)
     return
   }
-  game.hits[i] = game.hits[i] - 1
-  if (game.hits[i] <= 0) {
+  const left: i32 = game.hits[i]
+  if (left <= 1) {
+    // Its last hit: breaking it leaves it no hits.
+    game.hits[i] = 0
     breakBrick(game, i)
   } else {
+    game.hits[i] = left - 1
     queueSound(game, SOUND_CRACK)
     burst(
       game,
@@ -1258,16 +1353,25 @@ const breakBrick = (game: BreakGame, i: i32): void => {
   }
   const col: i32 = i % LEVEL_COLS
   const row: i32 = i / LEVEL_COLS
+  // Every cell is inside the wall, so this never returns; it states the
+  // wall's size, which the neighbour sums below are proved against.
+  if (col < 0 || col >= LEVEL_COLS || row < 0 || row >= LEVEL_MAX_ROWS) {
+    return
+  }
   const cx: f64 = brickX(col) + BRICK_W / 2.0
   const cy: f64 = brickY(game, row) + BRICK_H / 2.0
   const colour: i32 = brickColour(game, i)
-  game.combo = Math.min(game.combo + 1, 1000)
-  const points: i32 = brickPoints(game, i) * Math.min(game.combo, MAX_COMBO)
-  game.score = game.score + points
+  const was = game.combo
+  const next: i32 = was + 1
+  if (next <= 1000) {
+    game.combo = next
+  }
+  const points: i32 = brickPoints(game, i) * comboMultiplier(game.combo)
+  game.score = capped(capped(game.score) + capped(points))
   game.kinds[i] = BRICK_NONE
   game.hits[i] = 0
-  game.bricksLeft = game.bricksLeft - 1
-  queueSound(game, SOUND_BREAK + Math.min(game.combo, BREAK_PITCHES) - 1)
+  game.bricksLeft = countDown(game.bricksLeft)
+  queueSound(game, breakSound(game.combo))
   floatScore(game, cx, cy, points, game.combo >= 2 ? rasterRgb(255, 220, 90) : rasterRgb(235, 235, 245))
   if (kind === BRICK_MYSTERY || game.rng.nextF64() < game.tuning.dropChance) {
     dropCapsule(game, cx, cy)
@@ -1277,10 +1381,11 @@ const breakBrick = (game: BreakGame, i: i32): void => {
     burst(game, cx, cy, 36, rasterRgb(255, 150, 40))
     burst(game, cx, cy, 12, rasterRgb(255, 240, 180))
     game.shake = Math.min(game.shake + 3.0, 6.0)
-    for (let dr: i32 = -1; dr <= 1; dr++) {
-      for (let dc: i32 = -1; dc <= 1; dc++) {
-        if (breakable(brickAt(game, col + dc, row + dr))) {
-          breakBrick(game, (row + dr) * LEVEL_COLS + col + dc)
+    // The rows above, at and below, and in each the columns left, at and right.
+    for (let dr: i32 = 0; dr < 3; dr++) {
+      for (let dc: i32 = 0; dc < 3; dc++) {
+        if (breakable(brickAt(game, col + dc - 1, row + dr - 1))) {
+          breakBrick(game, (row + dr - 1) * LEVEL_COLS + (col + dc - 1))
         }
       }
     }
@@ -1293,7 +1398,7 @@ const breakBrick = (game: BreakGame, i: i32): void => {
 
 /** A capsule of a random kind falls from `x`, `y`: W, M and S three parts in fourteen, C and F two, L one. */
 const dropCapsule = (game: BreakGame, x: f64, y: f64): void => {
-  const roll: i32 = game.rng.nextInt(0, 13)
+  const roll: i32 = capsuleRoll(game.rng)
   let kind: i32 = CAPSULE_LIFE
   if (roll < 3) {
     kind = CAPSULE_WIDE
@@ -1307,6 +1412,29 @@ const dropCapsule = (game: BreakGame, x: f64, y: f64): void => {
     kind = CAPSULE_FIRE
   }
   spawnCapsule(game, x, y, kind)
+}
+
+/** The answers `capsuleRoll` gives: 0 to 13, the span `rng.nextInt(0, 13)` draws from. */
+const ROLL_SPAN: f64 = 14.0
+
+/** The draws `capsuleRoll` refuses: 2^32 mod `ROLL_SPAN`, the count `nextInt` refuses for that span. */
+const ROLL_REFUSED: f64 = 4294967296.0 % ROLL_SPAN
+
+/** The bits of `x` read as an unsigned count, from 0 to 2^32 - 1. */
+const unsignedDraw = (x: i32): f64 => (x < 0 ? toF64(x) + 4294967296.0 : toF64(x))
+
+/**
+ * A roll from 0 to 13, each with equal chance: the draws `rng.nextInt(0, 13)`
+ * makes, written out so no `lo > hi` check is left to stop the program. A
+ * draw among the lowest `ROLL_REFUSED` is drawn again, so what is left holds
+ * each answer equally often, and each answer is the one `nextInt` gives.
+ */
+export const capsuleRoll = (rng: Rng): i32 => {
+  let draw: f64 = unsignedDraw(rng.nextI32())
+  while (draw < ROLL_REFUSED) {
+    draw = unsignedDraw(rng.nextI32())
+  }
+  return toI32(draw % ROLL_SPAN)
 }
 
 /** A capsule of `kind` falling from `x`, `y`, in a free slot; with none free it is lost. */
@@ -1339,7 +1467,7 @@ const stepCapsules = (game: BreakGame): void => {
       c.live = false
       queueSound(game, SOUND_CAPSULE)
       applyPower(game, c.kind)
-      game.score = game.score + 50
+      game.score = capped(capped(game.score) + 50)
       floatScore(game, c.x, PADDLE_Y - 6.0, 50, capsuleColour(c.kind))
       burst(game, c.x, PADDLE_Y, 10, capsuleColour(c.kind))
     } else if (c.y - CAPSULE_H / 2.0 > WORLD_H) {
@@ -1361,30 +1489,31 @@ export const applyPower = (game: BreakGame, kind: i32): void => {
   } else if (kind === CAPSULE_FIRE) {
     game.fireSteps = FIRE_STEPS
   } else {
-    game.lives = Math.min(game.lives + 1, MAX_LIVES)
+    const was: i32 = game.lives
+    if (was < MAX_LIVES) {
+      game.lives = was + 1
+    } else {
+      game.lives = MAX_LIVES
+    }
   }
 }
 
 /** Two more balls from the first in play, 25° either side of its course; a stuck one is served first. */
 const multiball = (game: BreakGame): void => {
-  let from: i32 = -1
-  for (let i: i32 = 0; i < toI32(game.balls.length) && from < 0; i++) {
-    if (game.balls[i].live) {
-      from = i
+  for (const src of game.balls) {
+    if (!src.live) {
+      continue
     }
-  }
-  if (from < 0) {
+    if (src.stuck) {
+      src.stuck = false
+      aim(src, 0.0)
+      game.launched = true
+    }
+    const turn: f64 = (25.0 * Math.PI) / 180.0
+    splitBall(game, src, turn)
+    splitBall(game, src, -turn)
     return
   }
-  const src: Ball = game.balls[from]
-  if (src.stuck) {
-    src.stuck = false
-    aim(src, 0.0)
-    game.launched = true
-  }
-  const turn: f64 = (25.0 * Math.PI) / 180.0
-  splitBall(game, src, turn)
-  splitBall(game, src, -turn)
 }
 
 /** A new ball where `src` is, turned `angle` radians from its course, in a free slot if there is one. */
@@ -1417,7 +1546,7 @@ const stepWall = (game: BreakGame): void => {
     return
   }
   if (game.launched) {
-    game.advanceSteps = game.advanceSteps + 1
+    game.advanceSteps = countUp(game.advanceSteps)
     if (toF64(game.advanceSteps) >= game.tuning.advanceSeconds * toF64(STEPS_PER_SECOND)) {
       game.advanceSteps = 0
       game.wallTarget = game.wallTarget + BRICK_H
@@ -1436,7 +1565,9 @@ const stepWall = (game: BreakGame): void => {
 
 /** The bottom edge of the lowest row with a brick in it, or the wall's top with none. */
 export const wallBottom = (game: BreakGame): f64 => {
-  for (let row: i32 = game.rows - 1; row >= 0; row--) {
+  // A row past the level's last holds no brick, so the search may start at
+  // the tallest wall's bottom row.
+  for (let row: i32 = LEVEL_MAX_ROWS - 1; row >= 0; row--) {
     for (let col: i32 = 0; col < LEVEL_COLS; col++) {
       if (brickAt(game, col, row) !== BRICK_NONE) {
         return brickY(game, row) + BRICK_H
@@ -1448,7 +1579,12 @@ export const wallBottom = (game: BreakGame): f64 => {
 
 /** The last ball fell: a life goes, the power-ups with it, and the next ball waits on the paddle. */
 const loseLife = (game: BreakGame): void => {
-  game.lives = Math.max(game.lives - 1, 0)
+  const was: i32 = game.lives
+  if (was > 0) {
+    game.lives = was - 1
+  } else {
+    game.lives = 0
+  }
   game.combo = 0
   game.shake = Math.min(game.shake + 4.0, 6.0)
   clearPowers(game)
@@ -1465,11 +1601,17 @@ const loseLife = (game: BreakGame): void => {
 }
 
 /** The time bonus: 10 × level points a second under par, par 60 + 20 × level seconds. */
-export const timeBonusFor = (level: i32, seconds: i32): i32 =>
-  Math.max(60 + 20 * level - seconds, 0) * 10 * level
+export const timeBonusFor = (level: i32, seconds: i32): i32 => {
+  // In f64, where each step is exact, so no sum here can overflow.
+  const under: f64 = toF64(level) * 20.0 + 60.0 - toF64(seconds)
+  if (under <= 0.0) {
+    return 0
+  }
+  return toI32(under * 10.0 * toF64(level))
+}
 
 /** The lives bonus: 250 × level points a life left. */
-export const livesBonusFor = (level: i32, lives: i32): i32 => lives * 250 * level
+export const livesBonusFor = (level: i32, lives: i32): i32 => toI32(toF64(lives) * 250.0 * toF64(level))
 
 const enterClear = (game: BreakGame): void => {
   game.scoreBefore = game.score
@@ -1488,7 +1630,7 @@ const enterClear = (game: BreakGame): void => {
 
 /** The bonus counted so far on the clear screen. */
 export const tallied = (game: BreakGame): i32 => {
-  const total: i32 = game.timeBonus + game.livesBonus
+  const total: i32 = capped(game.timeBonus) + capped(game.livesBonus)
   if (game.phaseTime >= TALLY_STEPS) {
     return total
   }
@@ -1500,14 +1642,15 @@ const stepClear = (game: BreakGame, input: StepInput): void => {
   if (confirmPressed(input)) {
     game.phaseTime = TALLY_STEPS + CLEAR_HOLD_STEPS
   }
-  game.score = game.scoreBefore + tallied(game)
+  game.score = capped(capped(game.scoreBefore) + capped(tallied(game)))
   if (game.phaseTime < TALLY_STEPS + CLEAR_HOLD_STEPS) {
     return
   }
-  if (game.level >= BREAK_LEVELS) {
+  const level: i32 = game.level
+  if (level >= BREAK_LEVELS) {
     enterPhase(game, PHASE_WON)
   } else {
-    loadLevel(game, game.level + 1)
+    loadLevel(game, level + 1)
   }
 }
 
@@ -1571,6 +1714,10 @@ const firework = (game: BreakGame, x: f64, y: f64, colour: i32): void => {
 
 /** `points` floating up from `x`, `y`. */
 const floatScore = (game: BreakGame, x: f64, y: f64, points: i32, colour: i32): void => {
+  // With no floaters there is nowhere to show the points.
+  if (toI32(game.floaters.length) < 1) {
+    return
+  }
   let slot: Floater = game.floaters[0]
   for (const f of game.floaters) {
     if (f.life < slot.life) {
@@ -1626,7 +1773,7 @@ export const drawnBallY = (game: BreakGame, i: i32, alpha: f64): f64 => {
 }
 
 /** The level's base hue, in turns: each level its own palette. */
-const levelHue = (level: i32): f64 => toF64(level - 1) * 0.13 + 0.55
+const levelHue = (level: i32): f64 => (toF64(level) - 1.0) * 0.13 + 0.55
 
 /** The colour of capsule `kind`. */
 const capsuleColour = (kind: i32): i32 => {
@@ -1686,7 +1833,7 @@ const brickColour = (game: BreakGame, i: i32): i32 => {
   }
   const row: i32 = i / LEVEL_COLS
   const face: i32 = rasterHue(levelHue(game.level) + toF64(row) * 0.06)
-  return rasterDim(face, toF64(game.fullHits[i] - 1) * -0.18 + 1.0)
+  return rasterDim(face, (toF64(game.fullHits[i]) - 1.0) * -0.18 + 1.0)
 }
 
 /** The digit `d` as a constant string, so drawing a number allocates nothing. */
@@ -1742,18 +1889,21 @@ const levelLabel = (level: i32): string => {
 }
 
 /** How many digits `value` (at least 0) has. */
-const digits = (value: i32): i32 => {
-  let n: i32 = 1
+const digits = (value: i32): integer<0, 10> => {
   let v: i32 = Math.max(value, 0)
-  while (v >= 10) {
+  for (let n: i32 = 1; n < 10; n++) {
+    if (v < 10) {
+      return n
+    }
     v = v / 10
-    n++
   }
-  return n
+  // An `i32` has at most ten digits.
+  return 10
 }
 
-/** The width in pixels of `value` drawn at font `scale`. */
-const numberWidth = (value: i32, scale: i32): i32 => (digits(value) * RASTER_GLYPH_ADVANCE - 1) * scale
+/** The width in pixels of `value` drawn at font `scale`, a whole number. */
+const numberWidth = (value: i32, scale: i32): f64 =>
+  (toF64(digits(value)) * toF64(RASTER_GLYPH_ADVANCE) - 1.0) * toF64(scale)
 
 /**
  * `value` with its top-left at pixel column `px` and world `y`, digit by
@@ -1762,7 +1912,7 @@ const numberWidth = (value: i32, scale: i32): i32 => (digits(value) * RASTER_GLY
  */
 const drawNumberAt = (
   view: View,
-  px: i32,
+  px: f64,
   y: f64,
   scale: i32,
   value: i32,
@@ -1772,12 +1922,12 @@ const drawNumberAt = (
   if (scale < 1 || !(view.scale > 0.0)) {
     return
   }
-  const n: i32 = digits(value)
   let v: i32 = Math.max(value, 0)
-  for (let k: i32 = n - 1; k >= 0; k--) {
+  for (let k: i32 = digits(value) - 1; k >= 0; k--) {
     const d: string = digit(v % 10)
     v = v / 10
-    const x: f64 = (toF64(px + k * RASTER_GLYPH_ADVANCE * scale) - view.offsetX + 0.25) / view.scale
+    const column: f64 = px + toF64(k) * toF64(RASTER_GLYPH_ADVANCE) * toF64(scale)
+    const x: f64 = (column - view.offsetX + 0.25) / view.scale
     if (shadow !== NO_SHADOW) {
       const sx: f64 = x + toF64(scale) / view.scale
       drawText(view, sx, y + toF64(scale) / view.scale, scale, d, shadow)
@@ -1790,7 +1940,7 @@ const drawNumberAt = (
 const drawNumber = (view: View, x: f64, y: f64, scale: i32, value: i32, colour: i32, shadow: i32): void => {
   drawNumberAt(
     view,
-    toI32(clamp(Math.floor(pixelX(view, x) + 0.5), -1.0e6, 1.0e6)),
+    toF64(toI32(clamp(Math.floor(pixelX(view, x) + 0.5), -1.0e6, 1.0e6))),
     y,
     scale,
     value,
@@ -1809,13 +1959,13 @@ const drawNumberCentred = (
   colour: i32,
   shadow: i32
 ): void => {
-  const px: f64 = Math.floor(pixelX(view, cx) + 0.5) - toF64(numberWidth(value, scale) / 2)
-  drawNumberAt(view, toI32(clamp(px, -1.0e6, 1.0e6)), y, scale, value, colour, shadow)
+  const px: f64 = Math.floor(pixelX(view, cx) + 0.5) - Math.trunc(numberWidth(value, scale) / 2.0)
+  drawNumberAt(view, toF64(toI32(clamp(px, -1.0e6, 1.0e6))), y, scale, value, colour, shadow)
 }
 
 /** The seconds into the phase a draw at `alpha` shows, between the last step and this one. */
 const phaseSeconds = (game: BreakGame, alpha: f64): f64 =>
-  Math.max(toF64(game.phaseTime - 1) + clamp(alpha, 0.0, 1.0), 0.0) / toF64(STEPS_PER_SECOND)
+  Math.max(toF64(game.phaseTime) - 1.0 + clamp(alpha, 0.0, 1.0), 0.0) / toF64(STEPS_PER_SECOND)
 
 /**
  * Paint `game` into `fb` as it stands `alpha` (0 to 1) of the way from the
@@ -1867,10 +2017,11 @@ const drawWall = (game: BreakGame, view: View, alpha: f64): void => {
   const intro: boolean = game.phase === PHASE_INTRO
   const t: f64 = phaseSeconds(game, alpha)
   const glyph: i32 = fontScaleFor(view, BRICK_H - 2.0)
-  for (let row: i32 = 0; row < game.rows; row++) {
+  // No row past the tallest wall holds a brick to draw.
+  for (let row: i32 = 0; row < game.rows && row < LEVEL_MAX_ROWS; row++) {
     let y: f64 = BRICK_TOP + wall + toF64(row) * BRICK_H
     if (intro) {
-      const delay: f64 = toF64(game.rows - 1 - row) * 0.09
+      const delay: f64 = (toF64(game.rows) - 1.0 - toF64(row)) * 0.09
       const p: f64 = clamp((t - delay) / 0.7, 0.0, 1.0)
       y = y - (1.0 - outBounce(p)) * (y + BRICK_H + 4.0)
     }
@@ -2031,18 +2182,18 @@ const drawHud = (game: BreakGame, view: View): void => {
     return
   }
   if (game.combo >= 2) {
-    const px: i32 =
-      toI32(clamp(Math.floor(pixelX(view, FIELD_LEFT) + 0.5), -1.0e6, 1.0e6)) +
+    const px: f64 =
+      toF64(toI32(clamp(Math.floor(pixelX(view, FIELD_LEFT) + 0.5), -1.0e6, 1.0e6))) +
       numberWidth(game.score, scale) +
-      4 * scale
-    const wx: f64 = (toF64(px) - view.offsetX + 0.25) / view.scale
+      4.0 * toF64(scale)
+    const wx: f64 = (px - view.offsetX + 0.25) / view.scale
     drawText(view, wx, 2.5, scale, "x", rasterRgb(255, 210, 80))
     drawNumberAt(
       view,
-      px + RASTER_GLYPH_ADVANCE * scale,
+      px + toF64(RASTER_GLYPH_ADVANCE) * toF64(scale),
       2.5,
       scale,
-      Math.min(game.combo, MAX_COMBO),
+      comboMultiplier(game.combo),
       rasterRgb(255, 210, 80),
       NO_SHADOW
     )
@@ -2075,7 +2226,7 @@ const drawPower = (
 }
 
 /** The world units a line of text at `scale` takes on `view`: its glyph's pixel height and a 2-pixel gap. */
-const lineHeight = (view: View, scale: i32): f64 => toF64(RASTER_GLYPH_H * scale + 2) / view.scale
+const lineHeight = (view: View, scale: i32): f64 => (toF64(RASTER_GLYPH_H) * toF64(scale) + 2.0) / view.scale
 
 /**
  * What the phase puts over the field: the intro banner, the serve prompt, the
@@ -2118,7 +2269,7 @@ const drawScreen = (game: BreakGame, view: View, alpha: f64): void => {
     drawTextCentred(view, 120.0, 84.0, small, "TIME", rasterDim(white, 0.8), shadow)
     drawNumberCentred(view, 200.0, 84.0, small, time, white, shadow)
     drawTextCentred(view, 120.0, 98.0, small, "LIVES", rasterDim(white, 0.8), shadow)
-    drawNumberCentred(view, 200.0, 98.0, small, counted - time, white, shadow)
+    drawNumberCentred(view, 200.0, 98.0, small, toI32(toF64(counted) - toF64(time)), white, shadow)
     drawTextCentred(view, 120.0, 116.0, small, "SCORE", gold, shadow)
     drawNumberCentred(view, 200.0, 116.0, small, game.score, gold, shadow)
   } else {

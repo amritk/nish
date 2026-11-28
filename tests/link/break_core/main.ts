@@ -33,6 +33,7 @@ import {
   SCENE_INTRO,
   SCENE_MENU,
   adaptBreakResolution,
+  clockPassed,
   drawBreakDirector,
   keptSettings,
   sayBreakSound,
@@ -218,6 +219,61 @@ const checkSmall = (t: Suite): void => {
   t.ok("a room big enough again goes on", idle(d, input, 2))
 }
 
+/**
+ * `clockPassed` answers `now - since >= span` wherever that difference fits
+ * an `i64`: at negative, zero and equal clocks, and a span either side.
+ */
+const checkClock = (t: Suite): void => {
+  const clocks: i64[] = [
+    toI64(-5) * SECOND, toI64(-2) * SECOND, toI64(-1), toI64(0), toI64(1), SECOND, toI64(3) * SECOND
+  ]
+  const offsets: i64[] = [
+    toI64(-1), toI64(0), toI64(1), toI64(1500000000) - toI64(1), toI64(1500000000),
+    toI64(2000000000) - toI64(1), toI64(2000000000), toI64(2000000000) + toI64(1)
+  ]
+  let settle: boolean = true
+  let slow: boolean = true
+  let pairs: i32 = 0
+  for (const since of clocks) {
+    for (const offset of offsets) {
+      const now: i64 = since + offset
+      if (clockPassed(now, since, true) !== (now - since >= toI64(2000000000))) {
+        settle = false
+      }
+      if (clockPassed(now, since, false) !== (now - since >= toI64(1500000000))) {
+        slow = false
+      }
+      pairs++
+    }
+    for (const now of clocks) {
+      if (clockPassed(now, since, true) !== (now - since >= toI64(2000000000))) {
+        settle = false
+      }
+      if (clockPassed(now, since, false) !== (now - since >= toI64(1500000000))) {
+        slow = false
+      }
+      pairs++
+    }
+  }
+  t.ok("clockPassed reads 2 s for settling as now - since does", settle)
+  t.ok("and 1.5 s for a slow rate", slow)
+  t.eqI32("over every pair", pairs, 105)
+}
+
+/** A negative room leaves the frame as it was; a room of 0 sizes it to 0 × 0. */
+const checkSizing = (t: Suite): void => {
+  const d = new BreakDirector(7, new BreakSettings(), HELP, true)
+  const fb = new Framebuffer(3, 2)
+  sizeBreakFramebuffer(d, fb, -1, 360)
+  t.ok("a negative width keeps the frame", fb.width === 3 && fb.height === 2)
+  sizeBreakFramebuffer(d, fb, 640, -1)
+  t.ok("a negative height keeps the frame", fb.width === 3 && fb.height === 2)
+  sizeBreakFramebuffer(d, fb, 0, 360)
+  t.ok("no width sizes it to 0 x 0", fb.width === 0 && fb.height === 0)
+  sizeBreakFramebuffer(d, fb, 640, 360)
+  t.ok("and room again sizes it 16:9", fb.width === 640 && fb.height === 360)
+}
+
 /** A host with no terminal: F4 and F6 do nothing, and Settings leaves their rows out. */
 const checkNoTerminal = (t: Suite): void => {
   const d = new BreakDirector(7, new BreakSettings(), HELP, false)
@@ -347,6 +403,8 @@ export const main = (): number => {
   checkKept(t)
   checkAdapt(t)
   checkSmall(t)
+  checkClock(t)
+  checkSizing(t)
   checkNoTerminal(t)
   return t.done()
 }

@@ -99,20 +99,22 @@ function pixelsIndex(x: i32, y: i32, width: i32, length: i32): i32 -> @nish.pixe
 function Framebuffer.constructor(this: Framebuffer, width: i32, height: i32): void -> @nish.Framebuffer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: height width
-  calls: nish.pixelsArea nish_panic
+  calls: nish.pixelsArea
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 area: i32 (const)
   callee +0:23 pixelsArea -> @nish.pixelsArea
+  local +4:9 n: i32 (let)
 function Framebuffer.resize(this: Framebuffer, width: i32, height: i32): void -> @nish.Framebuffer.resize [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: height width
-  calls: nish.pixelsArea nish_panic
+  calls: nish.pixelsArea
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 area: i32 (const)
   callee -2:23 pixelsArea -> @nish.pixelsArea
+  local +3:11 n: i32 (let)
 function Framebuffer.pixelWidth(this: Framebuffer): i32 -> @nish.Framebuffer.pixelWidth [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=16 writesThrough=false captured=false
@@ -185,10 +187,10 @@ function scaleFramebuffer(src: Framebuffer, divisor: i32, dst: Framebuffer): voi
   pointer src: size=16 writesThrough=false captured=false
   pointer dst: size=16 writesThrough=true captured=false passedTo=nish.Framebuffer.resize#0
   stackSites=0 stackLocals=0
-  local -19:9 w: i32 (const)
-  callee -19:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
-  local -18:9 h: i32 (const)
-  callee -18:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
+  local -25:9 w: i32 (const)
+  callee -25:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
+  local -24:9 h: i32 (const)
+  callee -24:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
   callee -17:3 Framebuffer.resize -> @nish.Framebuffer.resize
   local -16:9 from: i32[] (const)
   local -15:9 to: i32[] (const)
@@ -2061,6 +2063,9 @@ function viewFor(view: View, fb: Framebuffer, shakeX: f64, shakeY: f64): void ->
   callee +7:14 rasterPixel -> @rasterPixel
   callee +8:16 rasterPixel -> @rasterPixel
   callee +9:17 rasterPixel -> @rasterPixel
+function pixelSum(v: i64): i32 -> @pixelSum
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function pixelX(view: View, x: f64): f64 -> @pixelX [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer view: size=64 writesThrough=false captured=false
@@ -2168,10 +2173,10 @@ function blendRect(view: View, x: f64, y: f64, w: f64, h: f64, colour: i32, t: f
   callee +5:14 rasterFrame -> @rasterFrame
   callee +5:83 rasterWeight -> @rasterWeight
 function bevelBrick(view: View, x: f64, y: f64, w: f64, h: f64, face: i32): void -> @bevelBrick [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via solidRect
   escaping: face x y
-  calls: llvm.smax.i32 llvm.smin.i32 nish_panic_overflow pixelX pixelY rasterMix rasterPixel solidRect
+  calls: llvm.smax.i32 llvm.smin.i32 pixelSum pixelX pixelY rasterMix rasterPixel solidRect
   pointer view: size=64 writesThrough=false captured=false passedTo=pixelX#0 pixelY#0 pixelX#0 pixelY#0
   stackSites=0 stackLocals=0
   local +0:9 fb: Framebuffer (const)
@@ -2188,7 +2193,9 @@ function bevelBrick(view: View, x: f64, y: f64, w: f64, h: f64, face: i32): void
   callee +4:19 rasterPixel -> @rasterPixel
   callee +4:31 pixelY -> @pixelY
   local +5:9 pw: i32 (const)
+  callee +5:19 pixelSum -> @pixelSum
   local +6:9 ph: i32 (const)
+  callee +6:19 pixelSum -> @pixelSum
   callee +8:5 solidRect -> @solidRect
   local +11:9 edge: i32 (const)
   callee +11:42 rasterPixel -> @rasterPixel
@@ -2196,11 +2203,19 @@ function bevelBrick(view: View, x: f64, y: f64, w: f64, h: f64, face: i32): void
   callee +12:22 rasterMix -> @rasterMix
   local +13:9 dark: i32 (const)
   callee +13:21 rasterMix -> @rasterMix
-  callee +14:3 solidRect -> @solidRect
-  callee +15:3 solidRect -> @solidRect
-  callee +16:3 solidRect -> @solidRect
-  callee +17:3 solidRect -> @solidRect
+  local +14:9 left: i32 (const)
+  callee +14:21 pixelSum -> @pixelSum
+  local +15:9 top: i32 (const)
+  callee +15:20 pixelSum -> @pixelSum
+  local +16:9 right: i32 (const)
+  callee +16:22 pixelSum -> @pixelSum
+  local +17:9 bottom: i32 (const)
+  callee +17:23 pixelSum -> @pixelSum
   callee +18:3 solidRect -> @solidRect
+  callee +19:3 solidRect -> @solidRect
+  callee +20:3 solidRect -> @solidRect
+  callee +21:3 solidRect -> @solidRect
+  callee +22:3 solidRect -> @solidRect
 function disc(view: View, cx: f64, cy: f64, r: f64, colour: i32): void -> @disc [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via discAlpha
@@ -2268,10 +2283,10 @@ function drawText(view: View, x: f64, y: f64, scale: i32, text: string, colour: 
   callee +3:3 rasterText -> @rasterText
   callee +3:14 rasterFrame -> @rasterFrame
 function drawTextShadow(view: View, x: f64, y: f64, scale: i32, text: string, colour: i32, shadow: i32): void -> @drawTextShadow [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rasterText
   escaping: colour scale shadow text x y
-  calls: llvm.smin.i32 nish_panic_overflow pixelX pixelY rasterFrame rasterPixel rasterText
+  calls: llvm.smin.i32 pixelSum pixelX pixelY rasterFrame rasterPixel rasterText
   pointer view: size=64 writesThrough=false captured=false passedTo=pixelX#0 pixelY#0
   stackSites=0 stackLocals=0
   local +0:9 fb: Framebuffer (const)
@@ -2283,29 +2298,34 @@ function drawTextShadow(view: View, x: f64, y: f64, scale: i32, text: string, co
   callee +2:31 pixelY -> @pixelY
   local +3:9 drop: i32 (const)
   callee +4:3 rasterText -> @rasterText
-  callee +4:14 rasterFrame -> @rasterFrame
-  callee +5:3 rasterText -> @rasterText
-  callee +5:14 rasterFrame -> @rasterFrame
+  callee +5:5 rasterFrame -> @rasterFrame
+  callee +8:5 pixelSum -> @pixelSum
+  callee +9:5 pixelSum -> @pixelSum
+  callee +14:3 rasterText -> @rasterText
+  callee +14:14 rasterFrame -> @rasterFrame
 function drawTextCentred(view: View, cx: f64, y: f64, scale: i32, text: string, colour: i32, shadow: i32): void -> @drawTextCentred [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rasterText
   escaping: colour cx scale shadow text y
-  calls: llvm.smin.i32 nish_panic_overflow pixelX pixelY rasterFrame rasterPixel rasterText rasterTextWidth
+  calls: llvm.smin.i32 pixelSum pixelX pixelY rasterFrame rasterPixel rasterText rasterTextWidth
   pointer view: size=64 writesThrough=false captured=false passedTo=pixelX#0 pixelY#0
   stackSites=0 stackLocals=0
   local +0:9 fb: Framebuffer (const)
   local +1:9 px: i32 (const)
-  callee +1:19 rasterPixel -> @rasterPixel
-  callee +1:31 pixelX -> @pixelX
-  callee +1:57 rasterTextWidth -> @rasterTextWidth
-  local +2:9 py: i32 (const)
-  callee +2:19 rasterPixel -> @rasterPixel
-  callee +2:31 pixelY -> @pixelY
-  local +4:11 drop: i32 (const)
-  callee +5:5 rasterText -> @rasterText
-  callee +5:16 rasterFrame -> @rasterFrame
-  callee +7:3 rasterText -> @rasterText
-  callee +7:14 rasterFrame -> @rasterFrame
+  callee +1:19 pixelSum -> @pixelSum
+  callee +2:11 rasterPixel -> @rasterPixel
+  callee +2:23 pixelX -> @pixelX
+  callee +2:56 rasterTextWidth -> @rasterTextWidth
+  local +4:9 py: i32 (const)
+  callee +4:19 rasterPixel -> @rasterPixel
+  callee +4:31 pixelY -> @pixelY
+  local +6:11 drop: i32 (const)
+  callee +7:5 rasterText -> @rasterText
+  callee +8:7 rasterFrame -> @rasterFrame
+  callee +11:7 pixelSum -> @pixelSum
+  callee +12:7 pixelSum -> @pixelSum
+  callee +18:3 rasterText -> @rasterText
+  callee +18:14 rasterFrame -> @rasterFrame
 function stepParticles(pool: RasterParticles, gravity: f64, drag: f64): void -> @stepParticles [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rasterStepParticles

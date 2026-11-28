@@ -244,6 +244,8 @@ function exportsOf(instance, state) {
     step: (nowMs) => guarded(() => raw.step(typedIn(nowMs, "number", "step: argument 1 (nowMs)"))),
     /** game.ts: draw(alpha: number, frameMs: number): void */
     draw: (alpha, frameMs) => guarded(() => raw.draw(typedIn(alpha, "number", "draw: argument 1 (alpha)"), typedIn(frameMs, "number", "draw: argument 2 (frameMs)"))),
+    /** ../../src/break-director.ts: clockPassed(now: i64, since: i64, settle: boolean): boolean */
+    clockPassed: (now, since, settle) => guarded(() => raw.clockPassed(typedIn(now, "bigint", "clockPassed: argument 1 (now)"), typedIn(since, "bigint", "clockPassed: argument 2 (since)"), typedIn(settle, "boolean", "clockPassed: argument 3 (settle)"))),
     /** ../../src/break-director.ts: breakGraphicsToast(graphics: number): string */
     breakGraphicsToast: (graphics) => guarded(() => {
       return stringOut(raw.breakGraphicsToast(typedIn(graphics, "number", "breakGraphicsToast: argument 1 (graphics)")));
@@ -325,12 +327,14 @@ function exportsOf(instance, state) {
     }),
     /** ../../src/break-levels.ts: brickKind(c: number): number */
     brickKind: (c) => guarded(() => raw.brickKind(typedIn(c, "number", "brickKind: argument 1 (c)"))),
-    /** ../../src/break-levels.ts: brickHits(c: number): number */
+    /** ../../src/break-levels.ts: brickHits(c: number): integer<0, 3> */
     brickHits: (c) => guarded(() => raw.brickHits(typedIn(c, "number", "brickHits: argument 1 (c)"))),
     /** ../../src/break-menu.ts: fpsChoice(index: number): number */
     fpsChoice: (index) => guarded(() => raw.fpsChoice(typedIn(index, "number", "fpsChoice: argument 1 (index)"))),
     /** ../../src/break-menu.ts: resolutionChoice(index: number): number */
     resolutionChoice: (index) => guarded(() => raw.resolutionChoice(typedIn(index, "number", "resolutionChoice: argument 1 (index)"))),
+    /** ../../src/break-menu.ts: logoRelease(column: number): number */
+    logoRelease: (column) => guarded(() => raw.logoRelease(typedIn(column, "number", "logoRelease: argument 1 (column)"))),
     /** ../../src/break-menu.ts: wallColour(row: number): number */
     wallColour: (row) => guarded(() => raw.wallColour(typedIn(row, "number", "wallColour: argument 1 (row)"))),
     /** ../../src/break-voices.ts: voiceSamples(id: number): number[] */

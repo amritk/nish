@@ -99,20 +99,22 @@ function pixelsIndex(x: i32, y: i32, width: i32, length: i32): i32 -> @nish.pixe
 function Framebuffer.constructor(this: Framebuffer, width: i32, height: i32): void -> @nish.Framebuffer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: height width
-  calls: nish.pixelsArea nish_panic
+  calls: nish.pixelsArea
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 area: i32 (const)
   callee +0:23 pixelsArea -> @nish.pixelsArea
+  local +4:9 n: i32 (let)
 function Framebuffer.resize(this: Framebuffer, width: i32, height: i32): void -> @nish.Framebuffer.resize [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: height width
-  calls: nish.pixelsArea nish_panic
+  calls: nish.pixelsArea
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 area: i32 (const)
   callee -2:23 pixelsArea -> @nish.pixelsArea
+  local +3:11 n: i32 (let)
 function Framebuffer.pixelWidth(this: Framebuffer): i32 -> @nish.Framebuffer.pixelWidth [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=16 writesThrough=false captured=false
@@ -185,10 +187,10 @@ function scaleFramebuffer(src: Framebuffer, divisor: i32, dst: Framebuffer): voi
   pointer src: size=16 writesThrough=false captured=false
   pointer dst: size=16 writesThrough=true captured=false passedTo=nish.Framebuffer.resize#0
   stackSites=0 stackLocals=0
-  local -19:9 w: i32 (const)
-  callee -19:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
-  local -18:9 h: i32 (const)
-  callee -18:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
+  local -25:9 w: i32 (const)
+  callee -25:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
+  local -24:9 h: i32 (const)
+  callee -24:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
   callee -17:3 Framebuffer.resize -> @nish.Framebuffer.resize
   local -16:9 from: i32[] (const)
   local -15:9 to: i32[] (const)
@@ -2113,9 +2115,9 @@ function arpeggio(out: f64[], base: f64, a: i32, b: i32, c: i32, d: i32, each: f
   callee +18:5 synthSemitone -> @synthSemitone
   callee +19:5 synthSemitone -> @synthSemitone
 function voiceSamples(id: i32): f64[] -> @voiceSamples [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via synthTone
-  calls: arpeggio llvm.smax.i32 llvm.smin.i32 nish_panic_overflow pentatonic synthSemitone synthSilence synthTone
+  calls: arpeggio pentatonic synthSemitone synthSilence synthTone
   stackSites=0 stackLocals=0
   local +0:11 out: f64[] (const)
   callee +0:24 synthSilence -> @synthSilence
@@ -2162,11 +2164,11 @@ function voiceSamples(id: i32): f64[] -> @voiceSamples [exported]
   callee +63:24 synthSilence -> @synthSilence
   callee +64:5 synthTone -> @synthTone
   callee +65:5 synthTone -> @synthTone
-  local +69:9 step: i32 (const)
-  local +70:9 f: f64 (const)
-  callee +70:18 synthSemitone -> @synthSemitone
-  callee +70:40 pentatonic -> @pentatonic
-  local +71:9 out: f64[] (const)
-  callee +71:22 synthSilence -> @synthSilence
-  callee +72:3 synthTone -> @synthTone
-  callee +73:3 synthTone -> @synthTone
+  local +71:7 step: i32 (let)
+  local +77:9 f: f64 (const)
+  callee +77:18 synthSemitone -> @synthSemitone
+  callee +77:40 pentatonic -> @pentatonic
+  local +78:9 out: f64[] (const)
+  callee +78:22 synthSilence -> @synthSilence
+  callee +79:3 synthTone -> @synthTone
+  callee +80:3 synthTone -> @synthTone

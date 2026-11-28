@@ -16,6 +16,13 @@ PASS  an empty help has no gap
 PASS  an empty help still ends
 PASS  the real help's rule has its gap
 PASS  the real help is cut into many pieces
+PASS  a word before column 1024 is a piece
+PASS  a word crossing column 1024 keeps its first four columns
+PASS  and is four columns wide
+PASS  its rest is no piece
+PASS  a word past column 1024 is no piece
+PASS  an escape past column 1024 still colours the next line
+PASS  bricks past column 1024 are no pieces
 PASS  a quiet step plays on
 PASS  space skips
 PASS  a letter skips
@@ -35,4 +42,4 @@ PASS  the last frame is the title's first but for the ball
 PASS  a frame mid-collapse draws text over the dark
 PASS  framebuffers too small to draw in never panic
 PASS  low effects run and draw to the end
-break-intro: 37 passed, 0 failed, 0 skipped
+break-intro: 44 passed, 0 failed, 0 skipped

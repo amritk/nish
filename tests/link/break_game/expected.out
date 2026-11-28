@@ -123,6 +123,8 @@ PASS  a caught capsule is gone
 PASS  a missed capsule does nothing
 PASS  a missed capsule falls away
 PASS  capsules stop at the pool's eight
+PASS  capsuleRoll rolls what nextInt(0, 13) rolls, over 101 seeds of 2000 draws
+PASS  and every roll from 0 to 13 comes up
 PASS  a lost ball costs a life
 PASS  a lost life serves a new ball on the paddle
 PASS  a lost life ends the combo
@@ -228,4 +230,4 @@ PASS  the compact last screen is three lines apart
 PASS  a perfect player clears level 1
 PASS  a perfect player wins
 PASS  the pools never grow
-break-game: 230 passed, 0 failed, 0 skipped
+break-game: 232 passed, 0 failed, 0 skipped

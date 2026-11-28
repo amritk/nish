@@ -76,6 +76,9 @@ const LINE_H: f64 = 6.0
 const TEXT_X: f64 = 1.0
 const TEXT_Y: f64 = 0.0
 
+/** The columns of a help line cut into pieces: far more than the 80 the world shows. */
+const CUT_COLUMNS: i32 = 1024
+
 /** The colours the help's SGR codes stand for: the terminal's plain text, bold, faint, and the theme's three. */
 const PLAIN: i32 = 0xd8d4f0
 const BOLD: i32 = 0xf4f2ff
@@ -152,7 +155,7 @@ export class BreakIntro {
   kinds: i32[]
   colours: i32[]
   widths: i32[]
-  lines: i32[]
+  lines: integer<0, 29>[]
   releases: i32[]
 
   /** Each wall brick's x now and a step ago, its y now and a step ago, velocity, and the steps it is laid and comes loose at (0 for never). */
@@ -195,23 +198,14 @@ export class BreakIntro {
     this.widths = []
     this.lines = []
     this.releases = []
-    const bricks: i32 = WALL_COLS * SWEEP_ROWS
-    this.wallXs = new Array<f64>(bricks)
-    this.wallXs.fill(0.0)
-    this.wallPrevXs = new Array<f64>(bricks)
-    this.wallPrevXs.fill(0.0)
-    this.wallYs = new Array<f64>(bricks)
-    this.wallYs.fill(0.0)
-    this.wallPrevYs = new Array<f64>(bricks)
-    this.wallPrevYs.fill(0.0)
-    this.wallVxs = new Array<f64>(bricks)
-    this.wallVxs.fill(0.0)
-    this.wallVys = new Array<f64>(bricks)
-    this.wallVys.fill(0.0)
-    this.wallLaid = new Array<i32>(bricks)
-    this.wallLaid.fill(0)
-    this.wallReleases = new Array<i32>(bricks)
-    this.wallReleases.fill(0)
+    this.wallXs = []
+    this.wallPrevXs = []
+    this.wallYs = []
+    this.wallPrevYs = []
+    this.wallVxs = []
+    this.wallVys = []
+    this.wallLaid = []
+    this.wallReleases = []
     this.sounds = []
     this.sparks = new RasterParticles(SPARK_CAPACITY)
     this.view = new View()
@@ -238,70 +232,98 @@ export const newBreakIntro = (help: string, seed: i64): BreakIntro => {
   return intro
 }
 
-/** A number in [`lo`, `hi`], both ends included, from xorshift32, as the menu draws its dice. */
-const introRandom = (intro: BreakIntro, lo: i32, hi: i32): i32 => {
+/**
+ * A number in [0, `sides`) from xorshift32, as the menu draws its dice, or 0
+ * for a die with no sides. Every die the intro rolls has at most 256 sides.
+ */
+const introRoll = (intro: BreakIntro, sides: i32): i32 => {
   let x: i32 = intro.rngState
   x = x ^ (x << 13)
   x = x ^ (x >>> 17)
   x = x ^ (x << 5)
   intro.rngState = x
-  const span: i32 = hi - lo + 1
-  if (span <= 0) {
-    return lo
+  if (sides <= 0) {
+    return 0
   }
-  const r: i32 = x % span
-  return lo + (r < 0 ? r + span : r)
+  const r: i32 = x % sides
+  const k: i32 = r < 0 ? r + sides : r
+  // `k` is below `sides`, so for the dice the intro rolls the test never
+  // fails; it is what bounds the answer for the sums its callers make.
+  if (k < 0 || k > 255) {
+    return 0
+  }
+  return k
 }
 
+/** A number in [`lo`, `hi`], both ends included. */
+const introRandom = (intro: BreakIntro, lo: integer<-100, 100>, hi: integer<-100, 100>): i32 =>
+  lo + introRoll(intro, hi - lo + 1)
+
 // ---- Cutting the help -------------------------------------------------------
+
+/** The colour one SGR parameter `v` leaves the text in, from the colour before it. */
+const introSgrParam = (v: i32, colour: i32): i32 => {
+  if (v === 0) {
+    return PLAIN
+  }
+  if (v === 1) {
+    return colour === PLAIN ? BOLD : colour
+  }
+  if (v === 2) {
+    return FAINT
+  }
+  if (v === 33) {
+    return YELLOW
+  }
+  if (v === 35) {
+    return MAGENTA
+  }
+  if (v === 36) {
+    return CYAN
+  }
+  return colour
+}
 
 /** The colour an SGR parameter list leaves the text in, from the colour and boldness before it. */
 const introSgrColour = (params: string, colour: i32): i32 => {
   let out: i32 = colour
   let value: i32 = 0
   let digits: boolean = false
-  for (let i: i32 = 0; i <= toI32(params.length); i++) {
-    const c: i32 = i < toI32(params.length) ? params.charCodeAt(i) : 59
+  for (let i: i32 = 0; i < params.length; i++) {
+    const c: i32 = params.charCodeAt(i)
     if (c >= 48 && c <= 57) {
-      value = value * 10 + (c - 48)
+      // No parameter the help is read for has more than two digits, so a
+      // longer one stops growing rather than overflowing and matches none.
+      if (value >= 0 && value < 100000) {
+        value = value * 10 + (c - 48)
+      }
       digits = true
       continue
     }
     if (c !== 59) {
       continue
     }
-    const v: i32 = digits ? value : 0
-    if (v === 0) {
-      out = PLAIN
-    } else if (v === 1) {
-      out = out === PLAIN ? BOLD : out
-    } else if (v === 2) {
-      out = FAINT
-    } else if (v === 33) {
-      out = YELLOW
-    } else if (v === 35) {
-      out = MAGENTA
-    } else if (v === 36) {
-      out = CYAN
-    }
+    out = introSgrParam(digits ? value : 0, out)
     value = 0
     digits = false
   }
-  return out
+  // The list ends a parameter the way a `;` does.
+  return introSgrParam(digits ? value : 0, out)
 }
 
-/** Add a piece: `text` (empty for a brick) at `column` of `line`, `width` columns wide. */
+/** Add a piece: `text` (empty for a brick) at `column` of `line`, `width` columns wide, raised `lift` above it. */
 const introAddPiece = (
   intro: BreakIntro,
   kind: i32,
   text: string,
   colour: i32,
-  line: i32,
+  line: integer<0, 29>,
   column: i32,
-  width: i32
+  width: i32,
+  lift: f64
 ): void => {
   const x: f64 = TEXT_X + toF64(column) * COL_W
-  const y: f64 = TEXT_Y + toF64(line) * LINE_H
+  const y: f64 = TEXT_Y + toF64(line) * LINE_H - lift
   intro.xs.push(x)
   intro.ys.push(y)
   intro.prevXs.push(x)
@@ -319,7 +341,8 @@ const introAddPiece = (
 
 /** Whether `help` holds `▀` (E2 96 80 in UTF-8) at byte `i`. */
 const introUpperHalfAt = (help: string, i: i32): boolean =>
-  i + 2 < toI32(help.length) &&
+  i >= 0 &&
+  i < toI32(help.length) - 2 &&
   help.charCodeAt(i) === 0xe2 &&
   help.charCodeAt(i + 1) === 0x96 &&
   help.charCodeAt(i + 2) === 0x80
@@ -331,7 +354,6 @@ const introUpperHalfAt = (help: string, i: i32): boolean =>
  * colour and takes no column; any other UTF-8 character takes one.
  */
 const introCutHelp = (intro: BreakIntro, help: string): void => {
-  const n: i32 = toI32(help.length)
   let line: i32 = 0
   let column: i32 = 0
   let colour: i32 = PLAIN
@@ -344,17 +366,23 @@ const introCutHelp = (intro: BreakIntro, help: string): void => {
       i++
       continue
     }
-    if (c === 27 && i + 1 < n && help.charCodeAt(i + 1) === 91) {
+    if (c === 27 && i < help.length - 1 && help.charCodeAt(i + 1) === 91) {
       let end: i32 = i + 2
-      while (end < n && help.charCodeAt(end) !== 109 && help.charCodeAt(end) !== 10) {
+      while (end < help.length && help.charCodeAt(end) !== 109 && help.charCodeAt(end) !== 10) {
         end++
       }
-      if (end < n && help.charCodeAt(end) === 109) {
+      if (end < help.length && help.charCodeAt(end) === 109) {
         colour = introSgrColour(help.substring(i + 2, end), colour)
         i = end + 1
       } else {
         i = end
       }
+      continue
+    }
+    // Past `CUT_COLUMNS` a line is far off the world's right edge and is never
+    // seen, so its text is passed over; its escapes above still set the colour.
+    if (column < 0 || column >= CUT_COLUMNS) {
+      i++
       continue
     }
     if (c === 32) {
@@ -364,16 +392,16 @@ const introCutHelp = (intro: BreakIntro, help: string): void => {
     }
     if (introUpperHalfAt(help, i)) {
       const from: i32 = column
-      while (introUpperHalfAt(help, i)) {
+      while (column < CUT_COLUMNS && i >= 0 && i < help.length - 2 && introUpperHalfAt(help, i)) {
         column++
         i = i + 3
       }
-      introAddPiece(intro, PIECE_BRICK, "", colour, line, from, column - from)
+      introAddPiece(intro, PIECE_BRICK, "", colour, line, from, column - from, 0.0)
       continue
     }
     const start: i32 = i
     const from: i32 = column
-    while (i < n) {
+    while (i < help.length && column < CUT_COLUMNS) {
       const d: i32 = help.charCodeAt(i)
       if (d === 10 || d === 32 || d === 27 || introUpperHalfAt(help, i)) {
         break
@@ -384,7 +412,10 @@ const introCutHelp = (intro: BreakIntro, help: string): void => {
       }
       i++
     }
-    introAddPiece(intro, PIECE_TEXT, help.slice(start, i), colour, line, from, column - from)
+    // The loop stops at the end of `help` at the latest; saying so proves the cut in range.
+    if (start >= 0 && start <= i && i <= help.length) {
+      introAddPiece(intro, PIECE_TEXT, help.substring(start, i), colour, line, from, column - from, 0.0)
+    }
   }
 }
 
@@ -395,24 +426,24 @@ const introCutHelp = (intro: BreakIntro, help: string): void => {
  */
 const introFindGap = (intro: BreakIntro): void => {
   const n: i32 = toI32(intro.kinds.length)
-  for (let i: i32 = 1; i < n; i++) {
-    if (
-      intro.kinds[i] !== PIECE_BRICK ||
-      intro.kinds[i - 1] !== PIECE_BRICK ||
-      intro.lines[i] !== intro.lines[i - 1]
-    ) {
+  // Every piece array is as long as `kinds`; the loop reads all four it uses.
+  for (
+    let i: i32 = 1;
+    i < intro.kinds.length && i < intro.lines.length && i < intro.widths.length && i < intro.xs.length;
+    i++
+  ) {
+    const line: integer<0, 29> = intro.lines[i]
+    if (intro.kinds[i] !== PIECE_BRICK || intro.kinds[i - 1] !== PIECE_BRICK || line !== intro.lines[i - 1]) {
       continue
     }
     const width: i32 = intro.widths[i - 1]
     const end: f64 = intro.xs[i - 1] + toF64(width) * COL_W
     const space: i32 = toI32(Math.round((intro.xs[i] - end) / COL_W))
-    if (width > 0 && space >= width + 2) {
-      const column: i32 = toI32(Math.round((end - TEXT_X) / COL_W)) + 1
-      introAddPiece(intro, PIECE_BRICK, "", GAP_BRICK, intro.lines[i], column, width)
+    // A piece is never wider than the columns cut, so `width + 2` fits.
+    if (width > 0 && width <= CUT_COLUMNS && space >= width + 2) {
+      const column: i32 = toI32(Math.round((end - TEXT_X) / COL_W) + 1.0)
+      introAddPiece(intro, PIECE_BRICK, "", GAP_BRICK, line, column, width, GAP_HEIGHT)
       intro.gap = n
-      const last: i32 = intro.gap
-      intro.ys[last] = intro.ys[last] - GAP_HEIGHT
-      intro.prevYs[last] = intro.ys[last]
       return
     }
   }
@@ -420,10 +451,15 @@ const introFindGap = (intro: BreakIntro): void => {
 
 /** Give every piece the step it falls from, bottom lines first, and the kick it falls with. */
 const introScheduleCollapse = (intro: BreakIntro): void => {
-  const n: i32 = toI32(intro.releases.length)
-  for (let i: i32 = 0; i < n; i++) {
-    const fromBottom: i32 = INTRO_LINES - 1 - intro.lines[i]
-    intro.releases[i] = COLLAPSE_FROM + fromBottom + introRandom(intro, 0, COLLAPSE_JITTER)
+  // Every piece array is as long as `releases`; the loop reads all four it uses.
+  for (
+    let i: i32 = 0;
+    i < intro.releases.length && i < intro.lines.length && i < intro.vxs.length && i < intro.vys.length;
+    i++
+  ) {
+    const line: integer<0, 29> = intro.lines[i]
+    const fromBottom: i32 = INTRO_LINES - 1 - line
+    intro.releases[i] = COLLAPSE_FROM + fromBottom + introRoll(intro, COLLAPSE_JITTER + 1)
     intro.vxs[i] = toF64(introRandom(intro, -40, 40))
     intro.vys[i] = -toF64(introRandom(intro, 10, 70))
   }
@@ -435,20 +471,27 @@ const introScheduleCollapse = (intro: BreakIntro): void => {
  * rows, the step it comes loose and the kick it falls with.
  */
 const introScheduleWall = (intro: BreakIntro): void => {
+  // The bricks are pushed in index order, `row * WALL_COLS + col`.
   for (let row: i32 = 0; row < SWEEP_ROWS; row++) {
     const course: i32 = SWEEP_ROWS - 1 - row
     for (let col: i32 = 0; col < WALL_COLS; col++) {
-      const i: i32 = row * WALL_COLS + col
-      const order: i32 = course % 2 === 0 ? col : WALL_COLS - 1 - col
-      intro.wallXs[i] = toF64(col) * WALL_BRICK_W
-      intro.wallPrevXs[i] = intro.wallXs[i]
-      intro.wallYs[i] = WALL_TOP + toF64(row) * WALL_BRICK_H
-      intro.wallPrevYs[i] = intro.wallYs[i]
-      intro.wallLaid[i] = SWEEP_FROM + course * COURSE_STEPS + (order * 3) / 2
+      const x: f64 = toF64(col) * WALL_BRICK_W
+      const y: f64 = WALL_TOP + toF64(row) * WALL_BRICK_H
+      intro.wallXs.push(x)
+      intro.wallPrevXs.push(x)
+      intro.wallYs.push(y)
+      intro.wallPrevYs.push(y)
+      const start: i32 = SWEEP_FROM + course * COURSE_STEPS
+      intro.wallLaid.push(course % 2 === 0 ? start + (col * 3) / 2 : start + ((WALL_COLS - 1 - col) * 3) / 2)
       if (row >= WALL_ROWS) {
-        intro.wallReleases[i] = CLEAR_FROM + (course * 3) / 2 + introRandom(intro, 0, CLEAR_JITTER)
-        intro.wallVxs[i] = toF64(introRandom(intro, -25, 25))
-        intro.wallVys[i] = -toF64(introRandom(intro, 0, 30))
+        intro.wallReleases.push(CLEAR_FROM + (course * 3) / 2 + introRoll(intro, CLEAR_JITTER + 1))
+        intro.wallVxs.push(toF64(introRandom(intro, -25, 25)))
+        intro.wallVys.push(-toF64(introRandom(intro, 0, 30)))
+      } else {
+        const still: f64 = 0.0
+        intro.wallReleases.push(0)
+        intro.wallVxs.push(still)
+        intro.wallVys.push(still)
       }
     }
   }
@@ -472,7 +515,12 @@ export const stepBreakIntro = (intro: BreakIntro, input: StepInput): i32 => {
     }
     return INTRO_DONE
   }
-  intro.tick = intro.tick + 1
+  // The clock stops where the intro ends at the latest: every step past it
+  // answers `INTRO_DONE` and moves the pieces just as a later tick would.
+  const last: i32 = intro.tick
+  if (last >= 0 && last < INTRO_MAX_STEPS) {
+    intro.tick = last + 1
+  }
   const t: i32 = intro.tick
   introStepGap(intro, t)
   const pieces: boolean = introStepPieces(intro, t)
@@ -491,7 +539,18 @@ export const stepBreakIntro = (intro: BreakIntro, input: StepInput): i32 => {
 const introStepGap = (intro: BreakIntro, t: i32): void => {
   const g: i32 = intro.gap
   // One step past the landing, so the step a moment ago is home too and a draw holds it still.
-  if (g < 0 || t > GAP_FROM + GAP_STEPS + 1) {
+  // The clock never runs below 0, so `t < 0` never returns; it bounds `t - GAP_FROM` below.
+  if (g < 0 || t < 0 || t > GAP_FROM + GAP_STEPS + 1) {
+    return
+  }
+  // `gap` is always a piece, so this test never fails; it proves the reads below.
+  if (
+    g >= intro.lines.length ||
+    g >= intro.ys.length ||
+    g >= intro.prevYs.length ||
+    g >= intro.xs.length ||
+    g >= intro.widths.length
+  ) {
     return
   }
   const home: f64 = TEXT_Y + toF64(intro.lines[g]) * LINE_H
@@ -499,9 +558,10 @@ const introStepGap = (intro: BreakIntro, t: i32): void => {
   intro.prevYs[g] = intro.ys[g]
   intro.ys[g] = home - (1.0 - outBounce(drop)) * GAP_HEIGHT
   if (t === GAP_CONTACT) {
+    // Read before the push, which ends what the checker knows of every array's length.
+    const cx: f64 = intro.xs[g] + (toF64(intro.widths[g]) * COL_W) / 2.0
     intro.sounds.push(SOUND_STEEL)
     const count: i32 = intro.effects === 0 ? 3 : 10
-    const cx: f64 = intro.xs[g] + (toF64(intro.widths[g]) * COL_W) / 2.0
     for (let k: i32 = 0; k < count; k++) {
       const vx: f64 = toF64(introRandom(intro, -60, 60))
       const vy: f64 = toF64(introRandom(intro, -70, -10))
@@ -514,8 +574,18 @@ const introStepGap = (intro: BreakIntro, t: i32): void => {
 const introStepPieces = (intro: BreakIntro, t: i32): boolean => {
   const dt: f64 = 1.0 / toF64(STEPS_PER_SECOND)
   let left: boolean = false
-  const n: i32 = toI32(intro.releases.length)
-  for (let i: i32 = 0; i < n; i++) {
+  // Every piece array is as long as `releases`; the loop reads all seven it uses.
+  for (
+    let i: i32 = 0;
+    i < intro.releases.length &&
+    i < intro.xs.length &&
+    i < intro.ys.length &&
+    i < intro.prevXs.length &&
+    i < intro.prevYs.length &&
+    i < intro.vxs.length &&
+    i < intro.vys.length;
+    i++
+  ) {
     if (intro.ys[i] > WORLD_H) {
       continue
     }
@@ -538,12 +608,33 @@ const introStepPieces = (intro: BreakIntro, t: i32): boolean => {
  * is still on screen.
  */
 const introStepWall = (intro: BreakIntro, t: i32): boolean => {
+  // The clock never runs below 0, so this never returns; it bounds `t - LAY_STEPS` below.
+  if (t < 0) {
+    return false
+  }
   const dt: f64 = 1.0 / toF64(STEPS_PER_SECOND)
   let left: boolean = false
-  const n: i32 = toI32(intro.wallReleases.length)
-  for (let i: i32 = 0; i < n; i++) {
-    if (t === intro.wallLaid[i] + LAY_STEPS && i % WALL_COLS === 0) {
-      intro.sounds.push(SOUND_WALL)
+  // The clacks are pushed after the loop, as a push ends what the checker
+  // knows of every array's length; nothing else in the loop makes a sound,
+  // so the step's sounds come out in the same order.
+  let clacks: i32 = 0
+  // Every wall array is as long as `wallReleases`; the loop reads all eight.
+  for (
+    let i: i32 = 0;
+    i < intro.wallReleases.length &&
+    i < intro.wallLaid.length &&
+    i < intro.wallXs.length &&
+    i < intro.wallYs.length &&
+    i < intro.wallPrevXs.length &&
+    i < intro.wallPrevYs.length &&
+    i < intro.wallVxs.length &&
+    i < intro.wallVys.length;
+    i++
+  ) {
+    // A course's first brick starts one of the wall's `SWEEP_ROWS` rows, so
+    // `clacks < SWEEP_ROWS` never fails; it bounds the count.
+    if (t - LAY_STEPS === intro.wallLaid[i] && i % WALL_COLS === 0 && clacks < SWEEP_ROWS) {
+      clacks++
     }
     if (intro.wallReleases[i] === 0 || intro.wallYs[i] > WORLD_H) {
       continue
@@ -557,6 +648,9 @@ const introStepWall = (intro: BreakIntro, t: i32): boolean => {
     intro.wallVys[i] = intro.wallVys[i] + CLEAR_GRAVITY * dt
     intro.wallXs[i] = intro.wallXs[i] + intro.wallVxs[i] * dt
     intro.wallYs[i] = intro.wallYs[i] + intro.wallVys[i] * dt
+  }
+  for (let k: i32 = 0; k < clacks; k++) {
+    intro.sounds.push(SOUND_WALL)
   }
   return left
 }
@@ -572,7 +666,7 @@ export const drawBreakIntro = (intro: BreakIntro, fb: Framebuffer, alpha: f64): 
   const view: View = intro.view
   viewFor(view, fb, 0.0, 0.0)
   const a: f64 = clamp(alpha, 0.0, 1.0)
-  const time: f64 = Math.max(toF64(intro.tick - 1) + a, 0.0)
+  const time: f64 = Math.max(toF64(intro.tick) - 1.0 + a, 0.0)
   const fade: f64 = clamp((time - toF64(COLLAPSE_FROM)) / toF64(FADE_STEPS), 0.0, 1.0)
   gradient(view, rasterMix(TERMINAL, BG_TOP, fade), rasterMix(TERMINAL, BG_BOTTOM, fade))
   introDrawWall(intro, view, a, time)
@@ -587,8 +681,16 @@ export const drawBreakIntro = (intro: BreakIntro, fb: Framebuffer, alpha: f64): 
  * own six rows end where `break-menu.ts` draws them.
  */
 const introDrawWall = (intro: BreakIntro, view: View, alpha: f64, time: f64): void => {
-  const n: i32 = toI32(intro.wallLaid.length)
-  for (let i: i32 = 0; i < n; i++) {
+  // Every wall array is as long as `wallLaid`; the loop reads all five it uses.
+  for (
+    let i: i32 = 0;
+    i < intro.wallLaid.length &&
+    i < intro.wallXs.length &&
+    i < intro.wallYs.length &&
+    i < intro.wallPrevXs.length &&
+    i < intro.wallPrevYs.length;
+    i++
+  ) {
     const laid: f64 = clamp((time - toF64(intro.wallLaid[i])) / toF64(LAY_STEPS), 0.0, 1.0)
     if (laid <= 0.0) {
       continue
@@ -598,8 +700,9 @@ const introDrawWall = (intro: BreakIntro, view: View, alpha: f64, time: f64): vo
     if (y > WORLD_H) {
       continue
     }
-    const course: i32 = SWEEP_ROWS - 1 - row
-    const side: f64 = course % 2 === 0 ? -1.0 : 1.0
+    // The course, `SWEEP_ROWS - 1 - row`, is even exactly when the row is odd,
+    // as `SWEEP_ROWS` is even; the row's parity needs no subtraction to bound.
+    const side: f64 = row % 2 === 1 ? -1.0 : 1.0
     const settled: f64 = outCubic(laid)
     const x: f64 = lerp(intro.wallPrevXs[i], intro.wallXs[i], alpha) + side * (1.0 - settled) * LAY_SLIDE
     const colour: i32 = rasterMix(BG_TOP, wallColour(row), settled)
@@ -618,8 +721,19 @@ const introDrawPieces = (intro: BreakIntro, view: View, alpha: f64): void => {
     1
   )
   const lift: f64 = (LINE_H - (toF64(RASTER_GLYPH_H) * toF64(scale)) / view.scale) / 2.0
-  const n: i32 = toI32(intro.kinds.length)
-  for (let i: i32 = 0; i < n; i++) {
+  // Every piece array is as long as `kinds`; the loop reads all eight it uses.
+  for (
+    let i: i32 = 0;
+    i < intro.kinds.length &&
+    i < intro.xs.length &&
+    i < intro.ys.length &&
+    i < intro.prevXs.length &&
+    i < intro.prevYs.length &&
+    i < intro.texts.length &&
+    i < intro.colours.length &&
+    i < intro.widths.length;
+    i++
+  ) {
     const y: f64 = lerp(intro.prevYs[i], intro.ys[i], alpha)
     if (y > WORLD_H) {
       continue

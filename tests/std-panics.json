@@ -7,7 +7,7 @@
   ],
   "total": 630,
   "explicit": {
-    "kept": 356,
+    "kept": 358,
     "toFix": 7
   },
   "modules": {
@@ -30,7 +30,7 @@
       "panic": 1
     },
     "std/compress/deflate.ts": {
-      "panic": 4
+      "panic": 5
     },
     "std/compress/gzip.ts": {
       "panic": 5
@@ -93,7 +93,7 @@
     "std/net/fetch.ts": {
       "io-exit": 3,
       "panic": 1,
-      "slice": 4
+      "slice": 8
     },
     "std/net/grpc.ts": {
       "overflow": 2,
@@ -216,7 +216,9 @@
       "slice": 1
     },
     "std/net/url.ts": {
-      "panic": 2
+      "array-length": 2,
+      "panic": 2,
+      "slice": 6
     },
     "std/net/websocket.ts": {
       "window": 2
@@ -228,9 +230,6 @@
     },
     "std/random.ts": {
       "panic": 1
-    },
-    "std/raster.ts": {
-      "array-length": 12
     },
     "std/release.ts": {
       "slice": 6
@@ -247,8 +246,7 @@
       "slice": 1
     },
     "std/term-pixels.ts": {
-      "array-length": 2,
-      "panic": 11,
+      "panic": 12,
       "slice": 1
     },
     "std/text.ts": {

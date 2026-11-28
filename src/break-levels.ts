@@ -155,11 +155,15 @@ export const brickKind = (c: i32): i32 => {
 }
 
 /** The hits a map character takes to break: its digit for a normal brick, 1 for the rest, 0 for empty. */
-export const brickHits = (c: i32): i32 => {
+export const brickHits = (c: i32): integer<0, 3> => {
   if (c >= 49 && c <= 51) {
-    return c - 48
+    const hits: i32 = c - 48
+    return hits
   }
-  return brickKind(c) === BRICK_NONE ? 0 : 1
+  if (brickKind(c) === BRICK_NONE) {
+    return 0
+  }
+  return 1
 }
 
 // ---- The difficulty curve ---------------------------------------------------
@@ -219,7 +223,7 @@ export class LevelTuning {
 /** The tuning of `level` (clamped), each number from its formula. */
 export const levelTuning = (level: i32): LevelTuning => {
   const n: i32 = clampLevel(level)
-  const k: f64 = toF64(n - 1)
+  const k: f64 = toF64(n) - 1.0
   const tuning = new LevelTuning()
   tuning.ballSpeed = BASE_BALL_SPEED * Math.pow(1.25, k)
   tuning.paddleWidth = BASE_PADDLE_WIDTH * Math.pow(0.8, k)

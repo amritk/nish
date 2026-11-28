@@ -201,7 +201,12 @@ export class Framebuffer {
     const area: i32 = pixelsArea("Framebuffer", width, height)
     this.width = width
     this.height = height
-    this.pixels = new Array<i32>(area)
+    // `area` is never negative here; the test lets the prover see it.
+    let n: i32 = 0
+    if (area > 0) {
+      n = area
+    }
+    this.pixels = new Array<i32>(n)
     this.pixels.fill(0)
   }
 
@@ -216,7 +221,12 @@ export class Framebuffer {
     if (width !== this.width || height !== this.height) {
       this.width = width
       this.height = height
-      this.pixels = new Array<i32>(area)
+      // `area` is never negative here; the test lets the prover see it.
+      let n: i32 = 0
+      if (area > 0) {
+        n = area
+      }
+      this.pixels = new Array<i32>(n)
     }
     this.pixels.fill(0)
   }
@@ -381,6 +391,12 @@ export const scaleFramebuffer = (src: Framebuffer, divisor: i32, dst: Framebuffe
   }
   const w: i32 = pixelsCeilDiv(src.width, divisor)
   const h: i32 = pixelsCeilDiv(src.height, divisor)
+  // Neither side is negative or larger than `src`'s, so only a `src` whose
+  // fields were set past its pixels gets here; the test is the size check
+  // `resize` makes, stated at the call so the call itself is proven.
+  if (w < 0 || h < 0 || toI64(w) * toI64(h) > toI64(2147483647)) {
+    panic("scaleFramebuffer: more than 2^31 - 1 pixels")
+  }
   dst.resize(w, h)
   const from: i32[] = src.pixels
   const to: i32[] = dst.pixels
