@@ -102,6 +102,7 @@ import {
   p256SignSha256,
   p256SignSha256Into,
 } from "nish/crypto/p256"
+import { RsaSignScratch, rsaPrivateKeyBits, rsaSignPssSha256Into } from "nish/crypto/rsa-sign"
 import { timingSafeEqual, timingSafeEqualAt } from "nish/crypto/ct"
 import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519"
 import {
@@ -121,6 +122,8 @@ import {
   TLS_EXT_RECORD_SIZE_LIMIT,
   TLS_RANDOM_SIZE,
   TLS_RECORD_SIZE_LIMIT_MAX,
+  TLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
+  TLS_SIGNATURE_RSA_PSS_RSAE_SHA256,
   TLS_VERSION_13,
   TLS_P256_SHARE_SIZE,
   TLS_X25519_SHARE_SIZE,
@@ -229,7 +232,9 @@ export interface TlsServerConfig {
   /**
    * The signature scheme the caller's key signs with, sent in
    * CertificateVerify: `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256` for a P-256
-   * key. A client that does not list it is refused with `handshake_failure`.
+   * key, `TLS_SIGNATURE_RSA_PSS_RSAE_SHA256` for an RSA key of 2048 to 4096
+   * bits (`TlsKeySigner` signs either). A client that does not list it is
+   * refused with `handshake_failure`.
    */
   signatureScheme: i32
   /** Whether the carrier is QUIC, which turns `quic_transport_parameters` on both ways. */
@@ -296,8 +301,8 @@ const tlsExtensionsHave = (extensions: u8[], type: i32): boolean => {
     if (length > end - at - 4) {
       return false
     }
-    // At most `end`, an array length, so the unsigned sum cannot wrap.
-    at = toI32(toU32(at) + toU32(4) + toU32(length))
+    // At most `end` by the check above; -1 past 2^31 ends the walk.
+    at = tlsSum(tlsSum(at, 4), length)
   }
   return false
 }
@@ -378,8 +383,8 @@ const tlsDerIntegerInto = (out: u8[], to: i32, rs: u8[], at: i32, length: i32): 
     j++
     from++
   }
-  // Inside `out` by the check above, so the unsigned sum cannot wrap.
-  return toI32(toU32(to) + toU32(2) + toU32(length))
+  // Inside `out` by the check above; -1 past 2^31.
+  return tlsSum(tlsSum(to, 2), length)
 }
 
 /**
@@ -499,6 +504,103 @@ export class TlsP256Signer {
     const der: u8[] = this.ders[at]
     tlsEcdsaDerInto(der, this.rs)
     return der
+  }
+}
+
+/**
+ * Signs CertificateVerify inputs for `rsa_pss_rsae_sha256` (RFC 8446
+ * §4.2.3) with nothing kept per signature: `rsaSignPssSha256Into` hashes in
+ * this signer's scratch, releases what it allocates, and writes the
+ * signature into this signer's own array of the key's length, which
+ * `TlsServer.sign` stores as it stores a P-256 one. The array is made by the
+ * first signature with a key of a new length and kept, so a server with one
+ * key allocates it once. A carrier keeps one signer, not one per slot.
+ */
+export class TlsRsaSigner {
+  /** The hashers every signature hashes in. */
+  private scratch: RsaSignScratch
+  /** The last signature, as long as the key's modulus; empty before the first. */
+  private out: u8[]
+
+  /** Makes the hashers; the signature array waits for the first key. */
+  constructor() {
+    this.scratch = new RsaSignScratch()
+    this.out = []
+  }
+
+  /**
+   * The `rsa_pss_rsae_sha256` signature of `content` under `priv`, in this
+   * signer's own array; `null` for a `Secret` that is not an RSA key from
+   * `rsaParsePrivateKey` or `x509ParseRsaPrivateKey`, and for a signature
+   * that fails the check against the public exponent. The key is borrowed.
+   *
+   * @param priv The server's RSA private key, borrowed.
+   * @param content The CertificateVerify input, as `TlsServer.signatureInput` answers it.
+   * @returns This signer's own array, which the next `sign` overwrites, or `null`.
+   */
+  sign(priv: Secret<u8[]>, content: u8[]): u8[] | null {
+    const bits: i32 = rsaPrivateKeyBits(priv)
+    if (bits < 2048 || bits > 4096) {
+      return null
+    }
+    const k: i32 = (bits + 7) >> 3
+    if (k < 256 || k > 512) {
+      return null
+    }
+    if (toI32(this.out.length) !== k) {
+      this.out = new Array<u8>(k)
+    }
+    if (
+      !rsaSignPssSha256Into(this.scratch, priv, content, TLS_FROM, toI32(content.length), this.out, TLS_FROM)
+    ) {
+      return null
+    }
+    return this.out
+  }
+}
+
+/**
+ * The CertificateVerify signer for a configuration's `signatureScheme`: a
+ * `TlsP256Signer` for `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256`, a
+ * `TlsRsaSigner` for `TLS_SIGNATURE_RSA_PSS_RSAE_SHA256`, and for any other
+ * scheme none, so every signature answers `null` and the connection fails
+ * with `internal_error`. Only the one the scheme names is made.
+ */
+export class TlsKeySigner {
+  /** The P-256 signer, with that scheme. */
+  private p256: TlsP256Signer | null
+  /** The RSA-PSS signer, with that scheme. */
+  private rsa: TlsRsaSigner | null
+
+  /**
+   * Makes the signer `scheme` names.
+   *
+   * @param scheme The configuration's `signatureScheme`.
+   */
+  constructor(scheme: i32) {
+    this.p256 = scheme === TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 ? new TlsP256Signer() : null
+    this.rsa = scheme === TLS_SIGNATURE_RSA_PSS_RSAE_SHA256 ? new TlsRsaSigner() : null
+  }
+
+  /**
+   * `content` signed under `priv` in the scheme this signer was made for,
+   * in the inner signer's own array; `null` for a key that is not of that
+   * kind, a signature that fails, or a scheme with no signer.
+   *
+   * @param priv The server's private key, borrowed.
+   * @param content The CertificateVerify input, as `TlsServer.signatureInput` answers it.
+   * @returns The inner signer's own array, or `null`.
+   */
+  sign(priv: Secret<u8[]>, content: u8[]): u8[] | null {
+    const p256: TlsP256Signer | null = this.p256
+    if (p256 !== null) {
+      return p256.sign(priv, content)
+    }
+    const rsa: TlsRsaSigner | null = this.rsa
+    if (rsa !== null) {
+      return rsa.sign(priv, content)
+    }
+    return null
   }
 }
 
@@ -670,6 +772,19 @@ class TlsExchangeWords {
 }
 
 /**
+ * `a + b` for two offsets or sizes, or -1 when either is negative or the sum
+ * passes 2^31 - 1. The sum is taken in i64, where it cannot overflow; -1 is
+ * an offset outside every array and a size no buffer grows to.
+ */
+const tlsSum = (a: i32, b: i32): i32 => {
+  if (a < 0 || b < 0) {
+    return -1
+  }
+  const sum: i64 = toI64(a) + toI64(b)
+  return sum > toI64(2147483647) ? -1 : toI32(sum)
+}
+
+/**
  * `n` zero bytes; none for a negative `n`. A length a `u16` holds is one
  * allocation; a longer one is pushed a byte at a time.
  */
@@ -699,11 +814,10 @@ const tlsWordAt = (b: u8[], at: i32): u64 => {
 }
 
 /**
- * `tlsWordAt(b, at + skip)` for a share's later words. The offset is summed
- * in u32, which is the i32 sum wherever that does not wrap; where it would,
- * the offset lands below zero and the word reads as zero, outside `b`.
+ * `tlsWordAt(b, at + skip)` for a share's later words. Where the sum would
+ * pass 2^31 the offset is -1, and the word reads as zero, outside `b`.
  */
-const tlsWordAfter = (b: u8[], at: i32, skip: i32): u64 => tlsWordAt(b, toI32(toU32(at) + toU32(skip)))
+const tlsWordAfter = (b: u8[], at: i32, skip: i32): u64 => tlsWordAt(b, tlsSum(at, skip))
 
 /** `v` big-endian into `b[at .. at + 8)`; a byte outside `b` is dropped. */
 const tlsWordInto = (b: u8[], at: i32, v: u64): void => {
@@ -1002,8 +1116,8 @@ const tlsFlightCapacity = (config: TlsServerConfig): i32 => {
     config.quic ? 0 : TLS_RECORD_SIZE_LIMIT_MAX
   )
   const certificate: i32 = tlsWriteCertificate(none, TLS_FROM, config.certificateChain)
-  // Two non-negative i32s and a constant: the u32 sum cannot wrap, and `tlsConfigFits` keeps it far below 2^31.
-  return toI32(toU32(extensions) + toU32(certificate) + toU32(8 + TLS_ECDSA_SIGNATURE_MAX + 4 + SHA384_SIZE))
+  // `tlsConfigFits` keeps the sum far below 2^31; past it, -1 sizes nothing.
+  return tlsSum(tlsSum(extensions, certificate), 8 + TLS_ECDSA_SIGNATURE_MAX + 4 + SHA384_SIZE)
 }
 
 // ---- Resumption ------------------------------------------------------------------
@@ -1289,10 +1403,8 @@ export class TlsServer {
     this.opened = new TlsTicketState()
     this.issuing = new TlsTicketState()
     this.ticketScratch = tlsZeros(tlsServerTicketCapacity(this.issuing))
-    // A few hundred bytes and a constant: the u32 sum cannot wrap.
-    this.outputApplication = tlsZeros(
-      toI32(toU32(toI32(this.ticketScratch.length)) + toU32(TLS_SERVER_TICKET_OVERHEAD))
-    )
+    // A few hundred bytes and a constant.
+    this.outputApplication = tlsZeros(tlsSum(toI32(this.ticketScratch.length), TLS_SERVER_TICKET_OVERHEAD))
     this.ticketNonce = new Array<u8>(1)
     this.ageAddBytes = new Array<u8>(4)
     this.restart(serverRandom, ephemeralPrivate)
@@ -1470,9 +1582,9 @@ export class TlsServer {
     }
     const most: i32 = TLS_MAX_HANDSHAKE_MESSAGE + 4
     let size: i32 = capacity
-    // Stopping at `most` gives the same clamped size; below it the u32 doubling cannot wrap.
+    // Stopping at `most` gives the same clamped size; an empty buffer starts there.
     while (size < need && size < most) {
-      size = toI32(toU32(size) * toU32(2))
+      size = size > 0 ? tlsSum(size, size) : most
     }
     const grown: u8[] = tlsZeros(size > most ? most : size)
     for (
@@ -1573,12 +1685,13 @@ export class TlsServer {
       return 0
     }
     const type: i32 = toI32(this.input[0])
-    const length: i32 = (toI32(this.input[1]) << 16) | (toI32(this.input[2]) << 8) | toI32(this.input[3])
+    // Three bytes, 0 to 2^24 - 1; the mask is the bound the proof reads.
+    const length: i32 =
+      ((toI32(this.input[1]) << 16) | (toI32(this.input[2]) << 8) | toI32(this.input[3])) & 0xffffff
     if (length > TLS_MAX_HANDSHAKE_MESSAGE) {
       return this.fail(TLS_ALERT_DECODE_ERROR)
     }
-    // Three bytes, so 0 to 2^24 - 1: the u32 sum cannot wrap.
-    const whole: i32 = toI32(toU32(4) + toU32(length))
+    const whole: i32 = 4 + length
     if (this.inputLength < whole) {
       return 0
     }
@@ -1623,8 +1736,8 @@ export class TlsServer {
       if (tlsSuiteHashLength(suite) > 0) {
         return suite
       }
-      // Both below 2^31, so the u32 sum cannot wrap; past i32 it ends the loop.
-      k = toI32(toU32(k) + toU32(2))
+      // `k` is below the data's length less one, so the sum is in range.
+      k = k + 2
     }
     return 0
   }
@@ -1653,12 +1766,12 @@ export class TlsServer {
         let at: i32 = hello.alpnAt
         while (toI64(at) < end && at >= 0 && at < toI32(data.length)) {
           const n: i32 = toI32(data[at])
-          // `at` is inside `data` and `n` a byte, so the u32 sums cannot wrap.
-          if (tlsBytesSpell(data, toI32(toU32(at) + toU32(1)), n, protocol)) {
+          // `at` is inside `data` and `n` a byte.
+          if (tlsBytesSpell(data, at + 1, n, protocol)) {
             this.alpn = protocol
             return 0
           }
-          at = toI32(toU32(at) + toU32(1) + toU32(n))
+          at = tlsSum(tlsSum(at, 1), n)
         }
       }
       return TLS_ALERT_NO_APPLICATION_PROTOCOL
@@ -1768,8 +1881,8 @@ export class TlsServer {
       // difference is the i32 it always was.
       this.transcript.update(data, prefix, toI32(toI64(4) + toI64(length) - toI64(prefix)))
     } else {
-      // Three bytes, so the u32 sum cannot wrap.
-      this.transcript.update(data, TLS_FROM, toI32(toU32(4) + toU32(length)))
+      // `length` is three bytes and inside the message.
+      this.transcript.update(data, TLS_FROM, tlsSum(4, length))
     }
     // The group is the server's choice, not the client's: x25519 whenever the
     // client lists it, secp256r1 only for a client that does not. A hello
@@ -2113,8 +2226,8 @@ export class TlsServer {
       this.config.quic ? this.config.quicTransportParameters : null,
       this.ownRecordSizeLimit()
     )
-    // A message's end inside the output and a hash length: the u32 sum cannot wrap.
-    this.reserveOutput(TLS_LEVEL_HANDSHAKE, toI32(toU32(extensionsEnd) + toU32(4) + toU32(this.hashLength)))
+    // A message's end inside the output and a hash length.
+    this.reserveOutput(TLS_LEVEL_HANDSHAKE, tlsSum(tlsSum(extensionsEnd, 4), this.hashLength))
     // The secrets' pool is the slot's, chosen before the blocks open.
     const pool: TlsSecretPool = this.secrets()
     this.writeResumedHello(pool, index)
@@ -2351,10 +2464,11 @@ export class TlsServer {
       return this.fail(TLS_ALERT_INTERNAL_ERROR)
     }
     const h: i32 = this.hashLength
-    // A length inside the output, at most 65535 and a hash length: the u32 sum cannot wrap.
+    // A length inside the output, the two headers (8 and 4 bytes), at most
+    // 65535 and a hash length.
     this.reserveOutput(
       TLS_LEVEL_HANDSHAKE,
-      toI32(toU32(this.outputHandshakeLength) + toU32(8) + toU32(signatureLength) + toU32(4) + toU32(h))
+      tlsSum(tlsSum(this.outputHandshakeLength, 12), tlsSum(signatureLength, h))
     )
     // The secrets' pool is the slot's, chosen before the blocks open.
     const pool: TlsSecretPool = this.secrets()
@@ -2387,8 +2501,8 @@ export class TlsServer {
     const h: i32 = this.hashLength
     using _scope = arena()
     const at: i32 = this.outputHandshakeLength
-    // Where the body starts: `at` is inside the output, so the u32 sum cannot wrap.
-    const body: i32 = toI32(toU32(at) + toU32(4))
+    // Where the body starts: `at` is inside the output.
+    const body: i32 = tlsSum(at, 4)
     this.transcript.hashInto(this.hashes, TLS_FROM)
     const serverHandshake: u8[] = expose(pool.serverHandshake, tlsHeldClone)
     tlsFinishedVerifyDataInto(this.kdf, h, serverHandshake, this.hashes, TLS_FROM, this.outputHandshake, body)
@@ -2421,8 +2535,8 @@ export class TlsServer {
     // The only client Finished `handleFinished` accepts is the one just
     // computed, so the transcript through it is known now (RFC 8446 §4.6.1),
     // and the resumption master secret is derived while the master secret is.
-    // A hash length and its header: the u32 sum cannot wrap.
-    const clientFinished: u8[] = tlsZeros(toI32(toU32(4) + toU32(h)))
+    // A hash length and its header.
+    const clientFinished: u8[] = tlsZeros(tlsSum(4, h))
     tlsWriteFinished(clientFinished, TLS_FROM, finished, TLS_FROM, h)
     this.transcript.update(clientFinished, TLS_FROM, toI32(clientFinished.length))
     this.transcript.hashInto(this.hashes, TLS_FROM)
@@ -2551,9 +2665,9 @@ export class TlsServer {
    * level's buffer, goes into the transcript and stays on the output.
    */
   private sent(level: i32, at: i32, end: i32): void {
-    // Both are offsets inside the buffer, `end` past `at`: the u32 difference
-    // is the i32 one, and cannot wrap.
-    const length: i32 = toI32(toU32(end) - toU32(at))
+    // Both are offsets inside the buffer, `end` past `at`; anything else
+    // records nothing.
+    const length: i32 = at >= 0 && end >= 0 && end >= at ? end - at : 0
     if (level === TLS_LEVEL_INITIAL) {
       this.transcript.update(this.outputInitial, at, length)
       this.outputInitialLength = end

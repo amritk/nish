@@ -27,7 +27,7 @@ import { Http3Server } from "nish/net/http3-server";
 import { QuicServerConfig } from "nish/net/quic";
 import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
 
-// `quicConfig.alpn` is ["h3"]; `privateKey` is the P-256 key of its certificate.
+// `quicConfig.alpn` is ["h3"]; `privateKey` is its certificate's key, P-256 or RSA.
 const run = (quicConfig: QuicServerConfig, privateKey: u8[], rounds: i32): void => {
   const fd: i32 = udpBind("0.0.0.0", 4433, 0);
   const listenerEntropy: u8[] = new Array<u8>(QUIC_LISTENER_ENTROPY_SIZE);
@@ -247,7 +247,7 @@ class Http3Server
 | `holds(slot: i32): boolean` | Whether `slot` holds a connection. |
 | `quic(slot: i32): QuicConnection` | The QUIC connection of `slot`, built as `connection` builds it; a slot out of range names the first. |
 | `ready(): i32` | The next slot with news for the program: call its connection's `next` until it has none. |
-| `receive(now: i64, key: Secret<u8[]>): i32` | Reads every datagram waiting on the socket, in at most `H3_SERVER_RECEIVE_BURST` receives, and hands each to its slot or the listener, signing a handshake's CertificateVerify with `key` (ECDSA P-256) when one asks. A GRO receive is cut into its datagrams in place. Answers how many datagrams it read. |
+| `receive(now: i64, key: Secret<u8[]>): i32` | Reads every datagram waiting on the socket, in at most `H3_SERVER_RECEIVE_BURST` receives, and hands each to its slot or the listener, signing a handshake's CertificateVerify with `key` (in `signatureScheme`) when one asks. A GRO receive is cut into its datagrams in place. Answers how many datagrams it read. |
 | `serve(slot: i32, buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void` | Hands `slot`'s connection a datagram from `address`, signs when the handshake asks, and refiles its IDs and timer. The connection decides from the address whether the client moved (RFC 9000 §9.3); an address that is not 18 bytes long leaves it where it is. |
 | `size(): i32` | How many slots the pool has, built or not. |
 | `stop(): void` | Stops the server for good and wipes the keys it holds: every built slot's connection is released (`QuicConnection.release`, which sends nothing), as is one built after, by `connection` or `quic`; the listener is released; and the configuration's `statelessResetKey` and `retryTokenKey`, the index's salt, the connections' entropy scratch and the listener's last answer (a Retry's or a reset's token) are zeroed. From then on every datagram is dropped and no connection is accepted.<br><br>The configuration's two keys are the server's once it is made with them: a program that keeps a copy of either, to start the next server with, wipes its own copy. The keys are zeroed in place, so give each server a `QuicServerConfig` of its own: any other listener, connection or server made with the same one would go on MACing Retry tokens and deriving stateless reset tokens under an all-zero key, which anyone can forge. |

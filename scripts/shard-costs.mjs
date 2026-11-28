@@ -230,6 +230,7 @@ const RECOGNIZERS = {
   netTlsTcp: /^net_tls_tcp: /,
   http2: /^net_http2_cleartext: /,
   tlsClient: /^net_tls_client_tcp: /,
+  tlsRsa: /^net_tls_rsa_server: /,
   diagnostics: /^(diagnostics|codes|union_scale|security-scope|dbg_locals|-g|objdump)[: ]/,
   performance: /^(performance|mem_loop_scope|perf_bounds_toi32_user)[: ]/,
   memAwfy: /^mem_awfy: /,
@@ -341,6 +342,16 @@ const measureShard = (lines, shard, shards, linkCount) => {
   const summary = lines.findIndex((l) => /^\d+ passed, \d+ failed/.test(l.body))
   if (summary < 0) {
     fail(`shard ${shard}/${shards} has no summary line; was the run green?`)
+  }
+  // A replayed program (tests/link-results.js) printed its checks without
+  // building anything, so its gap is not what it costs. A pull request's run
+  // can replay; the push to main's never does, so measure those.
+  const replayed = lines.filter((l) => /^REPLAY link\//.test(l.body)).length
+  if (replayed > 0) {
+    fail(
+      `shard ${shard}/${shards} replayed ${replayed} link program(s) from --link-results, so their seconds are not their cost; ` +
+        "measure runs of a push to main, which build every program"
+    )
   }
   // A failed check can stop a section early, so a red run's seconds are not its cost.
   const failed = Number(/^\d+ passed, (\d+) failed/.exec(lines[summary].body)[1])

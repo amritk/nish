@@ -217,7 +217,7 @@ program that could panic: each place it cannot prove safe is a compile error,
 with the line and the guard that would prove it. This program, saved as
 `overflow.ts`, adds past the largest `i32`:
 
-<!-- allow-panics: it is the program that shows a panic at run time -->
+<!-- allow-panics: shows an overflow stopping the program at run time -->
 <!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {

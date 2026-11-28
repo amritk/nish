@@ -207,14 +207,16 @@ const rsaBitLength = (v: u8[]): i32 => {
     return -1
   }
   const top: i32 = toI32(v[0])
-  let topBits: i32 = 0
+  // The leading zero bits of the top byte, eight for a zero byte.
+  let missing: i32 = 8
   for (let b: i32 = 0; b < 8; b++) {
     if (top >> b !== 0) {
-      topBits = b + 1
+      missing = 7 - b
     }
   }
-  // At most (2^28 - 2) 8 + 8, below 2^31, so the u32 sum is the count.
-  return toI32(toU32(length - 1) * 8 + toU32(topBits))
+  // The masks keep what the checks above already hold (fewer than 2^28 bytes,
+  // at most eight missing bits), and let src/bounds.ts prove the count fits.
+  return (length & 0x0fffffff) * 8 - (missing & 0xf)
 }
 
 /**
@@ -737,4 +739,24 @@ export const rsaVerifyPss = (key: RsaPublicKey, hash: i32, saltLen: i32, msg: u8
     return false
   }
   return timingSafeEqual(rsaDigest(hash, prime), h)
+}
+
+/**
+ * Verifies an RSASSA-PSS signature under a public key given as its DER, as
+ * `rsaVerifyPss` does after `rsaParsePublicKey`: for a caller that holds the
+ * key's bytes and no `RsaPublicKey`.
+ *
+ * @param der The key as `rsaParsePublicKey` reads it, whole.
+ * @param hash `RSA_HASH_SHA256`, `RSA_HASH_SHA384` or `RSA_HASH_SHA512`.
+ * @param saltLen The salt's length in bytes.
+ * @param msg The message signed, whole.
+ * @param sig The signature, big-endian.
+ * @returns `true` only when `der` parses and `sig` is its signature of `msg`.
+ */
+export const rsaVerifyPssDer = (der: u8[], hash: i32, saltLen: i32, msg: u8[], sig: u8[]): boolean => {
+  const key: RsaPublicKey | null = rsaParsePublicKey(der)
+  if (key === null) {
+    return false
+  }
+  return rsaVerifyPss(key, hash, saltLen, msg, sig)
 }

@@ -289,14 +289,26 @@ class JsonNumberParts {
     this.count = toI32(toI64(last) - toI64(first) + toI64(1))
     // A digit's exponent is the exponent plus `intLen - 1 - place`. The parts
     // that add and the parts that take away are summed apart, each below
-    // 2^51, so the one subtraction is exact in `u64` and its result an `i64`.
+    // 2^51 since `big` was refused above, and the larger side decides the sign.
     const up: u64 = toU64(intLen) + (minus ? toU64(0) : size)
     const down: u64 = minus ? size + toU64(1) : toU64(1)
-    this.lead = toI64(up - (down + toU64(first)))
-    this.last = toI64(up - (down + toU64(last)))
+    this.lead = jsonNumberDifference(up, down + toU64(first))
+    this.last = jsonNumberDifference(up, down + toU64(last))
     this.lastBiased = up + (toU64(1) << toU64(62)) - (down + toU64(last))
     return 0
   }
+}
+
+/**
+ * `up - down` as an `i64`, both below 2^63: the smaller is taken from the
+ * larger, so no subtraction wraps, and a negative answer is `~(down - up - 1)`.
+ */
+const jsonNumberDifference = (up: u64, down: u64): i64 => {
+  if (up >= down) {
+    return toI64(up - down)
+  }
+  const less: u64 = down - up - toU64(1)
+  return ~toI64(less)
 }
 
 /** `-1`, `0` or `1` as `a`'s size is below, equal to or above `b`'s, signs aside. */

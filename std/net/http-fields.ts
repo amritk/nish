@@ -59,6 +59,18 @@
  * `Date` field takes. It reads no clock, so a wasm32 build can import it; the
  * caller supplies the second.
  *
+ * **Media types.** `mediaTypeParse` reads a `Content-Type` value (RFC 9110
+ * §8.3.1): a `type/subtype` pair of tokens, lowercased, then `;`-separated
+ * parameters whose names are lowercased tokens and whose values are tokens or
+ * quoted strings, a backslash in one escaping the octet after it. A
+ * parameter named twice is refused, since two readers could believe
+ * different ones, and so is a 17th, which keeps that check linear in the
+ * value. `formDataDispositionParse` reads the `Content-Disposition`
+ * of a `multipart/form-data` part the same way, except that a backslash in a
+ * quoted value is a backslash: the HTML form submission algorithm writes `"`
+ * as `%22` and leaves `\` alone, so `filename="C:\x.txt"` names the file a
+ * browser sent. `mediaTypeParam` looks a parameter up.
+ *
  * Names and values are octets (`u8[]`), as HPACK and QPACK answer them. A
  * section that passes keeps references to the caller's arrays, not copies, so
  * it is valid for as long as they are.
@@ -66,8 +78,8 @@
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  *
- * Written from RFC 9110, RFC 9113, RFC 9114 and RFC 8441, not ported from
- * another implementation.
+ * Written from RFC 9110, RFC 9113, RFC 9114, RFC 8441 and the HTML form
+ * submission algorithm, not ported from another implementation.
  */
 
 /** A field section that has the shape asked for. */
@@ -355,8 +367,12 @@ const httpFieldsStatusOf = (value: u8[]): i32 => {
     if (digit < 0 || digit > 9) {
       return -1
     }
-    // Three digits are at most 999, so the unsigned sum cannot leave an `i32`.
-    code = toI32(toU32(code) * 10 + toU32(digit))
+    // The length test above allows three digits, so `code` is at most 99
+    // before the last one; the test is what proves the sum cannot overflow.
+    if (code < 0 || code > 99) {
+      return -1
+    }
+    code = code * 10 + digit
   }
   return code >= 100 && code <= 599 ? code : -1
 }
@@ -367,17 +383,17 @@ const httpFieldsLengthOf = (value: u8[]): i64 => {
   if (n === 0 || n > HTTP_FIELDS_MAX_LENGTH_DIGITS) {
     return toI64(-1)
   }
-  let length: i64 = 0
+  // The value stays `u64` throughout: at most eighteen digits stay below
+  // 10^18, so the sum never wraps and its value fits an `i64` exactly.
+  let length: u64 = 0
   for (const b of value) {
     const digit: i32 = toI32(b) - 48
     if (digit < 0 || digit > 9) {
       return toI64(-1)
     }
-    // At most eighteen digits stay below 10^18, so the unsigned sum cannot
-    // leave an `i64`.
-    length = toI64(toU64(length) * toU64(10) + toU64(digit))
+    length = length * 10 + toU64(digit)
   }
-  return length
+  return toI64(length)
 }
 
 /** Whether `authority` holds an `@`, which only userinfo would put there (RFC 9113 §8.3.1). */
@@ -714,16 +730,20 @@ const HTTP_FIELDS_DATE_NAMES: string = "SunMonTueWedThuFriSatJanFebMarAprMayJunJ
  * Writes `b` at `out[at + k]`. Its one caller, `httpDateWrite`, has checked
  * `0 <= at` and `at + HTTP_DATE_SIZE <= out.length` before the first write,
  * and every `k` it passes is a constant from 0 to 28, under `HTTP_DATE_SIZE`:
- * so `at + k` is inside `out`, the u32 sum does not wrap and the test always
- * holds. The test is what proves the index; nothing is allocated, and a byte
- * it skipped would show in the `httpDateWrite` round trips `tests/run.js`
- * pins byte for byte (`tests/link/net_http_date`). The skip is unreachable by
- * that room check in `httpDateWrite`, which the prover does not carry across
- * the call, so the test stays.
+ * so `at + k` is inside `out` and the tests always hold. The first test,
+ * whose literals are `HTTP_DATE_SIZE - 1` and `2^31 - 1` less that, proves
+ * the sum cannot overflow, and the second proves the index; nothing is
+ * allocated, and a byte it skipped would show in the `httpDateWrite` round
+ * trips `tests/run.js` pins byte for byte (`tests/link/net_http_date`). The
+ * skip is unreachable by that room check in `httpDateWrite`, which the prover
+ * does not carry across the call, so the tests stay.
  */
 const httpFieldsPut = (out: u8[], at: i32, k: i32, b: u32): void => {
-  const pos: i32 = toI32(toU32(at) + toU32(k))
-  if (pos >= 0 && pos < toI32(out.length)) {
+  if (at < 0 || at > 2147483619 || k < 0 || k > 28) {
+    return
+  }
+  const pos: i32 = at + k
+  if (pos < toI32(out.length)) {
     out[pos] = toU8(b)
   }
 }
@@ -733,22 +753,36 @@ const httpFieldsPut = (out: u8[], at: i32, k: i32, b: u32): void => {
  * `out[at + k ..)`. `httpDateWrite` passes a weekday, `(days + 4) % 7`, so 0
  * to 6, or `6 + month` with `month` 1 to 12 by the 153-day rule, so 7 to 18:
  * `3 * index + 2` is at most 56, under the table's 57 letters, and the test
- * always holds. It is what proves the index.
+ * always holds. It is what proves the index. Every `k` it is passed is 0 or
+ * 8, so the test on `k`, whose 26 is `HTTP_DATE_SIZE - 3`, always holds too;
+ * it is what proves `k + d` cannot overflow.
  */
 const httpFieldsPutName = (out: u8[], at: i32, k: i32, index: u32): void => {
+  if (k < 0 || k > 26) {
+    return
+  }
   const names: string = HTTP_FIELDS_DATE_NAMES
-  for (let d: u32 = 0; d < 3; d++) {
-    const pos: i32 = toI32(index * 3 + d)
+  for (let d: i32 = 0; d < 3; d++) {
+    // The letter's place is worked in `u32`, as `index` is: at most 56.
+    const step: u32 = toU32(d)
+    const pos: i32 = toI32(index * 3 + step)
     if (pos >= 0 && pos < toI32(names.length)) {
-      httpFieldsPut(out, at, toI32(toU32(k) + d), toU32(names.charCodeAt(pos)))
+      httpFieldsPut(out, at, k + d, toU32(names.charCodeAt(pos)))
     }
   }
 }
 
-/** Writes `n`, 0 to 99, as two digits at `out[at + k ..)`. */
+/**
+ * Writes `n`, 0 to 99, as two digits at `out[at + k ..)`. Every `k` it is
+ * passed is at most 23, so the test, whose 27 is `HTTP_DATE_SIZE - 2`, always
+ * holds; it is what proves `k + 1` cannot overflow.
+ */
 const httpFieldsPutTwo = (out: u8[], at: i32, k: i32, n: u32): void => {
+  if (k < 0 || k > 27) {
+    return
+  }
   httpFieldsPut(out, at, k, toU32(48) + n / 10)
-  httpFieldsPut(out, at, toI32(toU32(k) + toU32(1)), toU32(48) + (n % 10))
+  httpFieldsPut(out, at, k + 1, toU32(48) + (n % 10))
 }
 
 /**
@@ -774,12 +808,7 @@ const httpFieldsPutTwo = (out: u8[], at: i32, k: i32, n: u32): void => {
  *   or -1 when nothing was written
  */
 export const httpDateWrite = (out: u8[], at: i32, seconds: i64): i32 => {
-  if (
-    seconds < 0 ||
-    seconds > HTTP_DATE_LAST_SECOND ||
-    at < 0 ||
-    toI64(at) + toI64(HTTP_DATE_SIZE) > toI64(out.length)
-  ) {
+  if (seconds < 0 || seconds > HTTP_DATE_LAST_SECOND || at < 0 || at > toI32(out.length) - 29) {
     return -1
   }
   // The test above keeps `seconds` far below 2^63, so every step is `u64`
@@ -819,6 +848,273 @@ export const httpDateWrite = (out: u8[], at: i32, seconds: i64): i32 => {
   httpFieldsPut(out, at, 26, 71)
   httpFieldsPut(out, at, 27, 77)
   httpFieldsPut(out, at, 28, 84)
-  // The date fits in `out` from `at`, so the end is at most its length.
-  return toI32(toU32(at) + toU32(HTTP_DATE_SIZE))
+  // The room test above, whose 29 is `HTTP_DATE_SIZE`, keeps the end at most
+  // `out.length`; it is what proves the sum cannot overflow.
+  return at + 29
+}
+
+/**
+ * A media type or a disposition as `mediaTypeParse` and
+ * `formDataDispositionParse` read it: the type and subtype in lowercase, and
+ * the parameters in the order they came, each name in lowercase beside its
+ * value with any quoting removed.
+ */
+export class MediaType {
+  /** The type, `text` in `text/html`, or a disposition's type, in lowercase. */
+  type: string = ""
+  /** The subtype, `html` in `text/html`, in lowercase; empty for a disposition. */
+  subtype: string = ""
+  /** The parameter names, in lowercase, in the order they came. */
+  names: string[] = []
+  /** The parameter values, `values[k]` beside `names[k]`, quotes removed. */
+  values: string[] = []
+}
+
+/** The most parameters a media type or disposition may carry; one more is refused. */
+const HTTP_FIELDS_MAX_PARAMS: i32 = 16
+
+/** Whether `c` is a `tchar` (RFC 9110 §5.6.2), in either case. */
+const httpFieldsTchar = (c: i32): boolean => httpFieldsLowerTchar(c) || (c >= 65 && c <= 90)
+
+/** Whether `c` is optional whitespace (RFC 9110 §5.6.3): a space or a tab. */
+const httpFieldsOws = (c: i32): boolean => c === 32 || c === 9
+
+/**
+ * Whether `c` may stand inside a quoted string as itself (RFC 9110 §5.6.4's
+ * `qdtext`): a tab, a space, any visible character but `"` and `\`, or
+ * obs-text.
+ */
+const httpFieldsQdtext = (c: i32): boolean =>
+  c === 9 || c === 32 || c === 33 || (c >= 35 && c <= 91) || (c >= 93 && c <= 126) || (c >= 128 && c <= 255)
+
+/**
+ * The octets in `bytes[from .. to)` as a string, letters in lowercase when
+ * `lower`; empty when the window is not inside `bytes`. It goes a byte at a
+ * time because `String.fromBytes` keeps a range check no proof removes; each
+ * `String.fromCharCode` is the one octet, so the string's bytes are the
+ * window's.
+ */
+const httpFieldsString = (bytes: readonly u8[], from: i32, to: i32, lower: boolean): string => {
+  const parts: string[] = []
+  let i: i32 = from
+  while (i >= 0 && i < to && i < toI32(bytes.length)) {
+    const c: i32 = toI32(bytes[i])
+    parts.push(String.fromCharCode(lower && c >= 65 && c <= 90 ? c | 32 : c))
+    i = i + 1
+  }
+  return parts.join("")
+}
+
+/** The end of the run of `tchar` that starts at `from`, at most `to`. */
+const httpFieldsTokenEnd = (bytes: readonly u8[], from: i32, to: i32): i32 => {
+  const n: i32 = toI32(bytes.length)
+  let i: i32 = from
+  while (i >= 0 && i < to && i < n && httpFieldsTchar(toI32(bytes[i]))) {
+    i = i + 1
+  }
+  return i
+}
+
+/** The first index from `from` that is not optional whitespace, at most `to`. */
+const httpFieldsOwsEnd = (bytes: readonly u8[], from: i32, to: i32): i32 => {
+  const n: i32 = toI32(bytes.length)
+  let i: i32 = from
+  while (i >= 0 && i < to && i < n && httpFieldsOws(toI32(bytes[i]))) {
+    i = i + 1
+  }
+  return i
+}
+
+/**
+ * Reads the parameters in `bytes[from .. to)` into `into`: each is optional
+ * whitespace, `;`, optional whitespace and then, unless the list ends or
+ * another `;` follows, a token name, `=` and a value that is a token or a
+ * quoted string (RFC 9110 §5.6.6). With `escapes`, a backslash inside the
+ * quotes takes the next octet as itself (§5.6.4); without, it is an octet
+ * like any other, as HTML form submission writes a name (it escapes `"` as
+ * `%22` instead). Answers false for any other shape, for a name given
+ * twice, letters compared without case, and for a 17th parameter.
+ */
+const httpFieldsParams = (
+  bytes: readonly u8[],
+  from: i32,
+  to: i32,
+  escapes: boolean,
+  into: MediaType
+): boolean => {
+  let i: i32 = from
+  while (i >= 0 && i < to && i < toI32(bytes.length)) {
+    i = httpFieldsOwsEnd(bytes, i, to)
+    if (i === to) {
+      return true
+    }
+    if (i < 0 || i >= toI32(bytes.length) || toI32(bytes[i]) !== 59) {
+      return false
+    }
+    i = httpFieldsOwsEnd(bytes, i + 1, to)
+    if (i === to) {
+      return true
+    }
+    if (i < 0 || i >= toI32(bytes.length)) {
+      return false
+    }
+    if (toI32(bytes[i]) === 59) {
+      continue
+    }
+    const nameEnd: i32 = httpFieldsTokenEnd(bytes, i, to)
+    if (
+      nameEnd === i ||
+      nameEnd < 0 ||
+      nameEnd >= to ||
+      nameEnd >= toI32(bytes.length) ||
+      toI32(bytes[nameEnd]) !== 61
+    ) {
+      return false
+    }
+    // A cap on the count keeps the repeat check below from going quadratic.
+    if (toI32(into.names.length) >= HTTP_FIELDS_MAX_PARAMS) {
+      return false
+    }
+    const name: string = httpFieldsString(bytes, i, nameEnd, true)
+    for (const seen of into.names) {
+      if (seen === name) {
+        return false
+      }
+    }
+    i = nameEnd + 1
+    if (i < to && i < toI32(bytes.length) && toI32(bytes[i]) === 34) {
+      const out: string[] = []
+      i = i + 1
+      let closed: boolean = false
+      while (!closed && i >= 0 && i < to && i < toI32(bytes.length)) {
+        const c: i32 = toI32(bytes[i])
+        if (c === 34) {
+          closed = true
+        } else if (c === 92 && escapes) {
+          // A quoted pair: the octet after the backslash is a tab, a space,
+          // a visible character or obs-text, and stands for itself.
+          i = i + 1
+          if (i >= to || i >= toI32(bytes.length)) {
+            return false
+          }
+          const e: i32 = toI32(bytes[i])
+          if (!(e === 9 || (e >= 32 && e <= 126) || (e >= 128 && e <= 255))) {
+            return false
+          }
+          out.push(String.fromCharCode(e))
+        } else if (httpFieldsQdtext(c) || c === 92) {
+          out.push(String.fromCharCode(c))
+        } else {
+          return false
+        }
+        i = i + 1
+      }
+      if (!closed) {
+        return false
+      }
+      into.names.push(name)
+      into.values.push(out.join(""))
+    } else {
+      const valueEnd: i32 = httpFieldsTokenEnd(bytes, i, to)
+      if (valueEnd === i) {
+        return false
+      }
+      into.names.push(name)
+      into.values.push(httpFieldsString(bytes, i, valueEnd, false))
+      i = valueEnd
+    }
+  }
+  return i === to
+}
+
+/**
+ * Reads a `Content-Type` value (RFC 9110 §8.3.1): a `type/subtype` pair of
+ * tokens, then parameters, each `; name=value` with optional whitespace
+ * around the `;`, the value a token or a quoted string whose backslash takes
+ * the next octet as itself. Whitespace may also open and close the value.
+ * Type, subtype and parameter names are answered in lowercase; values as
+ * given, less their quoting.
+ *
+ *     const m: MediaType | null = mediaTypeParse(value, 0, toI32(value.length));
+ *     // m.type === "multipart", mediaTypeParam(m, "boundary") === "xyz"
+ *
+ * @param value the octets that hold the field value
+ * @param from where the value starts in `value`
+ * @param to where it ends, one past its last octet
+ * @returns the media type, or null when the window is not inside `value`, a
+ *   token is empty or holds a non-`tchar`, a quoted string is not closed or
+ *   holds a control character, a parameter has no `=`, a parameter name
+ *   comes twice, or more than 16 parameters come
+ */
+export const mediaTypeParse = (value: readonly u8[], from: i32, to: i32): MediaType | null => {
+  const n: i32 = toI32(value.length)
+  if (from < 0 || to < from || to > n) {
+    return null
+  }
+  const start: i32 = httpFieldsOwsEnd(value, from, to)
+  const typeEnd: i32 = httpFieldsTokenEnd(value, start, to)
+  if (typeEnd === start || typeEnd < 0 || typeEnd >= to || typeEnd >= n || toI32(value[typeEnd]) !== 47) {
+    return null
+  }
+  const subStart: i32 = typeEnd + 1
+  const subEnd: i32 = httpFieldsTokenEnd(value, subStart, to)
+  if (subEnd === subStart) {
+    return null
+  }
+  const m: MediaType = new MediaType()
+  m.type = httpFieldsString(value, start, typeEnd, true)
+  m.subtype = httpFieldsString(value, subStart, subEnd, true)
+  return httpFieldsParams(value, subEnd, to, true, m) ? m : null
+}
+
+/**
+ * Reads a part's `Content-Disposition` value the way a browser writes one in
+ * a `multipart/form-data` body (RFC 7578 §4.2, and HTML's form submission):
+ * a disposition type token, then parameters as `mediaTypeParse` reads them,
+ * except that a backslash inside quotes is an octet like any other. A sender
+ * writes a `"`, CR or LF in a name as `%22`, `%0D` or `%0A`, which are kept
+ * as given; Windows paths keep their backslashes.
+ *
+ * @param value the octets that hold the field value
+ * @param from where the value starts in `value`
+ * @param to where it ends, one past its last octet
+ * @returns the disposition, its type in `type` and `subtype` empty, or null
+ *   on the shapes `mediaTypeParse` refuses past the type
+ */
+export const formDataDispositionParse = (value: readonly u8[], from: i32, to: i32): MediaType | null => {
+  const n: i32 = toI32(value.length)
+  if (from < 0 || to < from || to > n) {
+    return null
+  }
+  const start: i32 = httpFieldsOwsEnd(value, from, to)
+  const typeEnd: i32 = httpFieldsTokenEnd(value, start, to)
+  if (typeEnd === start) {
+    return null
+  }
+  const m: MediaType = new MediaType()
+  m.type = httpFieldsString(value, start, typeEnd, true)
+  return httpFieldsParams(value, typeEnd, to, false, m) ? m : null
+}
+
+/**
+ * The value of parameter `name` of `m`, its letters compared without case.
+ *
+ * @param m a media type or disposition `mediaTypeParse` or
+ *   `formDataDispositionParse` answered
+ * @param name the parameter's name, in any case
+ * @returns its value, quotes removed, or null when `m` has no such parameter
+ */
+export const mediaTypeParam = (m: MediaType, name: string): string | null => {
+  const raw: u8[] = httpFieldBytes(name)
+  const key: string = httpFieldsString(raw, 0, toI32(raw.length), true)
+  const count: i32 =
+    toI32(m.names.length) < toI32(m.values.length) ? toI32(m.names.length) : toI32(m.values.length)
+  let k: i32 = 0
+  while (k >= 0 && k < count && k < toI32(m.names.length) && k < toI32(m.values.length)) {
+    if (m.names[k] === key) {
+      return m.values[k]
+    }
+    k = k + 1
+  }
+  return null
 }

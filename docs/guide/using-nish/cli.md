@@ -278,24 +278,26 @@ compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
 any other `sqlite3_*`). You need no SQLite library on your system, and a
 program that does not call SQLite gets none of it.
 
-This example builds with [`--allow-panics`](#asking-what-a-program-can-do): a
-`string` result from C is tested for `NULL` as the program runs, a check no
-proof removes. Declare the result `string | null` and test it for `null` to
-build it under the default.
+The example declares C's `const char *` result `string | null` and tests it
+for `null`: a plain `string` result would be tested for `NULL` as the program
+runs, a check no proof removes, so the default refuses it.
 
-<!-- allow-panics: reads a C pointer that may be `NULL` -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-declare function sqlite3_libversion(): string;
+declare function sqlite3_libversion(): string | null;
 
 export const main = (): i32 => {
-  console.log(sqlite3_libversion());
+  const version = sqlite3_libversion();
+  if (version === null) {
+    return 1;
+  }
+  console.log(version);
   return 0;
 };
 ```
 
 ```console
-$ nish run --allow-panics version.ts
+$ nish run version.ts
 3.54.1
 ```
 
@@ -841,9 +843,14 @@ leaves the IR unchanged.
   means the call broke a contract the function's doc states, such as an
   index outside an array the caller sized
   ([Panics the standard library keeps](../../reference/language/semantics-decisions.md#panics-the-standard-library-keeps)). A
-  function or method that checks a window `(buf, off, len)` with the one
-  guard shape the compiler reads moves that check to each call, so a caller
-  that has proved `off` and `len` inside `buf` calls it under the default
+  function, arrow `const` or method that checks a window `(buf, off, len)`
+  with the one guard shape the compiler reads moves that check to each call,
+  and so does a *forwarder*, one whose first statement calls such a guard
+  with its own parameters, so a caller that has proved `off` and `len` inside `buf` calls it under the
+  default. A forwarder that passes a fixed count, `check(b, off, 4)`, leaves
+  only `off` to its caller, and `off >= 0 && off + 4 <= b.length` proves it;
+  after the guard's own call, the reads `b[off]` to `b[off + 3]` need no proof
+  of their own
   ([Panic sites](../../reference/language/semantics-decisions.md#panic-sites),
   `window`).
 - **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`

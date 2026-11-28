@@ -62,13 +62,13 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 58 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 59 modules.
 
 </scalar-card>
 
 <scalar-card title="Cryptography" icon="phosphor/regular/lock-key" href="#cryptography">
 
-Hashes, ciphers, signatures, certificates and passwords: 22 modules.
+Hashes, ciphers, signatures, certificates and passwords: 23 modules.
 
 </scalar-card>
 
@@ -220,6 +220,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 | [`nish/net/http3-frame`](net/http3-frame.md) | The frames and stream types of HTTP/3 (RFC 9114 §6.2, §7): frame headers, SETTINGS, the one-identifier frames (GOAWAY, MAX_PUSH_ID, CANCEL_PUSH), and which types are HTTP/2's reserved ones or unknown. |
 | [`nish/net/http3-server`](net/http3-server.md) | HTTP/3 over QUIC on one UDP socket: a pool of slots, each a reusable `QuicConnection` with an `Http3Connection` beside it, a `QuicListener` in front for the datagrams no slot owns, for a program that owns its readiness loop. |
 | [`nish/net/http3`](net/http3.md) | The server side of an HTTP/3 connection (RFC 9114) on the streams of a `QuicConnection` (`nish/net/quic`): the control stream and SETTINGS both ways, the QPACK encoder and decoder streams (opened, at dynamic table capacity 0), requests and responses on bidirectional streams with their bodies streamed both ways, GOAWAY, and RFC 9114's error codes. |
+| [`nish/net/multipart`](net/multipart.md) | A `multipart/form-data` body read part by part, as an HTML form with a file input sends it (RFC 7578, framed by RFC 2046 §5.1.1). |
 | [`nish/net/oidc`](net/oidc.md) | Verify a JWT from an OpenID Connect issuer: find the issuer's keys through discovery (OpenID Connect Discovery 1.0), read its JWK Set (RFC 7517, RFC 7518 §6, RFC 8037), follow its key rotation, and check a token's signature and claims with `nish/crypto/jwt`. |
 | [`nish/net/outbound`](net/outbound.md) | The policy for a program that fetches URLs it did not choose: a webhook sender, a link previewer, an importer that takes a URL from a form. |
 | [`nish/net/postgres-async`](net/postgres-async.md) | `PgAsyncPool`, PostgreSQL connections an `async` task awaits a query on, so a task's query waits on its socket while the executor runs the others. |
@@ -275,6 +276,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 | [`nish/crypto/p384`](crypto/p384.md) | ECDSA signature verification over NIST P-384 (secp384r1). |
 | [`nish/crypto/pki-roots`](crypto/pki-roots.md) | The root certificates a program should trust, read from where OpenSSL and Go look for them: the files `SSL_CERT_FILE` and `SSL_CERT_DIR` name, or else the system's bundle. |
 | [`nish/crypto/pki`](crypto/pki.md) | Whether the certificate chain a TLS server sent leads to a root the program trusts and names the host it dialled: RFC 5280 §6 path validation and RFC 6125 §6 hostname matching, at the instant the caller gives. |
+| [`nish/crypto/rsa-sign`](crypto/rsa-sign.md) | An RSA private key of 2048 to 4096 bits held as a `Secret`, and RSASSA-PSS signing with SHA-256 under it (RFC 8017 §8.1.1, the TLS 1.3 scheme `rsa_pss_rsae_sha256`), in constant-time arithmetic. |
 | [`nish/crypto/rsa`](crypto/rsa.md) | RSA signature verification: RSASSA-PKCS1-v1_5 and RSASSA-PSS over SHA-256, SHA-384 and SHA-512, under a public key read from its DER. |
 | [`nish/crypto/scram`](crypto/scram.md) | The arithmetic of a SCRAM-SHA-256 client, as RFC 5802 §3 defines it with SHA-256 for `H` and `HMAC` (RFC 7677 §3): |
 | [`nish/crypto/sha1`](crypto/sha1.md) | SHA-1 as FIPS 180-4 §6.1 defines it, in pure Nish. |

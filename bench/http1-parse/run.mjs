@@ -36,9 +36,9 @@ const nishc = compilerFrom(process.argv)
 
 /** Each head as `main <parser> <head> <iterations>` takes it, and its checksum for one iteration. */
 const HEADS = [
-  { label: "loadgen GET", head: 0, known: "b29eddcc" },
-  { label: "loadgen POST", head: 1, known: "a43fafe7" },
-  { label: "browser GET", head: 2, known: "d66e7fa6" },
+  { label: "loadgen GET", head: 0, known: "ccb31299" },
+  { label: "loadgen POST", head: 1, known: "c4edf52d" },
+  { label: "browser GET", head: 2, known: "e07fac7b" },
 ]
 const COLUMNS = ["old", "old-copy", "new"]
 /** The nanoseconds a calibrated run aims at. */
