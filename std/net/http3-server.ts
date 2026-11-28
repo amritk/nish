@@ -1190,7 +1190,7 @@ export class Http3Server {
     if (this.listener.handleWindow(buf, at, len, address, now, answer) !== QUIC_LISTEN_ACCEPT) {
       const reply: i32 = toI32(answer.reply.length)
       if (reply > 0) {
-        this.send(answer.reply, H3_SERVER_ZERO, reply, address, H3_SERVER_ZERO, H3_SERVER_ZERO)
+        this.send(answer.reply, reply, address, H3_SERVER_ZERO, H3_SERVER_ZERO)
       }
       return
     }
@@ -1443,11 +1443,16 @@ export class Http3Server {
   }
 
   /**
-   * Sends `buf[at .. at + len)` to `to` with the ECN codepoint `ecn`, cut
-   * into `segment`-byte datagrams when it is above 0; answers whether it went.
+   * Sends `buf[0 .. len)` to `to` with the ECN codepoint `ecn`, cut into
+   * `segment`-byte datagrams when it is above 0; answers whether it went.
    */
-  private send(buf: u8[], at: i32, len: i32, to: u8[], segment: i32, ecn: i32): boolean {
-    const sent: i32 = udpSendTo(this.fd, buf, at, len, to, segment, ecn)
+  private send(buf: u8[], len: i32, to: u8[], segment: i32, ecn: i32): boolean {
+    if (len < 0 || len > toI32(buf.length)) {
+      // Never taken: every caller sends the first `len` bytes of `buf`, a
+      // count its writer answered for the buffer it wrote into.
+      return false
+    }
+    const sent: i32 = udpSendTo(this.fd, buf, 0, len, to, segment, ecn)
     if (sent >= 0) {
       return true
     }
@@ -1463,34 +1468,37 @@ export class Http3Server {
       mark = H3_SERVER_ZERO
     }
     const step: i32 = segment > 0 ? segment : len
-    if (at < 0 || len < 0) {
-      // Never taken: `udpSendTo` above took `buf[at .. at + len)`.
-      return false
+    if (step <= 0 || len > toI32(buf.length)) {
+      // Never taken past an empty send: `len` was checked above and
+      // `udpSendTo` does not resize `buf`.
+      return len === 0
     }
-    let p: i32 = at
-    let left: i32 = len
-    while (left > 0) {
-      const n: i32 = left < step ? left : step
-      let one: i32 = udpSendTo(this.fd, buf, p, n, to, H3_SERVER_ZERO, mark)
+    let p: i32 = 0
+    while (p >= 0 && p < len) {
+      // The datagram's end: `p + step` when that is short of `len`, so it fits an i32.
+      const q: i32 = p < len - step ? toI32(toI64(p) + toI64(step)) : len
+      if (q < p || q > toI32(buf.length)) {
+        // Never taken: `p <= q <= len`, and `len` fits `buf`.
+        return false
+      }
+      let one: i32 = udpSendTo(this.fd, buf, p, q - p, to, H3_SERVER_ZERO, mark)
       if (one === H3_SERVER_UNSUPPORTED && mark !== 0) {
         // No ECN here: this datagram and the rest go unmarked and no slot
         // marks again. The packets just counted as marked fail their
         // connection's validation.
         this.unmark()
         mark = H3_SERVER_ZERO
-        one = udpSendTo(this.fd, buf, p, n, to, H3_SERVER_ZERO, mark)
+        if (q > toI32(buf.length)) {
+          // Never taken: `unmark` does not resize `buf`.
+          return false
+        }
+        one = udpSendTo(this.fd, buf, p, q - p, to, H3_SERVER_ZERO, mark)
       }
       if (one < 0) {
         this.sendErrors = h3Count(this.sendErrors)
         return false
       }
-      if (n < 0 || n > left) {
-        // Never taken: `n` is the smaller of `left` and a positive `step`.
-        return false
-      }
-      left = left - n
-      // `p + n`, at most `at + len`, which `udpSendTo` took, so it fits an i32.
-      p = toI32(toI64(p) + toI64(n))
+      p = q
     }
     return true
   }
@@ -1561,7 +1569,7 @@ export class Http3Server {
     // the flight below picks where it goes.
     const probe: i32 = quic.takeProbeInto(this.tx, H3_SERVER_ZERO, now)
     if (probe > 0) {
-      this.send(this.tx, H3_SERVER_ZERO, probe, quic.probeAddress, H3_SERVER_ZERO, H3_SERVER_ZERO)
+      this.send(this.tx, probe, quic.probeAddress, H3_SERVER_ZERO, H3_SERVER_ZERO)
     }
     if (quic.pathKnown) {
       const current: u8[] = quic.sendAddress()
@@ -1589,7 +1597,7 @@ export class Http3Server {
         break
       }
       const segment: i32 = this.flight.count > 1 ? this.flight.segment : H3_SERVER_ZERO
-      if (!this.send(this.tx, H3_SERVER_ZERO, n, to, segment, this.flight.ecn)) {
+      if (!this.send(this.tx, n, to, segment, this.flight.ecn)) {
         break
       }
       retried = false
@@ -1598,7 +1606,7 @@ export class Http3Server {
       // The CONNECTION_CLOSE goes whatever the pacer says: nothing follows it.
       const n: i32 = quic.takeDatagramInto(this.tx, H3_SERVER_ZERO, now)
       if (n > 0) {
-        this.send(this.tx, H3_SERVER_ZERO, n, to, H3_SERVER_ZERO, quic.datagramEcn)
+        this.send(this.tx, n, to, H3_SERVER_ZERO, quic.datagramEcn)
       }
       this.release(slot)
       return
