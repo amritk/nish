@@ -18,6 +18,7 @@
 // over-wide shift poison and JavaScript wraps the count. A literal count is
 // masked here at compile time, so the common `x << 3` stays one instruction.
 
+import { wrappingSub } from "nish:unsafe"
 import { internalErrorFor } from "./ice"
 import { numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { Emitter } from "./emit"
@@ -530,12 +531,12 @@ const emitBitwise = (emitter: Emitter, expr: Node, type: i32): string => {
  * `-<literal>` at an integer type, as the constant it is rather than a
  * checked `sub <ty> 0, <literal>`: for `-2147483648` in `i32`, whose literal
  * already truncates to `INT_MIN`, that negation would overflow and panic.
- * The negation is done in `u64`, where it wraps, and sign-extended back from
- * the type's width, so every minimum spells itself and an unsigned `-(1)` is
- * all ones.
+ * The negation wraps in 64 bits, as two's complement defines it, and is
+ * sign-extended back from the type's width, so every minimum spells itself
+ * and an unsigned `-(1)` is all ones.
  */
 const negatedLiteral = (text: string, type: i32): string => {
-  const negated = toI64(toU64(0) - toU64(parseIntegerLiteral(text)))
+  const negated = wrappingSub(toI64(0), parseIntegerLiteral(text))
   const spare = toI64(64 - intBits(type))
   return `${(negated << spare) >> spare}`
 }

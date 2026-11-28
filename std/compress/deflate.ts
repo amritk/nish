@@ -52,7 +52,7 @@
  * the length limit is the Kraft-sum repair of the counts per length. Not
  * ported from another implementation.
  */
-import { uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub } from "nish:unsafe"
+import { uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe"
 import { copyBytes, tryCopyBytes } from "nish/bytes"
 
 /** Level 0: stored blocks only, the input copied with five bytes of framing per 65,535. */
@@ -122,8 +122,8 @@ const DEFLATE_BLOCK_TOKENS: i32 = 16384
 /** A table position this far up is slid back down before the next block. */
 const DEFLATE_REBASE: i32 = 1073741824
 
-/** Huffman's multiplier for the hash (Knuth's 2^32 / phi). */
-const DEFLATE_HASH_MUL: i64 = 2654435761
+/** Huffman's multiplier for the hash (Knuth's 2^32 / phi, 2654435761, in 32 signed bits). */
+const DEFLATE_HASH_MUL: i32 = -1640531535
 
 /** `FixedDeflater`'s largest hash table, 2^14 entries; a call clears only as much as its input needs. */
 const FIXED_HASH_BITS: i32 = 14
@@ -240,6 +240,16 @@ const deflateLoad32 = (b: u8[], p: integer<0, 2147483639>): u32 =>
   (toU32(uncheckedGet(b, p + 1)) << 8) |
   (toU32(uncheckedGet(b, p + 2)) << 16) |
   (toU32(uncheckedGet(b, p + 3)) << 24)
+
+/**
+ * The multiplicative hash of a little-endian `word`: the top `32 - shift`
+ * bits of its product with `DEFLATE_HASH_MUL`, a head-table index.
+ */
+const deflateHash = (word: u32, shift: i32): i32 =>
+  // Multiplicative hashing keeps the low 32 bits of the product and reads its
+  // top bits, so the multiply wraps by design; the shift, not the product,
+  // bounds the index.
+  wrappingMul(toI32(word), DEFLATE_HASH_MUL) >>> shift
 
 /**
  * The little-endian 64-bit word at `b[p .. p + 8)`; the caller has checked the
@@ -1470,10 +1480,7 @@ export class Deflater {
     }
     const at: integer<0, 2147483639> = p
     const word: u32 = deflateLoad32(src, at)
-    const h: i32 =
-      minMatch === 3
-        ? toI32(((word << 8) * toU32(DEFLATE_HASH_MUL)) >>> 17)
-        : toI32((word * toU32(DEFLATE_HASH_MUL)) >>> 17)
+    const h: i32 = minMatch === 3 ? deflateHash(word << 8, 17) : deflateHash(word, 17)
     let cand: i32 = uncheckedGet(head, h)
     uncheckedSet(head, h, v)
     uncheckedSet(prev, v & (DEFLATE_WINDOW - 1), cand)
@@ -1626,7 +1633,7 @@ export class Deflater {
         at0 = v
         const at: integer<0, 2147483639> = p
         const word: u32 = deflateLoad32(src, at)
-        const h: i32 = toI32((word * toU32(DEFLATE_HASH_MUL)) >>> 17)
+        const h: i32 = deflateHash(word, 17)
         let cand: i32 = uncheckedGet(head, h)
         uncheckedSet(head, h, v)
         uncheckedSet(prev, v & (DEFLATE_WINDOW - 1), cand)
@@ -1711,7 +1718,7 @@ export class Deflater {
         for (let k: i32 = 1; k < cnt && k < 258; k += 1) {
           const q: i32 = p + k
           const vq: i32 = v + k
-          const hq: i32 = toI32((deflateLoad32(src, q) * toU32(DEFLATE_HASH_MUL)) >>> 17)
+          const hq: i32 = deflateHash(deflateLoad32(src, q), 17)
           uncheckedSet(prev, vq & (DEFLATE_WINDOW - 1), uncheckedGet(head, hq))
           uncheckedSet(head, hq, vq)
         }
@@ -1847,9 +1854,7 @@ export class Deflater {
         while (q < insertEnd && q >= 0 && q <= 2147483639 && vq >= 0 && vq < 2147483647) {
           const qa: integer<0, 2147483639> = q
           const word: u32 = deflateLoad32(src, qa)
-          const hq: i32 = three
-            ? toI32(((word << 8) * toU32(DEFLATE_HASH_MUL)) >>> 17)
-            : toI32((word * toU32(DEFLATE_HASH_MUL)) >>> 17)
+          const hq: i32 = three ? deflateHash(word << 8, 17) : deflateHash(word, 17)
           uncheckedSet(prev, vq & (DEFLATE_WINDOW - 1), uncheckedGet(head, hq))
           uncheckedSet(head, hq, vq)
           q += 1
@@ -2609,7 +2614,7 @@ export class FixedDeflater {
       bits += 1
     }
     head.fill(0, 0, 1 << bits)
-    const shift: u32 = toU32(32 - bits)
+    const shift: i32 = 32 - bits
     // `deflateWindow` has checked both windows, so neither end is -1.
     const end: i32 = deflateWindowEnd(src, off, len)
     const outEnd: i32 = deflateWindowEnd(out, at, room)
@@ -2640,7 +2645,7 @@ export class FixedDeflater {
       if (pc <= last && pc <= 2147483639) {
         const pi: integer<0, 2147483639> = pc
         const w: u64 = deflateLoad64(src, pi)
-        const h: i32 = toI32((toU32(w) * toU32(DEFLATE_HASH_MUL)) >>> shift)
+        const h: i32 = deflateHash(toU32(w), shift)
         // The table holds 0 or `q - off + 1` for an earlier position `q`, so
         // the candidate `pc - dist` lies in [off - 1, pc).
         const seen: i32 = uncheckedGet(head, h)
@@ -2714,7 +2719,7 @@ export class FixedDeflater {
         const q: i32 = next - 2
         if (q >= off && q <= last && q <= 2147483639) {
           const qi: integer<0, 2147483639> = q
-          const hq: i32 = toI32((deflateLoad32(src, qi) * toU32(DEFLATE_HASH_MUL)) >>> shift)
+          const hq: i32 = deflateHash(deflateLoad32(src, qi), shift)
           uncheckedSet(head, hq, q - off + 1)
         }
         p = next
