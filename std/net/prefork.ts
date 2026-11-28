@@ -561,15 +561,65 @@ const preforkNowMs = (): i64 => monotonicNanos() / 1000000
 
 // The clock in milliseconds lies within 2^63 / 10^6 of 0, about 9.2 * 10^12,
 // so a sum or difference of two such times, or of one and an i32, is far
-// inside the i64 range. The 64-bit unsigned arithmetic below wraps rather
-// than panics, and on values that never pass the range its result, read
-// back as an i64, is the exact one.
+// inside the i64 range. The helpers below still hold a result at the range's
+// ends rather than overflow, so that the bounds prover sees no sum that can:
+// two values whose sum or difference cannot leave the range are worked in
+// `i64`, and two that could are worked as magnitudes in `u64`, where they are
+// below 2^64 and so exact, and held below 2^63 before they are read back.
 
 /** `now` plus `ms` milliseconds. */
-const preforkAfter = (now: i64, ms: i32): i64 => toI64(toU64(now) + toU64(toI64(ms)))
+const preforkAfter = (now: i64, ms: i32): i64 => {
+  const n: i64 = toI64(ms)
+  if (now >= 0) {
+    if (n < 0) {
+      return now + n
+    }
+    const sum: u64 = toU64(now) + toU64(n)
+    return toI64(preforkBelow2p63(sum))
+  }
+  if (n >= 0) {
+    return now + n
+  }
+  // `now + n` is `-1 - ((-1 - now) + (-1 - n) + 1)`.
+  const past: u64 = toU64(-1 - now) + toU64(-1 - n) + toU64(1)
+  const k: i64 = toI64(preforkBelow2p63(past))
+  if (k < 0) {
+    // Not taken: `k` is below 2^63. The test is what proves `-1 - k` fits.
+    return -1
+  }
+  return -1 - k
+}
 
 /** The milliseconds from `then` to `now`. */
-const preforkSince = (now: i64, then: i64): i64 => toI64(toU64(now) - toU64(then))
+const preforkSince = (now: i64, then: i64): i64 => {
+  if (now >= 0) {
+    if (then >= 0) {
+      return now - then
+    }
+    const sum: u64 = toU64(now) + toU64(-1 - then) + toU64(1)
+    return toI64(preforkBelow2p63(sum))
+  }
+  if (then < 0) {
+    return now - then
+  }
+  // `now - then` is `-1 - ((-1 - now) + then)`.
+  const past: u64 = toU64(-1 - now) + toU64(then)
+  const k: i64 = toI64(preforkBelow2p63(past))
+  if (k < 0) {
+    // Not taken: `k` is below 2^63. The test is what proves `-1 - k` fits.
+    return -1
+  }
+  return -1 - k
+}
+
+/** `x`, or 2^63 - 1 where `x` is larger: the most an `i64` holds. */
+const preforkBelow2p63 = (x: u64): u64 => {
+  const most: u64 = (toU64(1) << toU64(63)) - toU64(1)
+  if (x > most) {
+    return most
+  }
+  return x
+}
 
 /** The signals the supervisor stops its workers with. */
 const PREFORK_SIGTERM: i32 = 15
