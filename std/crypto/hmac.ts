@@ -1212,7 +1212,7 @@ const hmacResume256 = (h: Sha256, mid: u64[], at: i32): void => {
     state[i] = toU32(mid[p])
     p += 1
   }
-  h.total = toI64(SHA256_BLOCK)
+  h.total = toU64(SHA256_BLOCK)
   h.finished = false
 }
 

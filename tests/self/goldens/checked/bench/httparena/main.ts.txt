@@ -14764,34 +14764,35 @@ function websocketCheckResponse(response: Http1ResponseParser, key: string, offe
   callee +62:14 new WsHandshake -> @nish.WsHandshake.constructor
   callee +65:10 new WsHandshake -> @nish.WsHandshake.constructor
 module std/crypto/base64url.ts [package nish]
-function base64urlRangeMask(c: i32, lo: i32, hi: i32): i32 -> @nish.base64urlRangeMask
+function base64urlRangeMask(c: i32, lo: integer<0, 255>, hi: integer<0, 255>): i32 -> @nish.base64urlRangeMask
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+  local +0:9 d: i32 (const)
 function base64urlCharOf(v: i32): i32 -> @nish.base64urlCharOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: v
   calls: nish.base64urlRangeMask
   stackSites=0 stackLocals=0
-  callee +0:13 base64urlRangeMask -> @nish.base64urlRangeMask
-  callee +1:13 base64urlRangeMask -> @nish.base64urlRangeMask
-  callee +2:13 base64urlRangeMask -> @nish.base64urlRangeMask
-  callee +3:13 base64urlRangeMask -> @nish.base64urlRangeMask
-function base64urlSextetOf(c: i32): i32 -> @nish.base64urlSextetOf
+  local +0:9 s: i32 (const)
+  callee +4:6 base64urlRangeMask -> @nish.base64urlRangeMask
+  callee +5:6 base64urlRangeMask -> @nish.base64urlRangeMask
+  callee +6:6 base64urlRangeMask -> @nish.base64urlRangeMask
+  callee +7:6 base64urlRangeMask -> @nish.base64urlRangeMask
+function base64urlSextetOf(code: i32): i32 -> @nish.base64urlSextetOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: c
   calls: nish.base64urlRangeMask
   stackSites=0 stackLocals=0
-  local +0:9 upper: i32 (const)
-  callee +0:22 base64urlRangeMask -> @nish.base64urlRangeMask
-  local +1:9 lower: i32 (const)
+  local +0:9 c: i32 (const)
+  local +1:9 upper: i32 (const)
   callee +1:22 base64urlRangeMask -> @nish.base64urlRangeMask
-  local +2:9 digit: i32 (const)
+  local +2:9 lower: i32 (const)
   callee +2:22 base64urlRangeMask -> @nish.base64urlRangeMask
-  local +3:9 dash: i32 (const)
-  callee +3:21 base64urlRangeMask -> @nish.base64urlRangeMask
-  local +4:9 underscore: i32 (const)
-  callee +4:27 base64urlRangeMask -> @nish.base64urlRangeMask
-  local +5:9 value: i32 (const)
+  local +3:9 digit: i32 (const)
+  callee +3:22 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +4:9 dash: i32 (const)
+  callee +4:21 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +5:9 underscore: i32 (const)
+  callee +5:27 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +6:9 value: i32 (const)
 function base64Put(out: u8[], at: i32, byte: u8): i32 -> @nish.base64Put
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -14852,29 +14853,29 @@ function base64urlDecode(text: string): u8[] | null -> @nish.base64urlDecode [ex
   callee +65:7 base64Put -> @nish.base64Put
 function base64StdPadCharOf(v: i32): i32 -> @nish.base64StdPadCharOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: v
   calls: nish.base64urlRangeMask
   stackSites=0 stackLocals=0
-  callee +0:13 base64urlRangeMask -> @nish.base64urlRangeMask
-  callee +1:13 base64urlRangeMask -> @nish.base64urlRangeMask
-  callee +2:13 base64urlRangeMask -> @nish.base64urlRangeMask
-  callee +3:13 base64urlRangeMask -> @nish.base64urlRangeMask
-function base64StdPadSextetOf(c: i32): i32 -> @nish.base64StdPadSextetOf
+  local +0:9 s: i32 (const)
+  callee +4:6 base64urlRangeMask -> @nish.base64urlRangeMask
+  callee +5:6 base64urlRangeMask -> @nish.base64urlRangeMask
+  callee +6:6 base64urlRangeMask -> @nish.base64urlRangeMask
+  callee +7:6 base64urlRangeMask -> @nish.base64urlRangeMask
+function base64StdPadSextetOf(code: i32): i32 -> @nish.base64StdPadSextetOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: c
   calls: nish.base64urlRangeMask
   stackSites=0 stackLocals=0
-  local +0:9 upper: i32 (const)
-  callee +0:22 base64urlRangeMask -> @nish.base64urlRangeMask
-  local +1:9 lower: i32 (const)
+  local +0:9 c: i32 (const)
+  local +1:9 upper: i32 (const)
   callee +1:22 base64urlRangeMask -> @nish.base64urlRangeMask
-  local +2:9 digit: i32 (const)
+  local +2:9 lower: i32 (const)
   callee +2:22 base64urlRangeMask -> @nish.base64urlRangeMask
-  local +3:9 plus: i32 (const)
-  callee +3:21 base64urlRangeMask -> @nish.base64urlRangeMask
-  local +4:9 slash: i32 (const)
-  callee +4:22 base64urlRangeMask -> @nish.base64urlRangeMask
-  local +5:9 value: i32 (const)
+  local +3:9 digit: i32 (const)
+  callee +3:22 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +4:9 plus: i32 (const)
+  callee +4:21 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +5:9 slash: i32 (const)
+  callee +5:22 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +6:9 value: i32 (const)
 function base64StdPadEncode(data: u8[]): string -> @nish.base64StdPadEncode [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.base64StdPadCharOf nish_alloc_struct nish_array_grow nish_panic nish_str_new
@@ -14895,39 +14896,42 @@ function base64StdPadEncodeInto(data: u8[], start: i32, length: i32, out: u8[], 
   pointer data: size=0 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.base64Put#0 nish.base64Put#0
   stackSites=0 stackLocals=0
-  local -24:9 textLength: u32 (const)
-  local -20:9 end: i32 (const)
-  local -17:7 j: i32 (let)
-  local -16:7 k: i32 (let)
-  local -15:7 acc: i32 (let)
-  local -14:7 bits: u32 (let)
-  local -13:12 n: i32 (let)
-  callee -7:11 base64Put -> @nish.base64Put
-  callee -7:34 base64StdPadCharOf -> @nish.base64StdPadCharOf
-  callee -3:9 base64Put -> @nish.base64Put
-  callee -3:32 base64StdPadCharOf -> @nish.base64StdPadCharOf
+  local -26:9 textLength: i32 (const)
+  local -20:7 j: i32 (let)
+  local -19:7 k: i32 (let)
+  local -18:7 acc: i32 (let)
+  local -17:7 bits: u32 (let)
+  local -16:12 n: i32 (let)
+  callee -10:11 base64Put -> @nish.base64Put
+  callee -10:34 base64StdPadCharOf -> @nish.base64StdPadCharOf
+  callee -6:9 base64Put -> @nish.base64Put
+  callee -6:32 base64StdPadCharOf -> @nish.base64StdPadCharOf
+  local -2:9 padCount: i32 (const)
+  local -1:12 q: i32 (let)
 function base64StdPadDecodedLength(text: u8[], start: i32, length: i32): i32 -> @nish.base64StdPadDecodedLength [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: start
   calls: nish.base64StdPadSextetOf nish_panic
   pointer text: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 last: i32 (const)
-  local +1:7 pad: u32 (let)
-  local +5:9 chars: i32 (const)
-  local +6:7 bad: i32 (let)
-  local +7:7 acc: i32 (let)
-  local +8:7 bits: u32 (let)
-  local +9:7 p: i32 (let)
-  local +10:12 k: i32 (let)
-  local +11:11 v: i32 (const)
-  callee +11:20 base64StdPadSextetOf -> @nish.base64StdPadSextetOf
+  local +0:9 before: i32 (const)
+  local +5:9 rest: i32 (const)
+  local +12:9 last: i32 (const)
+  local +13:7 pad: integer<0, 2> (let)
+  local +17:9 chars: i32 (const)
+  local +18:7 bad: i32 (let)
+  local +19:7 acc: i32 (let)
+  local +20:7 bits: u32 (let)
+  local +21:7 p: i32 (let)
+  local +22:12 k: i32 (let)
+  local +23:11 v: i32 (const)
+  callee +23:20 base64StdPadSextetOf -> @nish.base64StdPadSextetOf
 function base64StdPadDecode(text: string): u8[] | null -> @nish.base64StdPadDecode [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.base64Put nish.base64StdPadSextetOf
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +9:7 pad: u32 (let)
+  local +9:7 pad: integer<0, 2> (let)
   local +16:7 last: i32 (let)
   local +23:9 whole: i32 (const)
   local +24:9 out: u8[] (const)
@@ -18606,7 +18610,7 @@ module std/crypto/sha256.ts [package nish]
 const SHA256_SIZE: i32 = 32 [exported]
 const SHA256_BLOCK: i32 = 64 [exported]
 struct Sha256 (class) size=40 align=8 exported
-  field total: i64 index=0 offset=0 initialized
+  field total: u64 index=0 offset=0 initialized
   field state: u32[] index=1 offset=8
   field block: u8[] index=2 offset=16
   field schedule: u32[] index=3 offset=24
@@ -22794,12 +22798,13 @@ function p256BaseSelect(out: P256ProjectivePoint, table: u32[], c: i32, digit: u
   local +3:9 u: u32 (const)
   callee +4:3 p256SetZero -> @nish.p256SetZero
   callee +5:3 p256SetZero -> @nish.p256SetZero
-  local +6:12 j: i32 (let)
-  local +8:11 at: i32 (const)
-  callee +9:5 p256BaseMove -> @nish.p256BaseMove
-  callee +11:3 p256SetZero -> @nish.p256SetZero
-  callee +12:3 p256FiatSub -> @nish.p256FiatSub
-  callee +13:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
+  local +9:9 first: i32 (const)
+  local +10:12 j: i32 (let)
+  local +11:11 at: i32 (const)
+  callee +12:5 p256BaseMove -> @nish.p256BaseMove
+  callee +14:3 p256SetZero -> @nish.p256SetZero
+  callee +15:3 p256FiatSub -> @nish.p256FiatSub
+  callee +16:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
 function p256PointAddMixed(p: P256ProjectivePoint, q: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256PointAddMixed
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256FiatMul
@@ -24533,6 +24538,15 @@ import Secret from "nish:secret" -> generic class Secret
 import exposeWith from "nish:secret" -> generic function exposeWith
 import secret from "nish:secret" -> generic function secret
 import wipe from "nish:secret" -> generic function wipe
+import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+import wrappingMul from "nish:unsafe" -> builtin wrappingMul
+import wrappingSub from "nish:unsafe" -> builtin wrappingSub
+unsafe import 100:10 wrappingAdd from "nish:unsafe"
+unsafe import 100:23 wrappingMul from "nish:unsafe"
+unsafe import 100:36 wrappingSub from "nish:unsafe"
+unsafe call 122:53 wrappingAdd (node 48)
+unsafe call 132:53 wrappingSub (node 68)
+unsafe call 142:53 wrappingMul (node 88)
 const X25519_SIZE: i32 = 32 [exported]
 const X25519_A24: i64 = 121665
 function f25519Add64(a: i64, b: i64): i64 -> @nish.f25519Add64 [exported]
@@ -39877,11 +39891,12 @@ function pkiLower(c: i32): i32 -> @nish.pkiLower
   stackSites=0 stackLocals=0
 function pkiFoldEqualAt(a: string, aAt: i32, b: string, bAt: i32, n: i32): boolean -> @nish.pkiFoldEqualAt
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: aAt bAt
   calls: nish.pkiLower
   stackSites=0 stackLocals=0
-  local +0:12 i: i32 (let)
-  local +2:11 x: i32 (const)
-  local +3:11 y: i32 (const)
+  local +0:7 x: i32 (let)
+  local +1:7 y: i32 (let)
+  local +2:12 i: i32 (let)
   callee +9:9 pkiLower -> @nish.pkiLower
   callee +9:46 pkiLower -> @nish.pkiLower
 function pkiStripDot(s: string): string -> @nish.pkiStripDot
@@ -39897,11 +39912,6 @@ function pkiValidDns(s: string): boolean -> @nish.pkiValidDns
   local +4:7 label: i32 (let)
   local +5:12 i: i32 (let)
   local +6:11 c: i32 (const)
-function pkiLabelCount(s: string): i32 -> @nish.pkiLabelCount
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-  local +0:7 count: i32 (let)
-  local +1:12 i: i32 (let)
 function pkiDigit(c: i32): i32 -> @nish.pkiDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -39965,9 +39975,9 @@ function pkiParseIp(host: string): u8[] | null -> @nish.pkiParseIp
   callee +10:12 pkiParseIpv6 -> @nish.pkiParseIpv6
   callee +12:10 pkiParseIpv4 -> @nish.pkiParseIpv4
 function pkiDnsMatch(san: string, host: string): boolean -> @nish.pkiDnsMatch
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: host san
-  calls: nish.pkiFoldEqualAt nish.pkiLabelCount nish.pkiStripDot nish.pkiValidDns nish_arena_mark nish_arena_release nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish.pkiFoldEqualAt nish.pkiStripDot nish.pkiValidDns nish_arena_mark nish_arena_release nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
   callee +0:24 pkiStripDot -> @nish.pkiStripDot
@@ -39975,11 +39985,10 @@ function pkiDnsMatch(san: string, host: string): boolean -> @nish.pkiDnsMatch
   local +3:11 rest: string (const)
   local +4:11 dot: i32 (const)
   local +5:11 restLength: i32 (const)
-  callee +7:7 pkiValidDns -> @nish.pkiValidDns
-  callee +8:7 pkiLabelCount -> @nish.pkiLabelCount
-  callee +13:7 pkiFoldEqualAt -> @nish.pkiFoldEqualAt
-  callee +16:10 pkiValidDns -> @nish.pkiValidDns
-  callee +16:59 pkiFoldEqualAt -> @nish.pkiFoldEqualAt
+  callee +8:51 pkiValidDns -> @nish.pkiValidDns
+  callee +11:59 pkiFoldEqualAt -> @nish.pkiFoldEqualAt
+  callee +13:10 pkiValidDns -> @nish.pkiValidDns
+  callee +13:59 pkiFoldEqualAt -> @nish.pkiFoldEqualAt
 function pkiHostDns(hostname: string): string | null -> @nish.pkiHostDns
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: hostname
@@ -40176,22 +40185,23 @@ function pkiConstraintsCode(s: PkiSearch, issuer: X509Certificate): i32 -> @nish
   pointer s: size=64 writesThrough=true captured=false
   pointer issuer: size=184 writesThrough=false captured=false passedTo=nish.pkiDnsAllowed#0 nish.pkiDnsAllowed#0 nish.pkiIpAllowed#0 nish.pkiDirAllowed#0
   stackSites=0 stackLocals=0
-  local -16:14 e: X509GeneralSubtree (const)
-  local -9:9 subtrees: i64 (const)
-  local -8:7 cost: i64 (let)
-  local -6:9 names: i64 (let)
-  local -5:16 c: X509Certificate (const)
-  local +8:9 used: i32 (const)
-  local +15:9 total: i64 (const)
-  callee +21:29 pkiDnsAllowed -> @nish.pkiDnsAllowed
-  local +24:12 i: i32 (let)
-  local +25:11 c: X509Certificate (const)
-  local +26:16 d: string (const)
-  callee +27:12 pkiDnsAllowed -> @nish.pkiDnsAllowed
-  local +31:16 ip: u8[] (const)
-  callee +32:12 pkiIpAllowed -> @nish.pkiIpAllowed
-  callee +36:22 pkiSelfIssued -> @nish.pkiSelfIssued
-  callee +36:44 pkiDirAllowed -> @nish.pkiDirAllowed
+  local -18:14 e: X509GeneralSubtree (const)
+  local -8:9 subtrees: u64 (const)
+  local -7:9 budget: u64 (const)
+  local -6:7 cost: u64 (let)
+  local -4:9 names: u64 (let)
+  local -3:16 c: X509Certificate (const)
+  local +6:9 used: i32 (const)
+  local +11:9 total: u64 (const)
+  callee +17:29 pkiDnsAllowed -> @nish.pkiDnsAllowed
+  local +20:12 i: i32 (let)
+  local +21:11 c: X509Certificate (const)
+  local +22:16 d: string (const)
+  callee +23:12 pkiDnsAllowed -> @nish.pkiDnsAllowed
+  local +27:16 ip: u8[] (const)
+  callee +28:12 pkiIpAllowed -> @nish.pkiIpAllowed
+  callee +32:22 pkiSelfIssued -> @nish.pkiSelfIssued
+  callee +32:44 pkiDirAllowed -> @nish.pkiDirAllowed
 function pkiTimeCode(c: X509Certificate, nowMs: i64): i32 -> @nish.pkiTimeCode
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer c: size=184 writesThrough=false captured=false
@@ -40222,14 +40232,14 @@ function pkiIssuerCode(s: PkiSearch, child: X509Certificate, cand: X509Certifica
   local +3:9 time: i32 (const)
   callee +3:21 pkiTimeCode -> @nish.pkiTimeCode
   callee +16:28 pkiCriticalitySound -> @nish.pkiCriticalitySound
-  local +26:9 below: i32 (let)
-  local +27:14 i: i32 (let)
-  callee +28:12 pkiSelfIssued -> @nish.pkiSelfIssued
-  local +37:9 names: i32 (const)
-  callee +37:22 pkiConstraintsCode -> @nish.pkiConstraintsCode
-  local +41:9 signature: i32 (const)
-  callee +41:26 pkiCheckSignature -> @nish.pkiCheckSignature
-  callee +42:45 pkiKeyIdsCode -> @nish.pkiKeyIdsCode
+  local +28:9 below: u32 (let)
+  local +29:14 i: i32 (let)
+  callee +30:12 pkiSelfIssued -> @nish.pkiSelfIssued
+  local +38:9 names: i32 (const)
+  callee +38:22 pkiConstraintsCode -> @nish.pkiConstraintsCode
+  local +42:9 signature: i32 (const)
+  callee +42:26 pkiCheckSignature -> @nish.pkiCheckSignature
+  callee +43:45 pkiKeyIdsCode -> @nish.pkiKeyIdsCode
 function pkiIsDistrusted(store: PkiTrustStore, cert: X509Certificate): boolean -> @nish.pkiIsDistrusted
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.sha256
@@ -40368,8 +40378,8 @@ function pkiVerifyServer(chain: u8[][], hostname: string, nowMs: i64, store: Pki
   local -48:9 count: i32 (const)
   callee -46:12 new PkiResult -> @nish.PkiResult.constructor
   callee -43:12 new PkiResult -> @nish.PkiResult.constructor
-  local -41:7 bytes: i64 (let)
-  local -40:14 der: u8[] (const)
+  local -39:7 bytes: u64 (let)
+  local -38:14 der: u8[] (const)
   callee -35:14 new PkiResult -> @nish.PkiResult.constructor
   local -32:9 certs: X509Certificate[] (const)
   local -31:7 first: X509Certificate | null (let)
@@ -41137,8 +41147,8 @@ function rsaBitLength(v: u8[]): i32 -> @nish.rsaBitLength
   stackSites=0 stackLocals=0
   local +0:9 length: i32 (const)
   local +4:9 top: i32 (const)
-  local +5:7 topBits: i32 (let)
-  local +6:12 b: i32 (let)
+  local +6:7 missing: i32 (let)
+  local +7:12 b: i32 (let)
 function rsaParsePublicKey(der: u8[]): RsaPublicKey | null -> @nish.rsaParsePublicKey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.RsaPublicKey.constructor nish.rsaBitLength nish.rsaDerElement nish.rsaDerUnsigned nish_alloc_struct
@@ -41586,19 +41596,28 @@ function x509DerRead(der: u8[], at: i32, limit: i32): X509DerElement | null -> @
   local +0:9 e: X509DerElement (const)
   callee +0:13 new X509DerElement -> @nish.X509DerElement.constructor
   callee +1:8 x509DerReadInto -> @nish.x509DerReadInto
+function x509Sum(a: i32, b: i32, limit: i32): i32 -> @nish.x509Sum
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 room: i32 (const)
+  local +4:9 gap: i32 (const)
 function x509DerReadInto(der: u8[], at: i32, limit: i32, into: X509DerElement): boolean -> @nish.x509DerReadInto
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  escaping: at
+  escaping: at limit
+  calls: nish.x509Sum
   pointer der: size=0 writesThrough=false captured=false
   pointer into: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -34:9 tag: i32 (const)
-  local -30:7 length: i32 (let)
-  local -29:7 start: i32 (let)
-  local -27:11 count: i32 (const)
-  local -21:11 stop: i32 (const)
-  local -12:14 i: i32 (let)
+  local -36:9 tag: i32 (const)
+  local -32:7 length: i32 (let)
+  local -31:7 start: i32 (let)
+  local -29:11 count: i32 (const)
+  local -22:11 stop: i32 (const)
+  callee -22:23 x509Sum -> @nish.x509Sum
+  local -13:14 i: i32 (let)
+  local -4:9 end: i32 (const)
+  callee -4:20 x509Sum -> @nish.x509Sum
 function x509DerExpect(der: u8[], at: i32, limit: i32, tag: i32): X509DerElement | null -> @nish.x509DerExpect
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: at limit
@@ -41630,13 +41649,15 @@ function x509DerSize(der: u8[], e: X509DerElement): i32 -> @nish.x509DerSize
   local +1:9 end: i32 (const)
 function x509DerOctet(der: u8[], e: X509DerElement, k: i32): i32 -> @nish.x509DerOctet
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.x509DerSize
+  escaping: k
+  calls: nish.x509DerSize nish.x509Sum
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerSize#0
   pointer e: size=16 writesThrough=false captured=false passedTo=nish.x509DerSize#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   callee +0:18 x509DerSize -> @nish.x509DerSize
-  local +5:9 i: i32 (const)
+  local +4:9 i: i32 (const)
+  callee +4:18 x509Sum -> @nish.x509Sum
 function x509DerSlice(der: u8[], from: i32, to: i32): u8[] -> @nish.x509DerSlice
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from
@@ -41708,7 +41729,8 @@ function x509DerBitStringOctets(der: u8[], e: X509DerElement): u8[] | null -> @n
   stackSites=0 stackLocals=0
   callee +0:41 x509DerBitStringSound -> @nish.x509DerBitStringSound
   callee +0:74 x509DerOctet -> @nish.x509DerOctet
-  callee +4:10 x509DerSlice -> @nish.x509DerSlice
+  local +3:9 start: i32 (const)
+  callee +9:10 x509DerSlice -> @nish.x509DerSlice
 function x509DerDigits(der: u8[], e: X509DerElement, from: i32, to: i32): i32 -> @nish.x509DerDigits
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
@@ -41740,26 +41762,26 @@ function x509DerTime(der: u8[], e: X509DerElement): i64 -> @nish.x509DerTime
   local +2:7 at: i32 (let)
   local +3:7 year: i32 (let)
   callee +5:12 x509DerDigits -> @nish.x509DerDigits
-  callee +12:12 x509DerDigits -> @nish.x509DerDigits
-  local +17:9 month: i32 (const)
-  callee +17:22 x509DerDigits -> @nish.x509DerDigits
-  local +18:9 day: i32 (const)
-  callee +18:20 x509DerDigits -> @nish.x509DerDigits
-  local +19:9 hour: i32 (const)
-  callee +19:21 x509DerDigits -> @nish.x509DerDigits
-  local +20:9 minute: i32 (const)
-  callee +20:23 x509DerDigits -> @nish.x509DerDigits
-  local +21:9 second: i32 (const)
-  callee +21:23 x509DerDigits -> @nish.x509DerDigits
-  callee +24:7 x509DerOctet -> @nish.x509DerOctet
-  callee +27:36 x509DaysInMonth -> @nish.x509DaysInMonth
-  local +36:9 y: i32 (const)
-  local +37:9 years: i32 (const)
-  local +39:7 yday: u32 (let)
-  local +40:12 m: i32 (let)
-  callee +41:25 x509DaysInMonth -> @nish.x509DaysInMonth
-  local +45:9 days: i32 (const)
-  local +46:9 seconds: i32 (const)
+  callee +17:12 x509DerDigits -> @nish.x509DerDigits
+  local +22:9 month: i32 (const)
+  callee +22:22 x509DerDigits -> @nish.x509DerDigits
+  local +23:9 day: i32 (const)
+  callee +23:20 x509DerDigits -> @nish.x509DerDigits
+  local +24:9 hour: i32 (const)
+  callee +24:21 x509DerDigits -> @nish.x509DerDigits
+  local +25:9 minute: i32 (const)
+  callee +25:23 x509DerDigits -> @nish.x509DerDigits
+  local +26:9 second: i32 (const)
+  callee +26:23 x509DerDigits -> @nish.x509DerDigits
+  callee +29:7 x509DerOctet -> @nish.x509DerOctet
+  callee +32:36 x509DaysInMonth -> @nish.x509DaysInMonth
+  local +41:9 y: i32 (const)
+  local +42:9 years: i32 (const)
+  local +45:7 yday: i32 (let)
+  local +46:12 m: i32 (let)
+  callee +47:28 x509DaysInMonth -> @nish.x509DaysInMonth
+  local +49:9 days: i32 (const)
+  local +50:9 seconds: i32 (const)
 function x509DerOidContents(subids: i32[]): u8[] -> @nish.x509DerOidContents
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
@@ -42061,20 +42083,20 @@ function x509DerTimeAt(seconds: i64): u8[] -> @nish.x509DerTimeAt
   local +0:7 days: i32 (let)
   local +1:9 rest: i32 (const)
   local +2:7 year: i32 (let)
-  local +4:11 length: i32 (const)
-  callee +4:25 x509IsLeapYear -> @nish.x509IsLeapYear
-  local +12:7 month: i32 (let)
-  local +14:11 length: i32 (const)
-  callee +14:25 x509DaysInMonth -> @nish.x509DaysInMonth
-  local +22:9 text: u8[] (const)
-  local +23:9 utc: boolean (const)
-  callee +24:3 x509PushDigits -> @nish.x509PushDigits
-  callee +25:3 x509PushDigits -> @nish.x509PushDigits
-  callee +27:3 x509PushDigits -> @nish.x509PushDigits
+  local +6:11 length: i32 (const)
+  callee +6:25 x509IsLeapYear -> @nish.x509IsLeapYear
+  local +15:7 month: i32 (let)
+  local +17:11 length: i32 (const)
+  callee +17:25 x509DaysInMonth -> @nish.x509DaysInMonth
+  local +26:9 text: u8[] (const)
+  local +27:9 utc: boolean (const)
   callee +28:3 x509PushDigits -> @nish.x509PushDigits
   callee +29:3 x509PushDigits -> @nish.x509PushDigits
-  callee +30:3 x509PushDigits -> @nish.x509PushDigits
-  callee +32:10 x509DerTlv -> @nish.x509DerTlv
+  callee +32:3 x509PushDigits -> @nish.x509PushDigits
+  callee +33:3 x509PushDigits -> @nish.x509PushDigits
+  callee +34:3 x509PushDigits -> @nish.x509PushDigits
+  callee +35:3 x509PushDigits -> @nish.x509PushDigits
+  callee +37:10 x509DerTlv -> @nish.x509DerTlv
 function x509IsUtf8Name(bytes: u8[]): boolean -> @nish.x509IsUtf8Name
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer bytes: size=0 writesThrough=false captured=false
@@ -42118,14 +42140,14 @@ function pemToDer(pem: string, label: string): u8[][] | null -> @nish.pemToDer [
   sharedWrite: +0:7
   calls: nish.base64StdPadDecode nish.x509EndsWith nish.x509StartsWith nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
-  local -62:9 out: u8[][] (const)
-  local -61:9 n: i32 (const)
-  local -59:7 inside: string (let)
-  local -58:7 body: string[] (let)
-  local -57:7 shortSeen: boolean (let)
-  local -56:7 lineStart: i32 (let)
-  local -54:9 lineEnd: i32 (let)
-  local -49:11 next: i32 (const)
+  local -66:9 out: u8[][] (const)
+  local -65:9 n: i32 (const)
+  local -63:7 inside: string (let)
+  local -62:7 body: string[] (let)
+  local -61:7 shortSeen: boolean (let)
+  local -60:7 lineStart: i32 (let)
+  local -58:9 lineEnd: i32 (let)
+  local -52:9 next: i32 (let)
   local -34:11 line: string (const)
   local -31:11 length: i32 (const)
   callee -29:11 x509StartsWith -> @nish.x509StartsWith
@@ -42381,6 +42403,7 @@ function x509ReadSubjectAltName(der: u8[], start: i32, end: i32, out: X509Certif
   local -4:13 dns: string | null (const)
   callee -4:34 x509DerText -> @nish.x509DerText
   callee +2:22 x509DerSlice -> @nish.x509DerSlice
+  local +4:13 other: i32 (const)
 function x509DerNonNegative(der: u8[], e: X509DerElement): i32 -> @nish.x509DerNonNegative
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.x509DerIntegerMinimal nish.x509DerOctet nish.x509DerSize
@@ -42483,31 +42506,32 @@ function x509DerBoundSound(der: u8[], e: X509DerElement): boolean -> @nish.x509D
 function x509ReadSubtrees(der: u8[], e: X509DerElement, into: X509GeneralSubtree[], out: X509Certificate): boolean -> @nish.x509ReadSubtrees
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.X509DerElement.constructor nish.X509GeneralSubtree.constructor nish.x509DerBoundSound nish.x509DerExpectInto nish.x509DerOctet nish.x509DerPeek nish.x509DerReadInto nish.x509DerSize nish.x509DerSlice nish.x509DerText nish.x509GeneralNameKind nish.x509MaskContiguous nish_alloc_struct nish_array_grow
+  calls: nish.X509DerElement.constructor nish.X509GeneralSubtree.constructor nish.x509DerBoundSound nish.x509DerExpectInto nish.x509DerOctet nish.x509DerPeek nish.x509DerReadInto nish.x509DerSize nish.x509DerSlice nish.x509DerText nish.x509GeneralNameKind nish.x509MaskContiguous nish.x509Sum nish_alloc_struct nish_array_grow
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpectInto#0 nish.x509DerReadInto#0 nish.x509GeneralNameKind#0 nish.x509DerSize#0 nish.x509DerText#0 nish.x509DerSlice#0 nish.x509DerSlice#0 nish.x509DerSlice#0 nish.x509DerPeek#0 nish.x509DerReadInto#0 nish.x509DerBoundSound#0 nish.x509DerSize#0 nish.x509DerOctet#0 nish.x509DerPeek#0 nish.x509DerReadInto#0 nish.x509DerBoundSound#0
   pointer e: size=16 writesThrough=false captured=false
   pointer into: size=0 writesThrough=true captured=false
   pointer out: size=184 writesThrough=true captured=false
   stackSites=4 stackLocals=4
-  local -35:9 tree: X509DerElement (const)
-  callee -35:16 new X509DerElement -> @nish.X509DerElement.constructor
-  local -34:9 base: X509DerElement (const)
-  callee -34:16 new X509DerElement -> @nish.X509DerElement.constructor
-  local -33:9 minimum: X509DerElement (const)
-  callee -33:19 new X509DerElement -> @nish.X509DerElement.constructor
-  local -32:9 maximum: X509DerElement (const)
-  callee -32:19 new X509DerElement -> @nish.X509DerElement.constructor
-  local -31:7 at: i32 (let)
-  callee -29:10 x509DerExpectInto -> @nish.x509DerExpectInto
-  callee -26:10 x509DerReadInto -> @nish.x509DerReadInto
-  local -23:11 subtree: X509GeneralSubtree (const)
-  callee -23:21 new X509GeneralSubtree -> @nish.X509GeneralSubtree.constructor
-  callee -22:20 x509GeneralNameKind -> @nish.x509GeneralNameKind
-  local -21:11 length: i32 (const)
-  callee -21:25 x509DerSize -> @nish.x509DerSize
-  local -19:13 dns: string | null (const)
-  callee -19:34 x509DerText -> @nish.x509DerText
-  local -9:13 half: i32 (const)
+  local -37:9 tree: X509DerElement (const)
+  callee -37:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -36:9 base: X509DerElement (const)
+  callee -36:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -35:9 minimum: X509DerElement (const)
+  callee -35:19 new X509DerElement -> @nish.X509DerElement.constructor
+  local -34:9 maximum: X509DerElement (const)
+  callee -34:19 new X509DerElement -> @nish.X509DerElement.constructor
+  local -33:7 at: i32 (let)
+  callee -31:10 x509DerExpectInto -> @nish.x509DerExpectInto
+  callee -28:10 x509DerReadInto -> @nish.x509DerReadInto
+  local -25:11 subtree: X509GeneralSubtree (const)
+  callee -25:21 new X509GeneralSubtree -> @nish.X509GeneralSubtree.constructor
+  callee -24:20 x509GeneralNameKind -> @nish.x509GeneralNameKind
+  local -23:11 length: i32 (const)
+  callee -23:25 x509DerSize -> @nish.x509DerSize
+  local -21:13 dns: string | null (const)
+  callee -21:34 x509DerText -> @nish.x509DerText
+  local -12:13 half: i32 (const)
+  callee -12:25 x509Sum -> @nish.x509Sum
   callee -8:20 x509DerSlice -> @nish.x509DerSlice
   callee -7:22 x509DerSlice -> @nish.x509DerSlice
   callee -6:12 x509MaskContiguous -> @nish.x509MaskContiguous
@@ -42784,57 +42808,59 @@ function x509MintSelfSigned(priv: Secret<u8[]>, commonName: string, notBeforeMs:
   pointer serial: size=0 writesThrough=false captured=false passedTo=nish.x509DerUnsignedInteger#0
   stackSites=12 stackLocals=0
   local +0:9 start: i64 (const)
-  local +7:9 end: i64 (const)
-  local +12:9 name: u8[] (const)
-  callee +12:22 x509Bytes -> @nish.x509Bytes
-  local +13:9 nameLength: i32 (const)
-  callee +14:63 x509IsUtf8Name -> @nish.x509IsUtf8Name
-  local +17:9 serialDer: u8[] (const)
-  callee +17:27 x509DerUnsignedInteger -> @nish.x509DerUnsignedInteger
-  local +19:7 nonzero: i32 (let)
-  local +20:12 k: i32 (let)
-  local +26:9 pub: u8[] | null (const)
-  callee +26:28 p256PublicKey -> @nish.p256PublicKey
-  local +31:9 algorithm: u8[] (const)
-  callee +31:27 x509DerWrap -> @nish.x509DerWrap
-  callee +31:59 x509DerTlv -> @nish.x509DerTlv
-  callee +31:84 x509OidEcdsaSha256 -> @nish.x509OidEcdsaSha256
-  local +32:9 rdn: u8[] (const)
-  callee +32:21 x509DerWrap -> @nish.x509DerWrap
-  callee +33:5 x509DerWrap -> @nish.x509DerWrap
-  callee +34:7 x509DerTlv -> @nish.x509DerTlv
-  callee +34:32 x509OidCommonName -> @nish.x509OidCommonName
-  callee +35:7 x509DerTlv -> @nish.x509DerTlv
-  local +38:9 distinguished: u8[] (const)
-  callee +38:31 x509DerWrap -> @nish.x509DerWrap
-  local +39:9 spki: u8[] (const)
-  callee +39:22 x509DerWrap -> @nish.x509DerWrap
-  callee +40:5 x509DerWrap -> @nish.x509DerWrap
-  callee +41:7 x509DerTlv -> @nish.x509DerTlv
-  callee +41:32 x509OidEcPublicKey -> @nish.x509OidEcPublicKey
-  callee +42:7 x509DerTlv -> @nish.x509DerTlv
-  callee +42:32 x509OidPrime256v1 -> @nish.x509OidPrime256v1
-  callee +44:5 x509DerBitString -> @nish.x509DerBitString
-  local +46:9 tbs: u8[] (const)
-  callee +46:21 x509DerWrap -> @nish.x509DerWrap
-  callee +48:5 x509DerWrap -> @nish.x509DerWrap
-  callee +48:24 x509DerTlv -> @nish.x509DerTlv
-  callee +52:5 x509DerWrap -> @nish.x509DerWrap
-  callee +52:37 x509DerTimeAt -> @nish.x509DerTimeAt
-  callee +52:59 x509DerTimeAt -> @nish.x509DerTimeAt
-  callee +55:5 x509MintExtensions -> @nish.x509MintExtensions
-  local +57:9 rs: u8[] | null (const)
-  callee +57:27 p256SignSha256 -> @nish.p256SignSha256
-  local +61:9 r: u8[] (const)
-  callee +61:19 x509DerSlice -> @nish.x509DerSlice
-  local +62:9 s: u8[] (const)
-  callee +62:19 x509DerSlice -> @nish.x509DerSlice
-  local +63:9 sig: u8[] (const)
-  callee +63:21 x509DerWrap -> @nish.x509DerWrap
-  callee +63:53 x509DerUnsignedInteger -> @nish.x509DerUnsignedInteger
-  callee +63:80 x509DerUnsignedInteger -> @nish.x509DerUnsignedInteger
-  callee +64:10 x509DerWrap -> @nish.x509DerWrap
-  callee +64:58 x509DerBitString -> @nish.x509DerBitString
+  local +8:9 stop: u64 (const)
+  local +10:9 last: i64 (const)
+  local +14:9 end: i64 (const)
+  local +15:9 name: u8[] (const)
+  callee +15:22 x509Bytes -> @nish.x509Bytes
+  local +16:9 nameLength: i32 (const)
+  callee +17:63 x509IsUtf8Name -> @nish.x509IsUtf8Name
+  local +20:9 serialDer: u8[] (const)
+  callee +20:27 x509DerUnsignedInteger -> @nish.x509DerUnsignedInteger
+  local +22:7 nonzero: i32 (let)
+  local +23:12 k: i32 (let)
+  local +29:9 pub: u8[] | null (const)
+  callee +29:28 p256PublicKey -> @nish.p256PublicKey
+  local +34:9 algorithm: u8[] (const)
+  callee +34:27 x509DerWrap -> @nish.x509DerWrap
+  callee +34:59 x509DerTlv -> @nish.x509DerTlv
+  callee +34:84 x509OidEcdsaSha256 -> @nish.x509OidEcdsaSha256
+  local +35:9 rdn: u8[] (const)
+  callee +35:21 x509DerWrap -> @nish.x509DerWrap
+  callee +36:5 x509DerWrap -> @nish.x509DerWrap
+  callee +37:7 x509DerTlv -> @nish.x509DerTlv
+  callee +37:32 x509OidCommonName -> @nish.x509OidCommonName
+  callee +38:7 x509DerTlv -> @nish.x509DerTlv
+  local +41:9 distinguished: u8[] (const)
+  callee +41:31 x509DerWrap -> @nish.x509DerWrap
+  local +42:9 spki: u8[] (const)
+  callee +42:22 x509DerWrap -> @nish.x509DerWrap
+  callee +43:5 x509DerWrap -> @nish.x509DerWrap
+  callee +44:7 x509DerTlv -> @nish.x509DerTlv
+  callee +44:32 x509OidEcPublicKey -> @nish.x509OidEcPublicKey
+  callee +45:7 x509DerTlv -> @nish.x509DerTlv
+  callee +45:32 x509OidPrime256v1 -> @nish.x509OidPrime256v1
+  callee +47:5 x509DerBitString -> @nish.x509DerBitString
+  local +49:9 tbs: u8[] (const)
+  callee +49:21 x509DerWrap -> @nish.x509DerWrap
+  callee +51:5 x509DerWrap -> @nish.x509DerWrap
+  callee +51:24 x509DerTlv -> @nish.x509DerTlv
+  callee +55:5 x509DerWrap -> @nish.x509DerWrap
+  callee +55:37 x509DerTimeAt -> @nish.x509DerTimeAt
+  callee +55:59 x509DerTimeAt -> @nish.x509DerTimeAt
+  callee +58:5 x509MintExtensions -> @nish.x509MintExtensions
+  local +60:9 rs: u8[] | null (const)
+  callee +60:27 p256SignSha256 -> @nish.p256SignSha256
+  local +64:9 r: u8[] (const)
+  callee +64:19 x509DerSlice -> @nish.x509DerSlice
+  local +65:9 s: u8[] (const)
+  callee +65:19 x509DerSlice -> @nish.x509DerSlice
+  local +66:9 sig: u8[] (const)
+  callee +66:21 x509DerWrap -> @nish.x509DerWrap
+  callee +66:53 x509DerUnsignedInteger -> @nish.x509DerUnsignedInteger
+  callee +66:80 x509DerUnsignedInteger -> @nish.x509DerUnsignedInteger
+  callee +67:10 x509DerWrap -> @nish.x509DerWrap
+  callee +67:58 x509DerBitString -> @nish.x509DerBitString
 function x509CertificateHash(der: u8[]): u8[] -> @nish.x509CertificateHash [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.sha256
@@ -43618,14 +43644,14 @@ function pkiRootsSplit(load: PkiRootsLoad, text: string): void -> @nish.pkiRoots
   local +2:7 blockStart: i32 (let)
   local +3:7 lineStart: i32 (let)
   local +5:9 lineEnd: i32 (let)
-  local +14:11 next: i32 (const)
-  local +18:9 end: i32 (let)
-  local +20:13 c: i32 (const)
-  local +26:11 kind: i32 (const)
-  callee +26:23 pkiRootsLineKind -> @nish.pkiRootsLineKind
-  callee +29:9 pkiRootsSkip -> @nish.pkiRootsSkip
-  callee +34:7 pkiRootsBlock -> @nish.pkiRootsBlock
-  callee +40:5 pkiRootsSkip -> @nish.pkiRootsSkip
+  local +13:9 next: i32 (let)
+  local +21:9 end: i32 (let)
+  local +23:13 c: i32 (const)
+  local +29:11 kind: i32 (const)
+  callee +29:23 pkiRootsLineKind -> @nish.pkiRootsLineKind
+  callee +32:9 pkiRootsSkip -> @nish.pkiRootsSkip
+  callee +37:7 pkiRootsBlock -> @nish.pkiRootsBlock
+  callee +43:5 pkiRootsSkip -> @nish.pkiRootsSkip
 function pkiRootsRegular(path: string): string | null -> @nish.pkiRootsRegular
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_realpath

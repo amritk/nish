@@ -3733,9 +3733,12 @@ const p256BaseSelect = (
   const u: u32 = (digit ^ ctEq(top, 0)) & low
   p256SetZero(out.x)
   p256SetZero(out.y)
+  // `c` is a comb below P256_COMBS (11) and `j` an entry below
+  // P256_COMB_ENTRIES (32), which the masks keep: they let src/bounds.ts prove
+  // the offset, P256_BASE_ENTRY (16) words an entry, in range.
+  const first: i32 = (c & 15) * (P256_COMB_ENTRIES * P256_BASE_ENTRY)
   for (let j: i32 = 0; j < entries; j++) {
-    // In u32: `c` is a comb below P256_COMBS, so the offset is inside the table.
-    const at: i32 = toI32((toU32(c) * toU32(entries) + toU32(j)) * toU32(P256_BASE_ENTRY))
+    const at: i32 = first + (j & 31) * P256_BASE_ENTRY
     p256BaseMove(out, table, at, ctEq(toU32(j), u))
   }
   p256SetZero(s.t1)

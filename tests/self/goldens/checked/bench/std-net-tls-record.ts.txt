@@ -4560,7 +4560,7 @@ module std/crypto/sha256.ts [package nish]
 const SHA256_SIZE: i32 = 32 [exported]
 const SHA256_BLOCK: i32 = 64 [exported]
 struct Sha256 (class) size=40 align=8 exported
-  field total: i64 index=0 offset=0 initialized
+  field total: u64 index=0 offset=0 initialized
   field state: u32[] index=1 offset=8
   field block: u8[] index=2 offset=16
   field schedule: u32[] index=3 offset=24

@@ -3207,12 +3207,13 @@ function p256BaseSelect(out: P256ProjectivePoint, table: u32[], c: i32, digit: u
   local +3:9 u: u32 (const)
   callee +4:3 p256SetZero -> @nish.p256SetZero
   callee +5:3 p256SetZero -> @nish.p256SetZero
-  local +6:12 j: i32 (let)
-  local +8:11 at: i32 (const)
-  callee +9:5 p256BaseMove -> @nish.p256BaseMove
-  callee +11:3 p256SetZero -> @nish.p256SetZero
-  callee +12:3 p256FiatSub -> @nish.p256FiatSub
-  callee +13:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
+  local +9:9 first: i32 (const)
+  local +10:12 j: i32 (let)
+  local +11:11 at: i32 (const)
+  callee +12:5 p256BaseMove -> @nish.p256BaseMove
+  callee +14:3 p256SetZero -> @nish.p256SetZero
+  callee +15:3 p256FiatSub -> @nish.p256FiatSub
+  callee +16:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
 function p256PointAddMixed(p: P256ProjectivePoint, q: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256PointAddMixed
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256FiatMul
@@ -4176,7 +4177,7 @@ module std/crypto/sha256.ts [package nish]
 const SHA256_SIZE: i32 = 32 [exported]
 const SHA256_BLOCK: i32 = 64 [exported]
 struct Sha256 (class) size=40 align=8 exported
-  field total: i64 index=0 offset=0 initialized
+  field total: u64 index=0 offset=0 initialized
   field state: u32[] index=1 offset=8
   field block: u8[] index=2 offset=16
   field schedule: u32[] index=3 offset=24
