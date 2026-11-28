@@ -2842,7 +2842,10 @@ link answers for itself), `geteuid()` (`i64`) and `isExecutableSync(path)`
 **The host.** `Date.now()` (an `f64` of whole milliseconds, the wall clock —
 **the only `Date` there is**: `new Date()`, `Date.parse` and the rest are
 refused), `crypto.getRandomValues(bytes)` (a statement over a `u8[]` only, at
-most 65,536 bytes a call, from the kernel's CSPRNG; more panics),
+most 65,536 bytes a call, from the kernel's CSPRNG; more panics, and so does a
+failing source), its twin `crypto.tryGetRandomValues(bytes)` (a `boolean`:
+`false` for more than 65,536 bytes or a failing source, never an exit, so it
+is the one a program built without `--allow-panics` calls),
 `statMtimeSync(path)` (an `f64` of milliseconds, **NaN** — not `null` — when the
 path cannot be stat'd, so test `m !== m`), and `signalFd()` / `readSignal(fd)`:
 call `signalFd()` once at the top of `main`, then `readSignal(fd)` blocks until

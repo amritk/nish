@@ -550,6 +550,7 @@ cases/os_mtime added after R6: no rewriter to freeze it with
 cases/os_now added after R6: no rewriter to freeze it with
 cases/os_random added after R6: no rewriter to freeze it with
 cases/os_random_limit added after R6: no rewriter to freeze it with
+cases/os_random_try added after R6: no rewriter to freeze it with
 cases/os_signal added after R6: no rewriter to freeze it with
 cases/os_signal_import added after R6: no rewriter to freeze it with
 cases/os_spawn added after R6: no rewriter to freeze it with

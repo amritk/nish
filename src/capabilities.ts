@@ -393,7 +393,7 @@ export const builtinCapability = (name: string): i32 => {
     return CAP_CLOCK
   }
   // runtime.c's `nish_random` seeds itself from `time(0)` and `getpid()`.
-  if (name === "crypto.getRandomValues" || name === "Math.random") {
+  if (name === "crypto.getRandomValues" || name === "crypto.tryGetRandomValues" || name === "Math.random") {
     return CAP_ENTROPY
   }
   if (name === "signalFd" || name === "readSignal") {

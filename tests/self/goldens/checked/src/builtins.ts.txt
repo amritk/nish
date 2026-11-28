@@ -42,7 +42,7 @@ import T_U32 from "./types" -> const T_U32
 import T_U64 from "./types" -> const T_U64
 import T_U8 from "./types" -> const T_U8
 import T_VOID from "./types" -> const T_VOID
-const SUPPORTED_BUILTINS: string = "console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, Math.floor, Math.ceil, Math.trunc, Math.round, Math.sin, Math.cos, Math.tan, Math.exp, Math.log, Math.pow, Math.atan2, Math.hypot, Math.abs, Math.sign, Math.min, Math.max, Math.clz32, Math.imul, Math.random, process.exit, Arena.mark, Arena.used, Date.now, crypto.getRandomValues"
+const SUPPORTED_BUILTINS: string = "console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, Math.floor, Math.ceil, Math.trunc, Math.round, Math.sin, Math.cos, Math.tan, Math.exp, Math.log, Math.pow, Math.atan2, Math.hypot, Math.abs, Math.sign, Math.min, Math.max, Math.clz32, Math.imul, Math.random, process.exit, Arena.mark, Arena.used, Date.now, crypto.getRandomValues, crypto.tryGetRandomValues"
 function isF64Unary(name: string): boolean -> @isF64Unary
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -536,12 +536,13 @@ function checkCrypto(ctx: CheckContext, call: Node, args: Node, name: string, me
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkBuffer#2
   stackSites=0 stackLocals=0
-  callee +0:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +0:44 cryptoRefusal -> @cryptoRefusal
-  callee +2:7 checkBuiltinArity -> @checkBuiltinArity
-  callee +2:55 refuseOnWasm -> @refuseOnWasm
-  callee +3:5 checkBuffer -> @checkBuffer
-  callee +5:3 requireStatementPosition -> @requireStatementPosition
+  local +0:9 answers: boolean (const)
+  callee +2:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +2:44 cryptoRefusal -> @cryptoRefusal
+  callee +4:7 checkBuiltinArity -> @checkBuiltinArity
+  callee +4:55 refuseOnWasm -> @refuseOnWasm
+  callee +5:5 checkBuffer -> @checkBuffer
+  callee +10:3 requireStatementPosition -> @requireStatementPosition
 function checkReadCString(ctx: CheckContext, call: Node, scope: Scope, args: Node): i32 -> @checkReadCString
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity

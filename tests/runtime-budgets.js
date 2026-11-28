@@ -530,6 +530,12 @@ const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1664
  * close of that descriptor tells this file so (`nish_signal_fd_closing`), +61 between
  * them, so that a loop holding only ring slots and that descriptor can wait on its ring
  * directly (the ceiling stands at 1,024, leaving 199).
+ *
+ * **845 bytes** on 2026-11-28 with clang 18.1.3 on linux-x64, 825 before, once
+ * `crypto.tryGetRandomValues` (examples-strict S7e) shares the fill: the loop moves into
+ * `nish_random_draw`, which answers false where it called the panic, and
+ * `nish_random_try_fill` answers it, +20 between them; the ceiling stands at 1,024,
+ * leaving 179.
  */
 const RUNTIME_HOST_TEXT_BUDGET = 1024
 /**

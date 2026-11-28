@@ -1699,14 +1699,14 @@ const isPrologueSite = (program: CheckedProgram, site: PanicSite): boolean => {
   return false
 }
 
-/** The io builtins exit inside the runtime; one of them has a twin that answers `null` instead. */
+/** The io builtins exit inside the runtime; two have a twin that answers instead (`null`, `false`). */
 const ioExitAdvice = (program: CheckedProgram, node: Node): string => {
   const name = calledName(program, node)
   if (name === "readFileSync") {
     return "`readFileSync` exits when the file cannot be read: call `readFileSyncOrNull`, which answers `null` instead"
   }
   if (name === "crypto.getRandomValues" || name === "getRandomValues") {
-    return "`crypto.getRandomValues` exits when the system cannot supply entropy, and has no twin that answers instead: draw it in a module outside the scope"
+    return "`crypto.getRandomValues` exits when the system cannot supply entropy: call `crypto.tryGetRandomValues`, which answers `false` instead"
   }
   return `\`${name}\` exits when the file cannot be written, and has no twin that answers instead: write it from a module outside the scope`
 }

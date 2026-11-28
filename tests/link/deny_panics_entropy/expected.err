@@ -1,0 +1,1 @@
+main.ts:9:3: error: `io-exit` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `crypto.getRandomValues` exits when the system cannot supply entropy: call `crypto.tryGetRandomValues`, which answers `false` instead
