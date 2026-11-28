@@ -11851,8 +11851,8 @@ declare noundef i32 @nish.JsonDocument.newObject(%struct.JsonDocument* noundef n
 declare noundef i32 @nish.JsonDocument.push(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.set(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.adoptable(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #2
-declare noundef i32 @nish.JsonDocument.append(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #0
-declare void @nish.JsonDocument.reserve(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonDocument.append(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #1
+declare void @nish.JsonDocument.reserve(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #1
 declare noundef i32 @nish.JsonDocument.storeSpan(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.copySpan(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.newStoredString(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #1

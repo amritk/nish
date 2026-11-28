@@ -578,16 +578,12 @@ const http1ClientHeadArray = (
   return out
 }
 
-/**
- * `n` zero bytes, appended one at a time: the prover reads only a constant
- * length of `new Array` as in range, and these lengths are computed.
- */
+/** `n` zero bytes, none when `n` is below 1: one zeroed allocation, not a `push` per byte. */
 const http1ClientZeros = (n: i32): u8[] => {
-  const out: u8[] = []
-  for (let k: i32 = 0; k < n; k += 1) {
-    out.push(toU8(0))
+  if (n <= 0) {
+    return []
   }
-  return out
+  return new Array<u8>(n)
 }
 
 // --- The parser -------------------------------------------------------------
@@ -990,11 +986,12 @@ export class Http1ResponseParser {
     if (this.state !== HTTP1_CLIENT_S_TUNNEL || from < 0 || to <= from || to > toI32(this.buf.length)) {
       return []
     }
-    const buf: u8[] = this.buf
-    const out: u8[] = []
-    for (let k: i32 = from; k >= 0 && k < to && k < toI32(buf.length); k += 1) {
-      out.push(buf[k])
+    const count: i32 = to - from
+    if (count <= 0) {
+      return []
     }
+    const out: u8[] = new Array<u8>(count)
+    tryCopyBytes(out, 0, this.buf, from, count)
     return out
   }
 }
