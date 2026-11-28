@@ -279,6 +279,11 @@ const aesUnpack = (buf: u8[], q: u64[]): void => {
  * are the circuit's XNOR gates, the affine constant 0x63.
  */
 const aesSbox = (q: u64[]): void => {
+  // Every state is `new Array<u64>(8)`, so this cannot happen; it lets the
+  // compiler prove the literal indices below.
+  if (toI32(q.length) < 8) {
+    return
+  }
   const x0: u64 = q[7]
   const x1: u64 = q[6]
   const x2: u64 = q[5]
@@ -436,6 +441,11 @@ const aesShiftPlane = (x: u64): u64 =>
 
 /** ShiftRows (FIPS 197 §5.1.2) on the whole state. */
 const aesShiftRows = (q: u64[]): void => {
+  // Every state is `new Array<u64>(8)`, so this cannot happen; it lets the
+  // compiler prove the literal indices below.
+  if (toI32(q.length) < 8) {
+    return
+  }
   // The last plane first: its checked read proves the other seven.
   const p7: u64 = q[7]
   q[0] = aesShiftPlane(q[0])
@@ -464,6 +474,11 @@ const aesRowAfterNext = (x: u64): u64 =>
  * for the reduction by x^8 + x^4 + x^3 + x + 1.
  */
 const aesMixColumns = (q: u64[]): void => {
+  // Every state is `new Array<u64>(8)`, so this cannot happen; it lets the
+  // compiler prove the literal indices below.
+  if (toI32(q.length) < 8) {
+    return
+  }
   // The last plane first: its checked read proves the other seven.
   const n7: u64 = aesNextRow(q[7])
   const n0: u64 = aesNextRow(q[0])
@@ -499,6 +514,12 @@ const aesMixColumns = (q: u64[]): void => {
  */
 const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
   const base: i32 = at & 127
+  // Every state is `new Array<u64>(8)` and every `at` is a round of the
+  // key's own schedule, so this cannot happen; it lets the compiler prove the
+  // indices below.
+  if (toI32(q.length) < 8 || base > toI32(rk.length) - 8) {
+    return
+  }
   // The first and last key words and the last plane first: their checked
   // reads prove every other index below.
   const k0: u64 = rk[base]
@@ -517,8 +538,9 @@ const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
 /**
  * One full middle round of the cipher on bitsliced state — SubBytes,
  * ShiftRows, MixColumns, then the round key of eight words from `at` — for
- * four blocks at once. Straight-line code with no branch and no index but
- * `at`, which is a round number times eight. Exported so that
+ * four blocks at once. No branch but each step's test of the state's and the
+ * keys' lengths, which no secret moves, and no index but `at`, which is a
+ * round number times eight. Exported so that
  * `tests/link/crypto_aes` can hold the copy the disassembly check reads to
  * this one; a caller has no other use for it.
  *
@@ -947,17 +969,22 @@ const ghashMul32 = (x: u64, y: u64): u64 => {
  * paper cited in the header).
  *
  * The 128 × 128 product is Karatsuba twice over: three 64 × 64 products, each
- * of three 32 × 32 ones from `ghashMul32`. Straight-line code; exported, like
- * `aesBitslicedRound`, so the disassembly check's copy can be held to it.
+ * of three 32 × 32 ones from `ghashMul32`. Straight-line code past one test of
+ * `y`'s length, which no secret moves; exported, like `aesBitslicedRound`, so
+ * the disassembly check's copy can be held to it.
  *
- * @param y The running GHASH value, two words, multiplied in place.
+ * @param y The running GHASH value, two words, multiplied in place; a shorter
+ *   array is left as it was.
  * @param hHi The high half of H.
  * @param hLo The low half of H.
  */
 export const ghashMultiply = (y: u64[], hHi: u64, hLo: u64): void => {
   const low32: u64 = (toU64(1) << toU64(32)) - toU64(1)
   const thirtyTwo: u64 = toU64(32)
-  // The second word first: its checked read proves the first.
+  // Every caller's state is two words; a shorter one is left as it was.
+  if (toI32(y.length) < 2) {
+    return
+  }
   const a0: u64 = y[1]
   const a1: u64 = y[0]
   const a2: u64 = a1 ^ a0
@@ -1259,7 +1286,8 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
   const hLo: u64 = h[1]
   const hHi: u64 = h[0]
   const j0: u8[] = aesGcmJ0(key, hHi, hLo, iv)
-  const out: u8[] = new Array<u8>(length + AES_GCM_TAG_SIZE)
+  const sealed: i32 = length + AES_GCM_TAG_SIZE
+  const out: u8[] = new Array<u8>(sealed)
   aesGcmCtr(key, j0, plaintext, out, length)
   const tag: u64[] = new Array<u64>(2)
   aesGcmTag(tag, key, hHi, hLo, j0, aad, out, length)

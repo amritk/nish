@@ -82,7 +82,7 @@
  *
  * Written from RFC 9110 and RFC 9112, not ported from another implementation.
  */
-import { base64Encode } from "nish/base64"
+import { base64EncodeIfFits } from "nish/base64"
 import { tryCopyBytes } from "nish/bytes"
 import {
   HTTP1_BODY,
@@ -1815,7 +1815,7 @@ const httpClientProxyUrl = (text: string): Url | null => {
 /**
  * The `Proxy-Authorization` value for a proxy URL's userinfo, `Basic` and
  * the decoded `user:password` in base64; "" when it has none; null when
- * either half is not valid percent-encoding.
+ * either half is not valid percent-encoding or the pair is too long to encode.
  */
 const httpClientProxyAuth = (proxy: Url): string | null => {
   if (proxy.username === "" && proxy.password === "") {
@@ -1826,7 +1826,26 @@ const httpClientProxyAuth = (proxy: Url): string | null => {
   if (user === null || password === null) {
     return null
   }
-  return "Basic " + base64Encode(httpFieldBytes(user + ":" + password))
+  // Encoded here, not by `base64Encode`, so that a credential too long to
+  // encode, past 1,610,612,733 bytes, answers null instead of panicking.
+  const field: u8[] = httpFieldBytes(user + ":" + password)
+  if (field.length > 1610612733) {
+    return null
+  }
+  const n: i32 = toI32(field.length)
+  if (n < 0 || n > 1610612733) {
+    return null
+  }
+  // Not negative for that `n`; the test is what lets the compiler see it.
+  const length: i32 = toI32((n + 2) / 3) * 4
+  if (length < 0) {
+    return null
+  }
+  const out: u8[] = new Array<u8>(length)
+  if (base64EncodeIfFits(field, 0, n, out, 0) < 0) {
+    return null
+  }
+  return "Basic " + String.fromBytes(out, 0, toI32(out.length))
 }
 
 /** The first value of the field `name`, in any case, from parallel name and value lists; null when there is none. */
