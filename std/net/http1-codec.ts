@@ -1255,10 +1255,12 @@ const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
     if (size <= 0) {
       return
     }
+    // Filled so runtime/nish.mjs, where `new Array` leaves holes, reads zeros too.
     const grown: i32[] = new Array<i32>(size)
-    // The prover does not carry `grown.length === size` from `new Array`.
-    if (toI32(old.length) <= toI32(grown.length)) {
-      grown.set(old, 0)
+    grown.fill(0)
+    const keep: i32 = toI32(old.length)
+    for (let k: i32 = 0; k < keep && k < toI32(grown.length); k += 1) {
+      grown[k] = old[k]
     }
     p.spans = grown
   }

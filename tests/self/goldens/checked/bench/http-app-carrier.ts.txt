@@ -6637,15 +6637,17 @@ function http1HeadAppend(p: Http1Parser, from: i32, to: i32): i32 -> @nish.http1
   callee +12:24 http1WindowEnd -> @nish.http1WindowEnd
   callee +14:5 http1Fail -> @nish.http1Fail
 function http1SpanSet(p: Http1Parser, at: i32, value: i32): void -> @nish.http1SpanSet
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at value
   pointer p: size=232 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -16:11 old: i32[] (const)
-  local -13:11 wide: i64 (const)
-  local -9:11 size: i32 (const)
-  local -5:11 grown: i32[] (const)
+  local -18:11 old: i32[] (const)
+  local -15:11 wide: i64 (const)
+  local -11:11 size: i32 (const)
+  local -6:11 grown: i32[] (const)
+  local -4:11 keep: i32 (const)
+  local -3:14 k: i32 (let)
   local +2:9 spans: i32[] (const)
 function http1TallyRun(tally: Http1ListTally, head: u8[], from: i32, to: i32, word: string): void -> @nish.http1TallyRun
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
