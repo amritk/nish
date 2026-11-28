@@ -49,7 +49,7 @@ while (true) {
 
 <scalar-card title="open​Http​Handler" icon="phosphor/regular/function" href="#openhttphandler">
 
-A handler as `new HttpHandler(limits, listener, router)` makes one, with what that constructor panics on answered as an `Err`: limits below their least, or a readiness loop `pollCreate` could not make.
+A handler as `new HttpHandler(limits, listener, router)` makes one, with limits below their least, which that constructor panics on, answered as an `Err`, and a readiness loop `pollCreate` could not make, which would leave that constructor's handler dead, answered as an `Err` too.
 
 </scalar-card>
 
@@ -174,8 +174,9 @@ implementation.
 ### openHttpHandler
 
 A handler as `new HttpHandler(limits, listener, router)` makes one, with
-what that constructor panics on answered as an `Err`: limits below their
-least, or a readiness loop `pollCreate` could not make.
+limits below their least, which that constructor panics on, answered as an
+`Err`, and a readiness loop `pollCreate` could not make, which would leave
+that constructor's handler dead, answered as an `Err` too.
 
 ```ts
 const openHttpHandler: (
