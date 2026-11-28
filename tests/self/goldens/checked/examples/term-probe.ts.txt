@@ -3567,15 +3567,16 @@ function render(p: Probe, frame: Frame): void -> @render$
   callee +3:3 Framebuffer.fill -> @nish.Framebuffer.fill
   local +4:9 width: i32 (const)
   local +5:9 height: i32 (const)
-  local +9:11 span: i32 (const)
-  local +10:11 x0: i32 (const)
-  local +12:16 y: i32 (let)
-  local +13:18 x: i32 (let)
-  callee +14:11 Framebuffer.set -> @nish.Framebuffer.set
-  local +20:11 s: TermStats (const)
-  callee +22:65 backendName -> @backendName
-  callee +22:95 round2 -> @round2
-  callee +23:49 round2 -> @round2
+  local +11:11 span: i32 (const)
+  local +12:11 step: i32 (const)
+  local +13:11 x0: i32 (const)
+  local +15:16 y: i32 (let)
+  local +16:18 x: i32 (let)
+  callee +17:11 Framebuffer.set -> @nish.Framebuffer.set
+  local +23:11 s: TermStats (const)
+  callee +25:65 backendName -> @backendName
+  callee +25:95 round2 -> @round2
+  callee +26:49 round2 -> @round2
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:3

@@ -61,14 +61,12 @@ import { DEV_SECRET, RelayOptions, relayNamed, relayOptionsFromEnv, relayParseAr
 import { Relay, RelayConfig, relayQuicConfig } from "./relay"
 
 /**
- * `a + b` for two readings of the millisecond clock, `nowMs`'s nanoseconds
- * over a million and so far inside `i64`: the sum wraps through `u64` where
- * `+` would check, and a wrap past the `i64` ceiling stops at it.
+ * Milliseconds from `start` to `now`, two `nowMs` readings, or -1 for a pair
+ * out of order. Neither reading is negative and `now` is the later, so the
+ * difference is proven to fit: the poll is timed by what has passed, not by
+ * a deadline summed from the clock.
  */
-const msSum = (a: i64, b: i64): i64 => {
-  const sum: i64 = toI64(toU64(a) + toU64(b))
-  return a >= 0 && b >= 0 && sum < 0 ? toI64((toU64(1) << toU64(63)) - toU64(1)) : sum
-}
+const msSince = (start: i64, now: i64): i64 => (start >= 0 && now >= start ? now - start : -1)
 
 /** How often the certificate files are looked at for a renewal, ms (main.rs's `CERT_POLL_INTERVAL`). */
 const CERT_POLL_INTERVAL: i64 = 60000
@@ -139,20 +137,24 @@ const serveUntilPoll = (
   key: Secret<u8[]>,
   grantKey: Secret<u8[]>
 ): boolean => {
-  const nextPoll: i64 = msSum(nowMs(), CERT_POLL_INTERVAL)
+  const started: i64 = nowMs()
   let signalled: boolean = false
   while (!signalled) {
     const now: i64 = nowMs()
     let wait: i32 = relay.timeout(now)
     if (source.pem) {
-      // `nextPoll - now` in `u64`, where it cannot wrap once `nextPoll > now`, and never past the interval.
-      const gap: u64 = nextPoll > now ? toU64(nextPoll) - toU64(now) : 0
-      const untilPoll: i32 = toI32(gap < toU64(CERT_POLL_INTERVAL) ? gap : toU64(CERT_POLL_INTERVAL))
+      // What is left of the interval, never past it, and none once the readings are out of order.
+      const since: i64 = msSince(started, now)
+      const left: i64 = since < 0 || since >= CERT_POLL_INTERVAL ? 0 : CERT_POLL_INTERVAL - since
+      const untilPoll: i32 = toI32(left)
       wait = wait < 0 || untilPoll < wait ? untilPoll : wait
     }
     signalled = relay.step(now, wallMs(), key, grantKey, wait)
-    if (!signalled && source.pem && nowMs() >= nextPoll) {
-      return true
+    if (!signalled && source.pem) {
+      const since: i64 = msSince(started, nowMs())
+      if (since < 0 || since >= CERT_POLL_INTERVAL) {
+        return true
+      }
     }
   }
   return false

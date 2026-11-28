@@ -413,21 +413,21 @@ function main(): i32 -> @nish_main [exported entry]
   local +2:7 values: u32 (let)
   local +3:7 total: u32 (let)
   local +4:7 checksum: u32 (let)
-  local +7:12 r: u32 (let)
-  local +8:11 hist: Mutex<Hist> (const)
-  callee +8:18 new Mutex<Hist> -> @nish.Mutex$$Hist.constructor
-  callee +8:34 new Hist -> @Hist.constructor
-  local +10:16 t: u32 (let)
-  callee +11:27 binShard -> @binShard$
-  callee +11:36 new Shard -> @Shard.constructor
-  local +14:13 binned: u32[] (const)
-  local +16:15 s: ThreadScope (const)
-  callee +16:19 scope -> @nish.scope
-  local +17:18 t: i32 (let)
-  local +18:17 shard: Shard (const)
-  callee +18:25 new Shard -> @Shard.constructor
-  callee +23:13 ThreadScope.spawn<Shard, u32, binShard> -> @nish.ThreadScope.spawn$$Shard$u32$fn.8.binShard
-  local +27:18 n: u32 (const)
-  local +31:11 g: MutexGuard<Hist> (const)
-  callee +31:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
-  local +32:14 b: i32 (let)
+  local +9:12 r: i32 (let)
+  local +10:11 hist: Mutex<Hist> (const)
+  callee +10:18 new Mutex<Hist> -> @nish.Mutex$$Hist.constructor
+  callee +10:34 new Hist -> @Hist.constructor
+  local +12:16 t: i32 (let)
+  callee +13:27 binShard -> @binShard$
+  callee +13:36 new Shard -> @Shard.constructor
+  local +16:13 binned: u32[] (const)
+  local +18:15 s: ThreadScope (const)
+  callee +18:19 scope -> @nish.scope
+  local +19:18 t: i32 (let)
+  local +20:17 shard: Shard (const)
+  callee +20:25 new Shard -> @Shard.constructor
+  callee +25:13 ThreadScope.spawn<Shard, u32, binShard> -> @nish.ThreadScope.spawn$$Shard$u32$fn.8.binShard
+  local +29:18 n: u32 (const)
+  local +33:11 g: MutexGuard<Hist> (const)
+  callee +33:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
+  local +34:14 b: i32 (let)
