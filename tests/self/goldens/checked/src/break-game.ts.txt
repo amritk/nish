@@ -2206,6 +2206,7 @@ const HIT_PADDLE: i32 = 1003
 const MAX_BOUNCES: i32 = 8
 const NO_HIT: f64 = 2
 const FAR: f64 = 1e+30
+const ROLL_SPAN: f64 = 14
 const ROLL_REFUSED: f64 = 4
 struct Ball (class) size=72 align=8 exported
   field x: f64 index=0 offset=0
@@ -2799,7 +2800,7 @@ function dropCapsule(game: BreakGame, x: f64, y: f64): void -> @dropCapsule
 function unsignedDraw(x: i32): f64 -> @unsignedDraw
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function capsuleRoll(rng: Rng): i32 -> @capsuleRoll
+function capsuleRoll(rng: Rng): i32 -> @capsuleRoll [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Rng.nextI32
   calls: llvm.fptosi.sat.i32.f64 nish.Rng.nextI32 unsignedDraw

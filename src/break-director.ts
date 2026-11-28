@@ -134,7 +134,7 @@ const DIRECTOR_NEVER_SETTLED: i64 = -2000000000
  * forming a difference that leaves `i64`: readings of one sign subtract
  * safely, and against a negative `since` the sum with the span does.
  */
-const clockPassed = (now: i64, since: i64, settle: boolean): boolean => {
+export const clockPassed = (now: i64, since: i64, settle: boolean): boolean => {
   if (since < 0) {
     return now >= (settle ? since + DIRECTOR_SETTLE_NS : since + DIRECTOR_SLOW_NS)
   }
@@ -653,9 +653,10 @@ export const adaptBreakResolution = (d: BreakDirector, fps: i32, rttMs: f64, hei
 export const sizeBreakFramebuffer = (d: BreakDirector, fb: Framebuffer, roomW: i32, roomH: i32): void => {
   const chosen: i32 = resolutionChoice(d.settings.resolution)
   let h: i32 = Math.min(roomH, chosen === 0 ? d.autoLines : chosen)
-  // A host with no room, or more lines than a 16:9 width holds in an `i32`,
-  // has no frame to size, so the one there stays. Auto resolution and every
-  // choice are at most 1080 lines, so only a negative room reaches this.
+  // A negative room, or more lines than a 16:9 width holds in an `i32`, has
+  // no frame to size, so the one there stays. Auto resolution and every
+  // choice are at most 1080 lines, so only a negative room reaches this; a
+  // room of 0 is sized below, to a 0 × 0 frame.
   if (h < 0 || h > 134217727 || roomW < 0) {
     return
   }

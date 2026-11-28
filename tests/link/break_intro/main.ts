@@ -227,9 +227,39 @@ const testDraw = (t: Suite): void => {
   t.pass("low effects run and draw to the end")
 }
 
+/** `n` spaces. */
+const spaces = (n: i32): string => {
+  let out: string = ""
+  for (let i: i32 = 0; i < n; i++) {
+    out = out + " "
+  }
+  return out
+}
+
+/**
+ * The cut passes over text from column 1024 on: a word that crosses it keeps
+ * the columns before it, a word past it is no piece, and an escape past it
+ * still sets the colour of the next line.
+ */
+const testFarColumns = (t: Suite): void => {
+  const help =
+    "near" + spaces(1016) + "crossing" + spaces(80) + "far\u001b[36m\n" + "next\n" + spaces(1030) + "▀▀▀▀\n"
+  const intro = newBreakIntro(help, toI64(7))
+  t.ok("a word before column 1024 is a piece", pieceOf(intro, "near") >= 0)
+  const crossing = pieceOf(intro, "cros")
+  t.ok("a word crossing column 1024 keeps its first four columns", crossing >= 0)
+  t.eqI32("and is four columns wide", crossing >= 0 ? intro.widths[crossing] : -1, 4)
+  t.eqI32("its rest is no piece", pieceOf(intro, "sing"), -1)
+  t.eqI32("a word past column 1024 is no piece", pieceOf(intro, "far"), -1)
+  const next = pieceOf(intro, "next")
+  t.eqI32("an escape past column 1024 still colours the next line", next >= 0 ? intro.colours[next] : -1, CYAN)
+  t.eqI32("bricks past column 1024 are no pieces", intro.texts.length, 3)
+}
+
 export const main = (): number => {
   const t = new Suite("break-intro")
   testCut(t)
+  testFarColumns(t)
   testKeys(t)
   testRun(t)
   testDraw(t)

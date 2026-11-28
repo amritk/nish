@@ -2633,7 +2633,7 @@ struct BreakDirector (class) size=136 align=8 exported
   field small: boolean index=25 offset=133
   field terminal: boolean index=26 offset=134
   constructor -> @BreakDirector.constructor
-function clockPassed(now: i64, since: i64, settle: boolean): boolean -> @clockPassed
+function clockPassed(now: i64, since: i64, settle: boolean): boolean -> @clockPassed [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function BreakDirector.constructor(this: BreakDirector, seed: i64, settings: BreakSettings, help: string, terminal: boolean): void -> @BreakDirector.constructor [exported constructor]
@@ -2857,8 +2857,8 @@ function sizeBreakFramebuffer(d: BreakDirector, fb: Framebuffer, roomW: i32, roo
   local +0:9 chosen: i32 (const)
   callee +0:23 resolutionChoice -> @resolutionChoice
   local +1:7 h: i32 (let)
-  local +8:7 w: i32 (let)
-  callee +14:5 Framebuffer.resize -> @nish.Framebuffer.resize
+  local +9:7 w: i32 (let)
+  callee +15:5 Framebuffer.resize -> @nish.Framebuffer.resize
 function directorWhole(x: f64): i32 -> @directorWhole
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.copysign.f64 llvm.fptosi.sat.i32.f64 nish_floor

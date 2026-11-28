@@ -332,11 +332,13 @@ export const WALL_BRICK_W: f64 = 20.0
 export const WALL_BRICK_H: f64 = 8.0
 export const WALL_TOP: f64 = 6.0
 
-/**
- * The steps a knocked-out brick stays away before it grows back: 4 s, and up
- * to 2 s (240 steps) more that `knock` draws.
- */
+/** The steps a knocked-out brick stays away before it grows back: 4 s and up to 2 s more. */
 const REGROW_STEPS: i32 = 480
+/**
+ * The most steps past `REGROW_STEPS` that `knock` draws: 2 s. A function, as
+ * a module constant cannot carry the range `menuRandom`'s bound is proved from.
+ */
+const regrowSpread = (): integer<0, 240> => 240
 
 /** The steps a returning brick takes to grow to full size. */
 const GROW_STEPS: i32 = 24
@@ -570,6 +572,17 @@ const layOutLogo = (menu: BreakMenu): void => {
 }
 
 /**
+ * The outro step logo column `column` comes loose on, before its jitter:
+ * `column * 0.7` truncated, in integers the checker can bound. The two forms
+ * agree on every column up to 89, and a word in the 24-column grid shifted
+ * at most 24 reaches column 47.
+ *
+ * @param column The brick's column in the logo grid, from 0 to 48.
+ * @returns The step, from 0 to 33.
+ */
+export const logoRelease = (column: integer<0, 48>): i32 => (column * 7) / 10
+
+/**
  * Place one word's bricks from slot `first` on, its rows `cols` cells wide
  * from world y `top`; `shift` is the word's first column in the logo's
  * 24-column grid, which the shimmer's hue runs along. Answers the next free slot.
@@ -605,9 +618,8 @@ const layOutWord = (menu: BreakMenu, cells: string, cols: i32, top: f64, first: 
     menu.homeYs[slot] = top + toF64(row) * CELL_H
     menu.columns[slot] = column
     // Columns come loose left to right with a little jitter, so the logo crumbles rather than drops.
-    // The first outro step is 1, so a release of 0 would never be kicked loose. `column * 7 / 10`
-    // is `column * 0.7` truncated for every column the logo has, in integers the checker can bound.
-    menu.releases[slot] = (column * 7) / 10 + menuRandom(menu, 1, 10)
+    // The first outro step is 1, so a release of 0 would never be kicked loose.
+    menu.releases[slot] = logoRelease(column) + menuRandom(menu, 1, 10)
     slot++
   }
   return slot
@@ -1040,7 +1052,7 @@ const knock = (menu: BreakMenu, cell: i32): void => {
   if (cell < 0 || cell >= toI32(menu.wallAway.length)) {
     return
   }
-  menu.wallAway[cell] = REGROW_STEPS + menuRandom(menu, 0, 240)
+  menu.wallAway[cell] = REGROW_STEPS + menuRandom(menu, 0, regrowSpread())
   const cx: f64 = (toF64(cell % WALL_COLS) + 0.5) * WALL_BRICK_W
   const cy: f64 = WALL_TOP + (toF64(cell / WALL_COLS) + 0.5) * WALL_BRICK_H
   const colour: i32 = rasterAdd(wallColour(cell / WALL_COLS), 0x303030)

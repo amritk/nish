@@ -849,7 +849,6 @@ const remember = (game: BreakGame): void => {
     i++
   ) {
     pool.prevXs[i] = pool.xs[i]
-
     pool.prevYs[i] = pool.ys[i]
   }
 }
@@ -1415,8 +1414,11 @@ const dropCapsule = (game: BreakGame, x: f64, y: f64): void => {
   spawnCapsule(game, x, y, kind)
 }
 
-/** The draws `capsuleRoll` refuses: 2^32 mod 14, the lowest 4 of the 2^32. */
-const ROLL_REFUSED: f64 = 4.0
+/** The answers `capsuleRoll` gives: 0 to 13, the span `rng.nextInt(0, 13)` draws from. */
+const ROLL_SPAN: f64 = 14.0
+
+/** The draws `capsuleRoll` refuses: 2^32 mod `ROLL_SPAN`, the count `nextInt` refuses for that span. */
+const ROLL_REFUSED: f64 = 4294967296.0 % ROLL_SPAN
 
 /** The bits of `x` read as an unsigned count, from 0 to 2^32 - 1. */
 const unsignedDraw = (x: i32): f64 => (x < 0 ? toF64(x) + 4294967296.0 : toF64(x))
@@ -1427,12 +1429,12 @@ const unsignedDraw = (x: i32): f64 => (x < 0 ? toF64(x) + 4294967296.0 : toF64(x
  * draw among the lowest `ROLL_REFUSED` is drawn again, so what is left holds
  * each answer equally often, and each answer is the one `nextInt` gives.
  */
-const capsuleRoll = (rng: Rng): i32 => {
+export const capsuleRoll = (rng: Rng): i32 => {
   let draw: f64 = unsignedDraw(rng.nextI32())
   while (draw < ROLL_REFUSED) {
     draw = unsignedDraw(rng.nextI32())
   }
-  return toI32(draw % 14.0)
+  return toI32(draw % ROLL_SPAN)
 }
 
 /** A capsule of `kind` falling from `x`, `y`, in a free slot; with none free it is lost. */

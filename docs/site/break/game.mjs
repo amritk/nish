@@ -188,6 +188,13 @@ function exportsOf(instance, state) {
     const { len, data } = header(hdr);
     value.set(new value.constructor(memory.buffer, data, Math.min(len, value.length)));
   };
+  /** A ranged argument, judged as the number it is rather than after ToInt32 wraps it. */
+  const rangeIn = (value, lo, hi, what) => {
+    if (typeof value !== "number") throw refuse(new TypeError(what + " must be a number"));
+    if (!Number.isInteger(value) || value < lo || value > hi)
+      throw refuse(new RangeError(what + " must be an integer in [" + lo + ", " + hi + "]"));
+    return value;
+  };
   const layout = {
     BREAK_LINK: { at: raw["nish_storage_0_BREAK_LINK.data"].value, length: 17, stride: 4 },
     BOX: { at: raw["nish_storage_0_BOX.data"].value, length: 2, stride: 4 },
@@ -244,6 +251,8 @@ function exportsOf(instance, state) {
     step: (nowMs) => guarded(() => raw.step(typedIn(nowMs, "number", "step: argument 1 (nowMs)"))),
     /** game.ts: draw(alpha: number, frameMs: number): void */
     draw: (alpha, frameMs) => guarded(() => raw.draw(typedIn(alpha, "number", "draw: argument 1 (alpha)"), typedIn(frameMs, "number", "draw: argument 2 (frameMs)"))),
+    /** ../../src/break-director.ts: clockPassed(now: i64, since: i64, settle: boolean): boolean */
+    clockPassed: (now, since, settle) => guarded(() => raw.clockPassed(typedIn(now, "bigint", "clockPassed: argument 1 (now)"), typedIn(since, "bigint", "clockPassed: argument 2 (since)"), typedIn(settle, "boolean", "clockPassed: argument 3 (settle)"))),
     /** ../../src/break-director.ts: breakGraphicsToast(graphics: number): string */
     breakGraphicsToast: (graphics) => guarded(() => {
       return stringOut(raw.breakGraphicsToast(typedIn(graphics, "number", "breakGraphicsToast: argument 1 (graphics)")));
@@ -331,6 +340,8 @@ function exportsOf(instance, state) {
     fpsChoice: (index) => guarded(() => raw.fpsChoice(typedIn(index, "number", "fpsChoice: argument 1 (index)"))),
     /** ../../src/break-menu.ts: resolutionChoice(index: number): number */
     resolutionChoice: (index) => guarded(() => raw.resolutionChoice(typedIn(index, "number", "resolutionChoice: argument 1 (index)"))),
+    /** ../../src/break-menu.ts: logoRelease(column: integer<0, 48>): number */
+    logoRelease: (column) => guarded(() => raw.logoRelease(rangeIn(column, 0, 48, "logoRelease: argument 1 (column)"))),
     /** ../../src/break-menu.ts: wallColour(row: number): number */
     wallColour: (row) => guarded(() => raw.wallColour(typedIn(row, "number", "wallColour: argument 1 (row)"))),
     /** ../../src/break-voices.ts: voiceSamples(id: number): number[] */
