@@ -275,7 +275,7 @@ const scheduleChecks = (t: Suite): void => {
   tlsMasterSecretHeld(h, handshake, handshake);
   t.eqStr("and into its own handshake secret", secretHex(handshake), toHex(rfc8448MasterSecret()));
 
-  const verifyData: u8[] = tlsFinishedVerifyDataHeld(h, traffic, transcript, 3);
+  const verifyData: u8[] = tlsFinishedVerifyDataHeld(h, traffic, transcript, 3) ?? [];
   const verifyInto: u8[] = new Array<u8>(32);
   tlsFinishedVerifyDataInto(kdf, h, rfc8448ServerHandshakeTraffic(), transcript, 3, verifyInto, zero);
   t.eqStr("tlsFinishedVerifyDataHeld is tlsFinishedVerifyDataInto", toHex(verifyData), toHex(verifyInto));
@@ -314,7 +314,7 @@ const scheduleChecks = (t: Suite): void => {
   t.eqStr("tlsMasterSecretHeld under SHA-384 is tlsMasterSecretInto", secretHex(out), toHex(outInto));
   const verify48: u8[] = new Array<u8>(48);
   tlsFinishedVerifyDataInto(kdf, h48, prk, hash, 1, verify48, zero);
-  t.eqStr("tlsFinishedVerifyDataHeld under SHA-384 is tlsFinishedVerifyDataInto", toHex(tlsFinishedVerifyDataHeld(h48, held, hash, 1)), toHex(verify48));
+  t.eqStr("tlsFinishedVerifyDataHeld under SHA-384 is tlsFinishedVerifyDataInto", toHex(tlsFinishedVerifyDataHeld(h48, held, hash, 1) ?? []), toHex(verify48));
   const key32: u8[] = new Array<u8>(32);
   const key32Into: u8[] = new Array<u8>(32);
   const ivInto48: u8[] = new Array<u8>(12);

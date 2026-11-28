@@ -1,8 +1,6 @@
-// HKDF-Expand-Label through the scratch panics on a length outside 0 to 255
-// ("hkdfExpandLabelInto: a length of 256 bytes, outside 0 to 255", on
-// stderr), as `hkdfExpandLabelSha256` does: `HkdfLabel.length` is a uint16
-// the protocol keeps to a key or a hash. Exit 1, and nothing on stdout after
-// the line printed before the misuse.
+// HKDF-Expand-Label through the scratch answers `false` for a length past
+// 255 bytes, as `hkdfExpandLabelSha256` panics on one, and leaves `out`
+// untouched.
 import { HkdfScratch, hkdfExpandLabelInto } from "nish/crypto/hkdf";
 
 export const main = (): i32 => {
@@ -11,7 +9,13 @@ export const main = (): i32 => {
   const none: u8[] = [];
   const out: u8[] = new Array<u8>(300);
   console.log("expanding 256 bytes");
-  hkdfExpandLabelInto(kdf, toI32(32), secret, "key", none, toI32(0), toI32(0), out, toI32(0), toI32(256));
-  console.log("unreachable: a 256-byte length was accepted");
+  const ok: boolean = hkdfExpandLabelInto(kdf, toI32(32), secret, "key", none, toI32(0), toI32(0), out, toI32(0), toI32(256));
+  let touched = false;
+  for (let i = 0; i < out.length; i += 1) {
+    if (out[i] !== toU8(0)) {
+      touched = true;
+    }
+  }
+  console.log(`refused: ${!ok}, out untouched: ${!touched}`);
   return 0;
 };

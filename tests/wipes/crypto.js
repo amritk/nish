@@ -207,8 +207,11 @@ export const wipeChecks = [
   // plain buffer inside `exposeWith`, copies it into the held destination and
   // wipes it before it returns, so every root counts its own HKDF-Expand
   // wipes (the HMAC states, their pads and the plain output block) beside
-  // that one buffer: `hkdfExpandLabel*Held` 31, a schedule step 62 to 91
-  // (one Expand, or an Extract and an Expand), `installHeld` and
+  // that one buffer: `hkdfExpandLabelSha256Held` and `hkdfExpandLabelSha384Held`
+  // 16 (`opt` folds their constant hash length, so each reaches its own hash's
+  // Expand, 15, and the buffer), `hkdfExpandLabelHeldInto` 31 (either hash's
+  // Expand), a schedule step 32 to 61 (two hash branches of one Expand, or of
+  // an Extract and an Expand; `tlsFinishedVerifyDataHeld` 59), `installHeld` and
   // `tlsTrafficKeysFromHeld` their key and iv derivations, and `advanceHeld`
   // the ratchet and the install it reaches. The plain output's two wipes,
   // `hkdfHeld`'s (the held destinations) and `hkdfExpandLabelHeldInto`'s (the
@@ -219,18 +222,18 @@ export const wipeChecks = [
     program: "tests/link/crypto_held_derive/main.ts",
     modules: HELD_DERIVE_MODULES,
     roots: [
-      ["nish.hkdfExpandLabelSha256Held", 31],
-      ["nish.hkdfExpandLabelSha384Held", 31],
+      ["nish.hkdfExpandLabelSha256Held", 16],
+      ["nish.hkdfExpandLabelSha384Held", 16],
       ["nish.hkdfExpandLabelHeldInto", 31],
-      ["nish.tlsDeriveSecretHeld", 62],
-      ["nish.tlsHandshakeSecretHeld", 90],
-      ["nish.tlsMasterSecretHeld", 91],
-      ["nish.tlsFinishedVerifyDataHeld", 89],
+      ["nish.tlsDeriveSecretHeld", 32],
+      ["nish.tlsHandshakeSecretHeld", 60],
+      ["nish.tlsMasterSecretHeld", 61],
+      ["nish.tlsFinishedVerifyDataHeld", 59],
       ["nish.tlsTrafficKeysFromHeld", 62],
       ["nish.TlsRecordProtection.installHeld", 65],
-      ["nish.TlsRecordProtection.advanceHeld", 127],
+      ["nish.TlsRecordProtection.advanceHeld", 97],
       ["nish.quicKeysHeldInto", 93],
-      ["nish.quicKeyUpdateSecretHeldInto", 62],
+      ["nish.quicKeyUpdateSecretHeldInto", 32],
     ],
   },
   // `nish/crypto/ed25519` (#788, ECC-5). The multiplication wipes its digits,

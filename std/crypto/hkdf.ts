@@ -59,11 +59,13 @@
  *     hkdfExtractInto(kdf, 32, salt, ikm, prk, 0);           // 32 bytes at prk[0]
  *     hkdfExpandLabelInto(kdf, 32, prk, "key", context, 0, 0, key, 0, 16);
  *
- * They refuse what the functions above refuse, the same way: `hkdfExpandInto`
- * answers `false` where `hkdfExpandSha256` answers `null`, and
- * `hkdfExpandLabelInto` panics where `hkdfExpandLabelSha256` does. A hash
- * length other than 32 or 48, or an output window outside its array, is the
- * caller's bug and panics.
+ * They refuse what the functions above refuse: `hkdfExpandInto` answers
+ * `false` where `hkdfExpandSha256` answers `null`, and a hash length other
+ * than 32 or 48, or an output window outside its array, panics in it and in
+ * `hkdfExtractInto`. `hkdfExpandLabelInto` answers `false` where
+ * `hkdfExpandLabelSha256` panics, and on a bad hash length or window too, so
+ * a TLS or QUIC key schedule on the attacker-facing path turns a slip into an
+ * alert instead of an exit.
  *
  * **What the key reaches is wiped** (CLAUDE.md, "Security"). Every HMAC on
  * the way wipes its key blocks and hashers (`nish/crypto/hmac`), and `expand`
@@ -83,7 +85,9 @@
  * it with the `*Held` forms, which fill as many bytes as the `Secret` holds,
  * in place, and wipe the plain output they copied from. The destination may
  * be the PRK itself; `hkdfExpandLabelHeldInto` writes a plain window instead,
- * for output that is plain by design, a record layer's AEAD key and IV:
+ * for output that is plain by design, a record layer's AEAD key and IV. Like
+ * `hkdfExpandLabelInto`, the `*Held` forms answer `false`, writing nothing,
+ * where the forms above panic:
  *
  *     hkdfExpandLabelSha256Held(secret, secret, "traffic upd", none);
  *     hkdfExpandLabelHeldInto(32, secret, "key", none, key, 0, 16);
@@ -413,21 +417,15 @@ export const hkdfSha384Secret = (
 
 /**
  * The `HkdfLabel` struct of RFC 8446 §7.1, the `info` HKDF-Expand-Label hands
- * to `expand`, or a panic naming `caller` when `length`, `label` or `context`
- * is outside the range the module docs give: 249 is `label<7..255>`'s 255 less
- * the prefix's 6 bytes. The lengths of `label` and `context` are compared as
- * the `number`s they are, before any `toI32`, which would saturate them under
+ * to `expand`, or `null` when `length`, `label` or `context` is outside the
+ * range the module docs give: 249 is `label<7..255>`'s 255 less the prefix's 6
+ * bytes. The lengths of `label` and `context` are compared as the `number`s
+ * they are, before any `toI32`, which would saturate them under
  * `--number-mode f64`; so the bounds are literals rather than `i32` constants.
  */
-const hkdfLabel = (caller: string, label: string, context: u8[], length: i32): u8[] => {
-  if (length < 0 || length > 255) {
-    panic(`${caller}: a length of ${length} bytes, outside 0 to 255`)
-  }
-  if (label.length === 0 || label.length > 249) {
-    panic(`${caller}: a label of ${toI32(label.length)} bytes, outside 1 to 249`)
-  }
-  if (context.length > 255) {
-    panic(`${caller}: a context of more than 255 bytes`)
+const hkdfLabelOrNull = (label: string, context: u8[], length: i32): u8[] | null => {
+  if (length < 0 || length > 255 || label.length === 0 || label.length > 249 || context.length > 255) {
+    return null
   }
   const full: string = `${HKDF_LABEL_PREFIX}${label}`
   const fullLength: i32 = toI32(full.length)
@@ -445,6 +443,24 @@ const hkdfLabel = (caller: string, label: string, context: u8[], length: i32): u
   p = hkdfPut(out, p, toU8(contextLength))
   hkdfAppend(out, p, context)
   return out
+}
+
+/**
+ * `hkdfLabelOrNull`, or a panic naming `caller` and the argument out of range,
+ * for the forms that panic on one.
+ */
+const hkdfLabel = (caller: string, label: string, context: u8[], length: i32): u8[] => {
+  const out: u8[] | null = hkdfLabelOrNull(label, context, length)
+  if (out !== null) {
+    return out
+  }
+  if (length < 0 || length > 255) {
+    panic(`${caller}: a length of ${length} bytes, outside 0 to 255`)
+  }
+  if (label.length === 0 || label.length > 249) {
+    panic(`${caller}: a label of ${toI32(label.length)} bytes, outside 1 to 249`)
+  }
+  panic(`${caller}: a context of more than 255 bytes`)
 }
 
 /**
@@ -796,9 +812,10 @@ export const hkdfExpandInto = (
  * HKDF-Expand-Label (RFC 8446 §7.1) over the hash `hashLength` names: `length`
  * bytes from `prk` (RFC 8446's Secret), `"tls13 " + label` and the context
  * `context[contextOff .. contextOff + contextLen)`, written at `out[at]`. It
- * panics where `hkdfExpandLabelSha256` does — a length outside 0 to 255, a
- * label empty or past 249 bytes, a context past 255, a secret shorter than
- * HashLen — and on a context window outside its array.
+ * answers `false`, with `out` untouched, where `hkdfExpandLabelSha256` panics —
+ * a length outside 0 to 255, a label empty or past 249 bytes, a context past
+ * 255, a secret shorter than HashLen — and on a `hashLength` other than 32 or
+ * 48, a context window outside its array or an output window outside `out`.
  *
  * @param s The scratch to compute in; what the call leaves in it is wiped.
  * @param hashLength 32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
@@ -811,6 +828,8 @@ export const hkdfExpandInto = (
  * @param out The caller's array the output is written into.
  * @param at Where the output starts in `out`.
  * @param length How many bytes to derive, 0 to 255.
+ * @returns `true` once the bytes are written; `false`, with `out` untouched,
+ *   for an argument out of range.
  */
 export const hkdfExpandLabelInto = (
   s: HkdfScratch,
@@ -823,26 +842,23 @@ export const hkdfExpandLabelInto = (
   out: u8[],
   at: i32,
   length: i32
-): void => {
-  hkdfCheckHash("hkdfExpandLabelInto", hashLength)
-  if (length < 0 || length > 255) {
-    panic(`hkdfExpandLabelInto: a length of ${length} bytes, outside 0 to 255`)
-  }
-  if (label.length === 0 || label.length > 249) {
-    panic(`hkdfExpandLabelInto: a label of ${toI32(label.length)} bytes, outside 1 to 249`)
-  }
+): boolean => {
   if (
+    (hashLength !== SHA256_SIZE && hashLength !== SHA384_SIZE) ||
+    length < 0 ||
+    length > 255 ||
+    label.length === 0 ||
+    label.length > 249 ||
     contextOff < 0 ||
     contextLen < 0 ||
     contextLen > 255 ||
-    contextOff > toI32(context.length) - contextLen
+    contextOff > toI32(context.length) - contextLen ||
+    toI32(prk.length) < hashLength ||
+    at < 0 ||
+    at > toI32(out.length) - length
   ) {
-    panic("hkdfExpandLabelInto: the context window is outside its array or longer than 255 bytes")
+    return false
   }
-  if (toI32(prk.length) < hashLength) {
-    panic("hkdfExpandLabelInto: a secret shorter than HashLen")
-  }
-  hkdfCheckOutput("hkdfExpandLabelInto", out, at, length)
   // The `HkdfLabel` struct, as `hkdfLabel` builds it, into the scratch, whose
   // HKDF_LABEL_MAX bytes hold the longest one the tests above let through.
   const prefix: string = HKDF_LABEL_PREFIX
@@ -873,6 +889,7 @@ export const hkdfExpandLabelInto = (
     q += 1
   }
   hkdfExpandWindow(s, hashLength, prk, info, p, out, at, length)
+  return true
 }
 
 // ---- From and into a held `Secret` -----------------------------------------
@@ -893,29 +910,24 @@ const hkdfHeldLength = (bytes: u8[]): i32 => toI32(bytes.length)
 
 /**
  * HKDF-Expand-Label of the held `prk` over the hash `hashLength` names: the
- * `length` bytes, plain, for the caller to copy and wipe. Panics naming
- * `caller` where `hkdfExpandLabelSha256` does.
+ * `length` bytes, plain, for the caller to copy and wipe, or `null` where
+ * `hkdfExpandLabelSha256` panics and on a `hashLength` other than 32 or 48.
  */
 const hkdfHeldDerive = (
-  caller: string,
   hashLength: i32,
   prk: Secret<u8[]>,
   label: string,
   context: u8[],
   length: i32
-): u8[] => {
-  hkdfCheckHash(caller, hashLength)
-  const request: HkdfExpandRequest = { info: hkdfLabel(caller, label, context, length), length: length }
-  const okm: u8[] | null =
-    hashLength === SHA256_SIZE
-      ? exposeWith(prk, request, hkdfExpandSha256Exposed)
-      : exposeWith(prk, request, hkdfExpandSha384Exposed)
-  if (okm === null) {
-    panic(
-      `${caller}: a secret shorter than ${hashLength} bytes, or more than ${toU32(hashLength) * 255} bytes asked`
-    )
+): u8[] | null => {
+  const info: u8[] | null = hkdfLabelOrNull(label, context, length)
+  if (info === null || (hashLength !== SHA256_SIZE && hashLength !== SHA384_SIZE)) {
+    return null
   }
-  return okm
+  const request: HkdfExpandRequest = { info: info, length: length }
+  return hashLength === SHA256_SIZE
+    ? exposeWith(prk, request, hkdfExpandSha256Exposed)
+    : exposeWith(prk, request, hkdfExpandSha384Exposed)
 }
 
 /**
@@ -928,25 +940,33 @@ const hkdfHeldCopy = (held: u8[], okm: u8[]): void => {
   }
 }
 
-/** Derives into `dst`, as many bytes as it holds, for the two exported forms. */
+/**
+ * Derives into `dst`, as many bytes as it holds, for the two exported forms:
+ * `false`, with `dst` untouched, where `hkdfHeldDerive` answers `null`.
+ */
 const hkdfHeld = (
-  caller: string,
   hashLength: i32,
   dst: Secret<u8[]>,
   prk: Secret<u8[]>,
   label: string,
   context: u8[]
-): void => {
-  const okm: u8[] = hkdfHeldDerive(caller, hashLength, prk, label, context, expose(dst, hkdfHeldLength))
+): boolean => {
+  const okm: u8[] | null = hkdfHeldDerive(hashLength, prk, label, context, expose(dst, hkdfHeldLength))
+  if (okm === null) {
+    return false
+  }
   exposeWith(dst, okm, hkdfHeldCopy)
   wipe(okm)
+  return true
 }
 
 /**
  * `hkdfExpandLabelSha256Secret` into `dst`: as many bytes as `dst` holds,
  * derived from `prk`, the label and `context` and written over `dst`'s in
  * place. `dst` may be `prk` itself, since the output is whole before it is
- * copied: that is a ratchet. Panics as `hkdfExpandLabelSha256` does.
+ * copied: that is a ratchet. Answers `false`, with `dst` untouched, where
+ * `hkdfExpandLabelSha256` panics: a `dst` past 255 bytes, a label empty or past
+ * 249, a context past 255 or a secret shorter than 32 bytes.
  *
  * @param dst The `Secret` to overwrite; its length is the length derived. It
  *   may be `prk`.
@@ -954,19 +974,19 @@ const hkdfHeld = (
  * @param label The label without the `"tls13 "` prefix, 1 to 249 bytes.
  * @param context The public context, often a transcript hash; at most 255
  *   bytes.
+ * @returns `true` once `dst` holds the output; `false` for an argument out of
+ *   range.
  */
 export const hkdfExpandLabelSha256Held = (
   dst: Secret<u8[]>,
   prk: Secret<u8[]>,
   label: string,
   context: u8[]
-): void => {
-  hkdfHeld("hkdfExpandLabelSha256Held", SHA256_SIZE, dst, prk, label, context)
-}
+): boolean => hkdfHeld(SHA256_SIZE, dst, prk, label, context)
 
 /**
- * `hkdfExpandLabelSha256Held` with HMAC-SHA-384: panics as
- * `hkdfExpandLabelSha384` does.
+ * `hkdfExpandLabelSha256Held` with HMAC-SHA-384: answers `false`, with `dst`
+ * untouched, where `hkdfExpandLabelSha384` panics.
  *
  * @param dst The `Secret` to overwrite; its length is the length derived. It
  *   may be `prk`.
@@ -974,21 +994,22 @@ export const hkdfExpandLabelSha256Held = (
  * @param label The label without the `"tls13 "` prefix, 1 to 249 bytes.
  * @param context The public context, often a transcript hash; at most 255
  *   bytes.
+ * @returns `true` once `dst` holds the output; `false` for an argument out of
+ *   range.
  */
 export const hkdfExpandLabelSha384Held = (
   dst: Secret<u8[]>,
   prk: Secret<u8[]>,
   label: string,
   context: u8[]
-): void => {
-  hkdfHeld("hkdfExpandLabelSha384Held", SHA384_SIZE, dst, prk, label, context)
-}
+): boolean => hkdfHeld(SHA384_SIZE, dst, prk, label, context)
 
 /**
  * HKDF-Expand-Label of the held `prk` over the hash `hashLength` names into a
  * plain array: `length` bytes written at `out[at]`. This is for output that is
  * kept plain by design, a record layer's AEAD key and IV, say, which live in
- * the arrays the cipher reads. Panics as `hkdfExpandLabelInto` does.
+ * the arrays the cipher reads. Answers `false`, with `out` untouched, where
+ * `hkdfExpandLabelInto` does.
  *
  * @param hashLength 32 for HMAC-SHA-256, 48 for HMAC-SHA-384.
  * @param prk RFC 8446's Secret, read only inside `exposeWith`.
@@ -997,6 +1018,8 @@ export const hkdfExpandLabelSha384Held = (
  * @param out The caller's plain array the output is written into.
  * @param at Where the output starts in `out`.
  * @param length How many bytes to derive, 0 to 255.
+ * @returns `true` once the bytes are written; `false`, with `out` untouched,
+ *   for an argument out of range.
  */
 export const hkdfExpandLabelHeldInto = (
   hashLength: i32,
@@ -1006,9 +1029,15 @@ export const hkdfExpandLabelHeldInto = (
   out: u8[],
   at: i32,
   length: i32
-): void => {
-  hkdfCheckOutput("hkdfExpandLabelHeldInto", out, at, length)
-  const okm: u8[] = hkdfHeldDerive("hkdfExpandLabelHeldInto", hashLength, prk, label, context, length)
+): boolean => {
+  if (at < 0 || length < 0 || at > toI32(out.length) - length) {
+    return false
+  }
+  const okm: u8[] | null = hkdfHeldDerive(hashLength, prk, label, context, length)
+  if (okm === null) {
+    return false
+  }
   hkdfAppend(out, at, okm)
   wipe(okm)
+  return true
 }

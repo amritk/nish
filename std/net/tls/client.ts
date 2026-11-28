@@ -905,8 +905,26 @@ export class TlsClient {
     const pool: TlsSecretPool = this.secrets()
     const h: i32 = this.hashLength
     this.transcript.hashInto(this.hashes, TLS_CLIENT_FROM)
-    tlsDeriveSecretHeld(h, pool.handshake, "c hs traffic", this.hashes, TLS_CLIENT_FROM, pool.clientHandshake)
-    tlsDeriveSecretHeld(h, pool.handshake, "s hs traffic", this.hashes, TLS_CLIENT_FROM, pool.serverHandshake)
+    if (
+      !tlsDeriveSecretHeld(
+        h,
+        pool.handshake,
+        "c hs traffic",
+        this.hashes,
+        TLS_CLIENT_FROM,
+        pool.clientHandshake
+      ) ||
+      !tlsDeriveSecretHeld(
+        h,
+        pool.handshake,
+        "s hs traffic",
+        this.hashes,
+        TLS_CLIENT_FROM,
+        pool.serverHandshake
+      )
+    ) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     this.held =
       this.held |
       (1 << TLS_SECRET_HANDSHAKE) |
@@ -1002,10 +1020,10 @@ export class TlsClient {
     }
     const h: i32 = this.hashLength
     const early: Secret<u8[]> = tlsEarlySecret(h)
-    tlsHandshakeSecretHeld(h, early, shared, this.secrets().handshake)
+    const derived: boolean = tlsHandshakeSecretHeld(h, early, shared, this.secrets().handshake)
     wipe(early)
     wipe(shared)
-    return 0
+    return derived ? 0 : TLS_ALERT_INTERNAL_ERROR
   }
 
   /** EncryptedExtensions (§4.3.1): ALPN, if any, must be one the client offered, and `server_name` acknowledged only if sent. */
@@ -1095,7 +1113,15 @@ export class TlsClient {
     }
     const pool: TlsSecretPool = this.secrets()
     this.transcript.hashInto(this.hashes, TLS_CLIENT_FROM)
-    const expected: u8[] = tlsFinishedVerifyDataHeld(h, pool.serverHandshake, this.hashes, TLS_CLIENT_FROM)
+    const expected: u8[] | null = tlsFinishedVerifyDataHeld(
+      h,
+      pool.serverHandshake,
+      this.hashes,
+      TLS_CLIENT_FROM
+    )
+    if (expected === null) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     const matches: boolean = timingSafeEqualAt(this.input, 4, expected, TLS_CLIENT_FROM, h)
     secureZero(expected)
     if (!matches) {
@@ -1107,26 +1133,38 @@ export class TlsClient {
     this.transcript.hashInto(this.hashes, TLS_CLIENT_FROM)
     // The master secret is derived over the handshake secret, which has no
     // other use left.
-    tlsMasterSecretHeld(h, pool.handshake, pool.handshake)
-    tlsDeriveSecretHeld(
-      h,
-      pool.handshake,
-      "c ap traffic",
-      this.hashes,
-      TLS_CLIENT_FROM,
-      pool.clientApplication
-    )
-    tlsDeriveSecretHeld(
-      h,
-      pool.handshake,
-      "s ap traffic",
-      this.hashes,
-      TLS_CLIENT_FROM,
-      pool.serverApplication
-    )
-    tlsDeriveSecretHeld(h, pool.handshake, "exp master", this.hashes, TLS_CLIENT_FROM, pool.exporter)
+    if (
+      !tlsMasterSecretHeld(h, pool.handshake, pool.handshake) ||
+      !tlsDeriveSecretHeld(
+        h,
+        pool.handshake,
+        "c ap traffic",
+        this.hashes,
+        TLS_CLIENT_FROM,
+        pool.clientApplication
+      ) ||
+      !tlsDeriveSecretHeld(
+        h,
+        pool.handshake,
+        "s ap traffic",
+        this.hashes,
+        TLS_CLIENT_FROM,
+        pool.serverApplication
+      ) ||
+      !tlsDeriveSecretHeld(h, pool.handshake, "exp master", this.hashes, TLS_CLIENT_FROM, pool.exporter)
+    ) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     pool.zero(TLS_SECRET_HANDSHAKE)
-    const verifyData: u8[] = tlsFinishedVerifyDataHeld(h, pool.clientHandshake, this.hashes, TLS_CLIENT_FROM)
+    const verifyData: u8[] | null = tlsFinishedVerifyDataHeld(
+      h,
+      pool.clientHandshake,
+      this.hashes,
+      TLS_CLIENT_FROM
+    )
+    if (verifyData === null) {
+      return TLS_ALERT_INTERNAL_ERROR
+    }
     const at: i32 = this.outputHandshakeLength
     const end: i32 = tlsWriteFinished(this.outputHandshake, at, verifyData, TLS_CLIENT_FROM, h)
     secureZero(verifyData)

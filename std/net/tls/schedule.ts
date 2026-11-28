@@ -549,8 +549,8 @@ const tlsEmptyHashInto = (hashLength: i32, out: u8[]): void => {
  * `tlsDeriveSecret` in place: Derive-Secret (RFC 8446 §7.1) of `prk` with
  * `label` and the transcript hash `transcriptHash[hashOff .. hashOff +
  * hashLength)`, its HashLen bytes written at `out[0]`. The scratch is wiped
- * before it returns. It panics as `hkdfExpandLabelInto` does, a window outside
- * its array included.
+ * before it returns. It answers `false`, writing nothing, where
+ * `hkdfExpandLabelInto` does, a window outside its array included.
  *
  * @param kdf The caller's HKDF scratch, which this computes in and wipes.
  * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
@@ -559,6 +559,7 @@ const tlsEmptyHashInto = (hashLength: i32, out: u8[]): void => {
  * @param transcriptHash The array that holds the transcript hash.
  * @param hashOff Where in `transcriptHash` the `hashLength` bytes of the hash start.
  * @param out Where the derived secret is written, from index 0; the caller owns and wipes it.
+ * @returns `true` once the secret is written; `false`, writing nothing, for an argument out of range.
  */
 export const tlsDeriveSecretInto = (
   kdf: HkdfScratch,
@@ -568,7 +569,7 @@ export const tlsDeriveSecretInto = (
   transcriptHash: u8[],
   hashOff: i32,
   out: u8[]
-): void => {
+): boolean =>
   hkdfExpandLabelInto(
     kdf,
     hashLength,
@@ -581,37 +582,43 @@ export const tlsDeriveSecretInto = (
     TLS_SCHEDULE_FROM,
     hashLength
   )
-}
 
 /**
  * `tlsMasterSecret` in place: HKDF-Extract of HashLen zeros under
  * `Derive-Secret(handshake, "derived", "")`, written at `out[0]`. The salt is
- * wiped before it returns, and so is the scratch.
+ * wiped before it returns, and so is the scratch. `false`, writing nothing,
+ * where `tlsDeriveSecretInto` answers it.
  *
  * @param kdf The caller's HKDF scratch, which this computes in and wipes.
  * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
  * @param handshakeSecret The handshake secret, plain. It stays the caller's to wipe.
  * @param out Where the master secret is written, from index 0; the caller owns and wipes it.
+ * @returns `true` once the secret is written; `false`, writing nothing, for an argument out of range.
  */
 export const tlsMasterSecretInto = (
   kdf: HkdfScratch,
   hashLength: i32,
   handshakeSecret: u8[],
   out: u8[]
-): void => {
+): boolean => {
   const empty: u8[] = tlsHashZeros(hashLength)
   tlsEmptyHashInto(hashLength, empty)
   const salt: u8[] = tlsHashZeros(hashLength)
-  tlsDeriveSecretInto(kdf, hashLength, handshakeSecret, "derived", empty, TLS_SCHEDULE_FROM, salt)
+  if (!tlsDeriveSecretInto(kdf, hashLength, handshakeSecret, "derived", empty, TLS_SCHEDULE_FROM, salt)) {
+    secureZero(salt)
+    return false
+  }
   hkdfExtractInto(kdf, hashLength, salt, tlsHashZeros(hashLength), out, TLS_SCHEDULE_FROM)
   secureZero(salt)
+  return true
 }
 
 /**
  * `tlsFinishedVerifyData` in place: the HMAC of `transcriptHash[hashOff ..
  * hashOff + hashLength)` under `finished_key = Expand-Label(baseKey,
  * "finished", "", HashLen)` (RFC 8446 §4.4.4), written at `out[at]`. The
- * finished key is wiped before it returns, and so is the scratch.
+ * finished key is wiped before it returns, and so is the scratch. `false`,
+ * writing nothing, where `hkdfExpandLabelInto` answers it.
  *
  * @param kdf The caller's HKDF scratch, which this computes in and wipes.
  * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
@@ -620,6 +627,7 @@ export const tlsMasterSecretInto = (
  * @param hashOff Where in `transcriptHash` the `hashLength` bytes of the hash start.
  * @param out Where `verify_data` is written. It goes on the wire, so it is plain.
  * @param at Where in `out` the HashLen bytes of `verify_data` start.
+ * @returns `true` once `verify_data` is written; `false`, writing nothing, for an argument out of range.
  */
 export const tlsFinishedVerifyDataInto = (
   kdf: HkdfScratch,
@@ -629,10 +637,10 @@ export const tlsFinishedVerifyDataInto = (
   hashOff: i32,
   out: u8[],
   at: i32
-): void => {
+): boolean => {
   const none: u8[] = []
   const finishedKey: u8[] = tlsHashZeros(hashLength)
-  hkdfExpandLabelInto(
+  const derived: boolean = hkdfExpandLabelInto(
     kdf,
     hashLength,
     baseKey,
@@ -644,6 +652,11 @@ export const tlsFinishedVerifyDataInto = (
     TLS_SCHEDULE_FROM,
     hashLength
   )
+  if (!derived) {
+    secureZero(finishedKey)
+    kdf.wipe()
+    return false
+  }
   if (hashLength === SHA384_SIZE) {
     kdf.sha384.begin(finishedKey, TLS_SCHEDULE_FROM, hashLength)
     kdf.sha384.update(transcriptHash, hashOff, hashLength)
@@ -655,6 +668,7 @@ export const tlsFinishedVerifyDataInto = (
   }
   secureZero(finishedKey)
   kdf.wipe()
+  return true
 }
 
 /**
@@ -679,11 +693,17 @@ export const tlsPskEarlySecretInto = (kdf: HkdfScratch, hashLength: i32, psk: u8
  * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
  * @param earlySecret The early secret, plain. It stays the caller's to wipe.
  * @param out Where the binder key is written, from index 0; the caller owns and wipes it.
+ * @returns `true` once the key is written; `false`, writing nothing, where `tlsDeriveSecretInto` answers it.
  */
-export const tlsBinderKeyInto = (kdf: HkdfScratch, hashLength: i32, earlySecret: u8[], out: u8[]): void => {
+export const tlsBinderKeyInto = (
+  kdf: HkdfScratch,
+  hashLength: i32,
+  earlySecret: u8[],
+  out: u8[]
+): boolean => {
   const empty: u8[] = tlsHashZeros(hashLength)
   tlsEmptyHashInto(hashLength, empty)
-  tlsDeriveSecretInto(kdf, hashLength, earlySecret, "res binder", empty, TLS_SCHEDULE_FROM, out)
+  return tlsDeriveSecretInto(kdf, hashLength, earlySecret, "res binder", empty, TLS_SCHEDULE_FROM, out)
 }
 
 /**
@@ -696,16 +716,17 @@ export const tlsBinderKeyInto = (kdf: HkdfScratch, hashLength: i32, earlySecret:
  * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
  * @param earlySecret The early secret, plain. It stays the caller's to wipe.
  * @param out Where the salt is written, from index 0.
+ * @returns `true` once the salt is written; `false`, writing nothing, where `tlsDeriveSecretInto` answers it.
  */
 export const tlsHandshakeSaltInto = (
   kdf: HkdfScratch,
   hashLength: i32,
   earlySecret: u8[],
   out: u8[]
-): void => {
+): boolean => {
   const empty: u8[] = tlsHashZeros(hashLength)
   tlsEmptyHashInto(hashLength, empty)
-  tlsDeriveSecretInto(kdf, hashLength, earlySecret, "derived", empty, TLS_SCHEDULE_FROM, out)
+  return tlsDeriveSecretInto(kdf, hashLength, earlySecret, "derived", empty, TLS_SCHEDULE_FROM, out)
 }
 
 /**
@@ -713,7 +734,7 @@ export const tlsHandshakeSaltInto = (
  * "resumption", ticketNonce[nonceOff .. nonceOff + nonceLength), HashLen)`
  * (RFC 8446 §4.6.1), written at `out[0]`. The scratch is wiped before it
  * returns. A nonce window outside `ticketNonce`, or longer than 255 bytes,
- * panics, as `hkdfExpandLabelInto` does.
+ * answers `false`, writing nothing, as `hkdfExpandLabelInto` does.
  *
  * @param kdf The caller's HKDF scratch, which this computes in and wipes.
  * @param hashLength The hash length, 32 or 48, which is also how many bytes are written.
@@ -722,6 +743,7 @@ export const tlsHandshakeSaltInto = (
  * @param nonceOff Where in `ticketNonce` the nonce starts.
  * @param nonceLength How many bytes the nonce is.
  * @param out Where the PSK is written, from index 0; the caller owns and wipes it.
+ * @returns `true` once the PSK is written; `false`, writing nothing, for an argument out of range.
  */
 export const tlsResumptionPskInto = (
   kdf: HkdfScratch,
@@ -731,7 +753,7 @@ export const tlsResumptionPskInto = (
   nonceOff: i32,
   nonceLength: i32,
   out: u8[]
-): void => {
+): boolean =>
   hkdfExpandLabelInto(
     kdf,
     hashLength,
@@ -744,7 +766,6 @@ export const tlsResumptionPskInto = (
     TLS_SCHEDULE_FROM,
     hashLength
   )
-}
 
 /**
  * Whether `binder[binderOff .. binderOff + binderLength)` is the PSK binder
@@ -782,8 +803,16 @@ export const tlsBinderVerify = (
     return false
   }
   const expected: u8[] = tlsHashZeros(hashLength)
-  tlsFinishedVerifyDataInto(kdf, hashLength, binderKey, truncatedHash, hashOff, expected, TLS_SCHEDULE_FROM)
-  const verified: boolean = timingSafeEqualAt(binder, binderOff, expected, TLS_SCHEDULE_FROM, hashLength)
+  const verified: boolean =
+    tlsFinishedVerifyDataInto(
+      kdf,
+      hashLength,
+      binderKey,
+      truncatedHash,
+      hashOff,
+      expected,
+      TLS_SCHEDULE_FROM
+    ) && timingSafeEqualAt(binder, binderOff, expected, TLS_SCHEDULE_FROM, hashLength)
   secureZero(expected)
   return verified
 }
@@ -821,31 +850,33 @@ export const tlsTrafficKeysInto = (
   ) {
     return false
   }
-  hkdfExpandLabelInto(
-    kdf,
-    hashLength,
-    trafficSecret,
-    "key",
-    none,
-    TLS_SCHEDULE_FROM,
-    TLS_SCHEDULE_FROM,
-    key,
-    TLS_SCHEDULE_FROM,
-    keyLength
+  // The tests above keep both expansions in range, so neither answers `false`.
+  return (
+    hkdfExpandLabelInto(
+      kdf,
+      hashLength,
+      trafficSecret,
+      "key",
+      none,
+      TLS_SCHEDULE_FROM,
+      TLS_SCHEDULE_FROM,
+      key,
+      TLS_SCHEDULE_FROM,
+      keyLength
+    ) &&
+    hkdfExpandLabelInto(
+      kdf,
+      hashLength,
+      trafficSecret,
+      "iv",
+      none,
+      TLS_SCHEDULE_FROM,
+      TLS_SCHEDULE_FROM,
+      iv,
+      TLS_SCHEDULE_FROM,
+      TLS_IV_SIZE
+    )
   )
-  hkdfExpandLabelInto(
-    kdf,
-    hashLength,
-    trafficSecret,
-    "iv",
-    none,
-    TLS_SCHEDULE_FROM,
-    TLS_SCHEDULE_FROM,
-    iv,
-    TLS_SCHEDULE_FROM,
-    TLS_IV_SIZE
-  )
-  return true
 }
 
 // ---- The schedule into held `Secret`s --------------------------------------
@@ -862,31 +893,21 @@ const tlsHeldCopy = (held: u8[], from: u8[]): void => {
 
 /**
  * `transcriptHash[hashOff .. hashOff + hashLength)` in a fresh array: the
- * context a held form hands HKDF. Panics naming `caller` when the window is
- * not inside `transcriptHash`, as `tlsHeldCheck` does for a wrong hash length:
- * a shorter context would derive another secret without a word.
+ * context a held form hands HKDF, or `null` when the window is not inside
+ * `transcriptHash`: a shorter context would derive another secret without a
+ * word.
  */
-const tlsHeldWindow = (caller: string, hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] => {
+const tlsHeldWindow = (hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] | null => {
   const window: u8[] = tlsCopyWindow(transcriptHash, hashOff, hashLength)
-  if (toI32(window.length) !== hashLength) {
-    panic(`${caller}: a transcript hash at ${hashOff} outside its ${transcriptHash.length} bytes`)
-  }
-  return window
+  return toI32(window.length) === hashLength ? window : null
 }
 
 /**
- * Panics naming `caller` unless `hashLength` is 32 or 48 and `held` holds
- * `hashLength` bytes, as every secret of the schedule does.
+ * Whether `hashLength` is 32 or 48 and `held` holds `hashLength` bytes, as
+ * every secret of the schedule does.
  */
-const tlsHeldCheck = (caller: string, hashLength: i32, held: Secret<u8[]>): void => {
-  if (hashLength !== SHA256_SIZE && hashLength !== SHA384_SIZE) {
-    panic(`${caller}: a hash length of ${hashLength}, not 32 or 48`)
-  }
-  const length: i32 = expose(held, tlsHeldLength)
-  if (length !== hashLength) {
-    panic(`${caller}: a secret of ${length} bytes, not ${hashLength}`)
-  }
-}
+const tlsHeldCheck = (hashLength: i32, held: Secret<u8[]>): boolean =>
+  (hashLength === SHA256_SIZE || hashLength === SHA384_SIZE) && expose(held, tlsHeldLength) === hashLength
 
 /** HKDF-Extract of `ikm` under `salt`, both held, written over `dst`'s bytes; the plain PRK is wiped. */
 const tlsExtractHeld = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>, dst: Secret<u8[]>): void => {
@@ -902,8 +923,9 @@ const tlsExtractHeld = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>, 
  * `tlsDeriveSecret` into a held `Secret`: Derive-Secret (RFC 8446 §7.1) of
  * `prk` with `label` and the transcript hash `transcriptHash[hashOff ..
  * hashOff + hashLength)`, written over the HashLen bytes `dst` holds. `dst`
- * may be `prk`. Panics unless `hashLength` is 32 or 48, both hold HashLen
- * bytes and the transcript hash's window is inside `transcriptHash`.
+ * may be `prk`. `false`, with `dst` untouched, unless `hashLength` is 32 or
+ * 48, both hold HashLen bytes and the transcript hash's window is inside
+ * `transcriptHash`.
  *
  * @param hashLength The hash length, 32 or 48.
  * @param prk The held stage of the schedule to derive from. It is only overwritten when it is also `dst`.
@@ -911,6 +933,7 @@ const tlsExtractHeld = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>, 
  * @param transcriptHash The array that holds the transcript hash, which is public.
  * @param hashOff Where in `transcriptHash` the `hashLength` bytes of the hash start.
  * @param dst The held secret whose bytes the result overwrites. The caller still owns and wipes it.
+ * @returns `true` once `dst` holds the secret; `false`, with `dst` untouched, for a bad length or window.
  */
 export const tlsDeriveSecretHeld = (
   hashLength: i32,
@@ -919,64 +942,79 @@ export const tlsDeriveSecretHeld = (
   transcriptHash: u8[],
   hashOff: i32,
   dst: Secret<u8[]>
-): void => {
-  tlsHeldCheck("tlsDeriveSecretHeld", hashLength, prk)
-  tlsHeldCheck("tlsDeriveSecretHeld", hashLength, dst)
-  const context: u8[] = tlsHeldWindow("tlsDeriveSecretHeld", hashLength, transcriptHash, hashOff)
-  if (hashLength === SHA384_SIZE) {
-    hkdfExpandLabelSha384Held(dst, prk, label, context)
-  } else {
-    hkdfExpandLabelSha256Held(dst, prk, label, context)
+): boolean => {
+  const context: u8[] | null = tlsHeldWindow(hashLength, transcriptHash, hashOff)
+  if (context === null || !tlsHeldCheck(hashLength, prk) || !tlsHeldCheck(hashLength, dst)) {
+    return false
   }
+  return hashLength === SHA384_SIZE
+    ? hkdfExpandLabelSha384Held(dst, prk, label, context)
+    : hkdfExpandLabelSha256Held(dst, prk, label, context)
 }
 
 /**
  * `tlsHandshakeSecret` into a held `Secret`: HKDF-Extract of `ecdhe` under
  * `Derive-Secret(early, "derived", "")`, written over `dst`'s HashLen bytes.
- * The salt is wiped before it returns; `dst` may be `earlySecret`. Panics
- * unless `hashLength` is 32 or 48 and `earlySecret` and `dst` hold HashLen
- * bytes.
+ * The salt is wiped before it returns; `dst` may be `earlySecret`. `false`,
+ * with `dst` untouched, unless `hashLength` is 32 or 48 and `earlySecret` and
+ * `dst` hold HashLen bytes.
  *
  * @param hashLength The hash length, 32 or 48.
  * @param earlySecret The held early secret. It is only overwritten when it is also `dst`.
  * @param ecdhe The held shared secret of the key exchange. It stays the caller's to wipe.
  * @param dst The held secret whose bytes the handshake secret overwrites. The caller still owns and wipes it.
+ * @returns `true` once `dst` holds the secret; `false`, with `dst` untouched, for a bad length.
  */
 export const tlsHandshakeSecretHeld = (
   hashLength: i32,
   earlySecret: Secret<u8[]>,
   ecdhe: Secret<u8[]>,
   dst: Secret<u8[]>
-): void => {
-  tlsHeldCheck("tlsHandshakeSecretHeld", hashLength, dst)
+): boolean => {
+  if (!tlsHeldCheck(hashLength, dst)) {
+    return false
+  }
   // Sized by the empty hash, not by a second test of `hashLength`, which `-O2`
   // would thread into a copy of the derivation (and its wipes) for each size.
   const empty: u8[] = tlsEmptyHash(hashLength)
   const derived: Secret<u8[]> = secret(new Array<u8>(toU16(empty.length)))
-  tlsDeriveSecretHeld(hashLength, earlySecret, "derived", empty, TLS_SCHEDULE_FROM, derived)
-  tlsExtractHeld(hashLength, derived, ecdhe, dst)
+  const salted: boolean = tlsDeriveSecretHeld(
+    hashLength,
+    earlySecret,
+    "derived",
+    empty,
+    TLS_SCHEDULE_FROM,
+    derived
+  )
+  if (salted) {
+    tlsExtractHeld(hashLength, derived, ecdhe, dst)
+  }
   wipe(derived)
+  return salted
 }
 
 /**
  * `tlsMasterSecret` into a held `Secret`: HKDF-Extract of HashLen zeros under
  * `Derive-Secret(handshake, "derived", "")`, written over `dst`'s HashLen
  * bytes. The salt and the zeros are wiped before it returns; `dst` may be
- * `handshakeSecret`. Panics unless `hashLength` is 32 or 48 and both hold
- * HashLen bytes.
+ * `handshakeSecret`. `false`, with `dst` untouched, unless `hashLength` is 32
+ * or 48 and both hold HashLen bytes.
  *
  * @param hashLength The hash length, 32 or 48.
  * @param handshakeSecret The held handshake secret. It is only overwritten when it is also `dst`.
  * @param dst The held secret whose bytes the master secret overwrites. The caller still owns and wipes it.
+ * @returns `true` once `dst` holds the secret; `false`, with `dst` untouched, for a bad length.
  */
 export const tlsMasterSecretHeld = (
   hashLength: i32,
   handshakeSecret: Secret<u8[]>,
   dst: Secret<u8[]>
-): void => {
-  tlsHeldCheck("tlsMasterSecretHeld", hashLength, dst)
+): boolean => {
+  if (!tlsHeldCheck(hashLength, dst)) {
+    return false
+  }
   const derived: Secret<u8[]> = secret(tlsHashZeros(hashLength))
-  tlsDeriveSecretHeld(
+  const salted: boolean = tlsDeriveSecretHeld(
     hashLength,
     handshakeSecret,
     "derived",
@@ -985,9 +1023,12 @@ export const tlsMasterSecretHeld = (
     derived
   )
   const zeros: Secret<u8[]> = secret(tlsHashZeros(hashLength))
-  tlsExtractHeld(hashLength, derived, zeros, dst)
+  if (salted) {
+    tlsExtractHeld(hashLength, derived, zeros, dst)
+  }
   wipe(derived)
   wipe(zeros)
+  return salted
 }
 
 /**
@@ -995,7 +1036,7 @@ export const tlsMasterSecretHeld = (
  * the HMAC of `transcriptHash[hashOff .. hashOff + hashLength)` under
  * `finished_key = Expand-Label(baseKey, "finished", "", HashLen)` (RFC 8446
  * §4.4.4). The finished key is held and wiped before it returns;
- * `verify_data` goes on the wire, so it is plain. Panics unless `hashLength`
+ * `verify_data` goes on the wire, so it is plain. `null` unless `hashLength`
  * is 32 or 48, `baseKey` holds HashLen bytes and the transcript hash's window
  * is inside `transcriptHash`.
  *
@@ -1003,23 +1044,29 @@ export const tlsMasterSecretHeld = (
  * @param baseKey The sender's held handshake traffic secret. It stays the caller's: this does not wipe it.
  * @param transcriptHash The array that holds the transcript hash up to the Finished message.
  * @param hashOff Where in `transcriptHash` the `hashLength` bytes of the hash start.
- * @returns The HashLen bytes of `verify_data`, plain, in a fresh array.
+ * @returns The HashLen bytes of `verify_data`, plain, in a fresh array; `null` for a bad length or window.
  */
 export const tlsFinishedVerifyDataHeld = (
   hashLength: i32,
   baseKey: Secret<u8[]>,
   transcriptHash: u8[],
   hashOff: i32
-): u8[] => {
-  tlsHeldCheck("tlsFinishedVerifyDataHeld", hashLength, baseKey)
-  // Refused before the finished key exists, so a panic leaves no key unwiped.
-  const transcript: u8[] = tlsHeldWindow("tlsFinishedVerifyDataHeld", hashLength, transcriptHash, hashOff)
+): u8[] | null => {
+  // Refused before the finished key exists, so a refusal leaves no key unwiped.
+  const transcript: u8[] | null = tlsHeldWindow(hashLength, transcriptHash, hashOff)
+  if (transcript === null || !tlsHeldCheck(hashLength, baseKey)) {
+    return null
+  }
   const none: u8[] = []
   const finishedKey: Secret<u8[]> = secret(tlsHashZeros(hashLength))
-  if (hashLength === SHA384_SIZE) {
-    hkdfExpandLabelSha384Held(finishedKey, baseKey, "finished", none)
-  } else {
-    hkdfExpandLabelSha256Held(finishedKey, baseKey, "finished", none)
+  // `tlsHeldCheck` above keeps the expansion in range, so it does not answer `false`.
+  const keyed: boolean =
+    hashLength === SHA384_SIZE
+      ? hkdfExpandLabelSha384Held(finishedKey, baseKey, "finished", none)
+      : hkdfExpandLabelSha256Held(finishedKey, baseKey, "finished", none)
+  if (!keyed) {
+    wipe(finishedKey)
+    return null
   }
   const verifyData: u8[] =
     hashLength === SHA384_SIZE
@@ -1060,7 +1107,9 @@ export const tlsTrafficKeysFromHeld = (
   ) {
     return false
   }
-  hkdfExpandLabelHeldInto(hashLength, trafficSecret, "key", none, key, TLS_SCHEDULE_FROM, keyLength)
-  hkdfExpandLabelHeldInto(hashLength, trafficSecret, "iv", none, iv, TLS_SCHEDULE_FROM, TLS_IV_SIZE)
-  return true
+  // The tests above keep both expansions in range, so neither answers `false`.
+  return (
+    hkdfExpandLabelHeldInto(hashLength, trafficSecret, "key", none, key, TLS_SCHEDULE_FROM, keyLength) &&
+    hkdfExpandLabelHeldInto(hashLength, trafficSecret, "iv", none, iv, TLS_SCHEDULE_FROM, TLS_IV_SIZE)
+  )
 }
