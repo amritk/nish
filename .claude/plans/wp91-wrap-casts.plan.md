@@ -201,13 +201,15 @@ Secret intermediates stay `Secret` and are wiped, as `CLAUDE.md` requires. A cha
 
 ## WP91 S7 — allow none
 
-**Owns:** `scripts/wrap-casts.mjs`, `scripts/wrap-casts.txt`, `CLAUDE.md`, `.claude/linting.md`, the S1 check in `tests/run.js`. **Depends on** S1–S6 merged (development too: it needs every count at zero). **Sensitive:** lint configuration and agent guidance, so S7 ends as a reviewed PR awaiting a human merge.
+**Owns:** `scripts/wrap-casts.mjs`, `scripts/wrap-casts.txt`, `CLAUDE.md`, `.claude/linting.md`, the S1 check in `tests/run.js`, and the two security rows that cite the baseline or the S1 check by name: COMP-21 in `docs/security/compress.md` and REGEX-8 in `docs/security/regex.md`. **Depends on** S1–S6 merged (development too: it needs every count at zero). **Sensitive:** lint configuration and agent guidance, so S7 ends as a reviewed PR awaiting a human merge.
 
 With every count at zero, delete [scripts/wrap-casts.txt](../../scripts/wrap-casts.txt) and the script's `--update` mode, so any cast fails `npm run lint`. Drop the baseline sentence from [CLAUDE.md](../../CLAUDE.md) and the row's config column in [.claude/linting.md](../../.claude/linting.md). The S1 `tests/run.js` check then plants a cast and asserts that it fails with no baseline involved.
 
 ## Run refinement
 
 Added for the `/feature` run on #2359, on `main` at 9533b5d5.
+
+**S7 refinement** (second run, on `main` at 4b5ee7c3, every S1–S6 count at zero): S7's `Owns` adds COMP-21 in `docs/security/compress.md` and REGEX-8 in `docs/security/regex.md`, which quote `scripts/wrap-casts.txt` and the S1 check's names. CLAUDE.md requires a security row to cite the check that fails without its guard, so a renamed check or a deleted baseline moves both rows in the same PR. No other file names the baseline (`git grep wrap-casts` at 4b5ee7c3, the plan aside). The S1 check keeps its whole-tree run and planted cast; the baseline half (a removed line, a self-planted baselined file) goes with `--update`, and a new assertion fails if `scripts/wrap-casts.txt` exists or the script still accepts `--update`.
 
 **Shared files**, which any stage may touch for its own entries only: `scripts/wrap-casts.txt` (lowered by `node scripts/wrap-casts.mjs --update`, never raised or added to; on a conflict, take `main`'s and rerun `--update`), `tests/nish-cmp.js` (its own `DECLARED` entries), `tests/run.js` (its own checks, and S1 its replacement check), `bench/instructions.json` (a count may fall, never rise), `docs/security/README.md` (its own rows).
 
