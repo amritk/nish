@@ -2796,9 +2796,8 @@ export const main = (): i32 => {
 ```
 
 Each function first checks that all its bytes lie in the array, and an
-offset whose bytes do not panics there, naming the function, the offset, the
-width and the array's length (`getU32LE: the 4 bytes at 1 do not all lie in an
-array of 4`). The compiler carries that check to each call, so a call your own
+offset whose bytes do not panics there, naming the function and the width
+(`getU32LE: the 4 bytes at the offset do not all lie in the array`). The compiler carries that check to each call, so a call your own
 code has tested builds without `--allow-panics`: test the offset after the
 last call before it, as the `b.length` tests above do, or, for an offset in a
 variable, `if (off < 0 || off > toI32(b.length) - 4)` before a 4-byte read. A

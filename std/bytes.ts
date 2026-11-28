@@ -24,7 +24,7 @@
  *
  * **Each function checks its whole window once, first, through `bytesWindow`**,
  * so an offset whose bytes do not all lie in the array panics before any byte
- * is read or written, naming the function, the offset and the array's length.
+ * is read or written, naming the function and its width (a literal message).
  * The check is a window contract (docs/LANGUAGE.md, "Panic sites", `window`):
  * it is recorded at each call, so a caller whose own test holds the window,
  * such as `off >= 0 && off + 4 <= b.length` before a `getU32LE`, proves it
