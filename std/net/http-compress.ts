@@ -1274,8 +1274,8 @@ export class HttpBodyDecoder {
       // decoded here reaches no panic; the test above has ruled it out.
       const end: i32 =
         coding === HTTP_CODING_GZIP
-          ? this.gunzip.decompressRange(src, off, stop, output, 0, limit)
-          : this.unzlib.decompressRange(src, off, stop, output, 0, limit)
+          ? this.gunzip.decompressRange(src, off, stop, output, toI32(0), limit)
+          : this.unzlib.decompressRange(src, off, stop, output, toI32(0), limit)
       if (end >= 0) {
         return end
       }

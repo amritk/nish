@@ -3716,8 +3716,8 @@ export class Inflater {
    * passing `op` for both cannot prove. A window outside its array is
    * `DEFLATE_ERR_WINDOW`, with nothing read or written.
    *
-   * @internal Called by `decompress` here and by the one-shot decoders of
-   * std/compress/gzip.ts and std/compress/zlib.ts.
+   * @internal Called by the one-shot decoders of std/compress/gzip.ts and
+   * std/compress/zlib.ts.
    * @param src The array that holds the compressed stream.
    * @param ip Where in `src` the stream starts.
    * @param inEnd One past the stream's last byte; running out before the
@@ -3839,51 +3839,9 @@ export class Inflater {
           return DEFLATE_ERR_BLOCK_TYPE
         }
       } else if (s === INF_S_STORED) {
-        const ip: i32 = this.inPos
-        const opos: i32 = this.outPos
-        // `inflate` checked `inPos <= inEnd` and `outPos <= outEnd`, and
-        // every step keeps both.
-        if (ip < 0 || ip > inEnd || opos < 0 || opos > outEnd) {
-          return DEFLATE_ERR_TRUNCATED
-        }
-        const inAvail: i32 = inEnd - ip
-        const outAvail: i32 = outEnd - opos
-        if (inAvail < 0 || outAvail < 0 || inEnd < 0 || outEnd < 0) {
-          return DEFLATE_ERR_TRUNCATED
-        }
-        // A stored length is 16 bits.
-        const left: i32 = this.storedLeft
-        if (left < 0 || left > 65535) {
-          return DEFLATE_ERR_STORED_LENGTH
-        }
-        let n: i32 = left
-        if (n > inAvail) {
-          n = inAvail
-        }
-        if (n > outAvail) {
-          n = outAvail
-        }
-        // `n` is at most each room, and each room at least zero: `ip + n`
-        // and `opos + n` are the ends less what is left of each room.
-        const inGap: i32 = inAvail - n
-        const outGap: i32 = outAvail - n
-        if (inGap < 0 || outGap < 0) {
-          return DEFLATE_ERR_TRUNCATED
-        }
-        // `inflate` checked both windows, so this copy always fits; the
-        // prover cannot follow them through the fields, and the answer for
-        // one that did not would be input that ends where it was read.
-        if (!tryCopyBytes(out, opos, src, ip, n)) {
-          return DEFLATE_ERR_TRUNCATED
-        }
-        this.inPos = inEnd - inGap
-        this.outPos = outEnd - outGap
-        this.storedLeft = left - n
-        if (this.storedLeft > 0) {
-          if (this.outPos === outEnd) {
-            return INFLATE_NEED_OUTPUT
-          }
-          return more ? INFLATE_NEED_INPUT : DEFLATE_ERR_TRUNCATED
+        const r: i32 = this.stored(src, inEnd, more, out, outEnd)
+        if (r !== 0) {
+          return r
         }
         this.state = INF_S_BLOCK
       } else {
@@ -3893,6 +3851,61 @@ export class Inflater {
         }
       }
     }
+  }
+
+  /**
+   * One stored block's copy: as much of what is left of it as both rooms
+   * hold. Answers 0 once the block is done, `INFLATE_NEED_OUTPUT` or
+   * `INFLATE_NEED_INPUT` when a room ran out first, and
+   * `DEFLATE_ERR_TRUNCATED` or `DEFLATE_ERR_STORED_LENGTH` for a window or a
+   * length `step` and `inflate` rule out.
+   */
+  private stored(src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32): i32 {
+    const ip: i32 = this.inPos
+    const opos: i32 = this.outPos
+    // `inflate` checked `inPos <= inEnd` and `outPos <= outEnd`, and
+    // every step keeps both.
+    if (ip < 0 || ip > inEnd || opos < 0 || opos > outEnd) {
+      return DEFLATE_ERR_TRUNCATED
+    }
+    const inAvail: i32 = inEnd - ip
+    const outAvail: i32 = outEnd - opos
+    if (inAvail < 0 || outAvail < 0 || inEnd < 0 || outEnd < 0) {
+      return DEFLATE_ERR_TRUNCATED
+    }
+    // A stored length is 16 bits.
+    const left: i32 = this.storedLeft
+    if (left < 0 || left > 65535) {
+      return DEFLATE_ERR_STORED_LENGTH
+    }
+    let n: i32 = left
+    if (n > inAvail) {
+      n = inAvail
+    }
+    if (n > outAvail) {
+      n = outAvail
+    }
+    // `n` is at most each room, and each room at least zero: `ip + n`
+    // and `opos + n` are the ends less what is left of each room.
+    const inGap: i32 = inAvail - n
+    const outGap: i32 = outAvail - n
+    // `inflate` checked both windows, so the copy always fits; the prover
+    // cannot follow them through the fields, and the answer for one that did
+    // not would be input that ends where it was read. One test with the gaps,
+    // so the copy shares their return.
+    if (inGap < 0 || outGap < 0 || !tryCopyBytes(out, opos, src, ip, n)) {
+      return DEFLATE_ERR_TRUNCATED
+    }
+    this.inPos = inEnd - inGap
+    this.outPos = outEnd - outGap
+    this.storedLeft = left - n
+    if (this.storedLeft > 0) {
+      if (this.outPos === outEnd) {
+        return INFLATE_NEED_OUTPUT
+      }
+      return more ? INFLATE_NEED_INPUT : DEFLATE_ERR_TRUNCATED
+    }
+    return 0
   }
 
   /**
@@ -4356,11 +4369,7 @@ export class Inflater {
     const inEnd: i32 = toI32(src.length) - inGap
     const end: i32 = toI32(out.length) - outGap
     this.reset()
-    const r: i32 = this.inflateAll(src, off, inEnd, out, at, end)
-    if (r === DEFLATE_ERR_WINDOW) {
-      this.consumed = 0
-      return r
-    }
+    const r: i32 = this.inflate(src, off, inEnd, false, out, at, end, at)
     const pos: i32 = this.inPos
     if (pos < 0) {
       this.consumed = 0
