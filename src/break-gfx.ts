@@ -413,7 +413,9 @@ export const drawTextCentred = (
   shadow: i32
 ): void => {
   const fb: Framebuffer = view.fb
-  const px: i32 = pixelSum(toI64(rasterPixel(pixelX(view, cx) + 0.5)) - toI64(rasterTextWidth(text, scale) / 2))
+  const px: i32 = pixelSum(
+    toI64(rasterPixel(pixelX(view, cx) + 0.5)) - toI64(rasterTextWidth(text, scale) / 2)
+  )
   const py: i32 = rasterPixel(pixelY(view, y) + 0.5)
   if (shadow !== NO_SHADOW) {
     const drop: i32 = Math.min(scale, RASTER_MAX_TEXT_SCALE)

@@ -341,15 +341,20 @@ const directorHotkey = (e: TermEvent): boolean => e.type === EVENT_KEY && e.key 
 const directorKeyRow = (key: i32): i32 => {
   if (key === KEY_F3) {
     return DIRECTOR_ROW_STATS
-  } else if (key === KEY_F4) {
+  }
+  if (key === KEY_F4) {
     return 0
-  } else if (key === KEY_F5) {
+  }
+  if (key === KEY_F5) {
     return 1
-  } else if (key === KEY_F6) {
+  }
+  if (key === KEY_F6) {
     return 2
-  } else if (key === KEY_F7) {
+  }
+  if (key === KEY_F7) {
     return 3
-  } else if (key === KEY_F8) {
+  }
+  if (key === KEY_F8) {
     return 4
   }
   return DIRECTOR_ROW_SOUND
@@ -613,7 +618,11 @@ const directorStepDown = (lines: i32): i32 => {
  * @param now The host's clock, in nanoseconds; only differences are read.
  */
 export const adaptBreakResolution = (d: BreakDirector, fps: i32, rttMs: f64, height: i32, now: i64): void => {
-  if (resolutionChoice(d.settings.resolution) !== 0 || height <= 270 || !clockPassed(now, d.settledAt, true)) {
+  if (
+    resolutionChoice(d.settings.resolution) !== 0 ||
+    height <= 270 ||
+    !clockPassed(now, d.settledAt, true)
+  ) {
     return
   }
   if (fps >= 60 || rttMs >= DIRECTOR_FAST_RTT_MS) {
