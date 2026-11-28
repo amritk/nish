@@ -44,7 +44,7 @@ the record that found it. The notes below the table name each such finding.
 | Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 3 | 0 / 0 / 0 / 4 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ⁷ |
 | HTTP/2 over cleartext (h2c) | [http2-cleartext.md](http2-cleartext.md) | `std/net/http2-cleartext.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
-| HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 8 | 0 / 0 / 0 / 1 ([H3-10](http3.md#findings)) ⁷ |
+| HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 9 | 0 / 0 / 0 / 0 ⁷ |
 | QUIC on every core | [quic-multicore.md](quic-multicore.md) | the UDP path of `nish/net/prefork`; the worker byte in `std/net/quic.ts`, `std/net/quic-listener.ts` and `std/net/quic-conn-cid.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ²⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ⁷ |
 | JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts`; the global `Map`'s key hashes: `std/collections.ts`, `src/emit-map.ts` | 0 / 0 / 2 / 2 | 0 / 0 / 0 / 2 ¹⁰ |

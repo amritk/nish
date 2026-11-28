@@ -743,8 +743,9 @@ export class Http3Server {
   private from: u8[]
   private meta: i32[]
   /**
-   * `QUIC_CONN_ENTROPY_SIZE` bytes of scratch, refilled from `crypto.getRandomValues` for each slot built
-   * and each connection accepted; it holds the last one's until the next, and `stop` zeroes it.
+   * `QUIC_CONN_ENTROPY_SIZE` bytes of scratch, filled from `crypto.tryGetRandomValues` for each
+   * connection accepted and zeroed by the connection that copies it, so it holds zeros between
+   * accepts; `stop` zeroes it too.
    */
   entropy: u8[]
   private flight: QuicFlight
@@ -793,6 +794,11 @@ export class Http3Server {
   accepted: i32 = 0
   /** Initials dropped because no slot was free, saturating at 2^31 - 1. */
   refused: i32 = 0
+  /**
+   * Initials dropped because the entropy source failed (`crypto.tryGetRandomValues`
+   * answered false) before a slot was taken, saturating at 2^31 - 1; the slot stays free.
+   */
+  starved: i32 = 0
   /** Datagrams no slot owns dropped past the answer budget before the listener read them, saturating. */
   limited: i32 = 0
   private sendErrors: i32 = 0
@@ -889,13 +895,16 @@ export class Http3Server {
   }
 
   /**
-   * Builds the next slot, `quics.length`: its QUIC connection under fresh
-   * entropy, sharing `streamPools` when its stream table is the one they
-   * were made for, its HTTP/3 connection on the pool's buffers and `date`,
-   * and its address.
+   * Builds the next slot, `quics.length`: its QUIC connection, sharing
+   * `streamPools` when its stream table is the one they were made for, its
+   * HTTP/3 connection on the pool's buffers and `date`, and its address.
+   * The QUIC connection is made from `entropy` as it stands, zeros (each
+   * connection zeroes it once copied): a built slot meets no peer and its
+   * connection IDs are not indexed until an accept takes it, and the accept
+   * seeds it again with `reset` from bytes the source gave, so no
+   * connection a peer reaches runs on these.
    */
   private build(): void {
-    crypto.getRandomValues(this.entropy)
     const quic = new QuicConnection(this.quicConfig, this.entropy)
     quic.ecnMarking = this.ecn
     this.quics.push(quic)
@@ -1216,7 +1225,13 @@ export class Http3Server {
     const addresses: u8[][] = this.addresses
     const state: i32[] = this.state
     const signatures: i64[] = this.signatures
-    crypto.getRandomValues(this.entropy)
+    // A source that fails drops the Initial before the slot is taken; the peer may send it again.
+    // The fill may have written a prefix, which is zeroed with the rest.
+    if (!crypto.tryGetRandomValues(this.entropy)) {
+      secureZero(this.entropy)
+      this.starved = h3Count(this.starved)
+      return
+    }
     // Never taken: a released slot was built, `slotAt` builds the one it answers, and
     // `state` and `signatures` are `size` long.
     if (

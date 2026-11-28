@@ -429,12 +429,17 @@ export class WebTransportWaiting {
   private heads: i32[]
   private tails: i32[]
   private salt: i64 = 0
+  /** Whether `salt` holds its 4 bytes from the entropy source; drawn by the first `add` that finds the source answering. */
+  private salted: boolean = false
   private freeHead: i32 = -1
   /** How many streams are waiting now. */
   count: i32 = 0
 
   /**
-   * Makes an empty room, its hash salted with 4 bytes from `crypto.getRandomValues`.
+   * Makes an empty room. Its hash is salted with 4 bytes from
+   * `crypto.tryGetRandomValues`, drawn by the first `add`, so a room that
+   * no stream ever waits in draws nothing; `add` answers false while the
+   * source fails.
    * @param size How many streams may wait at once; 0 or less makes room for 1.
    */
   constructor(size: i32) {
@@ -446,12 +451,30 @@ export class WebTransportWaiting {
     const buckets: i32 = wtBuckets(n)
     this.heads = wtI32s(buckets)
     this.tails = wtI32s(buckets)
-    const entropy: u8[] = wtBytes(4)
-    crypto.getRandomValues(entropy)
-    for (let j: i32 = 0; j < toI32(entropy.length); j++) {
-      this.salt = (this.salt << toI64(8)) | toI64(toI32(entropy[j]))
-    }
     this.reset()
+  }
+
+  /**
+   * Draws the salt if it is not drawn yet. Only an empty room draws it, so
+   * no entry was filed under another salt; the room starts empty and every
+   * `add` before the draw answers false.
+   * @returns Whether the room is salted: false while the entropy source fails.
+   */
+  private drawSalt(): boolean {
+    if (this.salted) {
+      return true
+    }
+    const entropy: u8[] = wtBytes(4)
+    if (!crypto.tryGetRandomValues(entropy)) {
+      return false
+    }
+    let salt: i64 = 0
+    for (let j: i32 = 0; j < toI32(entropy.length); j++) {
+      salt = (salt << toI64(8)) | toI64(toI32(entropy[j]))
+    }
+    this.salt = salt
+    this.salted = true
+    return true
   }
 
   /** @internal Empties the room; called by `WebTransport` in this module, not for callers. */
@@ -474,10 +497,15 @@ export class WebTransportWaiting {
   }
 
   /**
-   * Files stream `stream`, waiting for session `session`; answers whether there was room.
+   * Files stream `stream`, waiting for session `session`; answers whether
+   * there was room, false too when the salt is not drawn and the entropy
+   * source fails.
    * @internal Called by `WebTransport` in this module; not for callers.
    */
   add(stream: i64, session: i64): boolean {
+    if (!this.drawSalt()) {
+      return false
+    }
     const next: i32[] = this.next
     const prev: i32[] = this.prev
     const heads: i32[] = this.heads
