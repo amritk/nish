@@ -22,18 +22,19 @@ import {
   kittyFrame,
   scaleFramebuffer,
   sixelFrame,
+  tryFramebuffer,
 } from "nish/term-pixels";
 ```
 
 <scalar-code-group>
 
 ```ts example.ts
-import { Framebuffer, fitFramebuffer, GRAPHICS_KITTY, kittyFrame, PixelBytes } from "nish/term-pixels"
+import { fitFramebuffer, GRAPHICS_KITTY, kittyFrame, PixelBytes, tryFramebuffer } from "nish/term-pixels"
 
-const fb = new Framebuffer(160, 90)
+const fb = tryFramebuffer(160, 90).expect("a 160 × 90 framebuffer")
 fb.fill(0x000020)
 fb.set(80, 45, 0xffcc00)
-const rect = fitFramebuffer(fb.width, fb.height, 80, 24, 0, 0, GRAPHICS_KITTY)
+const rect = fitFramebuffer(fb.pixelWidth(), fb.pixelHeight(), 80, 24, 0, 0, GRAPHICS_KITTY)
 const out = new PixelBytes(1 << 16)
 kittyFrame(fb, rect, 1, out)
 // out.text() is the frame's bytes, for one write
@@ -85,6 +86,12 @@ Append one frame of `fb` as DEC Sixel graphics, drawn over `rect`'s `width × he
 
 </scalar-card>
 
+<scalar-card title="try​Framebuffer" icon="phosphor/regular/function" href="#tryframebuffer">
+
+The `Framebuffer` constructor for a caller with an answer to a size it cannot have: a black framebuffer of `width × height`, or `Err`.
+
+</scalar-card>
+
 <scalar-card title="Framebuffer" icon="phosphor/regular/cube" href="#framebuffer">
 
 A `width × height` grid of `0xRRGGBB` pixels, row by row, all black when made.
@@ -116,9 +123,11 @@ cell drawers go through `Screen`, which already is.
 </scalar-callout>
 
 - `Framebuffer(width, height)` holds the pixels, with `set`, `get`, `fill`,
-  `clear` and `resize`. `scaleFramebuffer(src, divisor, dst)` shrinks one by
-  an integer divisor, nearest-neighbour, for the refresh controller's
-  resolution downgrade.
+  `clear` and `resize`, and `pixelWidth`, `pixelHeight` and `pixelData` to
+  read its size and array. `tryFramebuffer(width, height)` and `tryResize`
+  answer an `Err` for a size the constructor and `resize` panic on.
+  `scaleFramebuffer(src, divisor, dst)` shrinks one by an integer divisor,
+  nearest-neighbour, for the refresh controller's resolution downgrade.
 - `GRAPHICS_ASCII`, `GRAPHICS_HALFBLOCK`, `GRAPHICS_SIXEL` and
   `GRAPHICS_KITTY` name the backends, numbered from worst to best so that a
   capability and a cap combine with `Math.min`.
@@ -357,7 +366,8 @@ is done with it.
 
 `imageId` is 1 to 2^31 - 1, since 0 is the protocol's "no id"; anything
 else panics. So does a framebuffer whose `pixels` does not hold
-`width × height`. An empty framebuffer or rect writes nothing.
+`width × height`. An empty framebuffer or rect writes nothing. A frame that
+would grow `out` past 2^31 - 1 bytes stops where it is and sets `out.full`.
 
 ```ts
 const kittyFrame: (
@@ -451,7 +461,8 @@ Append one frame of `fb` as DEC Sixel graphics, drawn over `rect`'s
 With `dither`, each pixel's components are offset by the 4×4 Bayer
 matrix's threshold before they are quantised (ordered dithering), so a
 gradient becomes a fine, stable pattern rather than steps. An empty rect
-writes nothing.
+writes nothing; a rect wider than 2^31 - 1 / 252 pixels, or of more than
+2^31 - 1, is more than one buffer holds and marks `out` `full` instead.
 
 ```ts
 const sixelFrame: (
@@ -486,6 +497,39 @@ Where the Sixel bytes are appended.
 
 </scalar-field>
 
+### tryFramebuffer
+
+The `Framebuffer` constructor for a caller with an answer to a size it cannot have: a black
+framebuffer of `width × height`, or `Err`. It builds an empty framebuffer and sizes it with
+`tryResize`, so a call still reaches the size checks of the constructor, which panic only on a
+size an empty one never has; `--deny-panics` reports them at the call.
+
+```ts
+const tryFramebuffer: (
+  width: i32,
+  height: i32,
+) => Result<Framebuffer, string>
+```
+
+<scalar-field name="width" type="i32" required>
+
+Pixels across, 0 or more.
+
+</scalar-field>
+
+<scalar-field name="height" type="i32" required>
+
+Pixels down, 0 or more.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Result&lt;Framebuffer, string&gt;">
+
+The framebuffer, or `Err` naming the problem for a negative size or more than
+2^31 - 1 pixels.
+
+</scalar-field>
+
 ## Classes
 
 ### Framebuffer
@@ -505,8 +549,12 @@ class Framebuffer
 | `clear(): void` | Set every pixel to black. |
 | `fill(colour: i32): void` | Set every pixel to `colour`'s low 24 bits. |
 | `get(x: i32, y: i32): i32` | The colour of the pixel at `x`, `y`, or black off the framebuffer. Panics when `pixels` does not hold `width × height`, as after setting those public fields out of step. |
+| `pixelData(): i32[]` | The pixels, one `0xRRGGBB` colour each at `y * pixelWidth() + x`, for `rasterFrame` to draw into, as the `pixels` field holds them. |
+| `pixelHeight(): i32` | Pixels down, as the `height` field holds it. |
+| `pixelWidth(): i32` | Pixels across, as the `width` field holds it. |
 | `resize(width: i32, height: i32): void` | Make the framebuffer `width × height` and black; the array is replaced only when the size changes. |
 | `set(x: i32, y: i32, colour: i32): void` | Set the pixel at `x`, `y` to `colour`'s low 24 bits; a pixel off the framebuffer is not drawn. Panics when `pixels` does not hold `width × height`, as after setting those public fields out of step. |
+| `tryResize(width: i32, height: i32): Result<void, string>` | `resize` for a caller with an answer to a size it cannot have: make the framebuffer `width × height` and black, replacing the array only when the size changes, or leave it as it was and answer `Err`. |
 
 ### PixelBytes
 
@@ -529,11 +577,12 @@ class PixelBytes
 | --- | --- |
 | `new PixelBytes(capacity: i32)` | An empty buffer with room for `capacity` bytes before it grows. |
 | `bytes: u8[]` | The bytes, of which the first `length` are written. |
+| `full: boolean` | True once a frame asked for more than one buffer holds: a `put` past 2^31 - 1 bytes, which was dropped, or a `sixelFrame` rect whose working arrays would pass 2^31 - 1 entries. `text()` is then not the whole escape and is not to be written. `reset()` clears it. |
 | `length: i32` | How many bytes are written. |
 | `put(b: i32): void` | Append the byte `b`. |
 | `putDecimal(v: i32): void` | Append `v`, at least 0, in decimal. |
 | `putText(s: string): void` | Append `s`, which is ASCII. |
-| `reserve(n: i32): void` | Make room for `n` more bytes, doubling the array as often as that takes. |
+| `reserve(n: i32): void` | Make room for `n` more bytes, doubling the array as often as that takes. Room past 2^31 - 1 bytes is not made: the buffer is marked `full` instead. |
 | `reset(): void` | Forget what was written. |
 | `text(): string` | What was written, as one string. |
 

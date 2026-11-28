@@ -2015,6 +2015,8 @@ const TERM_TS_PANIC_FREE = "std/term.ts panic-free"
 const TEMPORAL_PANIC_FREE = "std/temporal.ts panic-free"
 /** The changelog words of WP85 S2: std's term-pixels, term-io, term-rate and term-probe modules prove or drop their panic sites. */
 const TERM_PANIC_FREE = "term-pixels, term-io, term-rate and term-probe panic-free"
+/** The changelog words of examples-strict S4b: Framebuffer's Result-returning factory and resize. */
+const TERM_TRY_FRAMEBUFFER = "add tryFramebuffer and Framebuffer.tryResize"
 /** The changelog words of the panic prover's named constants, masks, charCodeAt and down-counting loops. */
 const PROVER_READS = "named constants, masks, charCodeAt and down-counting loops in the panic prover"
 const proverReads = byFinding(PROVER_READS)
@@ -11759,6 +11761,9 @@ const JSON_PUT_STRING = "jsonPutString"
 const HTTP1_TICK = "Http1Server.tick"
 /** The changelog words of WP80 S6: std/threads.ts gains checked atomic array twins, std/json-typed.ts and std/net/websocket.ts prove their windows, and the histogram-atomic example drops `--allow-panics`. The change's commit subject carries these words verbatim, which is how the changelog check finds them. */
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
+/** The changelog words of WP91 S1, which spells the cast wraps in std/compress, src/ and examples/. */
+const WP91_S1 = "compress, src/ and examples, and one check for every file"
+const wp91s1 = byFinding(WP91_S1)
 /** The changelog words of WP90 S1, the multipart/form-data reader. */
 const MULTIPART_BODIES = "multipart/form-data bodies"
 /** The changelog words of examples-strict S2 (#2296): a caller's proof discharges a std callee's leading contract guard. */
@@ -11870,6 +11875,17 @@ const storageIndex = () => [
     why: "the program indexes module storage past a guard against a function const under --deny-panics, which the candidate proves and the reference refuses as a site that may panic",
   },
 ]
+
+/** The changelog words of examples-strict S5: the wasm-arena example drops `--allow-panics`. */
+const ARENA_STRICT = "wasm-arena builds without --allow-panics"
+/** examples-strict S5: the arena programs the reference refuses once their smoke args drop the flag. */
+const arenaStrict = () =>
+  ["examples/wasm-arena/sim.ts", "examples/wasm-arena/replay.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: ARENA_STRICT,
+    why: "the arena's sim.ts now builds without --allow-panics: its loops index BODIES and SHOTS up to their caps and each helper handed an index tests it against the cap, which the candidate proves and the reference refuses as index sites that may panic",
+  }))
 
 /** The release-note words of TLS RSA S1, RSA-PSS CertificateVerify on the TLS and QUIC servers. */
 const RSA_PSS_SERVER = "RSA-PSS CertificateVerify under an RSA certificate"
@@ -14578,6 +14594,7 @@ const DECLARED = [
   ...targetFiles(),
   ...exportedBindings(),
   ...storageIndex(),
+  ...arenaStrict(),
   {
     program: "tests/link/net_grpc/main.ts",
     file: "exit",
@@ -24107,6 +24124,20 @@ const DECLARED = [
       "tests/link/std_term_rate_f64/main.ts": ["main.h"],
     }
   ),
+  // examples-strict S4b: Framebuffer's Result API and the term sites term-probe reaches.
+  ...byFinding(TERM_TRY_FRAMEBUFFER)(
+    "the program calls tryFramebuffer, Framebuffer.tryResize or base64EncodeIfFits, or reaches std/term-io.ts code that reads `PixelBytes.full`, which are new in this release (examples-strict S4b), so the seed's standard library has no such exports or field and refuses it",
+    {
+      "tests/link/break_game/main.ts": ["exit"],
+      "tests/link/break_gfx/main.ts": ["exit"],
+      "tests/link/std_base64_if_fits/main.ts": ["exit"],
+      "tests/link/std_term_pixels_try/main.ts": ["exit"],
+    }
+  ),
+  ...byFinding(TERM_TRY_FRAMEBUFFER)(
+    "Framebuffer gains tryResize, which returns a Result<void, string>, and its constructor checks the size through the rule tryFramebuffer shares (examples-strict S4b), so a module that lays out or constructs a Framebuffer declares the Result struct and its calls into the class move",
+    { "tests/link/std_term_pixels_negative_desync/main.ts": ["main.ll"] }
+  ),
   // WP87 S2: std/math, base64, random, regex, release, sqlite, testing and
   // text prove or remove their counted panic sites.
   ...s2RestPanicFree(
@@ -24335,6 +24366,36 @@ const DECLARED = [
     changelog: WP80_EXAMPLES_FREED,
     why: "the case is new with this change and imports std/threads.ts's checked twins atomicI32ArrayChecked and atomicI64ArrayChecked, which the seed's std/threads.ts does not export, so the reference refuses it",
   },
+  ...wp91s1(
+    "std/compress/deflate.ts's `deflateHash` multiplies with `wrappingMul` from nish:unsafe instead of casting through `u32`, so deflate.ll moves in every program that compresses",
+    {
+      "bench/pg-carrier.ts": ["deflate.ll"],
+      "bench/std-compress-deflate.ts": ["deflate.ll"],
+      "bench/std-compress-gzip.ts": ["deflate.ll"],
+      "bench/std-compress-inflate.ts": ["deflate.ll"],
+      "bench/std-http1.ts": ["deflate.ll"],
+      "examples/file-server.ts": ["deflate.ll"],
+      "examples/http-app/main.ts": ["deflate.ll"],
+      "examples/prefork-server.ts": ["deflate.ll"],
+      "examples/relay/main.ts": ["deflate.ll"],
+      "tests/link/net_http1_server_checked/main.ts": ["deflate.ll"],
+      "tests/link/std_compress_deflate_bounds/main.ts": ["deflate.ll"],
+      "tests/link/std_compress_sweep/main.ts": ["deflate.ll"],
+      "tests/link/std_http1_config_checked/main.ts": ["deflate.ll"],
+    }
+  ),
+  ...wp91s1(
+    "each example's cast wrap is spelled with nish:unsafe's wrapping operations or replaced by a bound the prover reads, so the example's own module moves",
+    {
+      "examples/file-server.ts": ["file-server.ll"],
+      "examples/histogram-atomic.ts": ["histogram-atomic.ll"],
+      "examples/histogram.ts": ["histogram.ll"],
+      "examples/http-app/main.ts": ["main.ll"],
+      "examples/prefork-jobs.ts": ["prefork-jobs.ll"],
+      "examples/relay/main.ts": ["main.ll"],
+      "examples/term-probe.ts": ["term-probe.ll"],
+    }
+  ),
   // WP91 S3: the cast wraps of std/json*, text, temporal, sqlite and sync
   // become proven sums, refusals or spelled wraps.
   ...["bench/httparena/main.ts", "tests/link/httparena_entry/main.ts"].map((program) => ({

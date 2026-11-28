@@ -10,6 +10,9 @@ import acceptStorageLength from "./module-storage" -> function @acceptStorageLen
 import checkStorage from "./module-storage" -> function @checkStorage
 import ConstInfo from "./program" -> struct ConstInfo
 import StringBuilder from "./strings" -> struct StringBuilder
+import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+import wrappingMul from "nish:unsafe" -> builtin wrappingMul
+import wrappingSub from "nish:unsafe" -> builtin wrappingSub
 import T_BOOL from "./types" -> const T_BOOL
 import T_ERROR from "./types" -> const T_ERROR
 import T_F64 from "./types" -> const T_F64
@@ -19,6 +22,14 @@ import T_STRING from "./types" -> const T_STRING
 import T_U16 from "./types" -> const T_U16
 import T_U32 from "./types" -> const T_U32
 import T_U8 from "./types" -> const T_U8
+unsafe import 30:10 wrappingAdd from "nish:unsafe"
+unsafe import 30:23 wrappingMul from "nish:unsafe"
+unsafe import 30:36 wrappingSub from "nish:unsafe"
+unsafe call 177:17 wrappingAdd (node 760)
+unsafe call 177:29 wrappingMul (node 764)
+unsafe call 766:42 wrappingAdd (node 3614)
+unsafe call 768:42 wrappingSub (node 3634)
+unsafe call 770:42 wrappingMul (node 3654)
 const TWO_53: f64 = 9007199254740992 [exported]
 struct ConstValue (class) size=32 align=8
   field type: i32 index=0 offset=0
