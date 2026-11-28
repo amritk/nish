@@ -11872,6 +11872,17 @@ const storageIndex = () => [
   },
 ]
 
+/** The changelog words of examples-strict S5: the wasm-arena example drops `--allow-panics`. */
+const ARENA_STRICT = "wasm-arena builds without --allow-panics"
+/** examples-strict S5: the arena programs the reference refuses once their smoke args drop the flag. */
+const arenaStrict = () =>
+  ["examples/wasm-arena/sim.ts", "examples/wasm-arena/replay.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: ARENA_STRICT,
+    why: "the arena's sim.ts now builds without --allow-panics: its loops index BODIES and SHOTS up to their caps and each helper handed an index tests it against the cap, which the candidate proves and the reference refuses as index sites that may panic",
+  }))
+
 /** The release-note words of TLS RSA S1, RSA-PSS CertificateVerify on the TLS and QUIC servers. */
 const RSA_PSS_SERVER = "RSA-PSS CertificateVerify under an RSA certificate"
 
@@ -14579,6 +14590,7 @@ const DECLARED = [
   ...targetFiles(),
   ...exportedBindings(),
   ...storageIndex(),
+  ...arenaStrict(),
   {
     program: "tests/link/net_grpc/main.ts",
     file: "exit",
