@@ -11807,6 +11807,7 @@ const CALLER_CONTRACT = "a caller's proof discharges a std callee's contract pan
 const WINDOW_FORWARD = "window contracts forward from free functions, arrow consts and literal lengths"
 /** The changelog words of WP80 S7: std/bytes.ts's fixed-width getters and setters check their window through the `bytesWindow` guard, so a caller that tests its window discharges the check. The change's commit subject carries these words verbatim. */
 const WP80_BYTES_WINDOW = "byte getters check their window"
+const S7_HTTP_APP = "http-app builds without --allow-panics"
 /** WP91 S4: the cast wraps in std/net's HTTP, HPACK, URL and server modules, spelled. */
 const WP91_S4_NET_HTTP = "std/net HTTP, HPACK, URL and the server stack"
 
@@ -26210,6 +26211,24 @@ const DECLARED = [
     file: "exit",
     changelog: WP80_BYTES_WINDOW,
     why: "the case is new with this change and builds under --deny-panics because its caller's window test discharges getU32BE's guard; the seed's std/bytes.ts keeps per-byte index panics no caller test reaches, so the reference refuses it",
+  },
+  {
+    program: "bench/std-compress-checksum.ts",
+    file: "std-compress-checksum.ll",
+    changelog: S7_HTTP_APP,
+    why: "std/compress/checksum.ts adds Crc32.ofRange and adler32Range, which answer -1 for a window outside its array, and gzip's and zlib's trailer checks call them, so the module that declares nish/compress's functions declares one more and its declarations and attribute groups renumber",
+  },
+  {
+    program: "tests/link/std_compress_gzip_files/main.ts",
+    file: "main.ll",
+    changelog: S7_HTTP_APP,
+    why: "std/compress/checksum.ts adds Crc32.ofRange, which answers -1 for a window outside its array, so the program's module, which declares nish/compress's functions, declares one more and its declarations and attribute groups renumber",
+  },
+  {
+    program: "tests/link/std_http_compress_window/main.ts",
+    file: "exit",
+    changelog: S7_HTTP_APP,
+    why: "the case is new with this change and calls adler32Range, which std/compress/checksum.ts adds; the seed's module has no such export, so the reference refuses it",
   },
 ]
 
