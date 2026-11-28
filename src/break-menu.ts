@@ -222,7 +222,8 @@ export const parseBreakSettings = (text: string): BreakSettings => {
   const s: BreakSettings = new BreakSettings()
   let start: i32 = 0
   for (let i: i32 = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) === 10) {
+    // `start` is 0 or one past an earlier newline, so never past `i`; saying so proves the cut in range.
+    if (text.charCodeAt(i) === 10 && start >= 0 && start <= i) {
       applySettingLine(s, text.substring(start, i))
       start = i + 1
     }

@@ -412,7 +412,10 @@ const introCutHelp = (intro: BreakIntro, help: string): void => {
       }
       i++
     }
-    introAddPiece(intro, PIECE_TEXT, help.substring(start, i), colour, line, from, column - from, 0.0)
+    // The loop stops at the end of `help` at the latest; saying so proves the cut in range.
+    if (start >= 0 && start <= i && i <= help.length) {
+      introAddPiece(intro, PIECE_TEXT, help.substring(start, i), colour, line, from, column - from, 0.0)
+    }
   }
 }
 
