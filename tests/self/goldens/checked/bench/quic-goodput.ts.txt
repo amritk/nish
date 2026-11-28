@@ -19657,11 +19657,9 @@ function tlsWriteCertificateVerifyContent(out: u8[], at: i32, transcriptHash: u8
   callee +5:7 tlsPutU8 -> @nish.tlsPutU8
   callee +6:10 tlsPutWindow -> @nish.tlsPutWindow
 function tlsZeros(n: i32): u8[] -> @nish.___std_net_tls_codec$.tlsZeros
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
   stackSites=0 stackLocals=0
-  local +0:9 out: u8[] (const)
-  local +1:12 k: i32 (let)
 function tlsBytesString(name: u8[]): string -> @nish.tlsBytesString
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.tlsWindowString

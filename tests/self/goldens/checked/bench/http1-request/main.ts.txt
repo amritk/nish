@@ -6929,10 +6929,10 @@ function http1SpanSet(p: Http1Parser, at: i32, value: i32): void -> @nish.http1S
   escaping: at value
   pointer p: size=232 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -18:11 old: i32[] (const)
-  local -15:11 wide: i64 (const)
-  local -11:11 size: i32 (const)
-  local -6:11 grown: i32[] (const)
+  local -16:11 old: i32[] (const)
+  local -13:11 wide: i64 (const)
+  local -9:11 size: i32 (const)
+  local -5:11 grown: i32[] (const)
   local -4:11 keep: i32 (const)
   local -3:14 k: i32 (let)
   local +2:9 spans: i32[] (const)
@@ -9516,11 +9516,9 @@ function http1ClientHeadArray(method: string, target: string, names: string[], v
   callee +4:21 http1ClientZeros -> @nish.http1ClientZeros
   callee +5:3 http1ClientPutHead -> @nish.http1ClientPutHead
 function http1ClientZeros(n: i32): u8[] -> @nish.http1ClientZeros
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
   stackSites=0 stackLocals=0
-  local +0:9 out: u8[] (const)
-  local +1:12 k: i32 (let)
 function http1ClientClamp(limit: i32): i32 -> @nish.http1ClientClamp
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: limit
@@ -20014,11 +20012,9 @@ function tlsWriteCertificateVerifyContent(out: u8[], at: i32, transcriptHash: u8
   callee +5:7 tlsPutU8 -> @nish.tlsPutU8
   callee +6:10 tlsPutWindow -> @nish.tlsPutWindow
 function tlsZeros(n: i32): u8[] -> @nish.______std_net_tls_codec$.tlsZeros
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
   stackSites=0 stackLocals=0
-  local +0:9 out: u8[] (const)
-  local +1:12 k: i32 (let)
 function tlsBytesString(name: u8[]): string -> @nish.tlsBytesString
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.tlsWindowString
