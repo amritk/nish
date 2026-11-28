@@ -11761,6 +11761,8 @@ const HTTP1_TICK = "Http1Server.tick"
 const WP80_EXAMPLES_FREED = "histogram-atomic example without --allow-panics"
 /** The changelog words of WP90 S1, the multipart/form-data reader. */
 const MULTIPART_BODIES = "multipart/form-data bodies"
+/** The changelog words of examples-strict S2 (#2296): a caller's proof discharges a std callee's leading contract guard. */
+const CALLER_CONTRACT = "a caller's proof discharges a std callee's contract panic"
 
 /** The changelog words of examples-strict S1, indexes into module storage. */
 const STORAGE_INDEX = "prove index sites into module storage"
@@ -24445,6 +24447,18 @@ const DECLARED = [
     file: "exit",
     changelog: MULTIPART_BODIES,
     why: "the case is new with this change and imports nish/net/multipart, which the seed does not ship, so the reference refuses it",
+  },
+  {
+    program: "tests/cases/deny_panics_caller.ts",
+    file: "exit",
+    changelog: CALLER_CONTRACT,
+    why: "the case is new with this change: under `--deny-panics` its callers prove `count`'s leading range guard, which the candidate records as proven at each call, where the reference keeps the guard's `panic` and refuses the program",
+  },
+  {
+    program: "tests/link/caller_contract_proven/main.ts",
+    file: "exit",
+    changelog: CALLER_CONTRACT,
+    why: "the case is new with this change: every call into `sum` and `Span.width` proves the callee's leading guard, which the candidate records as proven, where the reference keeps each guard's `panic` and refuses the program",
   },
 ]
 
