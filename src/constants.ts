@@ -27,6 +27,7 @@ import { unwrapParens } from "./emit-util"
 import { acceptStorageLength, checkStorage } from "./module-storage"
 import { ConstInfo } from "./program"
 import { StringBuilder } from "./strings"
+import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe"
 import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_U16, T_U32, T_U8 } from "./types"
 
 /**
@@ -170,10 +171,10 @@ export const parseIntegerLiteral = (text: string): i64 => {
         digit = c - 55
       }
       if (digit >= 0) {
-        // A literal too large for `i64` keeps the bits it has rather than
-        // overflowing a signed value; the range check that follows the fold is
-        // what refuses it. `u64` is where that wrap is defined.
-        value = toI64(toU64(value) * toU64(radix) + toU64(digit))
+        // A literal too large for `i64` keeps its low 64 bits rather than
+        // overflowing: the fold wraps by design, and the range check that
+        // follows it is what refuses the literal.
+        value = wrappingAdd(wrappingMul(value, radix), toI64(digit))
       }
     }
     i = i + 1
@@ -758,15 +759,15 @@ const narrowConstant = (
   return intValue(type, value)
 }
 
-// Two's-complement 64-bit arithmetic. `u64` is defined as wrapping whether or
-// not `nsw` is on, so these are the wrap the flagged signed instructions no
-// longer perform, written without overflowing a signed value.
+// Two's-complement 64-bit arithmetic: the folder's model of the `wrapping*`
+// builtins and of an overflow it then refuses, so each one wraps by the
+// builtin's own definition.
 
-const wrapAdd = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
+const wrapAdd = (a: i64, b: i64): i64 => wrappingAdd(a, b)
 
-const wrapSub = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
+const wrapSub = (a: i64, b: i64): i64 => wrappingSub(a, b)
 
-const wrapMul = (a: i64, b: i64): i64 => toI64(toU64(a) * toU64(b))
+const wrapMul = (a: i64, b: i64): i64 => wrappingMul(a, b)
 
 /** `a + b` leaves the 64-bit range only when both operands share a sign and the sum does not. */
 const addOverflows = (a: i64, b: i64): boolean => {

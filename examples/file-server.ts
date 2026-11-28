@@ -93,10 +93,22 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
     }
     pos = 0
   }
-  while (pos < served.size) {
-    // `u64` here and below, which wraps rather than panics, and cannot: in
-    // this loop 0 <= `pos` < `size` <= 2^31 - 1, which `main` makes sure of.
-    const left: i64 = toI64(toU64(served.size) - toU64(pos))
+  // `main` holds the file to 2^31 - 1 bytes, so in this loop 0 <= `pos` <
+  // `size` < 2^31 and `pos` fits an `i32`: the guards say so where the prover
+  // reads them, and `size - here` and `here + took` are proven to fit.
+  const size: i64 = served.size
+  if (size < 0 || size > toI64(2147483647)) {
+    conn.abort()
+    return IDLE
+  }
+  while (pos < size) {
+    const low: i32 = toI32(pos)
+    if (pos < 0 || low < 0) {
+      conn.abort()
+      return IDLE
+    }
+    const here: integer<0, 2147483647> = low
+    const left: i64 = size - toI64(here)
     const want: i32 = left < toI64(WINDOW) ? toI32(left) : WINDOW
     const window: u8[] = served.window
     if (want < 0 || want > toI32(window.length)) {
@@ -117,7 +129,7 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
       conn.abort()
       return IDLE
     }
-    pos = toI64(toU64(pos) + toU64(took))
+    pos = toI64(here) + toI64(took)
     if (took < n) {
       // The rest of this window is read again on the next H1_WRITE.
       return pos

@@ -362,6 +362,7 @@ import {
 } from "nish/net/tls"
 import { TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule"
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
+import { wrappingAdd } from "nish:unsafe"
 
 // ---- Sizes ----------------------------------------------------------------------
 
@@ -876,9 +877,9 @@ class QuicConnReassembly {
     for (let s: i32 = start; s < capacity && s - start < n; s += 1) {
       this.mark(s, false)
     }
-    // Exact: `delivered` only moves past bytes that arrived, below 2^62 + the ring, and `n` is at
-    // most the ring's size, so the sum is far below 2^63 and the u64 add cannot wrap.
-    this.delivered = toI64(toU64(this.delivered) + toU64(n))
+    // `delivered` only moves past bytes that arrived, below 2^62 + the ring, and `n` is at most the
+    // ring's size, so the sum is far below 2^63 and `quicConnSum` never holds it at the cap.
+    this.delivered = quicConnSum(this.delivered, toI64(n))
   }
 }
 
@@ -1291,8 +1292,8 @@ class QuicConnSpace {
       // Never taken: a CRYPTO offset is a varint.
       return
     }
-    // Exact: `offset` is a varint, below 2^62, and `length` an `i32`, so the u64 sum cannot wrap.
-    const end: i64 = toI64(toU64(offset) + toU64(length))
+    // `offset` is a varint, below 2^62, and `length` an `i32`, so the sum is exact.
+    const end: i64 = quicConnSum(offset, toI64(length))
     if (this.cryptoResendLow < 0) {
       this.cryptoResendLow = offset
       this.cryptoResendHigh = end
@@ -1478,14 +1479,14 @@ const quicConnBytes = (count: i64): u8[] => {
  * `a + b`, stopping at the largest or smallest `i64` instead of wrapping. Its
  * callers add a span to a time in milliseconds or a datagram's size to a byte
  * count, which are never near either end, so the sum is exact on every path a
- * connection takes. The add is done in `u64`, where it wraps to the same bits
- * as an exact two's-complement sum, and a wrap shows as a sign the operands
- * did not have.
+ * connection takes. The add is a `wrappingAdd` because the wrap is how an
+ * overflow is seen, as a sign the operands did not have; the answer is then
+ * the cap, never the wrapped value.
  */
 const quicConnSum = (a: i64, b: i64): i64 => {
-  const sum: i64 = toI64(toU64(a) + toU64(b))
+  const sum: i64 = wrappingAdd(a, b)
   if (a >= 0 && b >= 0 && sum < 0) {
-    return toI64((toU64(1) << toU64(63)) - toU64(1))
+    return toI64(-1) >>> toI64(1)
   }
   if (a < 0 && b < 0 && sum >= 0) {
     return toI64(toU64(1) << toU64(63))
@@ -1512,11 +1513,14 @@ const quicConnRingAt = (index: i64, entries: i32): i32 => {
 
 /**
  * `received * 3 - sent`, what the anti-amplification limit (RFC 9000 §8.1)
- * leaves a path. Byte counts are never near the ends of `i64`, so the
- * arithmetic, done in `u64` where it wraps to the bits of the exact result,
- * is exact.
+ * leaves a path, each step held at the ends of `i64` by `quicConnSum`. Byte
+ * counts are never near those ends, so the answer is exact on every path a
+ * connection takes; a `sent` below 0, which no count holds, subtracts nothing.
  */
-const quicConnThrice = (received: i64, sent: i64): i64 => toI64(toU64(received) * toU64(3) - toU64(sent))
+const quicConnThrice = (received: i64, sent: i64): i64 => {
+  const tripled: i64 = quicConnSum(quicConnSum(received, received), received)
+  return sent > 0 ? quicConnSum(tripled, 0 - sent) : tripled
+}
 
 /** Puts `from[at .. at + length)` in `to`, emptied first, in the room `to` already has. */
 const quicConnRefill = (to: u8[], from: u8[], at: i32, length: i32): void => {
@@ -3744,12 +3748,11 @@ export class QuicConnection {
     }
     let matched: boolean = false
     for (let m: i32 = 0; m < this.challengeCount; m += 1) {
-      // At most `challengesDrawn` challenges are kept, so the index, taken
-      // in `u64` where it is exact, is never negative.
-      const base: i32 = quicConnRingAt(
-        toI64(toU64(this.challengesDrawn) - toU64(1) - toU64(m)),
-        QUIC_CONN_CHALLENGES
-      )
+      // At most `challengesDrawn` challenges are kept, so the index is never
+      // negative; were it, `quicConnRingAt` answers -1 and the slot is skipped.
+      const drawn: i64 = this.challengesDrawn
+      const last: i64 = drawn >= 1 ? drawn - 1 : -1
+      const base: i32 = quicConnRingAt(last >= 0 ? last - toI64(m) : -1, QUIC_CONN_CHALLENGES)
       if (base < 0) {
         continue
       }
@@ -4491,9 +4494,11 @@ export class QuicConnection {
       using _scope = arena()
       n = this.buildProbe(out, at, size)
     }
-    // Both are byte counts far from the ends of `i64`, so the `u64`
-    // difference is exact.
-    this.probeBudget = toI64(toU64(this.probeBudget) - toU64(n))
+    // Both are byte counts far from the ends of `i64`, so the difference is
+    // exact; a negative `n`, no bytes built, spends nothing.
+    if (n > 0) {
+      this.probeBudget = quicConnSum(this.probeBudget, toI64(0 - n))
+    }
     return n
   }
 
@@ -5038,9 +5043,8 @@ export class QuicConnection {
    */
   private beforeDatagram(): void {
     const limit: i64 = this.confidentialityLimit
-    // The limit is a positive count far from the ends of `i64`, so the
-    // `u64` difference is exact.
-    if (this.sealedUnderKey >= toI64(toU64(limit) - toU64(limit / 4))) {
+    // The limit is a positive count, so three quarters of it is a proven difference.
+    if (limit >= 0 && this.sealedUnderKey >= limit - limit / 4) {
       this.updateKeys()
     }
     const pn: i64 = this.application.nextPn
@@ -5249,11 +5253,11 @@ export class QuicConnection {
     if (low >= 0) {
       const high: i64 = space.cryptoResendHigh
       // A resend range is never empty while it is kept, so this is never taken.
-      if (high < low) {
+      if (high < low || high < 0) {
         return at
       }
-      // `high` is at least `low`, so the `u64` difference is exact.
-      const want: i32 = toI32(toI64(toU64(high) - toU64(low)))
+      // `high` is at least `low`, which is 0 or more, so the difference is exact.
+      const want: i32 = toI32(high - low)
       const left: i32 = toI32(toI64(end) - toI64(at) - toI64(quicCryptoOverhead(low, want)))
       const n: i32 = left < want ? left : want
       if (n <= 0) {

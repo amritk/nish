@@ -464,7 +464,11 @@ export const step = (): void => {
   method and `X.length =` are
   `` Module storage `X` has a fixed length and a fixed place, so `X.m` is not available: index it, and keep a count beside it for the slots in use ``
   (NL2688, `reject_storage_push`, `_pop`, `_sort`, `_length_assign`).
-  `X[i]` and `X.length` are what remain.
+  `X[i]` and `X.length` are what remain. Because the length is fixed, an
+  index into `X` is proven as an index into a local array is: `X[3]` of a
+  storage of 4, or `X[i]` under `i < X.length`, or under `i < N` for the
+  constant `N` it was made with, keeps no check
+  ([panic sites](semantics-decisions.md#panic-sites)).
 - **Its name is a place, not a value.** Binding, returning, storing or
   passing `X` itself is
   `` Module storage `X` is a place, not a value: index it (`X[i]`) or read `X.length`, lend it only to a parameter declared `u8[]`, `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` or to a host function's buffer window, and never alias, return or store the array itself ``
