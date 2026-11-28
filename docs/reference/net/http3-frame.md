@@ -254,6 +254,8 @@ namespace (`docs/wp26-stdlib.md` §3e).
 ### h3CheckWindow
 
 Panics unless `[off, off + len)` lies inside `buf`: a window outside its buffer is the program's mistake.
+A window guard (`docs/LANGUAGE.md`, `window`), so a caller that proves the window in range removes the
+panic site, and a function whose first statement hands it its own window passes that proof to its callers.
 
 ```ts
 const h3CheckWindow: (

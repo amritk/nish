@@ -1,0 +1,9 @@
+{"functions":[
+{"name":"Span.constructor","symbol":"Span.constructor","module":"tests/link/caller_contract_proven/main.ts","line":15,"panics":[]},
+{"name":"Span.width","symbol":"Span.width","module":"tests/link/caller_contract_proven/main.ts","line":18,"panics":[{"kind":"panic","line":20,"column":7,"proven":true}]},
+{"name":"sum","symbol":"sum","module":"tests/link/caller_contract_proven/main.ts","line":26,"panics":[{"kind":"panic","line":28,"column":5,"proven":true},{"kind":"overflow","line":31,"column":32,"proven":true},{"kind":"index","line":32,"column":25,"proven":true}]},
+{"name":"wrap","symbol":"wrap","module":"tests/link/caller_contract_proven/main.ts","line":37,"panics":[{"kind":"overflow","line":37,"column":85,"proven":true}]},
+{"name":"part","symbol":"part","module":"tests/link/caller_contract_proven/main.ts","line":39,"panics":[{"kind":"contract","line":41,"column":12,"proven":true}]},
+{"name":"main","symbol":"nish_main","module":"tests/link/caller_contract_proven/main.ts","line":46,"panics":[{"kind":"oom","line":49,"column":15,"allowed":true},{"kind":"contract","line":49,"column":18,"proven":true},{"kind":"oom","line":50,"column":15,"allowed":true},{"kind":"contract","line":50,"column":18,"proven":true},{"kind":"oom","line":51,"column":15,"allowed":true},{"kind":"overflow","line":53,"column":14,"proven":true},{"kind":"oom","line":55,"column":17,"allowed":true},{"kind":"contract","line":55,"column":20,"proven":true}]},
+{"name":"done","symbol":"done","module":"tests/link/caller_contract_proven/done.ts","line":1,"panics":[]}
+]}

@@ -237,6 +237,7 @@ cases/dbg_map_iter added after R6: no rewriter to freeze it with
 cases/dbg_rng added after R6: no rewriter to freeze it with
 cases/dbg_union_generic added after R6: no rewriter to freeze it with
 cases/deny_panics_arr_map added after R6: no rewriter to freeze it with
+cases/deny_panics_caller added after R6: no rewriter to freeze it with
 cases/deny_panics_charcode added after R6: no rewriter to freeze it with
 cases/deny_panics_clean added after R6: no rewriter to freeze it with
 cases/deny_panics_const_convert added after R6: no rewriter to freeze it with

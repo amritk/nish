@@ -5,7 +5,7 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 931,
+  "total": 643,
   "explicit": {
     "kept": 357,
     "toFix": 7
@@ -43,7 +43,6 @@
       "index": 7
     },
     "std/crypto/base64url.ts": {
-      "array-length": 2,
       "panic": 7
     },
     "std/crypto/hkdf.ts": {
@@ -140,12 +139,13 @@
       "panic": 3
     },
     "std/net/http3-frame.ts": {
-      "panic": 1
+      "panic": 1,
+      "window": 3
     },
     "std/net/http3-server.ts": {
       "io-exit": 2,
       "panic": 3,
-      "slice": 4
+      "slice": 3
     },
     "std/net/http3.ts": {
       "panic": 4
@@ -264,11 +264,7 @@
       "panic": 3
     },
     "std/yaml.ts": {
-      "array-length": 3,
-      "index": 12,
-      "overflow": 270,
-      "panic": 1,
-      "slice": 3
+      "panic": 1
     }
   },
   "kept": [
@@ -1319,8 +1315,8 @@
     },
     {
       "module": "std/net/qpack.ts",
-      "function": "qpackPushInteger",
-      "reason": "value must be 0 to 2^62 - 1 with a 1 to 8 bit prefix, as the doc says; both are the program's choice"
+      "function": "qpackPushStreamCancellation",
+      "reason": "the stream ID must be 0 to 2^62 - 1, as the doc says; the program's choice"
     },
     {
       "module": "std/net/quic-listener.ts",

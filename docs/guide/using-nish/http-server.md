@@ -398,6 +398,100 @@ HTTP/1.1 and HTTP/3, and on routes you did not mark, the request comes out
 once with its whole body, `r.streaming` false and `r.bodyEnded` true, and a
 body past `maxBody` is still answered 413.
 
+## WebSockets
+
+A request on an HTTP/1.1 listener, over TLS or cleartext, can become a
+WebSocket ([RFC 6455](https://www.rfc-editor.org/rfc/rfc6455)) without leaving
+the loop. `server.acceptWebSocket(r, protocol)` checks the opening handshake
+and queues the 101 (`protocol` is a subprotocol the client offered, or `""`).
+From then on `r.socket` is true and `r` stays yours until
+`server.closeWebSocket(r, code)`. It comes out of `take` again whenever one of
+three things holds:
+
+- `r.message`: a whole message arrived. `r.opcode` is `WS_OP_TEXT` or
+  `WS_OP_BINARY`, and the payload is `r.messageLength` bytes of
+  `r.messageData` from `r.messageStart`, read in place in the connection's
+  input. Call `server.received(r)` when you are done with it: nothing more is
+  read until then, so the bytes do not change under you.
+- `r.writable`: an earlier `sendFrame` answered `H1_AGAIN` and the output has
+  room again.
+- `r.closed`: the WebSocket is over. `r.closeCode` is the peer's close code,
+  1002, 1007 or 1009 when it broke the protocol, sent text that is not UTF-8
+  or sent a message too large, or 1006 when the connection ended without a
+  close. Hand `r` back with `closeWebSocket`.
+
+`server.sendFrame(r, fin, opcode, buf, off, len)` sends one frame; its payload
+is copied once, into the connection's output. Pings are answered by the
+connection and never reach you.
+
+<!-- allow-panics: calls `std/net/http-server.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
+import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server";
+import { Http1Config } from "nish/net/http1-server";
+import { RouterLimits, routerChecked } from "nish/net/router";
+import { WS_CLOSE_INTERNAL_ERROR, WS_CLOSE_NORMAL } from "nish/net/websocket";
+import { tcpListen } from "nish:net";
+
+// Each message goes back as one frame; a message that does not fit the output
+// closes the WebSocket instead of waiting for `writable`.
+const echo = (server: HttpServer, r: HttpServerRequest): void => {
+  if (r.closed) {
+    server.closeWebSocket(r, WS_CLOSE_NORMAL); // hands it back
+    return;
+  }
+  if (!r.message) {
+    return;
+  }
+  const sent = server.sendFrame(r, true, r.opcode, r.messageData, r.messageStart, r.messageLength);
+  if (sent !== 0) {
+    server.closeWebSocket(r, WS_CLOSE_INTERNAL_ERROR);
+    return;
+  }
+  server.received(r);
+};
+
+export const main = (): i32 => {
+  const table = routerChecked(new RouterLimits());
+  if (table.isErr()) {
+    return 1;
+  }
+  const router = table.value;
+  router.add("GET", "/ws");
+  const listener: i32 = tcpListen("127.0.0.1", 8080, 1024);
+  if (listener < 0) {
+    return 1;
+  }
+  const server = new HttpServer(new HttpServerLimits(), router);
+  server.listenHttp1(listener, new Http1Config(), 256);
+  while (true) {
+    server.wait(1000);
+    while (server.ready()) {
+      const r = server.take();
+      if (r.socket) {
+        echo(server, r);
+      } else if (r.route !== 0) {
+        server.refuse(r);
+      } else if (server.acceptWebSocket(r, "") !== 0) {
+        server.empty(r, 400); // not an opening handshake
+      }
+    }
+  }
+};
+```
+
+A request that arrived over HTTP/2 or HTTP/3 does not upgrade:
+`acceptWebSocket` answers `H1_INVALID` and you answer it as any other.
+`sendFrame` and `closeWebSocket` answer `H1_INVALID`, and `received` does
+nothing, on a request that is not a WebSocket you hold: one never upgraded, or
+one you handed back. `sendFrame` answers it too for a window outside its buffer.
+Extended CONNECT ([RFC 8441](https://www.rfc-editor.org/rfc/rfc8441)) is not
+served. `bodyTimeout` does not apply to a WebSocket; the HTTP/1.1 listener's
+`Http1Config.idleTimeout` closes one nothing moves on, and it comes out
+`closed` with 1006. Each WebSocket holds a request from the pool until you
+hand it back, so a listener's `slots` bound how many there are. To speak
+WebSocket on a connection you drive yourself, see [WebSocket](websocket.md).
+
 ## Steps before and after a route
 
 A [`Router`](http-router.md#steps-before-and-after-a-route) can bind *steps*
@@ -491,6 +585,11 @@ each busy one after its answer, and sends `GOAWAY` on each HTTP/2 and HTTP/3
 connection, which closes once its streams are done. A request already read is
 still handed over, so answer what `take` gives you until `connections()` is
 0.
+
+A WebSocket stays open through a drain until you close it, so close each one
+you hold with `closeWebSocket` once you drain. A draining server upgrades no
+new request: `acceptWebSocket` answers `H1_INVALID`, and you answer the
+request with a status, after which its connection closes.
 
 `HttpServer` decides this for its own connections. A program that carries
 its own HTTP/1.1 bytes drives an `Http1Connection` from

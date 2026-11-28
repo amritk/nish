@@ -243,14 +243,14 @@ byte by `link/std_compress: exits with 0 and stdout matches expected.out`,
   plain body sent as gzip is answered 400", "an x-gzip body in capitals is
   taken", "two codings in one field are taken", "as they arrived".
 - **COMP-21** (`tests/run.js`): `std-panics: scripts/wrap-casts.mjs passes
-  the tree, with no cast wrap in std/compress, src/ or examples/`, which fails
-  on any such cast in `std/compress` (none is listed in
-  `scripts/wrap-casts.txt`), and `std-panics: scripts/wrap-casts.mjs --root
-  fails on a cast wrap planted in std/compress/deflate.ts, and passes the
-  unplanted copy` and `std-panics: scripts/wrap-casts.mjs --root fails on a
-  baseline with a line removed (${dropped || "none found"})`, which fail when
-  the scan stops finding a planted cast or the baseline stops holding counts
-  down; the std-panics ratchet, which
+  the tree, with no cast wrap in std/, src/ or examples/`, which fails on any
+  such cast in `std/compress`; `std-panics: scripts/wrap-casts.mjs --root
+  fails on a cast wrap planted in std/compress/deflate.ts, src/ or
+  examples/, and passes the unplanted copy`, which fails when the scan
+  stops covering `std/compress`, `src/` or `examples/`; and `std-panics:
+  scripts/wrap-casts.mjs refuses the count-lowering flag it dropped, and no
+  count file sits beside it`, which fails when a per-file allowance of casts
+  comes back; the std-panics ratchet, which
   fails on a new panic site; and `link/std_compress_checked_sums: exits with 0
   and stdout matches expected.out`, whose `over-subscribed at 15: -5 true`
   fails when the Kraft test after the loop is removed; and

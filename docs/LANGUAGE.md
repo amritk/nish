@@ -16905,8 +16905,11 @@ integer, a `u32` under `--number-mode i32`)
 
 **`panic`**: `panic(message)`
 
-- *What proves it away:* nothing: a path the program never takes is still a
-  site (`tests/cases/panics_panic`)
+- *What proves it away:* a leading guard every call into its function proves
+  false, a [`contract`](#panic-sites) the callers hold
+  (`tests/cases/deny_panics_caller`); anywhere else, nothing: a path the
+  program never takes is still a site, and a guard one call leaves open
+  stays the callee's (`tests/link/panic_caller_unproven`)
 
 **`expect`**: `r.expect(message)` on an `Err`
 
@@ -17024,6 +17027,63 @@ followed as any call's is
   one (`handlerCheckLimits`), so `openHttpHandler`, which tests
   `handlerLimitsFault` first and leaves on a fault (a failed `pollCreate`
   returns between), proves the limit check of the handler it makes
+
+**`contract`**: a call to a function or method whose first statements are
+`if (test) { panic(m) }`, each test an `||` of comparisons on its own
+parameters, with arguments that make one of them true. The comparisons read
+are `p < 0`, `p > toI32(b.length)`, `p >= toI32(b.length)`,
+`p > toI32(b.length) - q`, `toI64(q) + toI64(p) > toI64(b.length)` (the
+same window, its sum widened) and `p < q` (or `q > p`, with
+`p > toI32(b.length)` held too), `p` and `q` `i32` parameters and `b` an
+array or string one, and `toI64(p) * toI64(q) > toI64(C)` for a decimal `C`
+no larger than `2147483647`. A run may name a length first,
+`const n: i32 = toI32(b.length)`, and read `n` for `toI32(b.length)` after
+it, or a product, `const a: i64 = toI64(p) * toI64(q)`, and read `a > C`;
+each name is new, never a parameter's. The run stops at the first statement
+that is not one of these; what follows is the function's own. A
+constructor holds one as a function does. A run may end in a **forward**: a
+call, alone or as a `const`'s value, into another function's contract whose
+arguments are the holder's own parameters of the same type or literals, so
+that contract's comparisons become the holder's own. A task, a generator, a
+function with a default or rest parameter, and a window or fault guard hold
+no such contract. In `p > toI32(b.length) - q` the subtraction is an `overflow`
+site of its own, which no contract proof stands in for: a run that tests
+`q < 0` first proves it (`tests/link/caller_contract_shapes`), and without
+that test a caller's `q = -2147483647` leaves it, and the `panic`, the
+callee's (`caller_contract_rest_overflow`)
+
+- *What proves it away:* the caller's own proof that each comparison is
+  false for the arguments it passes: literals into a buffer whose length a
+  literal fixes, `toI32(b.length)` itself, or a range behind
+  `start >= 0 && start <= end && end <= b.length`
+  (`tests/link/caller_contract_proven`, `tests/cases/deny_panics_caller`),
+  or, for the product, two constants whose product fits, as in
+  `new Grid(640, 480)` and `new Grid(0, 0)`
+  (`tests/link/caller_contract_forward`, and `caller_contract_forward_import`
+  with `area` in another module of the package, the contract read where it
+  is defined), or factors the caller's own
+  `if (w < 0 || h < 0 || toI64(w) * toI64(h) > toI64(C)) { return … }`
+  bounds before the call, `C` at most the callee's cap
+  (`caller_contract_method_guard`; without that guard,
+  `caller_contract_method_guard_unproven`). The callee's `panic` is held only
+  when every call into it is proven and it is not exported to a host
+  (`caller_contract_exported`), passed as a value or dispatched
+  (`caller_contract_value`, `caller_contract_value_std`): then it is listed
+  proven at its own line and a call answers for it only through its
+  `contract` site. A forward's own call is proven exactly when its holder's
+  `panic`s would be held, so a forward a host may call holds nothing
+  (`caller_contract_exported_forward`). One call nothing proves leaves the
+  `panic` the callee's, and every call reaches it as any call does
+  (`tests/link/caller_contract_unproven`, `caller_contract_shapes_unproven`,
+  and `caller_contract_forward_unproven`, a `new Grid(n, n)` whose size its
+  caller chooses). No call into one hides outside a function: a module
+  constant's or a field's initializer is no proven call
+  (`caller_contract_initializer`, `caller_contract_field`, and
+  `caller_contract_field_new`, a field's `new` of a contract constructor), and a root cannot re-export a `std/` function
+  (`caller_contract_reexport`). A root program's call into `std/`
+  that proves the guard builds under `--deny-panics` (the `tests/run.js`
+  checks "caller contract: …" on `routerDecode`); std's own counts in
+  `tests/std-panics.json` do not move
 
 **`ffi-nul`**: a `string` argument to a [`declare function`](#calling-c) that
 holds a NUL byte, which C would read as the end of the string:
@@ -17278,7 +17338,8 @@ refused (NL2458), and the same `panic` in a module of the scope is NL2457. A
 caller in the scope calls the checked twin where there is one, or proves the
 contract at the call where the site is the caller's own, as a
 [`spawn-slot`](#panic-sites), a [`parallel-length`](#panic-sites), a
-[`window`](#panic-sites) or a [`fault`](#panic-sites) is.
+[`window`](#panic-sites), a [`fault`](#panic-sites) or a
+[`contract`](#panic-sites) is.
 
 ### The compatibility dialect
 
