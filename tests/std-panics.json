@@ -5,7 +5,7 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 1029,
+  "total": 1017,
   "explicit": {
     "kept": 359,
     "toFix": 7
@@ -240,9 +240,6 @@
     },
     "std/random.ts": {
       "panic": 1
-    },
-    "std/raster.ts": {
-      "array-length": 12
     },
     "std/release.ts": {
       "slice": 6

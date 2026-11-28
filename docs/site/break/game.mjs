@@ -325,7 +325,7 @@ function exportsOf(instance, state) {
     }),
     /** ../../src/break-levels.ts: brickKind(c: number): number */
     brickKind: (c) => guarded(() => raw.brickKind(typedIn(c, "number", "brickKind: argument 1 (c)"))),
-    /** ../../src/break-levels.ts: brickHits(c: number): number */
+    /** ../../src/break-levels.ts: brickHits(c: number): integer<0, 3> */
     brickHits: (c) => guarded(() => raw.brickHits(typedIn(c, "number", "brickHits: argument 1 (c)"))),
     /** ../../src/break-menu.ts: fpsChoice(index: number): number */
     fpsChoice: (index) => guarded(() => raw.fpsChoice(typedIn(index, "number", "fpsChoice: argument 1 (index)"))),
