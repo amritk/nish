@@ -1,0 +1,7 @@
+{
+  "name": "ffi-handle-owned",
+  "private": true,
+  "nish": {
+    "link": { "sources": ["c/gpu.c"] }
+  }
+}

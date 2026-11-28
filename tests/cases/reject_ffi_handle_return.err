@@ -1,1 +1,1 @@
-`File` is a handle class, and its name may be written only as the type of a parameter that borrows one
+reject_ffi_handle_return.ts:27:10: error: A `File` cannot be used here

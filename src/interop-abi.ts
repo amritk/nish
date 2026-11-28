@@ -27,6 +27,7 @@ import { analyzeFunctions, AnalysisUnit, FunctionFacts } from "./attributes"
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { privateAbi } from "./emit-result"
+import { signatureNamesHandle } from "./handles"
 import { StringMap, StringSet } from "./map"
 import { ROOT_PACKAGE } from "./packages"
 import { hasFunctionParameter } from "./generics"
@@ -175,6 +176,13 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
       // defines for a host. A sidecar declaring it would describe C's own
       // function as the program's (`export_declare_header`).
       if (sig.foreign()) {
+        continue
+      }
+      // WP89 S5a: a function that takes or gives a handle, or a method of a
+      // handle class, links to the modules that import it, but a C host
+      // given the pointer would run no close, so no sidecar offers it. The
+      // entry module refuses such an export outright (NL2827).
+      if (signatureNamesHandle(program, compilation.table, sig)) {
         continue
       }
       // `internal`, so no host can name it (the linkage condition, WP31 §9).

@@ -182,6 +182,29 @@ const PG_CARRIER_TIMED_OUT: i32 = -110
 const PG_CARRIER_MAX_BATCHERS: i32 = 8
 /** The most queries or executions one carrier holds. */
 const PG_CARRIER_MAX_QUERIES: i32 = 65536
+/** 2^62 - 1 nanoseconds, past any monotonic clock reading; a connect deadline stops there. */
+const PG_CARRIER_CLOCK_MOST: i64 = 1073741824 * 4294967296 - 1
+
+/**
+ * The monotonic clock plus `span` nanoseconds, held at `PG_CARRIER_CLOCK_MOST`
+ * instead of passing it.
+ *
+ * @param span - The nanoseconds to add, at least 0.
+ * @returns The deadline, or the clock itself when either reading is negative.
+ */
+const pgCarrierDeadline = (span: i64): i64 => {
+  const now: i64 = monotonicNanos()
+  if (now < 0 || span < 0) {
+    return now
+  }
+  const room: i64 = PG_CARRIER_CLOCK_MOST - now
+  if (room < 0) {
+    return PG_CARRIER_CLOCK_MOST
+  }
+  const left: i64 = room - span
+  return left > 0 ? PG_CARRIER_CLOCK_MOST - left : PG_CARRIER_CLOCK_MOST
+}
+
 /** Where `next()` is in its pass, so that a call resumes where the last stopped. */
 const PG_CARRIER_POLL: i32 = 0
 const PG_CARRIER_SLOTS: i32 = 1
@@ -466,7 +489,10 @@ export class PgCarrier {
     const runs: PgCarrierExecution[] = []
     const eFree: PgCarrierExecution[] = []
     for (let e: i32 = 0; e < executions; e++) {
-      runs.push(new PgCarrierExecution(toI32(toU32(queries) + toU32(e))))
+      // Summed in i64; both counts are at most PG_CARRIER_MAX_QUERIES, checked
+      // above, so the id fits an i32.
+      const id: i64 = toI64(queries) + toI64(e)
+      runs.push(new PgCarrierExecution(toI32(id)))
     }
     k = toI32(runs.length)
     while (k > 0) {
@@ -1272,9 +1298,7 @@ export class PgCarrier {
     const sockets: PgCarrierSlot[] = this.sockets
     if (connect) {
       let want: i32 = this.pool.wanted()
-      // In `u64`, which wraps by definition: a monotonic clock is centuries
-      // short of the top.
-      const deadline: i64 = want >= 0 ? toI64(toU64(monotonicNanos()) + toU64(this.timeoutNs)) : toI64(0)
+      const deadline: i64 = want >= 0 ? pgCarrierDeadline(this.timeoutNs) : toI64(0)
       while (want >= 0 && want < toI32(sockets.length)) {
         const slot: PgCarrierSlot = sockets[want]
         crypto.getRandomValues(this.nonce)

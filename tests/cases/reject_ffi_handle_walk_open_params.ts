@@ -1,7 +1,7 @@
-// WP53 H1.1, Row 5: a parameter borrows a handle only where this module alone
-// calls it, with one type: not on an exported class, a generic class, a
-// generic function or a generic method, and a `File | null` parameter is not
-// a `File` one, so `f` may not be lent to it.
+// WP53 H1.1, Row 5: a parameter borrows a handle only where it has one type:
+// not on a generic class, a generic function or a generic method. An exported
+// class's parameter borrows like any other (WP89 S5a), and a `File | null`
+// parameter is not a `File` one, so `f` may not be lent to it.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 class File {

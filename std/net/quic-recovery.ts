@@ -95,6 +95,7 @@
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { QUIC_MAX_VARINT } from "nish/net/quic-packet"
+import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe"
 
 /** The Initial space's index, which is `TLS_LEVEL_INITIAL`. */
 export const QUIC_RECOVERY_INITIAL: i32 = 0
@@ -225,18 +226,18 @@ const QUIC_RECOVERY_CUBIC_SCALE: i64 = 5000000000
 const quicRecoveryMax = (a: i64, b: i64): i64 => (a > b ? a : b)
 
 /** 2^63 − 1, the largest `i64`, which a sum or product past it is held at. */
-const quicRecoveryTop = (): i64 => toI64((toU64(1) << toU64(63)) - toU64(1))
+const quicRecoveryTop = (): i64 => toI64(-1) >>> toI64(1)
 
 /**
  * `a + b`, held at 2^63 − 1 when the true sum is past it and at −2^63 when
  * it is below. Recovery's times, durations and byte counts are far inside
  * an `i64`, so a held sum is one no clock or window reaches: a deadline that
- * never comes, a window nothing fills. Taken in `u64`, whose `+` wraps, and
- * read back as the `i64` with the same bits, which is the true sum whenever
- * that fits.
+ * never comes, a window nothing fills. The wrap is how the overflow is
+ * seen, not an answer: `wrappingAdd` is the true sum whenever that fits, and
+ * its sign crosses only when it does not, which is held instead.
  */
 const quicRecoverySum = (a: i64, b: i64): i64 => {
-  const sum: i64 = toI64(toU64(a) + toU64(b))
+  const sum: i64 = wrappingAdd(a, b)
   if (a >= 0 && b >= 0 && sum < 0) {
     return quicRecoveryTop()
   }
@@ -248,7 +249,7 @@ const quicRecoverySum = (a: i64, b: i64): i64 => {
 
 /** `a − b`, held at 2^63 − 1 / −2^63 where the true difference passes either. */
 const quicRecoveryLess = (a: i64, b: i64): i64 => {
-  const diff: i64 = toI64(toU64(a) - toU64(b))
+  const diff: i64 = wrappingSub(a, b)
   if (a >= 0 && b < 0 && diff < 0) {
     return quicRecoveryTop()
   }
@@ -264,8 +265,9 @@ const quicRecoveryStep = (n: i32): i32 => (n >= 2147483647 ? n : n + 1)
 /**
  * `a × b` for two non-negative times, durations or byte counts, held at
  * 2^63 − 1 when the true product is past it, as `quicRecoverySum` holds a
- * sum. Below that it is taken in `u64` and is exact. A negative operand
- * counts as 0: every caller passes values it has kept at 0 or above.
+ * sum. Below that, with `b` at most 2^63 − 1 over `a`, the product fits, so
+ * `wrappingMul` is exact and never wraps. A negative operand counts as 0:
+ * every caller passes values it has kept at 0 or above.
  */
 const quicRecoveryProduct = (a: i64, b: i64): i64 => {
   if (a <= 0 || b <= 0) {
@@ -274,7 +276,7 @@ const quicRecoveryProduct = (a: i64, b: i64): i64 => {
   if (b > quicRecoveryTop() / a) {
     return quicRecoveryTop()
   }
-  return toI64(toU64(a) * toU64(b))
+  return wrappingMul(a, b)
 }
 
 /** `x` clamped to −`QUIC_RECOVERY_CUBIC_SPAN` .. `QUIC_RECOVERY_CUBIC_SPAN`. */

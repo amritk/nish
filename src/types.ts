@@ -369,6 +369,12 @@ export class TypeTable {
    * it lowers as `CPtr` does, to `i8*`.
    */
   opaques: boolean[]
+  /**
+   * Per struct id: whether it is a handle class (WP89 S5a). A flag on the
+   * shared table, as `opaques` is, because a module lays out a field typed by
+   * a handle class it imports before its import binds that class.
+   */
+  handles: boolean[]
   /** The interning index: a key built by `derivedKey` -> the id it names. */
   index: StringMap
   /**
@@ -430,6 +436,7 @@ export class TypeTable {
     this.readonlys = []
     this.displays = []
     this.opaques = []
+    this.handles = []
     this.index = new StringMap()
     this.memberEnums = []
     this.stringEnums = []
@@ -449,6 +456,7 @@ export class TypeTable {
       this.readonlys.push(false)
       this.displays.push("")
       this.opaques.push(false)
+      this.handles.push(false)
       scalar = scalar + 1
     }
   }
@@ -519,6 +527,7 @@ export class TypeTable {
     this.readonlys.push(ro)
     this.displays.push("")
     this.opaques.push(false)
+    this.handles.push(false)
     this.index.set(key, id)
     return id
   }
@@ -560,6 +569,16 @@ export class TypeTable {
   /** Whether `type` is an opaque `declare class` (WP66 S3); -1 is not. */
   isOpaque(type: i32): boolean {
     return type >= 0 && this.opaques[type]
+  }
+
+  /** Records whether the struct id `type` is a handle class (WP89 S5a). */
+  setHandle(type: i32, handle: boolean): void {
+    this.handles[type] = handle
+  }
+
+  /** Whether `type` is a handle class (WP89 S5a); -1 is not. */
+  isHandleClass(type: i32): boolean {
+    return type >= 0 && this.handles[type]
   }
 
   /** Record `display` as the spelling `typeName` gives the struct id `type`. */
