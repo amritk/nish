@@ -297,8 +297,9 @@ export class Upstream {
     if (connections < 1 || slots < 1 || limits.maxHead < 1 || limits.timeoutMs < 1) {
       panic("Upstream: connections, calls, maxHead and timeoutMs must each be at least 1")
     }
-    // Both are in 0 .. 2^31, so their unsigned sum cannot wrap.
-    if (firstId < 0 || toU32(firstId) + toU32(connections) > toU32(HANDLER_MAX_WATCHED)) {
+    // The test's 16 is HANDLER_MAX_WATCHED: past it the sum is past it too,
+    // and short of it `firstId + connections` is at most 32.
+    if (firstId < 0 || firstId > 16 || connections > 16 || firstId + connections > HANDLER_MAX_WATCHED) {
       panic(
         `Upstream: ${connections} watch ids from ${firstId} are not all inside 0 to ${HANDLER_MAX_WATCHED - 1}`
       )
@@ -311,15 +312,15 @@ export class Upstream {
     this.connections = []
     for (let k: i32 = 0; k < connections; k += 1) {
       // `firstId + k` is below `firstId + connections`, which the check above holds to HANDLER_MAX_WATCHED.
-      const id: i32 = toI32(toU32(firstId) + toU32(k))
+      const id: i32 = firstId + k
       this.connections.push(new UpstreamConnection(id, upstreamParser(limits)))
     }
     const placeholder: HttpRequest = new HttpRequest(-1)
     this.calls = []
     const free: i32[] = upstreamSlots(slots)
     for (let k: i32 = 0; k < slots && k < toI32(free.length); k += 1) {
-      // `k` is below `slots`, so `slots - 1 - k` is in 0 .. slots - 1 and the unsigned difference cannot wrap.
-      free[k] = toI32(toU32(slots) - 1 - toU32(k))
+      // `k` is below `slots`, so `slots - 1 - k` is in 0 .. slots - 1.
+      free[k] = slots - 1 - k
     }
     for (let k: i32 = 0; k < slots; k += 1) {
       this.calls.push(new UpstreamResponse(k, limits.maxHead, placeholder))
@@ -425,9 +426,9 @@ export class Upstream {
     r.length = 0
     r.retried = false
     // The clock counts nanoseconds since boot and the span is under 2^52 ns, so the sum is far inside
-    // i64; added as u64 it is the same two's-complement sum without an overflow check.
+    // i64 and `upstreamLater` never saturates it.
     const span: i64 = toI64(this.limits.timeoutMs) * UPSTREAM_NS_PER_MS
-    r.deadline = toI64(toU64(monotonicNanos()) + toU64(span))
+    r.deadline = upstreamLater(monotonicNanos(), span)
     if (this.error !== UPSTREAM_E_NONE) {
       this.end(r, this.error)
       return UPSTREAM_E_NONE
@@ -504,8 +505,13 @@ export class Upstream {
    * @returns The count of slots in use.
    */
   pending(): i32 {
-    // `freeCount` stays in 0 .. free.length, so the unsigned difference cannot wrap.
-    return toI32(toU32(toI32(this.free.length)) - toU32(this.freeCount))
+    // `freeCount` stays in 0 .. free.length, so the test never fires.
+    const size: i32 = toI32(this.free.length)
+    const free: i32 = this.freeCount
+    if (free < 0 || size < free) {
+      return 0
+    }
+    return size - free
   }
 
   /**
@@ -661,14 +667,19 @@ export class Upstream {
     const head: u8[] = r.head
     const end: i32 = r.headLength
     // `get` wrote `end` bytes into `head` and `sent` only grows to `end`, so this never fires.
-    if (c.sent < 0 || end > toI32(head.length)) {
+    if (c.sent < 0 || end < 0 || end > toI32(head.length)) {
       this.finish(c, UPSTREAM_E_REQUEST)
       return
     }
     let sent: i32 = c.sent
     while (sent < end) {
-      // Unsigned, as `0 <= sent < end` makes the difference fit and the prover cannot relate the two.
-      const left: i32 = toI32(toU32(end) - toU32(sent))
+      // `sent` starts at least 0 and only grows, so this never fires; it is
+      // what proves `end - sent` fits.
+      if (sent < 0) {
+        this.finish(c, UPSTREAM_E_REQUEST)
+        return
+      }
+      const left: i32 = end - sent
       const n: i32 = netWrite(c.fd, head, sent, left)
       if (n === UPSTREAM_WOULD_BLOCK) {
         this.interest(c, UPSTREAM_WRITE)
@@ -678,8 +689,17 @@ export class Upstream {
         this.finish(c, UPSTREAM_E_CLOSED)
         return
       }
-      // Unsigned, as `n <= left` keeps the sum at most `end`.
-      sent = toI32(toU32(sent) + toU32(n))
+      // `netWrite` writes at most the `left` bytes it was asked for, so `gap`
+      // is never negative and `sent` becomes `sent + n`, at most `end`. A
+      // larger answer would count the head as all sent.
+      let next: i32 = end
+      if (left >= 0) {
+        const gap: i32 = left - n
+        if (gap >= 0) {
+          next = end - gap
+        }
+      }
+      sent = next
       c.sent = sent
     }
     this.interest(c, UPSTREAM_READ)
@@ -862,10 +882,33 @@ const upstreamSlots = (n: i32): i32[] => {
 
 /**
  * The poll token the handler's loop reports for watch id `id`: `-2 - id`.
- * Watch ids are in 0 .. HANDLER_MAX_WATCHED, so the unsigned difference is
- * that same small negative number and does not wrap past it.
+ * Watch ids are in 0 .. HANDLER_MAX_WATCHED, which the constructor checks,
+ * so the difference is a small negative number and the test, whose
+ * 2147483646 is the largest id `-2 - id` holds, never fires; past it the
+ * answer is the one the unsigned difference gave.
  */
-const upstreamToken = (id: i32): i32 => toI32(toU32(-2) - toU32(id))
+const upstreamToken = (id: i32): i32 => {
+  if (id > 2147483646) {
+    return 2147483647
+  }
+  return -2 - id
+}
+
+/**
+ * The `monotonicNanos` instant `span` nanoseconds after `now`, or the last
+ * `i64` when the sum would pass it, which no clock reading does. Both are at
+ * least 0, so they are summed in `u64`, where two values below 2^63 cannot
+ * wrap, and the sum is turned back only once it is known to fit. A negative
+ * `now` or `span`, which no caller passes, answers `now`.
+ */
+const upstreamLater = (now: i64, span: i64): i64 => {
+  if (now < 0 || span < 0) {
+    return now
+  }
+  const sum: u64 = toU64(now) + toU64(span)
+  const top: u64 = (toU64(1) << toU64(63)) - toU64(1)
+  return sum > top ? toI64(top) : toI64(sum)
+}
 
 /**
  * A ring of call slot indexes, one place per slot. Each slot sits in at most
@@ -889,9 +932,12 @@ class UpstreamQueue {
     if (this.start < 0 || this.start >= n || offset < 0 || offset >= n) {
       return -1
     }
-    // Both are below `n`, under 2^31, so the unsigned sum cannot wrap, and one lap brings it back under `n`.
+    // Both are below `n`, under 2^31, so the unsigned sum cannot wrap, and one lap brings it back under `n`:
+    // worked in `u32` throughout, the place is at most `n - 1` and turns back exactly.
+    const size: u32 = toU32(n)
     const sum: u32 = toU32(this.start) + toU32(offset)
-    return toI32(sum < toU32(n) ? sum : sum - toU32(n))
+    const place: u32 = sum < size ? sum : sum - size
+    return toI32(place)
   }
 
   /** Puts `index` last. */

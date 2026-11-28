@@ -5553,7 +5553,6 @@ const URL_AT: i32 = 64
 const URL_OPEN_BRACKET: i32 = 91
 const URL_CLOSE_BRACKET: i32 = 93
 const URL_BACKSLASH: i32 = 92
-const URL_MAX_PORT: i32 = 65535
 struct UrlPathSegments (class) size=32 align=8 exported
   field bytes: u8[] index=0 offset=0
   field start: i32 index=1 offset=8 initialized
@@ -5592,12 +5591,21 @@ struct Url (class) size=64 align=8 exported
   field fragment: string | null index=6 offset=48 initialized
   field port: i32 index=7 offset=56 initialized
   field hasAuthority: boolean index=8 offset=60 initialized
-function urlCheckWindow(bytes: u8[], off: i32, len: i32, who: string): i32 -> @nish.urlCheckWindow
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat
+function urlWindowEnd(bytes: u8[], off: i32, len: i32): i32 -> @nish.urlWindowEnd
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 size: i32 (const)
+  local +1:9 room: i32 (const)
+  local +5:9 gap: i32 (const)
+function urlCheckWindow(bytes: u8[], off: i32, len: i32, who: string): i32 -> @nish.urlCheckWindow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: len off
+  calls: nish.urlWindowEnd nish_arena_mark nish_arena_release nish_panic nish_str_concat
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.urlWindowEnd#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 urlWindowEnd -> @nish.urlWindowEnd
 function urlHexValue(b: i32): i32 -> @nish.urlHexValue
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -5619,21 +5627,22 @@ function urlDecodeChecked(result: i32, who: string): i32 -> @nish.urlDecodeCheck
 function urlDecodeRun(src: u8[], off: i32, len: i32, out: u8[], at: i32, flags: i32, wantPos: boolean): i32 -> @nish.urlDecodeRun
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: at off
-  calls: nish.urlEscapeAt
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.urlEscapeAt#0
+  escaping: at len off
+  calls: nish.urlEscapeAt nish.urlWindowEnd
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.urlWindowEnd#0 nish.urlEscapeAt#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -35:9 n: i32 (const)
-  local -34:9 size: i32 (const)
-  local -26:9 end: i32 (const)
+  local -34:9 n: i32 (const)
+  local -33:9 size: i32 (const)
+  local -32:9 end: i32 (const)
+  callee -32:20 urlWindowEnd -> @nish.urlWindowEnd
   local -25:9 form: boolean (const)
   local -24:9 lenient: boolean (const)
   local -23:9 allowNul: boolean (const)
   local -22:7 i: i32 (let)
   local -21:7 w: i32 (let)
   local -19:9 b: i32 (let)
-  local -18:9 step: i32 (let)
+  local -18:9 escaped: boolean (let)
   local -16:13 e: i32 (const)
   callee -16:22 urlEscapeAt -> @nish.urlEscapeAt
 function urlQueryScan(bytes: u8[], off: i32, end: i32): i32 -> @nish.urlQueryScan
@@ -5751,20 +5760,22 @@ function UrlQuery.next(this: UrlQuery): i32 -> @nish.UrlQuery.next [exported met
   local +6:11 maxPairs: i32 (const)
   local +11:9 eq: i32 (let)
   local +13:13 b: i32 (const)
+  local +31:13 valueStart: i32 (const)
 function urlKeyEquals(bytes: u8[], off: i32, len: i32, name: string): boolean -> @nish.urlKeyEquals
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: off
-  calls: nish.urlEscapeAt
-  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.urlEscapeAt#0
+  escaping: len off
+  calls: nish.urlEscapeAt nish.urlWindowEnd
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.urlWindowEnd#0 nish.urlEscapeAt#0
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 size: i32 (const)
-  local +6:9 end: i32 (const)
-  local +7:7 i: i32 (let)
-  local +8:7 o: i32 (let)
-  local +10:9 b: i32 (let)
-  local +11:9 step: i32 (let)
-  callee +13:11 urlEscapeAt -> @nish.urlEscapeAt
+  local +2:9 end: i32 (const)
+  callee +2:20 urlWindowEnd -> @nish.urlWindowEnd
+  local +6:7 i: i32 (let)
+  local +7:7 o: i32 (let)
+  local +9:9 b: i32 (let)
+  local +10:9 escaped: boolean (let)
+  callee +12:11 urlEscapeAt -> @nish.urlEscapeAt
 function urlQueryFind(q: UrlQuery, name: string): i32 -> @nish.urlQueryFind [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.UrlQuery.next
@@ -5789,8 +5800,8 @@ function urlIsUtf8(buf: u8[], off: i32, len: i32): boolean -> @nish.urlIsUtf8
   local +10:9 lo: i32 (let)
   local +11:9 hi: i32 (let)
   local +36:11 second: i32 (const)
-  local +46:13 c: i32 (const)
-  local +55:13 c: i32 (const)
+  local +50:11 third: i32 (const)
+  local +61:11 fourth: i32 (const)
 function urlBytesOf(s: string): u8[] | null -> @nish.urlBytesOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -5834,13 +5845,16 @@ function urlQueryGet(target: string, name: string): string | null -> @nish.urlQu
   callee +20:10 urlDecodeString -> @nish.urlDecodeString
 function urlLowerString(bytes: u8[], a: i32, b: i32): string -> @nish.urlLowerString
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: a
   calls: nish_panic nish_panic_slice nish_str_new
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 out: u8[] (const)
-  local +1:7 j: i32 (let)
-  local +3:11 i: i32 (const)
-  local +7:11 c: i32 (const)
+  local +0:7 width: i32 (let)
+  local +4:9 out: u8[] (const)
+  local +5:9 n: i32 (const)
+  local +6:7 j: i32 (let)
+  local +7:7 i: i32 (let)
+  local +9:11 c: i32 (const)
 function urlFind(bytes: u8[], a: i32, b: i32, c: i32): i32 -> @nish.urlFind
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a
@@ -5939,9 +5953,10 @@ function urlPortOf(bytes: u8[], a: i32, b: i32): i32 -> @nish.urlPortOf
   escaping: a
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:7 port: i32 (let)
+  local +0:7 port: integer<0, 65535> (let)
   local +1:7 i: i32 (let)
   local +3:11 c: i32 (const)
+  local +8:11 next: i32 (const)
 function urlIsHostPort(bytes: u8[], a: i32, b: i32): boolean -> @nish.urlIsHostPort [exported]
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
@@ -5987,11 +6002,9 @@ function urlDotSegment(s: string, a: i32, b: i32): i32 -> @nish.urlDotSegment
   escaping: a b s
   calls: nish.urlDotAt
   stackSites=0 stackLocals=0
-  local +0:9 first: i32 (const)
-  callee +0:22 urlDotAt -> @nish.urlDotAt
-  local +6:9 next: i32 (const)
-  local +10:9 second: i32 (const)
-  callee +10:23 urlDotAt -> @nish.urlDotAt
+  local +0:9 next: i32 (const)
+  callee +0:21 urlDotAt -> @nish.urlDotAt
+  callee +7:10 urlDotAt -> @nish.urlDotAt
 function urlRemoveDotSegments(s: string): string -> @nish.urlRemoveDotSegments
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: s

@@ -395,8 +395,8 @@ const http2FramePriority = (frame: Http2Frame, buf: u8[], at: i32): i32 => {
     (toI32(buf[at + 1]) << 16) |
     (toI32(buf[at + 2]) << 8) |
     toI32(buf[at + 3])
-  // A byte is 0 to 255, so the weight is 1 to 256.
-  frame.weight = toI32(toU32(buf[at + 4]) + toU32(1))
+  // A byte is 0 to 255, so the weight is 1 to 256 and the sum cannot overflow.
+  frame.weight = toI32(buf[at + 4]) + 1
   if (frame.dependency === frame.streamId) {
     frame.streamError = H2_PROTOCOL_ERROR
   }

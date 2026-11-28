@@ -233,6 +233,19 @@ bootstrap's fixed point, which the job hands to the `bootstrap (x86_64-linux)`
 row of the same run rather than proving it twice. A delegation is not a skip;
 it is named with the job that proves it, and the shard is only as green as
 that job. A local `npm test` delegates nothing (`.claude/testing.md`).
+On a pull request a shard can also print `Replayed: N tests/link program(s)`
+after its summary: programs whose compiler, harness, runtime, toolchain,
+directory and sources all match a run in which every one of their checks
+passed, which print that run's checks under a `REPLAY link/<name>` line
+instead of being built again (`--link-results`, `tests/link-results.js`). The
+push to main never replays, so it is the run that answers for every program
+built from scratch ([`docs/wp10-ci.md`](docs/wp10-ci.md#link-program-results-across-runs)).
+A green pull request has also not run the deferred lanes (`simd-arm64`,
+`sha256-macos`, `gfx-macos`, `postgres-live`, reporting green with their
+steps skipped) unless it changed one of their own paths, nor the aarch64
+rows of `bootstrap` and `nish-cmp-elision`; add `ci:full` before merging a
+change to NEON, Apple, Metal or postgres code those paths do not name
+([`docs/wp10-ci.md`](docs/wp10-ci.md#scoped-lanes), "Deferred lanes").
 Each shard's summary line, FAIL lines and SKIP lines are also copied into the
 job's step summary (the "Test summary" step, `scripts/ci-test-summary.mjs`),
 which is uploaded separately from the console log. Read them there when the

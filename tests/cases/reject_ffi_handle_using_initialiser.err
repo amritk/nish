@@ -1,1 +1,1 @@
-A `File` cannot be used here
+reject_ffi_handle_using_initialiser.ts:27:21: error: A `File` cannot be used here

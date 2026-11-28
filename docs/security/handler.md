@@ -110,10 +110,10 @@ none is open. HANDLER-16 holds; HANDLER-17 is accepted.
 handler** (#2296). `new HttpHandler` hands its `limits` to
 `handlerCheckLimits` (`std/net/handler.ts:932:5`), a fault guard over
 `handlerLimitsFault` ([`fault`](../reference/language/semantics-decisions.md#panic-sites)),
-so the guard's `panic` (`std/net/handler.ts:2663:5`) is proven and each
+so the guard's `panic` (`std/net/handler.ts:2720:5`) is proven and each
 construction is a `fault` site of its own. `openHttpHandler` runs
-`handlerLimitsFault(limits)` (`std/net/handler.ts:2648:3`) and returns its
-`Err` before `new HttpHandler` (`2656:13`); the failed-`pollCreate` return
+`handlerLimitsFault(limits)` (`std/net/handler.ts:2705:3`) and returns its
+`Err` before `new HttpHandler` (`2713:13`); the failed-`pollCreate` return
 between them is an `if` that only leaves, so that site is proven.
 `tests/link/fault_contract_proven` and `fault_contract_early_exit` are the
 same shapes on a two-module program, each pinned by its `expected.panics`,

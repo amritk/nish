@@ -79,6 +79,8 @@
  * one against the appendix's table.
  */
 
+import { wrappingAdd } from "nish:unsafe"
+
 /** A decode that read the whole block and answered every field. */
 export const HPACK_OK: i32 = 0
 
@@ -386,29 +388,58 @@ const hpackSameAsWindow = (bytes: u8[], store: u8[], at: i32, n: i32): boolean =
   if (toI32(bytes.length) !== n) {
     return false
   }
+  // `j` walks the window alongside `i`, and steps on only from inside `store`, so it never passes
+  // `store.length`; a window that leaves `store` reads as a difference.
+  let j: i32 = at
   for (let i: i32 = 0; i < n && i < toI32(bytes.length); i += 1) {
-    // `at` and `i` are each below 2^31, so the unsigned sum cannot wrap; a sum past `store`, a window
-    // the caller has checked, reads as a difference.
-    const j: i32 = toI32(toU32(at) + toU32(i))
-    if (at < 0 || j < 0 || j >= toI32(store.length) || bytes[i] !== store[j]) {
+    if (j < 0 || j >= toI32(store.length) || bytes[i] !== store[j]) {
       return false
     }
+    j += 1
   }
   return true
 }
 
 /**
- * What an entry of this name and value costs in the table (§4.1), in `i64`
- * because two lengths of up to 2^31 - 1 and the overhead do not fit an `i32`.
+ * The dynamic table index of the combined index `index`, which must be past the static table's 61 entries,
+ * or -1 for one that is not. The literal is `HPACK_STATIC_LENGTH`, spelled out because the bounds prover
+ * reads only a literal, and it is what proves the difference cannot overflow.
  */
-const hpackEntrySize = (name: u8[], value: u8[]): i64 =>
-  toI64(name.length) + toI64(value.length) + toI64(HPACK_ENTRY_OVERHEAD)
-
-/** Panics unless `[off, off + len)` lies inside `buf`; the window is the caller's. */
-const hpackCheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
-  if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(buf.length)) {
-    panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${toI32(buf.length)} bytes`)
+const hpackDynamicIndex = (index: i32): i32 => {
+  let i: i32 = -1
+  if (index > 61) {
+    i = index - 61
   }
+  return i
+}
+
+/**
+ * `off + len` when `buf[off, off + len)` lies inside `buf`, else -1. The sum is taken in `i64`, where two
+ * `i32`s cannot overflow; one no larger than `buf.length` fits an `i32` again.
+ */
+const hpackWindowEnd = (buf: u8[], off: i32, len: i32): i32 => {
+  const end: i64 = toI64(off) + toI64(len)
+  if (off < 0 || len < 0 || end > toI64(buf.length)) {
+    return -1
+  }
+  return toI32(end)
+}
+
+/**
+ * The panic of a window outside `buf`, `hpackCheckedWindowEnd`'s, kept apart from its test so that the
+ * test stays small enough to inline; the window is the caller's.
+ */
+const hpackCheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
+  panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${toI32(buf.length)} bytes`)
+}
+
+/** Panics unless `[off, off + len)` lies inside `buf`, and answers the window's end, `off + len`. */
+const hpackCheckedWindowEnd = (what: string, buf: u8[], off: i32, len: i32): i32 => {
+  const end: i32 = hpackWindowEnd(buf, off, len)
+  if (end < 0) {
+    hpackCheckWindow(what, buf, off, len)
+  }
+  return end
 }
 
 /**
@@ -454,7 +485,7 @@ export class HpackHuffman {
    * Where each length's symbols start in `symbols`, by length.
    * @internal Read by `hpackHuffmanDecode`; not for callers.
    */
-  baseRank: i32[]
+  baseRank: u32[]
 
   /** Rebuilds the code from Appendix B's 257 code lengths. Build one and reuse it: each build allocates. */
   constructor() {
@@ -465,23 +496,25 @@ export class HpackHuffman {
     this.symbols = new Array<i32>(257)
     this.firstCode = new Array<i32>(31)
     this.countAt = new Array<i32>(31)
-    this.baseRank = new Array<i32>(31)
+    this.baseRank = new Array<u32>(31)
     // Every bound below is the array's own length, which the constants fix at 257 symbols and 31 code
     // lengths, so no test ever stops a loop early.
     const table: string = HPACK_HUFFMAN_LENGTHS
     for (let sym: i32 = 0; sym < toI32(this.lengths.length) && sym < toI32(table.length); sym += 1) {
       this.lengths[sym] = toI32(table.charCodeAt(sym)) - 60
     }
-    // How many symbols each length has. Appendix B's lengths are 5 to 30, so every one lands in a row.
+    // How many symbols each length has, counted in the unsigned `baseRank` rows, which 257 symbols cannot
+    // wrap. Appendix B's lengths are 5 to 30, so every one lands in a row.
     for (let sym: i32 = 0; sym < toI32(this.lengths.length); sym += 1) {
       const len: i32 = this.lengths[sym]
-      if (len >= 0 && len < toI32(this.countAt.length)) {
-        this.countAt[len] = toI32(toU32(this.countAt[len]) + 1)
+      if (len >= 0 && len < toI32(this.baseRank.length)) {
+        this.baseRank[len] += 1
       }
     }
     // Canonical order is by length, then by symbol: each length's first code and rank follow from the
     // counts of the shorter ones. Unsigned: the code is below 2^30 and the rank at most 257, so neither
-    // can wrap. Each count goes back to 0, to count again as the pass after hands the codes out.
+    // can wrap. Each count becomes its length's first rank, the next slot of `symbols` the pass after
+    // fills.
     let code: u32 = 0
     let rank: u32 = 0
     for (
@@ -492,33 +525,45 @@ export class HpackHuffman {
       len < toI32(this.countAt.length);
       len += 1
     ) {
+      const count: u32 = this.baseRank[len]
       this.firstCode[len] = toI32(code)
-      this.baseRank[len] = toI32(rank)
-      const count: u32 = toU32(this.countAt[len])
-      this.countAt[len] = 0
+      this.baseRank[len] = rank
+      this.countAt[len] = toI32(rank)
       code = (code + count) << 1
       rank += count
     }
-    // Walking the symbols in order hands each length its codes in symbol order, as the canonical code
-    // does, and leaves every count as it was. Appendix B has 257 symbols, so the rank never reaches
-    // past `symbols`.
+    // Walking the symbols in order hands each length its slots of `symbols` and its codes in symbol
+    // order, as the canonical code does, with the count holding the next slot and the first code the next
+    // code. Appendix B has 257 symbols and codes below 2^30, so the tests never refuse a symbol; they are
+    // what keep the slot in `symbols` and prove the increments cannot overflow.
     for (let sym: i32 = 0; sym < toI32(this.lengths.length) && sym < toI32(this.codes.length); sym += 1) {
       const len: i32 = this.lengths[sym]
-      if (
-        len >= 5 &&
-        len <= HPACK_HUFFMAN_MAX_BITS &&
-        len < toI32(this.firstCode.length) &&
-        len < toI32(this.baseRank.length) &&
-        len < toI32(this.countAt.length)
-      ) {
-        const done: u32 = toU32(this.countAt[len])
-        const at: i32 = toI32(toU32(this.baseRank[len]) + done)
-        if (at >= 0 && at < toI32(this.symbols.length)) {
-          this.codes[sym] = toI32(toU32(this.firstCode[len]) + done)
+      if (len >= 5 && len < toI32(this.countAt.length) && len < toI32(this.firstCode.length)) {
+        const at: i32 = this.countAt[len]
+        const next: i32 = this.firstCode[len]
+        if (at >= 0 && at < toI32(this.symbols.length) && next < 1073741824) {
           this.symbols[at] = sym
-          this.countAt[len] = toI32(done + 1)
+          this.codes[sym] = next
+          this.countAt[len] = at + 1
+          this.firstCode[len] = next + 1
         }
       }
+    }
+    // The same walk over the lengths as above puts each first code back, and each count, from the slot
+    // past its run less the run's first rank. Unsigned, as above.
+    code = 0
+    rank = 0
+    for (
+      let len: i32 = 5;
+      len <= HPACK_HUFFMAN_MAX_BITS && len < toI32(this.firstCode.length) && len < toI32(this.countAt.length);
+      len += 1
+    ) {
+      const end: u32 = toU32(this.countAt[len])
+      const count: u32 = end - rank
+      this.firstCode[len] = toI32(code)
+      this.countAt[len] = toI32(count)
+      code = (code + count) << 1
+      rank = end
     }
   }
 }
@@ -536,7 +581,7 @@ export class HpackHuffman {
  *   internal fields).
  */
 export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i32): i32 => {
-  hpackCheckWindow("hpackHuffmanLength", src, off, len)
+  hpackCheckedWindowEnd("hpackHuffmanLength", src, off, len)
   // Unsigned: at most 30 bits for each of fewer than 2^31 octets, far below 2^64.
   let bits: u64 = 0
   // Widened, so `off + len` cannot wrap. The window check has already proved
@@ -573,7 +618,7 @@ export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i3
  * @param out Where the coded bytes go: appended after what it holds, `hpackHuffmanLength` of them.
  */
 export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): void => {
-  hpackCheckWindow("hpackHuffmanEncode", src, off, len)
+  hpackCheckedWindowEnd("hpackHuffmanEncode", src, off, len)
   let acc: u64 = 0
   // Unsigned: fewer than eight waiting bits plus one code of at most 31, so it never wraps.
   let bits: u32 = 0
@@ -620,7 +665,7 @@ export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i3
  *   which only a table cut short (by writing its internal fields) allows.
  */
 export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i32, out: u8[]): i32 => {
-  hpackCheckWindow("hpackHuffmanDecode", src, off, len)
+  hpackCheckedWindowEnd("hpackHuffmanDecode", src, off, len)
   // Unsigned, and `bits` never passes 30: the code is complete, so thirty bits always end a symbol,
   // and the row test below gives up before a 31st.
   let code: u32 = 0
@@ -644,13 +689,13 @@ export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i3
         ) {
           return HPACK_ERR_HUFFMAN_PADDING
         }
-        // Both sides fit an `i32`, so the `i64` difference cannot wrap.
+        // The difference is taken in `i64`, where it cannot overflow: the code is under 2^30 and every
+        // table entry an `i32`. Past the test `at` is in `[0, 2^31)`, which `toU32` keeps whole, and the
+        // slot is `u32` like the rank it starts from; a slot outside `symbols` matches no code.
         const at: i64 = toI64(code) - toI64(h.firstCode[row])
         if (at >= 0 && at < toI64(h.countAt[row])) {
-          // `at` is below `h.countAt[row]`, so in `[0, 2^31)`; the unsigned sum of two such cannot wrap,
-          // and one past `symbols` matches no code.
-          const slot: i32 = toI32(toU32(h.baseRank[row]) + toU32(at))
-          if (slot < 0 || slot >= toI32(h.symbols.length)) {
+          const slot: u32 = h.baseRank[row] + toU32(at)
+          if (slot >= toU32(h.symbols.length)) {
             return HPACK_ERR_HUFFMAN_PADDING
           }
           const sym: i32 = h.symbols[slot]
@@ -696,12 +741,9 @@ export class HpackCursor {
    * @param len How many bytes from `off` on the cursor may read.
    */
   constructor(buf: u8[], off: i32, len: i32) {
-    hpackCheckWindow("HpackCursor", buf, off, len)
     this.buf = buf
     this.pos = off
-    // The window check proved `off` and `len` non-negative with a sum at most `buf.length`, so the unsigned
-    // sum does not wrap.
-    this.end = toI32(toU32(off) + toU32(len))
+    this.end = hpackCheckedWindowEnd("HpackCursor", buf, off, len)
   }
 
   /**
@@ -709,12 +751,9 @@ export class HpackCursor {
    * @internal Called by `HpackDecoder.decode` for each block; not for callers.
    */
   reset(buf: u8[], off: i32, len: i32): void {
-    hpackCheckWindow("HpackCursor", buf, off, len)
     this.buf = buf
     this.pos = off
-    // The window check proved `off` and `len` non-negative with a sum at most `buf.length`, so the unsigned
-    // sum does not wrap.
-    this.end = toI32(toU32(off) + toU32(len))
+    this.end = hpackCheckedWindowEnd("HpackCursor", buf, off, len)
   }
 }
 
@@ -734,14 +773,19 @@ export const hpackEncodeInteger = (out: u8[], flags: i32, prefixBits: i32, value
   if (prefixBits < 1 || prefixBits > 8 || value < 0) {
     panic(`hpackEncodeInteger: a value of ${value} with a ${prefixBits}-bit prefix, outside 1 to 8`)
   }
-  // Unsigned: the prefix is 1 to 8 bits, so `max` is 1 to 255, and `value` is at least `max` below.
-  const max: i32 = toI32((toU32(1) << toU32(prefixBits)) - toU32(1))
+  // The prefix is 1 to 8 bits, so `max` is 1 to 255, and `value` is at least `max` below.
+  const max: i32 = toI32(255) >> (8 - prefixBits)
   if (value < max) {
     out.push(toU8(flags | value))
     return
   }
   out.push(toU8(flags | max))
-  let rest: i32 = toI32(toU32(value) - toU32(max))
+  // `value` is at least `max` here and `max` is positive, so the difference is ordered; the test is what
+  // proves it.
+  let rest: i32 = 0
+  if (max >= 0 && value >= max) {
+    rest = value - max
+  }
   while (rest >= 128) {
     out.push(toU8((rest & 127) | 128))
     rest = rest >> 7
@@ -774,7 +818,7 @@ export const hpackDecodeInteger = (c: HpackCursor, prefixBits: i32): i32 => {
   if (at >= c.end || at < 0 || at >= toI32(buf.length)) {
     return HPACK_ERR_TRUNCATED
   }
-  const max: i32 = toI32((toU32(1) << toU32(prefixBits)) - toU32(1))
+  const max: i32 = toI32(255) >> (8 - prefixBits)
   const first: i32 = toI32(buf[at]) & max
   c.pos = at + 1
   if (first < max) {
@@ -993,11 +1037,9 @@ export class HpackTable {
   valueStart(i: i32): i32 {
     const start: i32 = this.nameStart(i)
     const length: i32 = this.nameLength(i)
-    if (start < 0 || length < 0) {
-      return -1
-    }
-    // Both are non-negative, and the name lies inside `bytes`, so the unsigned sum does not wrap.
-    return toI32(toU32(start) + toU32(length))
+    // The name lies inside `bytes`, so its end is the window's end, which cannot overflow; a name
+    // outside `bytes`, which only a caller writing the public fields makes, has no value.
+    return hpackWindowEnd(this.bytes, start, length)
   }
 
   /**
@@ -1010,8 +1052,13 @@ export class HpackTable {
     if (k < 0 || start < 0) {
       return -1
     }
-    // The value ends at or after it starts, so the unsigned difference does not wrap.
-    return toI32(toU32(this.endOf(k)) - toU32(start))
+    // The value ends at or after it starts, so the difference is ordered; the test is what proves it.
+    const end: i32 = this.endOf(k)
+    let length: i32 = 0
+    if (end > start) {
+      length = end - start
+    }
+    return length
   }
 
   /**
@@ -1050,11 +1097,23 @@ export class HpackTable {
    * @internal Called by `add`, `resize` and `HpackDecoder`; not for callers.
    */
   evictTo(limit: i32): void {
-    while (toI64(this.size) > toI64(limit) && this.count() > 0) {
-      // The size counts every live entry's cost, so the unsigned difference does not wrap; and `first` is
-      // below the slot count, under 2^30, while `count()` is positive.
-      this.size = toI32(toU32(this.size) - toU32(this.costOf(this.first)))
-      this.first = toI32(toU32(this.first) + 1)
+    while (toI64(this.size) > toI64(limit)) {
+      // `count()` is positive exactly when `first` is a slot below the slot count, which is what proves
+      // the step on cannot overflow.
+      const f: i32 = this.first
+      if (f < 0 || f >= toI32(this.entries.length) >> 1) {
+        break
+      }
+      // The size counts every live entry's cost, so the difference is ordered; the test is what proves
+      // it, and a size short of the cost, which only a caller writing the public fields makes, empties.
+      const size: i32 = this.size
+      const cost: i32 = this.costOf(f)
+      let left: i32 = 0
+      if (cost >= 0 && size > cost) {
+        left = size - cost
+      }
+      this.size = left
+      this.first = f + 1
     }
     this.compact()
   }
@@ -1073,11 +1132,15 @@ export class HpackTable {
     if (f > 0 && f <= n && f >= n - f) {
       const live: i32 = toI32(toU32(n - f) << 1)
       const from: i32 = toI32(toU32(f) << 1)
+      // `at` runs alongside `k` from `from`, and `from + live` is the slot count doubled, at most
+      // `entries.length`, so the walk ends where the old index test did.
+      let at: i32 = from
       for (let k: i32 = 0; k < live && k < toI32(entries.length); k += 1) {
-        const at: i32 = toI32(toU32(from) + toU32(k))
-        if (at >= 0 && at < toI32(entries.length)) {
-          entries[k] = entries[at]
+        if (at < 0 || at >= toI32(entries.length)) {
+          break
         }
+        entries[k] = entries[at]
+        at += 1
       }
       while (toI32(entries.length) > live && toI32(entries.length) > 0) {
         entries.pop()
@@ -1096,12 +1159,18 @@ export class HpackTable {
       while (toI32(bytes.length) > keep && toI32(bytes.length) > 0) {
         bytes.pop()
       }
-      // Every live entry starts at or after `start`, so the unsigned difference does not wrap.
+      // Every live entry starts at or after `start`, so the difference is ordered; the test is what
+      // proves it.
       const slots: i32 = toI32(entries.length) >> 1
       for (let k: i32 = this.first; k >= 0 && k < slots; k += 1) {
         const at: i32 = toI32(toU32(k) << 1)
         if (at >= 0 && at < toI32(entries.length)) {
-          entries[at] = toI32(toU32(entries[at]) - toU32(start))
+          const was: i32 = entries[at]
+          let moved: i32 = 0
+          if (was > start) {
+            moved = was - start
+          }
+          entries[at] = moved
         }
       }
     }
@@ -1120,15 +1189,29 @@ export class HpackTable {
    *   and value are both empty.
    */
   add(name: u8[], value: u8[]): i32 {
-    const cost: i64 = hpackEntrySize(name, value)
-    if (cost > toI64(this.maxSize)) {
+    // `limit` is `maxSize` less the cost, taken one ordered difference at a time; the entry does not fit
+    // exactly when one of them would go below zero, which is the cost passing `maxSize`.
+    const nameLength: i32 = toI32(name.length)
+    const valueLength: i32 = toI32(value.length)
+    const max: i32 = this.maxSize
+    let limit: i32 = -1
+    if (max >= 32) {
+      const afterOverhead: i32 = max - 32
+      if (nameLength >= 0 && nameLength <= afterOverhead) {
+        const afterName: i32 = afterOverhead - nameLength
+        if (valueLength >= 0 && valueLength <= afterName) {
+          limit = afterName - valueLength
+        }
+      }
+    }
+    if (limit < 0) {
       const nothing: i32 = 0
       this.evictTo(nothing)
       return nothing
     }
-    // The cost is from 32 to `maxSize`, so neither unsigned sum nor difference below wraps: the size after
-    // eviction is at most `maxSize - cost`, and the octets pushed are the cost less 32.
-    this.evictTo(toI32(toU32(this.maxSize) - toU32(cost)))
+    // The size after eviction is at most `limit`, so the entry's cost, `maxSize - limit`, takes it to at
+    // most `maxSize`.
+    this.evictTo(limit)
     this.entries.push(toI32(this.bytes.length))
     this.entries.push(toI32(name.length))
     let pushed: u32 = 0
@@ -1140,7 +1223,18 @@ export class HpackTable {
       this.bytes.push(b)
       pushed += 1
     }
-    this.size = toI32(toU32(this.size) + toU32(cost))
+    // The new size is `maxSize` less the room eviction left, `limit - size`; both differences are ordered,
+    // and a size past `limit`, which only a caller writing the public fields makes, counts no room.
+    const size: i32 = this.size
+    let room: i32 = 0
+    if (size >= 0 && limit > size) {
+      room = limit - size
+    }
+    let grown: i32 = 0
+    if (room >= 0 && max > room) {
+      grown = max - room
+    }
+    this.size = grown
     return toI32(pushed)
   }
 
@@ -1396,8 +1490,7 @@ export class HpackDecoder {
       hpackAppendText(out, hpackStaticName(index))
       return
     }
-    // `index` is past HPACK_STATIC_LENGTH here, so the unsigned difference does not wrap.
-    const i: i32 = toI32(toU32(index) - toU32(HPACK_STATIC_LENGTH))
+    const i: i32 = hpackDynamicIndex(index)
     hpackAppend(out, this.table.bytes, this.table.nameStart(i), this.table.nameLength(i))
     this.countCopied(this.table.nameLength(i))
   }
@@ -1408,8 +1501,7 @@ export class HpackDecoder {
       hpackAppendText(out, hpackStaticValue(index))
       return
     }
-    // `index` is past HPACK_STATIC_LENGTH here, so the unsigned difference does not wrap.
-    const i: i32 = toI32(toU32(index) - toU32(HPACK_STATIC_LENGTH))
+    const i: i32 = hpackDynamicIndex(index)
     hpackAppend(out, this.table.bytes, this.table.valueStart(i), this.table.valueLength(i))
     this.countCopied(this.table.valueLength(i))
   }
@@ -1419,8 +1511,7 @@ export class HpackDecoder {
     if (index <= HPACK_STATIC_LENGTH) {
       return toI32(hpackStaticName(index).length)
     }
-    // `index` is past HPACK_STATIC_LENGTH here, so the unsigned difference does not wrap.
-    return this.table.nameLength(toI32(toU32(index) - toU32(HPACK_STATIC_LENGTH)))
+    return this.table.nameLength(hpackDynamicIndex(index))
   }
 
   /** What the entry at `index` counts towards a header list, without building it. */
@@ -1432,14 +1523,17 @@ export class HpackDecoder {
         toI64(HPACK_ENTRY_OVERHEAD)
       )
     }
-    // `index` is past HPACK_STATIC_LENGTH here, so the unsigned difference does not wrap.
-    return toI64(this.table.entrySize(toI32(toU32(index) - toU32(HPACK_STATIC_LENGTH))))
+    return toI64(this.table.entrySize(hpackDynamicIndex(index)))
   }
 
-  /** Adds `n` octets, when there are any, to `tableCopied`; the count would need 2^63 octets to wrap. */
+  /**
+   * Adds `n` octets, when there are any, to `tableCopied`. The count is a statistic that tests read as a
+   * difference between two reads, never a length or a decision, so it wraps mod 2^64 rather than panic:
+   * the difference stays exact across a wrap, and reaching one takes 2^63 octets.
+   */
   private countCopied(n: i32): void {
     if (n > 0) {
-      this.tableCopied = toI64(toU64(this.tableCopied) + toU64(n))
+      this.tableCopied = wrappingAdd(this.tableCopied, toI64(n))
     }
   }
 
@@ -1741,16 +1835,17 @@ export class HpackEncoder {
         return i
       }
     }
-    // Unsigned counters: the dynamic table holds at most `maxSize / 32` entries, so neither they nor the index wrap.
-    const n: u32 = toU32(this.table.count())
-    for (let k: u32 = 1; k <= n; k += 1) {
+    // The dynamic table holds at most `maxSize / 32` entries, under 2^26, so the literal cap never stops
+    // the walk; it is what proves neither the counter nor the index can overflow. The 61 is
+    // `HPACK_STATIC_LENGTH`, spelled out because the bounds prover reads only a literal.
+    const n: i32 = this.table.count()
+    for (let i: i32 = 1; i <= n && i < 1073741824; i += 1) {
       const t: HpackTable = this.table
-      const i: i32 = toI32(k)
       if (
         hpackSameAsWindow(name, t.bytes, t.nameStart(i), t.nameLength(i)) &&
         hpackSameAsWindow(value, t.bytes, t.valueStart(i), t.valueLength(i))
       ) {
-        return toI32(toU32(HPACK_STATIC_LENGTH) + k)
+        return 61 + i
       }
     }
     return 0
@@ -1764,12 +1859,11 @@ export class HpackEncoder {
         return i
       }
     }
-    // Unsigned counters, as in `findField`.
-    const n: u32 = toU32(this.table.count())
-    for (let k: u32 = 1; k <= n; k += 1) {
-      const i: i32 = toI32(k)
+    // The literal cap and the 61 are as in `findField`.
+    const n: i32 = this.table.count()
+    for (let i: i32 = 1; i <= n && i < 1073741824; i += 1) {
       if (hpackSameAsWindow(name, this.table.bytes, this.table.nameStart(i), this.table.nameLength(i))) {
-        return toI32(toU32(HPACK_STATIC_LENGTH) + k)
+        return 61 + i
       }
     }
     return 0

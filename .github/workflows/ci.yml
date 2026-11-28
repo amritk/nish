@@ -51,7 +51,14 @@
 #       only when every changed path is one that job is proven not to read;
 #       bootstrap, nish-cmp, nish-cmp-elision, simd-arm64, sha256-macos,
 #       fuzz-smoke and postgres-live then skip their steps and still report.
-#       The test shards and lint always run. `ci-gate` needs every job and
+#       A pull request also defers simd-arm64, sha256-macos, gfx-macos and
+#       postgres-live, unless it changes the code only that job runs, and the
+#       aarch64 rows of bootstrap and nish-cmp-elision, to the push to main,
+#       the merge queue, the Release PR and the release, which run every lane
+#       and row (docs/wp10-ci.md, "Deferred lanes"; ci:full runs them).
+#       lint always runs; the test shards and examples skip only for a pull
+#       request every changed path of which the suite never reads
+#       (SUITE_UNREAD in scripts/ci-scope.mjs: .claude/plans/). `ci-gate` needs every job and
 #       fails unless each one it selected succeeded: it is the one check
 #       branch protection has to require.
 #
@@ -178,7 +185,12 @@ jobs:
   # request is the only event that can turn a lane off; any other event (a
   # push to main, the merge queue, workflow_call) runs everything, as do the
   # `ci:full` label and the NISH_CI_SCOPE repository variable set to `full`.
-  # The test shards and lint are never lanes and do not wait on this job.
+  # A pull request whose file list it read also defers each
+  # `pullRequests: false` lane it changes none of the own paths of, and
+  # writes `rows=native`.
+  # `lint` is never a lane. The test shards and `examples` wait on this job
+  # for `suite`, which is false only for a pull request that changes nothing
+  # the suite reads.
   scope:
     name: scope
     runs-on: ubuntu-latest
@@ -197,6 +209,14 @@ jobs:
       fuzz: ${{ steps.scope.outputs.fuzz }}
       postgres: ${{ steps.scope.outputs.postgres }}
       gfx: ${{ steps.scope.outputs.gfx }}
+      gfx_macos: ${{ steps.scope.outputs.gfx_macos }}
+      # `native` on a pull request without ci:full: `bootstrap` and
+      # `nish-cmp-elision` take only the x86_64-linux seed row (the `seeds`
+      # job's `rows_native` and `cmp_native`); `all` otherwise.
+      rows: ${{ steps.scope.outputs.rows }}
+      # `false` on a pull request every changed path of which the suite never
+      # reads (SUITE_UNREAD: .claude/plans/): `test` and `examples` skip.
+      suite: ${{ steps.scope.outputs.suite }}
       why: ${{ steps.scope.outputs.why }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -215,6 +235,12 @@ jobs:
 
   test:
     name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/9)
+    # The one case it skips: a pull request that changes only paths the suite
+    # never reads (scripts/ci-scope.mjs, SUITE_UNREAD), where `ci-gate`
+    # expects the skip. Every other event and change runs it; a failed
+    # `scope` skips it too, and `ci-gate` fails on that.
+    needs: scope
+    if: needs.scope.outputs.suite != 'false'
     runs-on: ${{ matrix.os }}
     # 25 minutes, up from 15: shard 1 took 14m49s on main at 6e11fa6b once
     # #663 added about 3 s of clang -O2 to each program that imports p256, so
@@ -450,6 +476,20 @@ jobs:
           sudo sysctl -w net.ipv4.tcp_migrate_req=1
           test "$(cat /proc/sys/net/ipv4/tcp_migrate_req)" = 1
 
+      # A pull request's run reads the link programs' records an earlier run of
+      # this shard kept: its own last push's first (a cache is scoped to the
+      # ref that saved it), else main's. The push to main, the Release PR's
+      # dispatched run and the release never restore one, so they build every
+      # program, and they are what a key that missed a read is caught by.
+      - name: The link programs' results from an earlier run
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: build/cache/link-results
+          key: link-results-2-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            link-results-2-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-
+
       # `--seed` rather than NISH_BOOTSTRAP: the variable also turns on
       # `tests/nish-cmp.js`, which the `nish-cmp` job below already runs, one
       # row per seed, and whose `cmpSince` rule that job's matrix states.
@@ -481,6 +521,15 @@ jobs:
       # workflow_call time them too. A check in tests/run.js fails if this job
       # stops running on a push to main.
       #
+      # `--link-results`: the tests/link programs' records, kept between runs
+      # by everything each one reads (tests/link-results.js, and
+      # docs/wp10-ci.md, "Link-program results across runs"). A program whose
+      # compiler, harness, runtime, toolchain, directory and sources match a
+      # run in which it passed replays that run's checks, under a REPLAY line,
+      # instead of being built again. Only a pull request's run restores the
+      # file (the step before this one), from its own last push or else from
+      # main's; every run saves it (the step after the summary).
+      #
       # `WASI_SYSROOT=/usr` because Debian's wasi-libc installs under
       # /usr/lib/wasm32-wasi and /usr/include/wasm32-wasi rather than in a
       # sysroot directory of its own, so none of the default locations
@@ -499,7 +548,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           set +e
-          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/9" | tee --output-error=warn "$RUNNER_TEMP/test.log"
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --link-results "build/cache/link-results/shard-$SHARD.json" --shard "$SHARD/9" | tee --output-error=warn "$RUNNER_TEMP/test.log"
           status=("${PIPESTATUS[@]}")
           echo "npm=${status[0]} tee=${status[1]}" > "$RUNNER_TEMP/test.status"
           exit "${status[0]}"
@@ -515,6 +564,22 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
         run: node scripts/ci-test-summary.mjs "$RUNNER_TEMP/test.log" "$RUNNER_TEMP/test.status"
+
+      # What this run kept, for the next push of this pull request, or, from
+      # main, for every pull request's first; nothing restores another event's
+      # (the merge queue's, the Release PR's), so those keep none. Saved after
+      # a red run too: it
+      # holds only programs whose every check passed, so the push that fixes
+      # the failure builds the failed programs and replays the rest. And after
+      # a cancelled one: a newer merge cancels most pushes to main, and the
+      # suite writes the file whole (a rename) once the link programs are done,
+      # so a run cancelled before then has none to save.
+      - name: Keep the link programs' results
+        if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && hashFiles('build/cache/link-results/*.json') != '' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: build/cache/link-results
+          key: link-results-2-${{ runner.os }}-${{ runner.arch }}-shard${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The steps from here on run in one shard each: each answers once for
       # the commit, and every shard built the same compiler. Those that read
@@ -703,6 +768,9 @@ jobs:
   # every event, and `ci-gate` needs it.
   examples:
     name: examples
+    # Skipped with the `test` shards, for the same pull requests.
+    needs: scope
+    if: needs.scope.outputs.suite != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -877,6 +945,10 @@ jobs:
     outputs:
       rows: ${{ steps.linux.outputs.rows }}
       cmp: ${{ steps.pick.outputs.cmp }}
+      # The x86_64-linux row of each, which is what a pull request's
+      # `bootstrap` and `nish-cmp-elision` take (`scope`'s `rows=native`).
+      rows_native: ${{ steps.linux.outputs.rows_native }}
+      cmp_native: ${{ steps.linux.outputs.cmp_native }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -903,7 +975,11 @@ jobs:
         id: linux
         env:
           ROWS: ${{ steps.pick.outputs.rows }}
-        run: echo "rows=$(jq -c '[.[] | select(.runner | startswith("macos") | not)]' <<< "$ROWS")" >> "$GITHUB_OUTPUT"
+          CMP: ${{ steps.pick.outputs.cmp }}
+        run: |
+          echo "rows=$(jq -c '[.[] | select(.runner | startswith("macos") | not)]' <<< "$ROWS")" >> "$GITHUB_OUTPUT"
+          echo "rows_native=$(jq -c '[.[] | select(.asset == "x86_64-linux")]' <<< "$ROWS")" >> "$GITHUB_OUTPUT"
+          echo "cmp_native=$(jq -c '[.[] | select(.asset == "x86_64-linux")]' <<< "$CMP")" >> "$GITHUB_OUTPUT"
 
   bootstrap:
     name: bootstrap (${{ matrix.seed.asset }})
@@ -921,7 +997,9 @@ jobs:
       # change.
       fail-fast: false
       matrix:
-        seed: ${{ fromJSON(needs.seeds.outputs.rows) }}
+        # A pull request takes the x86_64-linux row alone (scripts/ci-scope.mjs,
+        # `rows=native`); the push to main and the release take every row.
+        seed: ${{ fromJSON(needs.scope.outputs.rows == 'native' && needs.seeds.outputs.rows_native != '[]' && needs.seeds.outputs.rows_native || needs.seeds.outputs.rows) }}
     steps:
       - name: Say why this job was not selected
         if: needs.scope.outputs.bootstrap == 'false'
@@ -930,7 +1008,7 @@ jobs:
         run: |
           echo "### Not selected: the bootstrap lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the bootstrap lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs turned the bootstrap lane off on this pull request ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.bootstrap != 'false'
 
@@ -1120,7 +1198,7 @@ jobs:
         run: |
           echo "### Not selected: the nish_cmp lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the nish_cmp lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs turned the nish_cmp lane off on this pull request ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.nish_cmp != 'false'
 
@@ -1251,7 +1329,9 @@ jobs:
       # whether it is the architecture or the change.
       fail-fast: false
       matrix:
-        seed: ${{ fromJSON(needs.seeds.outputs.cmp) }}
+        # A pull request takes the x86_64-linux row alone (scripts/ci-scope.mjs,
+        # `rows=native`); the push to main and the release take every row.
+        seed: ${{ fromJSON(needs.scope.outputs.rows == 'native' && needs.seeds.outputs.cmp_native != '[]' && needs.seeds.outputs.cmp_native || needs.seeds.outputs.cmp) }}
     steps:
       - name: Say why this job was not selected
         if: needs.scope.outputs.elision == 'false'
@@ -1260,7 +1340,7 @@ jobs:
         run: |
           echo "### Not selected: the elision lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the elision lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs turned the elision lane off on this pull request ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.elision != 'false'
 
@@ -1489,7 +1569,7 @@ jobs:
         run: |
           echo "### Not selected: the simd lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the simd lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs turned the simd lane off on this pull request ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.simd != 'false'
 
@@ -1824,7 +1904,7 @@ jobs:
         run: |
           echo "### Not selected: the sha256_macos lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the sha256_macos lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs turned the sha256_macos lane off on this pull request ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.sha256_macos != 'false'
 
@@ -1926,7 +2006,7 @@ jobs:
         run: |
           echo "### Not selected: the gfx lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the gfx lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs turned the gfx lane off on this pull request ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.gfx != 'false'
 
@@ -1995,47 +2075,47 @@ jobs:
   gfx-macos:
     name: gfx (macos-latest, Metal)
     needs: scope
-    runs-on: ${{ needs.scope.outputs.gfx == 'false' && 'ubuntu-latest' || 'macos-latest' }}
+    runs-on: ${{ needs.scope.outputs.gfx_macos == 'false' && 'ubuntu-latest' || 'macos-latest' }}
     timeout-minutes: 25
     steps:
       - name: Say why this job was not selected
-        if: needs.scope.outputs.gfx == 'false'
+        if: needs.scope.outputs.gfx_macos == 'false'
         env:
           WHY: ${{ needs.scope.outputs.why }}
         run: |
-          echo "### Not selected: the gfx lane" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Not selected: the gfx_macos lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the gfx lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs turned the gfx_macos lane off on this pull request ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        if: needs.scope.outputs.gfx != 'false'
+        if: needs.scope.outputs.gfx_macos != 'false'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: needs.scope.outputs.gfx != 'false'
+        if: needs.scope.outputs.gfx_macos != 'false'
         with:
           node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18, cmake and ninja (macOS)
-        if: needs.scope.outputs.gfx != 'false'
+        if: needs.scope.outputs.gfx_macos != 'false'
         timeout-minutes: 10
         uses: ./.github/actions/brew-install
         with:
           formulae: llvm@18 cmake ninja
 
       - name: Put LLVM 18 on PATH (macOS)
-        if: needs.scope.outputs.gfx != 'false'
+        if: needs.scope.outputs.gfx_macos != 'false'
         run: |
           prefix="$(brew --prefix llvm@18)"
           if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        if: needs.scope.outputs.gfx != 'false'
+        if: needs.scope.outputs.gfx_macos != 'false'
         timeout-minutes: 5
         run: npm ci --ignore-scripts
 
       - name: Fetch the seed
-        if: needs.scope.outputs.gfx != 'false'
+        if: needs.scope.outputs.gfx_macos != 'false'
         timeout-minutes: 5
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2043,16 +2123,16 @@ jobs:
         run: bash scripts/fetch-seed.sh
 
       - name: The compiler under test
-        if: needs.scope.outputs.gfx != 'false'
+        if: needs.scope.outputs.gfx_macos != 'false'
         uses: ./.github/actions/compiler-cache
 
       - name: Fetch and build SDL3 and wgpu-native
-        if: needs.scope.outputs.gfx != 'false'
+        if: needs.scope.outputs.gfx_macos != 'false'
         timeout-minutes: 10
         run: sh scripts/fetch-gfx.sh
 
       - name: The gfx section on Metal
-        if: needs.scope.outputs.gfx != 'false'
+        if: needs.scope.outputs.gfx_macos != 'false'
         run: |
           set -o pipefail
           node tests/run.js gfx | tee "$RUNNER_TEMP/gfx.log"
@@ -2079,7 +2159,7 @@ jobs:
         run: |
           echo "### Not selected: the fuzz lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the fuzz lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs turned the fuzz lane off on this pull request ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.fuzz != 'false'
 
@@ -2211,7 +2291,7 @@ jobs:
         run: |
           echo "### Not selected: the postgres lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the postgres lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs turned the postgres lane off on this pull request ($WHY), so every step below was skipped. To run it, add the ci:full label and use Re-run all jobs (re-running only the failed jobs does not repeat scope), or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.postgres != 'false'
 
@@ -2363,7 +2443,9 @@ jobs:
   # means its `needs` failed, and fails the gate. EXPECT_SKIP lists the jobs
   # whose own `if:` is false on this run, written from those `if:`s:
   # runtime-net (`if: false`), runner (a tag or release/next only), bootstrap
-  # (no seed rows) and the two nish-cmp jobs (no cmp rows).
+  # (no seed rows), the two nish-cmp jobs (no cmp rows), and `test` and
+  # `examples` (`suite=false`: a pull request that changes nothing the suite
+  # reads).
   ci-gate:
     name: ci-gate
     if: always()
@@ -2401,7 +2483,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           EXPECT_SKIP: >-
-            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}]
+            ["runtime-net"${{ !(github.ref_type == 'tag' || github.head_ref == 'release/next' || github.ref == 'refs/heads/release/next') && ', "runner"' || '' }}${{ needs.seeds.outputs.rows == '[]' && ', "bootstrap"' || '' }}${{ needs.seeds.outputs.cmp == '[]' && ', "nish-cmp", "nish-cmp-elision"' || '' }}${{ needs.scope.outputs.suite == 'false' && ', "test", "examples"' || '' }}]
         run: node scripts/ci-scope.mjs --gate
 
       # A pull request's required checks count only check runs from push,

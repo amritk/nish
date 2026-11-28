@@ -10,6 +10,17 @@
 // paths it reads (`reads`, which win over `inert`). Anything this script cannot
 // classify, cannot fetch or cannot parse turns every lane on.
 //
+// Some lanes are deferred instead (`pullRequests: false`): the jobs that run
+// one platform's code no other job runs (NEON and the ARMv8 kernels, Apple's
+// detection and the Metal link) and a live server. A pull request runs one
+// only when it changes a path of the lane's `pullRequestPaths`, the code that
+// platform path or that server exchange is in, and otherwise leaves it, with
+// the other platforms' `bootstrap` and `nish-cmp-elision` rows
+// (`rows=native`), to the push to main, the merge queue, the Release PR's
+// dispatched run and the release, which run every lane. `ci:full`,
+// NISH_CI_SCOPE=full, a change to CI itself and a file list this script
+// cannot read run them on a pull request too.
+//
 //   node scripts/ci-scope.mjs                     # in the `scope` job (env below)
 //   node scripts/ci-scope.mjs --files <file>      # a newline-separated path list
 //   node scripts/ci-scope.mjs --backtest [<file>] # replay merged PRs
@@ -148,6 +159,31 @@ export const LANES = [
     jobs: ["simd-arm64"],
     names: ["the NEON path agrees (aarch64-linux)"],
     minutes: 5.5,
+    // The one job that runs the NEON, ARMv8 AES/PMULL, SHA-256 and CRC32
+    // paths (no x86_64 job can), so a pull request that changes those kernels,
+    // their lowerings or the link recipe still runs it.
+    pullRequests: false,
+    pullRequestPaths: [
+      "runtime/runtime-simd.c",
+      "runtime/runtime-bytes.c",
+      "runtime/runtime-aes.c",
+      "runtime/runtime-sha256.c",
+      "runtime/runtime-chacha20.c",
+      "runtime/runtime-checksum.c",
+      "runtime/*.h",
+      "src/kernels.ts",
+      "src/target.ts",
+      "std/crypto/aes.ts",
+      "std/crypto/sha256.ts",
+      "std/crypto/chacha20poly1305.ts",
+      "std/compress/checksum.ts",
+      "tests/simd/**",
+      "bench/sha256/**",
+      "bench/crc32.mjs",
+      "bench/adler32.mjs",
+      "bench/chacha20.mjs",
+      "scripts/build.sh",
+    ],
     // tests/run.js's simd, float-corpus and kernel sections, bench/*.mjs and build/test/simd/*.
     // The `crc32 kernel` section's std_compress_gzip_files gzips docs/LANGUAGE.md.
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**", "docs/LANGUAGE.md"],
@@ -159,6 +195,18 @@ export const LANES = [
     jobs: ["sha256-macos"],
     names: ["SHA-256 on Apple silicon (macos-latest)"],
     minutes: 2.1,
+    // The one job that runs runtime-sha256.c's Apple detection, so a pull
+    // request that changes the kernel, its lowering or the link recipe still runs it.
+    pullRequests: false,
+    pullRequestPaths: [
+      "runtime/runtime-sha256.c",
+      "runtime/*.h",
+      "src/kernels.ts",
+      "std/crypto/sha256.ts",
+      "tests/simd/sha256*",
+      "bench/sha256/**",
+      "scripts/build.sh",
+    ],
     // tests/simd/sha256*.c, tests/run.js sha256_hw and bench/sha256/run.mjs.
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
     unread: RUN_JS_UNREAD,
@@ -180,6 +228,10 @@ export const LANES = [
     jobs: ["postgres-live"],
     names: ["postgres-live"],
     minutes: 1.8,
+    // A live server, which a recorded exchange can disagree with, so a pull
+    // request that changes the client, its tests or the servers still runs it.
+    pullRequests: false,
+    pullRequestPaths: ["std/postgres.ts", "std/postgres-*.ts", "tests/postgres/**", "bench/techempower/**"],
     // .github/actions/compiler-cache (tests/self/compiler-cache.js and
     // seed.js), tests/postgres/live/run.mjs, tls-certs.sh and the
     // bench/techempower servers.
@@ -194,11 +246,11 @@ export const LANES = [
   },
   {
     name: "gfx",
-    jobs: ["gfx", "gfx-macos"],
-    names: ["gfx (ubuntu-latest, lavapipe)", "gfx (macos-latest, Metal)"],
-    // Not on run 44273081341, which predates the jobs: run 45857452100's two
-    // rows, 3.2 and 4.5 minutes.
-    minutes: 7.7,
+    jobs: ["gfx"],
+    names: ["gfx (ubuntu-latest, lavapipe)"],
+    // Not on run 44273081341, which predates the jobs: run 45857452100's
+    // row, 3.2 minutes.
+    minutes: 3.2,
     // .github/actions/compiler-cache, scripts/fetch-gfx.sh and tests/run.js
     // gfx (tests/gfx.js: scripts/build.sh, runtime/gfx/, tests/gfx/triangle.c).
     // tests/run.js imports bench/*.mjs before any section runs.
@@ -206,7 +258,69 @@ export const LANES = [
     unread: RUN_JS_UNREAD,
     inert: [...INERT, "CHANGELOG.md", "changelog/**"],
   },
+  {
+    name: "gfx_macos",
+    jobs: ["gfx-macos"],
+    names: ["gfx (macos-latest, Metal)"],
+    // Run 45857452100's row, 4.5 minutes.
+    minutes: 4.5,
+    // The one job that links SDL's Cocoa driver and wgpu-native's Metal
+    // backend, so a pull request that changes the gfx runtime or the link
+    // recipe still runs it.
+    pullRequests: false,
+    pullRequestPaths: [
+      "runtime/gfx/**",
+      "scripts/build.sh",
+      "scripts/fetch-gfx.sh",
+      "tests/gfx/**",
+      "tests/gfx.js",
+      "src/c-symbols.ts",
+      "src/run-cache.ts",
+    ],
+    reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
+    unread: RUN_JS_UNREAD,
+    inert: [...INERT, "CHANGELOG.md", "changelog/**"],
+  },
 ]
+
+/** Why a pull request turns a `pullRequests: false` lane off. */
+export const DEFERRED =
+  "this pull request changes none of their own paths, so they are left to the push to main, the merge queue, the Release PR and the release (add ci:full to run them here)"
+
+/**
+ * Paths the whole suite never reads: no file of tests/, scripts/, bench/,
+ * src/, std/ or .github/ names them (`node tests/run.js ci-scope` greps for
+ * it). A pull request every one of whose changed paths is here skips the
+ * `test` shards and `examples` (`suite=false`); `lint` still runs, since
+ * docs/check-links.mjs reads every Markdown file.
+ */
+export const SUITE_UNREAD = [".claude/plans/**"]
+
+/** The lanes a pull request leaves to the push to main and the release. */
+export const deferredLanes = () => LANES.filter((l) => l.pullRequests === false).map((l) => l.name)
+
+/**
+ * The matrix jobs whose other platforms' rows a pull request leaves to main
+ * under `rows=native`: the seed rows of `bootstrap` and `nish-cmp-elision`,
+ * of which only x86_64-linux's runs. `nish-cmp` keeps every row: its
+ * aarch64-linux row failed alone on two of the recorded pull requests
+ * (#1658, #1714), a difference that pull request had to declare.
+ */
+export const NATIVE_ROW_JOBS = ["bootstrap", "nish-cmp-elision"]
+
+/** The one seed asset a `rows=native` run keeps. */
+export const NATIVE_ASSET = "x86_64-linux"
+
+/**
+ * Whether a job, by its display name, is a row `rows=native` leaves out.
+ *
+ * @param {string} display the job's display name, e.g. `bootstrap (aarch64-linux)`
+ * @returns {boolean} true for a non-x86_64-linux row of a `NATIVE_ROW_JOBS` job
+ */
+export const otherPlatformRow = (display) => {
+  const m = /^(bootstrap|nish-cmp elision) \(([^()]+)\)$/.exec(display)
+  return m !== null && m[2] !== NATIVE_ASSET
+}
 
 /** A changed path matching one of these turns every lane on. */
 const FULL = [
@@ -295,26 +409,29 @@ export const inertFor = (lane, file) =>
   matches(file, lane.unread ?? []) || (matches(file, lane.inert) && !matches(file, lane.reads))
 
 /**
- * Decides every lane for one change.
+ * Decides every lane for one change by its read set alone, before a pull
+ * request defers anything: the rule `decide` applies, and what tests/run.js
+ * holds each lane's listed reads against.
  *
- * @param {object} change what the pull request is
- * @param {string} change.event the GitHub event name
- * @param {string[]} [change.labels] the pull request's label names
- * @param {string} [change.mode] the NISH_CI_SCOPE variable
- * @param {{path: string, status?: string, previous?: string}[] | null} change.files the changed files, or null when unknown
- * @param {boolean} [change.truncated] the file list hit the API's cap
- * @returns {{full: string | null, lanes: Record<string, boolean>}} `full` is why everything runs, or null
+ * @param {Parameters<typeof decide>[0]} change what the pull request is
+ * @returns {{full: string | null, lanes: Record<string, boolean>, everything: boolean}} `full` is
+ *   why every lane runs, or null; `everything` is true when nothing is deferred either (another
+ *   event, `ci:full`, NISH_CI_SCOPE=full, or a change to CI itself)
  */
-export const decide = ({ event, labels = [], mode = "", files, truncated = false }) => {
-  const all = (why) => ({ full: why, lanes: Object.fromEntries(LANES.map((l) => [l.name, true])) })
+export const byReadSet = ({ event, labels = [], mode = "", files, truncated = false }) => {
+  const all = (why, everything = false) => ({
+    full: why,
+    lanes: Object.fromEntries(LANES.map((l) => [l.name, true])),
+    everything,
+  })
   if (!SCOPED_EVENTS.has(event)) {
-    return all(`a ${event || "unknown"} event runs every lane`)
+    return all(`a ${event || "unknown"} event runs every lane`, true)
   }
   if (mode.trim().toLowerCase() === "full") {
-    return all("the NISH_CI_SCOPE variable is `full`")
+    return all("the NISH_CI_SCOPE variable is `full`", true)
   }
   if (labels.some((l) => typeof l === "string" && l.trim().toLowerCase() === "ci:full")) {
-    return all("the pull request has the `ci:full` label")
+    return all("the pull request has the `ci:full` label", true)
   }
   if (!Array.isArray(files) || files.length === 0) {
     return all("the changed-file list is empty or unknown")
@@ -334,7 +451,8 @@ export const decide = ({ event, labels = [], mode = "", files, truncated = false
     }
     for (const p of [f.path, f.previous].filter(Boolean)) {
       if (matches(p, FULL)) {
-        return all(`${p} changes what CI runs`)
+        // A change to CI itself may break a deferred job, so it runs them too.
+        return all(`${p} changes what CI runs`, true)
       }
     }
     if (f.status === "renamed" || f.previous) {
@@ -352,7 +470,44 @@ export const decide = ({ event, labels = [], mode = "", files, truncated = false
   return {
     full: null,
     lanes: Object.fromEntries(LANES.map((l) => [l.name, !paths.every((p) => inertFor(l, p))])),
+    everything: false,
   }
+}
+
+/**
+ * Decides every lane for one change: `byReadSet`, then, on a pull request
+ * whose file list it read and that does not run everything, each deferred
+ * lane off unless a changed path is one of its `pullRequestPaths`, and only
+ * the x86_64-linux rows of `NATIVE_ROW_JOBS`.
+ *
+ * @param {object} change what the pull request is
+ * @param {string} change.event the GitHub event name
+ * @param {string[]} [change.labels] the pull request's label names
+ * @param {string} [change.mode] the NISH_CI_SCOPE variable
+ * @param {{path: string, status?: string, previous?: string}[] | null} change.files the changed files, or null when unknown
+ * @param {boolean} [change.truncated] the file list hit the API's cap
+ * @returns {{full: string | null, lanes: Record<string, boolean>, rows: "all" | "native", deferred: string[], suite: boolean}}
+ *   `full` is why every lane its read set selects runs, or null; `rows` is whether the matrix jobs
+ *   take every seed's row or only x86_64-linux's; `deferred` names the lanes its read set ran
+ *   and the deferral turned off; `suite` is whether the `test` shards and `examples` run
+ */
+export const decide = (change) => {
+  const { full, lanes, everything } = byReadSet(change)
+  // A file list it cannot read defers nothing: whether a pull request
+  // changes a deferred lane's own paths is a fact about that list.
+  if (everything || full !== null) {
+    return { full, lanes, rows: "all", deferred: [], suite: true }
+  }
+  const paths = change.files.flatMap((f) => [f.path, f.previous].filter(Boolean))
+  const suite = !paths.every((p) => matches(p, SUITE_UNREAD))
+  const deferred = []
+  for (const lane of LANES.filter((l) => l.pullRequests === false)) {
+    if (lanes[lane.name] && !paths.some((p) => matches(p, lane.pullRequestPaths ?? []))) {
+      lanes[lane.name] = false
+      deferred.push(lane.name)
+    }
+  }
+  return { full, lanes, rows: "native", deferred, suite }
 }
 
 /**
@@ -476,14 +631,26 @@ const backtest = (file) => {
   const skipped = Object.fromEntries(LANES.map((l) => [l.name, 0]))
   const misses = []
   const excused = []
+  // A deferred lane's failure, or a left-out row's, where the read set ran
+  // it, is not a miss of the read-set rule: it is what the push to main
+  // would have found instead. One the read set skipped is still a miss.
+  const deferred = []
   let saved = 0
   for (const pr of prs) {
-    const { lanes } = decide({
+    const decision = decide({
       event: "pull_request",
       labels: pr.labels ?? [],
       files: pr.files,
       truncated: pr.truncated === true,
     })
+    const { lanes } = decision
+    if (decision.rows === "native") {
+      for (const run of pr.runs ?? []) {
+        for (const job of (run.failed ?? []).filter((j) => otherPlatformRow(j) && lanes[laneOf(j)?.name])) {
+          deferred.push(`#${pr.number} ${job} (run ${run.id})`)
+        }
+      }
+    }
     for (const lane of LANES) {
       if (lanes[lane.name]) {
         continue
@@ -500,7 +667,9 @@ const backtest = (file) => {
           }
           const line = `#${pr.number} ${job} (run ${run.id})`
           const flake = run.flakes?.[job]
-          if (flake) {
+          if (decision.deferred.includes(lane.name)) {
+            deferred.push(line)
+          } else if (flake) {
             excused.push(`${line}: ${flake}`)
           } else {
             misses.push(line)
@@ -522,6 +691,10 @@ const backtest = (file) => {
     `saved: ${per.toFixed(2)} runner-minutes per pull request run, of ${total.toFixed(1)} in the lanes ` +
       `(${((100 * per) / 119).toFixed(1)}% of a ~119-minute run)`
   )
+  console.log(`deferred to main (a deferred lane or a left-out row failed): ${deferred.length}`)
+  for (const d of deferred) {
+    console.log(`  DEFERRED ${d}`)
+  }
   console.log(`misses: ${misses.length}`)
   for (const m of misses) {
     console.log(`  MISS ${m}`)
@@ -542,22 +715,44 @@ const backtest = (file) => {
  * @param {ReturnType<typeof decide>} result the decision
  * @returns {void}
  */
-const emit = ({ full, lanes }) => {
-  const off = Object.keys(lanes).filter((k) => !lanes[k])
-  const why =
-    full ??
-    (off.length > 0
-      ? `lanes off: ${off.join(", ")}; every changed path of each is on its allowlist of paths it does not read`
-      : "every lane reads a changed path")
-  const lines = [...Object.entries(lanes).map(([k, v]) => `${k}=${v}`), `why=${why.replace(/[\r\n]+/g, " ")}`]
+const emit = ({ full, lanes, rows, deferred: deferredOff = [], suite = true }) => {
+  const off = Object.keys(lanes).filter((k) => !lanes[k] && !deferredOff.includes(k))
+  const parts = []
+  if (off.length > 0) {
+    parts.push(
+      `lanes off: ${off.join(", ")}; every changed path of each is on its allowlist of paths it does not read`
+    )
+  }
+  if (deferredOff.length > 0 || rows === "native") {
+    parts.push(
+      `deferred: ${[...deferredOff, ...(rows === "native" ? ["the other platforms' bootstrap and nish-cmp elision rows"] : [])].join(", ")}; ${DEFERRED}`
+    )
+  }
+  if (!suite) {
+    parts.push(
+      `the test shards and examples skip: every changed path is one the suite never reads (${SUITE_UNREAD.join(", ")})`
+    )
+  }
+  // `full` alone is the reason when every lane runs; on a pull request that
+  // still defers, the deferral is said too.
+  let why = parts.length > 0 ? parts.join("; ") : "every lane reads a changed path"
+  if (full !== null) {
+    why = parts.length === 0 ? full : `${full}; ${parts.join("; ")}`
+  }
+  const lines = [
+    ...Object.entries(lanes).map(([k, v]) => `${k}=${v}`),
+    `rows=${rows}`,
+    `suite=${suite}`,
+    `why=${why.replace(/[\r\n]+/g, " ")}`,
+  ]
   if (process.env.GITHUB_OUTPUT) {
     fs.appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join("\n")}\n`)
   }
   if (process.env.GITHUB_STEP_SUMMARY) {
-    const rows = Object.entries(lanes).map(([k, v]) => `| ${k} | ${v ? "runs" : "skipped"} |`)
+    const table = Object.entries(lanes).map(([k, v]) => `| ${k} | ${v ? "runs" : "skipped"} |`)
     fs.appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
-      `### CI scope\n\n${why}\n\n| Lane | |\n| --- | --- |\n${rows.join("\n")}\n`
+      `### CI scope\n\n${why}\n\n| Lane | |\n| --- | --- |\n${table.join("\n")}\n\nSeed rows: ${rows}\n`
     )
   }
   console.log(lines.join("\n"))
