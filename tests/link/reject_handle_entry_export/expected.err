@@ -1,0 +1,1 @@
+main.ts:7:14: error: Handle class `File` cannot cross an export of the entry module: the entry's exports are C symbols, and a foreign caller that is given or lent a handle runs no close; export the class and the functions that take it from a module the entry imports

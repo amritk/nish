@@ -457,27 +457,81 @@ const http2CheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => 
 }
 
 /**
- * How long before `now` the instant `since` was, both `monotonicNanos` readings. The difference is taken
- * modulo 2^64: two readings of one monotonic clock are under 2^63 apart, so it is the exact one.
+ * How long before `now` the instant `since` was, both `monotonicNanos` readings. Two readings of one
+ * monotonic clock are under 2^63 apart, so `http2Minus` gives the exact difference.
  */
-const http2Since = (now: i64, since: i64): i64 => toI64(toU64(now) - toU64(since))
+const http2Since = (now: i64, since: i64): i64 => http2Minus(now, since)
 
 /**
- * The `monotonicNanos` instant `ms` milliseconds after `since`. The product is under 2^52 for an `i32`
- * `ms`; the sum is taken modulo 2^64, and a reading plus it stays far below 2^63.
+ * The `monotonicNanos` instant `ms` milliseconds after `since`. The product is under 2^52 in size for an
+ * `i32` `ms`, and a reading plus it stays far below 2^63, so `http2Plus` gives the exact sum.
  */
-const http2After = (since: i64, ms: i32): i64 => toI64(toU64(since) + toU64(toI64(ms) * toI64(1000000)))
+const http2After = (since: i64, ms: i32): i64 => http2Plus(since, toI64(ms) * 1000000)
 
 /**
- * `a + b` for flow-control figures: a window, the bytes owed to one, or the change a SETTINGS makes to
- * every window. Each stays within 2^33 either side of 0, since a window that passes 2^31 - 1 fails its
- * stream or the connection and no frame moves one by more than 2^31 - 1, so the sum taken modulo 2^64
- * is the exact one.
+ * `a + b` for flow-control figures, clock readings and byte counts, held at the `i64` range's ends where
+ * the sum would leave it. None of them does: a flow-control figure (a window, the bytes owed to one, or
+ * the change a SETTINGS makes to every window) stays within 2^33 either side of 0, since a window that
+ * passes 2^31 - 1 fails its stream or the connection and no frame moves one by more than 2^31 - 1; a
+ * clock is centuries short of 2^63; and 2^63 bytes cannot arrive. Two values of opposite signs add in
+ * `i64`, as they cannot leave the range. Two of one sign add as magnitudes in `u64`, where they are below
+ * 2^64 and so exact: a sum of values at least 0 is the `u64` sum, and a sum of values below 0 is
+ * `-1 - ((-1 - a) + (-1 - b) + 1)`. Each magnitude is held below 2^63 before it is read back as an
+ * `i64`, so the read is exact too, and the bounds prover sees no sum that can overflow.
  */
-const http2Plus = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
+const http2Plus = (a: i64, b: i64): i64 => {
+  if (a >= 0) {
+    if (b < 0) {
+      return a + b
+    }
+    const sum: u64 = toU64(a) + toU64(b)
+    return toI64(http2Below2p63(sum))
+  }
+  if (b >= 0) {
+    return a + b
+  }
+  const past: u64 = toU64(-1 - a) + toU64(-1 - b) + toU64(1)
+  const k: i64 = toI64(http2Below2p63(past))
+  if (k < 0) {
+    // Not taken: `k` is below 2^63. The test is what proves `-1 - k` fits.
+    return -1
+  }
+  return -1 - k
+}
 
-/** `a - b` for flow-control figures, exact for the reason `http2Plus` gives. */
-const http2Minus = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
+/**
+ * `a - b` for the figures `http2Plus` takes, held at the range's ends the same way. Two values of one
+ * sign subtract in `i64`. Otherwise the difference is a sum of magnitudes: `a + (-1 - b) + 1` for `a` at
+ * least 0, and `-1 - ((-1 - a) + b)` for `a` below 0.
+ */
+const http2Minus = (a: i64, b: i64): i64 => {
+  if (a >= 0) {
+    if (b >= 0) {
+      return a - b
+    }
+    const sum: u64 = toU64(a) + toU64(-1 - b) + toU64(1)
+    return toI64(http2Below2p63(sum))
+  }
+  if (b < 0) {
+    return a - b
+  }
+  const past: u64 = toU64(-1 - a) + toU64(b)
+  const k: i64 = toI64(http2Below2p63(past))
+  if (k < 0) {
+    // Not taken: `k` is below 2^63. The test is what proves `-1 - k` fits.
+    return -1
+  }
+  return -1 - k
+}
+
+/** `x`, or 2^63 - 1 where `x` is larger: the most an `i64` holds. */
+const http2Below2p63 = (x: u64): u64 => {
+  const most: u64 = (toU64(1) << toU64(63)) - toU64(1)
+  if (x > most) {
+    return most
+  }
+  return x
+}
 
 /** Whether one of `names` is `date` in any ASCII case (RFC 9110 §5.1). */
 const http2NamesHoldDate = (names: u8[][]): boolean => {
@@ -1486,8 +1540,8 @@ export class Http2Connection {
       return this.discarded(id) ? H2_NEED_MORE : this.refuseStream(id, H2_STREAM_CLOSED)
     }
     const end: boolean = f.has(H2_FLAG_END_STREAM)
-    // A count of body bytes: 2^63 of them cannot arrive, so the sum modulo 2^64 is the exact one.
-    const received: i64 = toI64(toU64(s.received) + toU64(toI64(f.contentLength)))
+    // A count of body bytes: 2^63 of them cannot arrive, so `http2Plus` gives the exact sum.
+    const received: i64 = http2Plus(s.received, toI64(f.contentLength))
     const declared: boolean = s.contentLength >= toI64(0)
     let error: i32 = H2_NO_ERROR
     if (s.remoteEnded) {

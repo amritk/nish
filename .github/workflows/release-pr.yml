@@ -214,7 +214,7 @@ jobs:
           # The job's own token, and no secret: `pull-requests: write` opens
           # the pull request once the repository switch above is on (the step
           # degrades rather than fails when it is off), and `actions: write`
-          # dispatches ci.yml and pr-title.yml.
+          # dispatches ci.yml, pr-title.yml and interop.yml.
           GH_TOKEN: ${{ github.token }}
           NEXT: ${{ steps.next.outputs.next }}
         run: |
@@ -241,9 +241,12 @@ jobs:
           # checks the merge requires at the branch: they report on the commit
           # just pushed, the PR's head, with no approval and no personal token
           # (the required `ci-gate` as a commit status; see ci.yml's gate).
+          # interop.yml too, which the merge does not require but which no
+          # other pull request runs without a label: its live peers answer for
+          # the release here, before the tag.
           # A refused dispatch leaves the pull request, which is still worth
           # opening, so it warns.
-          for workflow in ci.yml pr-title.yml; do
+          for workflow in ci.yml pr-title.yml interop.yml; do
             if ! gh workflow run "$workflow" --ref "$branch"; then
               echo "::warning title=Release CI not started::Pushed $branch, but dispatching $workflow at it failed. Start it with: gh workflow run $workflow --ref $branch"
             fi

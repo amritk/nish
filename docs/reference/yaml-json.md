@@ -266,7 +266,7 @@ the value's. `parseYaml` refuses these itself (`YAML_ERR_BAD_MERGE`, a load's
 
 `YAML_JSON_ERR_NUMBER: i32`
 
-A `0x` or `0o` integer with more than `YAML_JSON_MAX_RADIX_DIGITS` digits.
+A `0x` or `0o` integer with more than `YAML_JSON_MAX_RADIX_DIGITS` digits, or with a byte that is not a digit of its base.
 
 </scalar-card>
 

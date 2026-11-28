@@ -1,1 +1,1 @@
-Handle class `File`: a handle class declares exactly one `CPtr` or `CPtr | null` field, `readonly` and with no initialiser, so the one point
+Handle class `File`: each field a handle class owns is a `CPtr`, an opaque `declare class`, a `HostHandle` or another handle class

@@ -38,6 +38,8 @@ tests/fix/decl-nofix-export-default-twice.nofix.ts  # the fixer's declaration-ki
 tests/fix/port-nofix-div-shadow-function.nofix.ts  # a shadowing function declaration is the subject
 tests/parser/names-bindings.ts  # exercises the parser's function-declaration bindings
 tests/parser/recovery.ts  # syntax-recovery fixture; its declarations are what recovers
+tests/link/window_contract_free_function/main.ts  # a `function`-declared window forwarder is the subject
+tests/link/window_contract_host_forward/main.ts  # a `function`-declared window forwarder is the subject
 
 # The codemod cannot parse these (each names a function after a keyword:
 # `catch`, or a word TypeScript reads as an operator), or misreads them.

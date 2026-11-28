@@ -1327,9 +1327,9 @@ export class HttpHandler {
   /** Sends what `slot` holds and re-arms it, or closes it once it is over; enqueues a parked request once there is room. */
   private settle(slot: i32, conn: Http1Connection): void {
     if (conn.wantsWrite()) {
-      // Worked in `u64`, whose wrapping sum has the bits of the signed one: a
-      // count of sends is centuries short of 2^63.
-      this.sent = toI64(toU64(this.sent) + toU64(1))
+      // Saturates at the last `i64` as an instant does, which a count of
+      // sends is centuries short of; it starts at 0, so it is never negative.
+      this.sent = handlerLater(this.sent, toI64(1))
     }
     // `flush` arms a held write for writing even once its send emptied the output.
     const wants: i32 = this.server.flush(slot)
@@ -1848,8 +1848,11 @@ export class HttpHandler {
     if (left === 0) {
       return HANDLER_NEXT
     }
-    // The lowest bit set, `left & -left`, negated in wrapping unsigned arithmetic.
-    const low: i32 = toI32(toU32(left) & (toU32(0) - toU32(left)))
+    // The lowest bit set, `left & -left`, kept in `u32`, where the negation
+    // wraps by its type and has the bits of the two's complement one.
+    const bits: u32 = toU32(left)
+    const lowest: u32 = bits & (toU32(0) - bits)
+    const low: i32 = toI32(lowest)
     r.stepsLeft = left ^ low
     r.stepsRan = r.stepsRan | low
     return toI32(31) - toI32(Math.clz32(toU32(low)))
@@ -2706,17 +2709,28 @@ const handlerProbeLength = (maxParams: i32): i32 => toI32(toI64(maxParams) * toI
 
 /**
  * The nanoseconds from the `monotonicNanos` instant `from` to `to`, or 0 when
- * `to` is not after it. Worked in `u64`, which has the bits of the signed
- * difference once `to` is the later.
+ * `to` is not after it. An instant is never negative, so the difference of
+ * the later and a `from` of at least 0 fits an `i64`; a negative `from`
+ * answers 0 too.
  */
-const handlerSince = (from: i64, to: i64): i64 => (to > from ? toI64(toU64(to) - toU64(from)) : toI64(0))
+const handlerSince = (from: i64, to: i64): i64 => (to > from && from >= 0 ? to - from : toI64(0))
 
 /**
- * The `monotonicNanos` instant `span` nanoseconds after `now`. Worked in
- * `u64`, whose wrapping sum has the bits of the signed one: an instant is
- * centuries short of 2^63 and the span a constant of a second or less.
+ * The `monotonicNanos` instant `span` nanoseconds after `now`, or the last
+ * `i64` when the sum would pass it, which no clock reading does: an instant
+ * is centuries short of 2^63 and the span a constant of a second or less.
+ * Both are at least 0, so they are summed in `u64`, where two values below
+ * 2^63 cannot wrap, and the sum is turned back only once it is known to fit.
+ * A negative `now` or `span`, which no caller passes, answers `now`.
  */
-const handlerLater = (now: i64, span: i64): i64 => toI64(toU64(now) + toU64(span))
+const handlerLater = (now: i64, span: i64): i64 => {
+  if (now < 0 || span < 0) {
+    return now
+  }
+  const sum: u64 = toU64(now) + toU64(span)
+  const top: u64 = (toU64(1) << toU64(63)) - toU64(1)
+  return sum > top ? toI64(top) : toI64(sum)
+}
 
 /** Place `start + k` of a ring of `size` places, in `[0, size)`; -1 for an empty ring or a negative place. */
 const handlerRing = (start: i32, k: i32, size: i32): i32 => {

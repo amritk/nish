@@ -1,5 +1,5 @@
-// WP53 H1.1, Row 8: a function returning a handle would hand it past the
-// `using` block that closes it.
+// WP53 H1.1, Row 8; WP89 S5a: a function returns only a handle it opens, so a
+// borrowed one would outlive the `using` block that closes it.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

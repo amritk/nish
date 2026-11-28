@@ -125,16 +125,51 @@ seconds, whatever runner its rows would otherwise take.
 | `sha256_macos`, `fuzz` | `sha256-macos`, `fuzz-smoke` | the compiler, any file under `tests/` but `tests/ci-scope/` (a `tests/run.js` section can open any fixture there), `bench/`, `examples/` |
 | `simd` | `simd-arm64` | the same as `sha256_macos`, and `docs/LANGUAGE.md` (the `crc32 kernel` section gzips it) |
 | `postgres` | `postgres-live` | the compiler, `tests/self/` (the compiler-cache action), `tests/postgres/`, `bench/techempower/` |
-| `gfx` | `gfx`, `gfx-macos` | the same as `sha256_macos` (its `tests/run.js gfx` section, `scripts/fetch-gfx.sh` under the compiler's `scripts/`, and the `bench/` and `examples/` programs it builds); about 7.7 runner-minutes a run, from [run 45857452100](https://github.com/amritk/nish/actions/runs/45857452100), most of it the macOS row |
+| `gfx` | `gfx` | the same as `sha256_macos` (its `tests/run.js gfx` section, `scripts/fetch-gfx.sh` under the compiler's `scripts/`, and the `bench/` and `examples/` programs it builds); about 3.2 runner-minutes a run, from [run 45857452100](https://github.com/amritk/nish/actions/runs/45857452100) |
+| `gfx_macos` | `gfx-macos` | the same as `gfx`; 4.5 runner-minutes on that run |
+
+**Deferred lanes.** Four of those lanes run code no other job runs:
+`simd` is the one run of the NEON, ARMv8 AES/PMULL, SHA-256 and CRC32 paths,
+`sha256_macos` of runtime-sha256.c's Apple detection, `gfx_macos` of the
+Cocoa and Metal link, and `postgres` of a live server, which a recorded
+exchange can disagree with. Each is `pullRequests: false` in
+`scripts/ci-scope.mjs` with a list of `pullRequestPaths`: the kernels and
+their lowerings, the gfx runtime, the postgres client and its tests, and
+`scripts/build.sh`. A pull request runs the lane when it changes one of
+those paths and its read set also reads the change, and otherwise defers it.
+It also defers the other platforms' rows of `bootstrap` and
+`nish-cmp-elision`: `scope` writes `rows=native`, and those two jobs take
+only the `seeds` job's x86_64-linux row (`rows_native`, `cmp_native`), so
+their aarch64-linux rows are not in the pull request's run at all. A
+deferred lane's job still reports under its name, its steps skipped, with
+the reason in its summary. `nish-cmp` keeps every row: its aarch64-linux row
+failed alone on two of the recorded pull requests (#1658, #1714), each a
+difference that pull request had to declare.
+
+What a pull request defers runs on the push to main, the merge queue, the
+Release PR's dispatched run and the release, which run every lane and every
+row; `ci:full`, NISH_CI_SCOPE=full, a change to `.github/**`, `package.json`
+or `scripts/ci-scope.mjs`, and a file list the script cannot read run them
+on the pull request too. The cost is where a failure in deferred code shows,
+and when: a newer merge cancels a push to main's run (the concurrency group
+above), and a newer merge force-pushes `release/next`, which cancels the
+Release PR's, so on a busy day the first of these to finish can be the
+release's own `ci` job at the tag, and a failure there blocks the release.
+A change to the code a deferred lane exists for is what its
+`pullRequestPaths` keep on the pull request. `byReadSet` is the read-set
+rule alone, before the deferral; the command list below is checked against
+it, so a deferred lane's read set is still proven for the runs that use it,
+and the backtest counts a failure as deferred only where the read set ran
+the lane, so one it skipped is still a miss.
 
 The rule fails closed. A lane is off only when **every** changed path is on that
 lane's allowlist of paths it does not read (`docs/`, `web/`, `skills/`,
 `.claude/`, the top-level prose files and the other lanes' test trees), and
 the read set wins over the allowlist. A path on neither list turns every lane
 on. Each list was read from the code of every command the lane runs, composite
-actions included (`node tests/run.js ci-scope` pins a file per command, 24
-commands across the eight lanes, the compiler-cache action counted once for
-each of the six lanes that run it). That check proves only that a change to a
+actions included (`node tests/run.js ci-scope` pins a file per command, 27
+commands across the nine lanes, the compiler-cache action counted once for
+each of the seven lanes that run it). That check proves only that a change to a
 listed file turns its lane on: it cannot find a read nobody listed. Some were also traced with `strace -f` on
 x86_64 Linux: the compiler-cache key, the `nish-cli` build and run,
 `soundness.js`, the `simd`, `float-corpus`, `sha256_hw` and five kernel
@@ -163,7 +198,17 @@ macOS. Every lane runs on:
 - a change to `.github/**`, any `package.json` or `package-lock.json`, or
   `scripts/ci-scope.mjs` itself.
 
-The `test` shards and `lint` are not lanes and do not wait for `scope`.
+`lint` is not a lane and does not wait for `scope`. The `test` shards and
+`examples` wait for its `suite` output and skip only when it is `false`: a
+pull request every changed path of which is one the whole suite never reads
+(`SUITE_UNREAD` in `scripts/ci-scope.mjs`, today `.claude/plans/**`). Such a
+pull request runs `lint` (docs/check-links.mjs reads every Markdown file),
+and `ci-gate` expects the two skips; any other change, event or label runs
+both. `node tests/run.js ci-scope` fails if any file of tests/, scripts/,
+bench/, src/, std/ or .github/ names a path under it outside a comment. A
+path joins that list only with the same proof: the suite reads docs/,
+CLAUDE.md and most of `.claude/` (its checks compile the guide's examples
+and pin rules' text), so a docs change runs it.
 
 **`ci-gate`** needs every other job, runs `if: always()`, and fails unless each
 one succeeded or was skipped by its own `if:` on this run (`runtime-net`, and
@@ -187,8 +232,18 @@ that skipping is safe. `node tests/run.js ci-scope` runs the replay and
 pins every case that must run everything, and `node tests/run.js ci.yml` pins
 the lanes the `test` job delegates to.
 
-`interop.yml` is scoped by GitHub, not by this script: a pull request runs it
-only when a changed file matches its `pull_request.paths`. Those paths are its
+`interop.yml` runs on a pull request only with the `ci:interop` or `ci:full`
+label (adding either starts it: the trigger takes `labeled`), and then only
+when a changed file matches its `pull_request.paths`. Another label's
+`labeled` event runs nothing, in a concurrency group of its own, so it never
+cancels a labelled run in flight. A re-run reads the labels its event
+carried, so adding the label, not re-running an older run, is what starts it. Its fourteen jobs took
+16 to 20 minutes, longer than `ci.yml` (run 46080094444: 16.4 minutes; its
+`arena` soak is ten minutes by design), on every pull request that touched
+one of those paths. The push to main runs it unfiltered, `release-pr.yml`
+dispatches it at `release/next` beside `ci.yml`, and the release's tag runs
+it with the compiler just published. The paths are the labelled run's scope,
+and GitHub's, not this script's. Those paths are its
 read set, so the same rule applies to them. `ci-scope.mjs`'s `workflowPaths`
 reads the list, and `node tests/run.js ci-scope` fails when a file the `grpc`
 job opens is not on it (WP72 S4). That covers the workflow,
@@ -218,6 +273,76 @@ transfer, 43 of goodput's 56 s. crosstraffic's row ends some 22 minutes in,
 so it runs only on a release's tag, where release.yml passes
 `crosstraffic: true`. A pull request's run and main's end near 10 minutes
 with goodput's row, whose five transfers must every one complete as well.
+
+### Link-program results across runs
+
+The `tests/link` programs are about two fifths of a `test` shard's suite:
+in [run 46080094445](https://github.com/amritk/nish/actions/runs/46080094445)
+in the eight shards whose logs are whole they took 155 to 287 s of the 419
+to 591 s from the first check to the summary (1668 of 4148 s together),
+against 10 to 48 s for the golden cases and the rest for the sections. A pull request's run no longer builds one whose inputs have not
+changed since a run in which it passed. `node tests/run.js --link-results
+<file>` reads and rewrites a file of records, one per program, each the
+checks that program printed and the key they were printed under
+(`tests/link-results.js`); a program whose key matches replays its record,
+under a `REPLAY link/<name>: ... (key <12 hex>)` line, and the run's summary
+says how many replayed. The key covers:
+
+- the compiler under test, byte for byte, and the suite's flags other than
+  `--shard`, `--jobs`, `--seed` and `--link-results`;
+- tests/run.js and every file it imports, followed through relative imports:
+  an edit to the suite's code replays nothing;
+- every file under std/ and runtime/, scripts/build.sh, package.json and
+  nish-capabilities.lock.json. All of std/, rather than the modules a compile
+  writes: a library of generics writes no `.ll` of its own
+  (`std/collections.ts`), so no output names it;
+- the toolchain and the tools a run drives by `--version` (`TOOLS`), Node,
+  the platform, architecture, kernel release, glibc, the CPU's model and
+  feature flags, the core count, and the variables a build or a run reads
+  (`ENV_KEYS`: `HOME`, `TZ`, `PATH`, `LANG`, `CC`, `WASI_SYSROOT`, ..., and
+  every `NISH_*`);
+- the program's directory and every tests/link directory it imports by a
+  relative path, transitively, each whole.
+
+A record is kept only when every one of its checks passed and it logged
+nothing, and it replays for a week (`MAX_AGE_MS`) from the run that built
+it: a replay carries that time forward, so the clock (a certificate's
+validity, a date) is checked at least weekly. A program is never kept when a
+later section reads its output (`LINK_READ_LATER`), when its compile wrote
+no module (a rejection, which costs a twentieth of a second), when a
+compile's module names a source outside std/ and its directories, when a
+relative import leaves tests/link for anywhere but std/, or when any file of
+its directory names a path of the checkout outside those and the base key's
+files: a string starting with a root-level entry (`"tests/json-suite/..."`,
+`` `runtime/${f}` ``, `'README.md'`), a non-import string starting with
+`../`, or a word of `args`. Such a program can read that file at run time,
+which no compile names. On `1c6d6d39`'s tree, of the 1479 programs with a
+`main.ts`, 348 are rejections, 55 import outside tests/link and std/, and
+131 name such a path; the other 945 can be kept. A path a program builds
+from pieces at run time is the one read the key cannot see; that is the gap
+the push to main closes, below.
+
+In CI, each `test` shard restores its file from the Actions cache before the
+suite on a **pull request only**: its own last push's file first (a cache is
+scoped to the ref that saved it), else `main`'s. A pull request's run and
+a push to main's save the file after the suite (no other event's is ever
+restored), red ones too, since only passing records are in it, and
+cancelled ones, since the suite writes it whole by a rename once the link
+programs are done. So a pull request's second push builds the programs its
+change reaches and the ones that failed, and its first push replays what
+`main`'s last saved run passed with the same inputs. A change to `src/` or to
+one of the `std/` modules the compiler imports is a new compiler and replays
+nothing; a change to anything in std/, runtime/ or tests/run.js replays
+nothing either. The push to main, the
+Release PR's dispatched run and the release never restore a file, so they
+build every program: a key that missed a read fails there.
+
+`node tests/run.js link-results` moves each input of the key alone, in a
+checkout in miniature, and requires a miss (and requires none for the flags
+that only place work, a variable no run reads and a file no program reads), pins what is never kept, and holds the `test` job's restore,
+flag and save to the above. `scripts/shard-costs.mjs` refuses a log with a
+`REPLAY` line, whose programs cost nothing: refit the costs from pushes to
+main.
 
 ### Shards and time limits
 
