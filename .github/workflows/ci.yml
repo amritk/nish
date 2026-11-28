@@ -2488,8 +2488,11 @@ jobs:
       # request compares against the merge-base of its base and head, every
       # other run against HEAD's first parent: the commit before a squash on
       # main, the queue's base, the parent of a tag or the Release PR's commit.
-      # The checkout is one commit deep, so this fetches the commit graph alone
-      # (`--filter=tree:0`) and the one file it reads on demand. A base with no
+      # The job's checkout keeps actions/checkout's default depth of 1, which
+      # `--unshallow` needs (it fails on a complete clone), so this fetches the
+      # commit graph alone (`--filter=tree:0`) and the one file it reads on
+      # demand. On a pull request the head file compared is the checkout's,
+      # the pull request merged into its base's tip. A base with no
       # bench/instructions.json has nothing to compare; one from before the
       # file's `raises` reads as having none. The script writes the table to
       # the step summary itself.
@@ -2502,7 +2505,7 @@ jobs:
           if [ "$EVENT" = "pull_request" ]; then
             git fetch --no-tags --unshallow --filter=tree:0 --quiet origin "$PR_BASE" "$PR_HEAD"
             base=$(git merge-base "$PR_BASE" "$PR_HEAD")
-            what="the merge-base of the pull request's base ${PR_BASE:0:9} and head ${PR_HEAD:0:9}"
+            what="the merge-base of the pull request's base ${PR_BASE:0:9} and head ${PR_HEAD:0:9} (the head file is from ${PR_HEAD:0:9} merged into ${PR_BASE:0:9})"
           else
             git fetch --no-tags --unshallow --filter=tree:0 --quiet origin "$GITHUB_SHA"
             base=$(git rev-parse --verify --quiet "$GITHUB_SHA^1") || {
