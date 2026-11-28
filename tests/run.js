@@ -1808,7 +1808,15 @@ const DEALT_SECTIONS = {
   nishRunner: { name: "the golden runner written in Nish", selected: selects("nish-runner") },
   bench: {
     name: "the WP9 bench section (the twins' table, json-compare, yaml-compare, instruction counts)",
-    selected: selects("bench", "wp9", "bench: the twins' reading", "json-compare", "yaml-compare", "instructions"),
+    selected: selects(
+      "bench",
+      "wp9",
+      "bench: the twins' reading",
+      "json-compare",
+      "yaml-compare",
+      "instructions",
+      "instruction-raises"
+    ),
   },
   runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
   sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
@@ -11779,6 +11787,311 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
       }
     }
   }
+}
+
+// ---- Instruction baseline raises -----------------------------------------------------
+// No count in bench/instructions.json rises unrecorded (bench/README.md, "Raising a
+// baseline"). scripts/instruction-raises.mjs compares a base file with a head one
+// and fails a row that rose past the tolerance with no `raises` entry for its exact
+// counts; the fixture pairs reach each of its verdicts. `--instructions --update`
+// refuses an unnamed raise: its `--counts` hook stands in for valgrind and its
+// `--baseline` hook points it at a temporary copy, so the refusal is checked on
+// every host and the real file is never written.
+if (dealtHere("bench") && (!only || "instruction-raises".includes(only))) {
+  const fixtures = path.join(root, "tests", "fixtures", "instruction-raises")
+  const compareScript = path.join(root, "scripts", "instruction-raises.mjs")
+  // CI sets GITHUB_STEP_SUMMARY for the test job, so only the check that reads
+  // the summary passes one through.
+  const compare = (base, head, env = { ...process.env, GITHUB_STEP_SUMMARY: "" }) =>
+    spawnSync("node", [compareScript, base, head], { cwd: root, encoding: "utf8", env })
+  const fixture = (name) => path.join(fixtures, `${name}.json`)
+  const base = fixture("base")
+  const row = (out, name) => out.split("\n").find((l) => l.startsWith(`| ${name} |`)) ?? ""
+
+  const summary = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "nish-raises-")), "summary.md")
+  const raised = compare(base, fixture("raised"), { ...process.env, GITHUB_STEP_SUMMARY: summary })
+  check(
+    "instruction-raises: a row raised past the tolerance with no raises entry fails the comparison and is named",
+    raised.status === 1 &&
+      row(raised.stdout, "rises").endsWith("| raised |") &&
+      raised.stdout.split("\n").filter((l) => l.startsWith("instruction-raises:")).join("\n") ===
+        "instruction-raises: 1 of 6 rose more than +0.100% with no `raises` entry: rises (200000000 to 202000000)",
+    `${raised.stdout}${raised.stderr}`
+  )
+  check(
+    "instruction-raises: the table lists a fall, a change within the tolerance, a new row and a removed row without failing them",
+    row(raised.stdout, "falls").includes("| -3.333% | fell |") &&
+      row(raised.stdout, "within").includes("| +0.050% | ok |") &&
+      row(raised.stdout, "added").endsWith("| - | 600,000,000 | - | new |") &&
+      row(raised.stdout, "removed").endsWith("| 500,000,000 | - | - | removed |"),
+    raised.stdout
+  )
+  check(
+    "instruction-raises: the table is appended to $GITHUB_STEP_SUMMARY when it is set",
+    fs.existsSync(summary) && fs.readFileSync(summary, "utf8").includes(row(raised.stdout, "rises")),
+    fs.existsSync(summary) ? fs.readFileSync(summary, "utf8") : "no summary written"
+  )
+  const recorded = compare(base, fixture("recorded"))
+  check(
+    "instruction-raises: the same raise with a raises entry for its row, from and to passes",
+    recorded.status === 0 && row(recorded.stdout, "rises").endsWith("| recorded |"),
+    `${recorded.stdout}${recorded.stderr}`
+  )
+  const stale = compare(base, fixture("stale"))
+  check(
+    "instruction-raises: an entry for the row whose from and to are another raise's does not record this one",
+    stale.status === 1 && row(stale.stdout, "rises").endsWith("| raised |"),
+    `${stale.stdout}${stale.stderr}`
+  )
+  const reraise = compare(fixture("reraise-base"), fixture("recorded"))
+  check(
+    "instruction-raises: an entry the base already carries does not record the same raise again",
+    reraise.status === 1 && row(reraise.stdout, "rises").endsWith("| raised |"),
+    `${reraise.stdout}${reraise.stderr}`
+  )
+  const reraised = compare(fixture("reraise-base"), fixture("reraised"))
+  check(
+    "instruction-raises: the same raise again passes with an entry beyond the base's",
+    reraised.status === 0 && row(reraised.stdout, "rises").endsWith("| recorded |"),
+    `${reraised.stdout}${reraised.stderr}`
+  )
+  const wider = compare(base, fixture("wider"))
+  check(
+    "instruction-raises: a head that widens the tolerance is still held to the base's, and the widening is named",
+    wider.status === 1 &&
+      row(wider.stdout, "rises").endsWith("| raised |") &&
+      /^instruction-raises: the head widens the tolerance from \+0\.100% to \+5\.000%; /m.test(wider.stdout),
+    `${wider.stdout}${wider.stderr}`
+  )
+  const uncounted = compare(base, fixture("uncounted"))
+  check(
+    "instruction-raises: a count that is not a positive integer is refused, row by row",
+    uncounted.status === 2 &&
+      ["programs.rises.instructions is \"202000000\"", "programs.falls.instructions is 2.5", "programs.within.instructions is null"].every(
+        (p) => uncounted.stderr.includes(p)
+      ),
+    `${uncounted.stdout}${uncounted.stderr}`
+  )
+  const dropped = compare(base, fixture("dropped"))
+  check(
+    "instruction-raises: a row the head keeps without its count fails, so the count cannot come back as new",
+    dropped.status === 1 &&
+      row(dropped.stdout, "rises").endsWith("| 200,000,000 | - | - | dropped |") &&
+      /^instruction-raises: 1 of 6 keep their row with no count: rises \(was 200000000\)$/m.test(dropped.stdout),
+    `${dropped.stdout}${dropped.stderr}`
+  )
+  const fell = compare(base, fixture("fell"))
+  check(
+    "instruction-raises: a head whose rows only fall or hold passes",
+    fell.status === 0 && row(fell.stdout, "rises").endsWith("| fell |"),
+    `${fell.stdout}${fell.stderr}`
+  )
+  const malformed = compare(base, fixture("malformed"))
+  check(
+    "instruction-raises: a malformed raises entry is refused with each of its problems",
+    malformed.status === 2 &&
+      ["which is not a raise", ".why gives no reason", ".pr is neither"].every((p) => malformed.stderr.includes(p)),
+    `${malformed.stdout}${malformed.stderr}`
+  )
+  // Each malformed file is the base with one field broken; the comparison
+  // refuses it, as base or head, before it compares a row.
+  const shapes = fs.mkdtempSync(path.join(os.tmpdir(), "nish-raise-shapes-"))
+  const baseData = JSON.parse(fs.readFileSync(base, "utf8"))
+  const entry = { row: "rises", from: 200000000, to: 202000000, why: "w", pr: null }
+  const broken = [
+    ["raises is not an array", { raises: {} }, "is not an array"],
+    ["an entry that is not an object", { raises: [7] }, "raises[0] is not an object"],
+    ["an entry with a field the record does not have", { raises: [{ ...entry, by: "x" }] }, "raises[0] has unknown field(s) by"],
+    ["an entry whose from is not a count", { raises: [{ ...entry, from: "200000000" }] }, "raises[0].from and .to are not both"],
+    ["no tolerance", { tolerance: undefined }, "has no `tolerance`"],
+    ["a negative tolerance", { tolerance: -1 }, "has no `tolerance`"],
+    ["no programs", { programs: undefined }, "`programs` is not an object"],
+    ["a row that is not an object", { programs: { kept: 5 } }, "programs.kept is not an object"],
+  ]
+  for (const [what, edit, says] of broken) {
+    const file = path.join(shapes, "broken.json")
+    fs.writeFileSync(file, JSON.stringify({ ...baseData, ...edit }))
+    const asHead = compare(base, file)
+    const asBase = compare(file, base)
+    check(
+      `instruction-raises: a file with ${what} is refused, as base or head`,
+      asHead.status === 2 && asHead.stderr.includes(says) && asBase.status === 2 && asBase.stderr.includes(says),
+      `${asHead.stderr}${asBase.stderr}`
+    )
+  }
+  const notJson = path.join(shapes, "not.json")
+  fs.writeFileSync(notJson, "{")
+  const unreadable = [compare(base, notJson), compare(base, path.join(shapes, "absent.json"))]
+  check(
+    "instruction-raises: a file that is not JSON, or is not there, is refused",
+    unreadable.every((r) => r.status === 2 && r.stderr.includes("cannot read")),
+    unreadable.map((r) => r.stderr).join("")
+  )
+  const usage = spawnSync("node", [compareScript, base], { cwd: root, encoding: "utf8" })
+  check(
+    "instruction-raises: the comparison takes exactly two files",
+    usage.status === 2 && usage.stderr.startsWith("usage: "),
+    `${usage.stdout}${usage.stderr}`
+  )
+  fs.rmSync(shapes, { recursive: true, force: true })
+  check(
+    "instruction-raises: bench/instructions.json itself is well formed and compares clean against itself",
+    compare(path.join(root, "bench", "instructions.json"), path.join(root, "bench", "instructions.json")).status ===
+      0,
+    "scripts/instruction-raises.mjs bench/instructions.json bench/instructions.json"
+  )
+
+  // --update on a temporary copy of the real file, stamped for this host so the
+  // platform guard lets it through.
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-raise-update-"))
+  const real = JSON.parse(fs.readFileSync(path.join(root, "bench", "instructions.json"), "utf8"))
+  const fib = real.programs.fib.instructions
+  const nbody = real.programs.nbody.instructions
+  const copy = path.join(work, "instructions.json")
+  const writeCopy = (edit = (x) => x) =>
+    fs.writeFileSync(copy, JSON.stringify(edit({ ...structuredClone(real), platform: `${process.platform}-${process.arch}` })))
+  const counts = path.join(work, "counts.json")
+  fs.writeFileSync(counts, JSON.stringify({ fib: fib + Math.ceil(fib / 100), nbody: nbody - 1000 }))
+  const update = (...extra) =>
+    spawnSync(
+      "node",
+      [
+        path.join(root, "bench", "run.mjs"),
+        "--compiler",
+        path.relative(root, NISH),
+        "--instructions",
+        "--update",
+        "--baseline",
+        copy,
+        "--counts",
+        counts,
+        ...extra,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+  writeCopy()
+  const before = fs.readFileSync(copy, "utf8")
+  const unnamed = update()
+  check(
+    "instruction-raises: --instructions --update refuses a raise --raise does not name and leaves the file as it was",
+    unnamed.status === 1 &&
+      /^refused: fib rises \+1\.000% /m.test(unnamed.stdout) &&
+      fs.readFileSync(copy, "utf8") === before,
+    `${unnamed.stdout}${unnamed.stderr}`
+  )
+  const idle = update("--raise", "fib,nbody", "--why", "fixture")
+  check(
+    "instruction-raises: --update refuses a --raise that names a row the update does not raise",
+    idle.status === 1 && /^refused: --raise names nbody, /m.test(idle.stdout) && fs.readFileSync(copy, "utf8") === before,
+    `${idle.stdout}${idle.stderr}`
+  )
+  const noWhy = update("--raise", "fib")
+  check(
+    "instruction-raises: --raise without --why is refused before anything is counted",
+    noWhy.status === 2 && noWhy.stderr.includes("--raise and --why go together"),
+    `${noWhy.stdout}${noWhy.stderr}`
+  )
+  const named = update("--raise", "fib", "--why", "the fixture's raise", "--pr", "7")
+  const after = JSON.parse(fs.readFileSync(copy, "utf8"))
+  check(
+    "instruction-raises: a raise --raise names is written with its {row, from, to, why, pr} entry, and the fall beside it is locked in",
+    named.status === 0 &&
+      after.programs.fib.instructions === fib + Math.ceil(fib / 100) &&
+      after.programs.nbody.instructions === nbody - 1000 &&
+      JSON.stringify(after.raises) ===
+        JSON.stringify([{ row: "fib", from: fib, to: fib + Math.ceil(fib / 100), why: "the fixture's raise", pr: 7 }]),
+    `${named.stdout}${named.stderr}\n${JSON.stringify(after.raises)}`
+  )
+  const againstReal = compare(path.join(root, "bench", "instructions.json"), copy)
+  check(
+    "instruction-raises: the comparison passes the file the named --update wrote",
+    againstReal.status === 0 && row(againstReal.stdout, "fib").endsWith("| recorded |"),
+    `${againstReal.stdout}${againstReal.stderr}`
+  )
+  writeCopy((x) => {
+    delete x.programs.fib.instructions
+    return x
+  })
+  const fresh = update()
+  check(
+    "instruction-raises: a row with no stored count is recorded without --raise",
+    fresh.status === 0 &&
+      /^fib +\S+ +[\d,]+ +- +- +new$/m.test(fresh.stdout) &&
+      JSON.parse(fs.readFileSync(copy, "utf8")).raises.length === 0,
+    `${fresh.stdout}${fresh.stderr}`
+  )
+  writeCopy((x) => ({ ...x, raises: [{ row: "fib", from: fib, to: fib, why: "", pr: null }] }))
+  const bad = update("--raise", "fib", "--why", "fixture")
+  check(
+    "instruction-raises: --update refuses a baseline whose raises entry is malformed",
+    bad.status === 2 && bad.stderr.includes("raises[0]") && bad.stderr.includes("which is not a raise"),
+    `${bad.stdout}${bad.stderr}`
+  )
+  writeCopy((x) => {
+    delete x.raises
+    return x
+  })
+  const missing = update()
+  check(
+    "instruction-raises: --update refuses a baseline with no raises array",
+    missing.status === 2 && missing.stderr.includes("has no `raises` array"),
+    `${missing.stdout}${missing.stderr}`
+  )
+  writeCopy((x) => {
+    x.programs.fib.instructions = String(fib)
+    return x
+  })
+  const notCount = update()
+  check(
+    "instruction-raises: --update refuses a baseline whose stored count is not a positive integer",
+    notCount.status === 2 && notCount.stderr.includes(`programs.fib.instructions is "${fib}", not a positive integer count`),
+    `${notCount.stdout}${notCount.stderr}`
+  )
+  // The flags' own refusals, each before anything is counted or written.
+  writeCopy()
+  const flags = [
+    ["a --raise row the baseline does not list", ["--raise", "nosuch", "--why", "w"], "--raise names `nosuch`"],
+    ["a --pr that is not a pull request number", ["--raise", "fib", "--why", "w", "--pr", "0"], "--pr expects a pull request number"],
+    ["--pr without --raise", ["--pr", "7"], "--pr names the pull request of a --raise"],
+    ["--why without --raise", ["--why", "w"], "--raise and --why go together"],
+  ]
+  for (const [what, extra, says] of flags) {
+    const r = update(...extra)
+    check(
+      `instruction-raises: --update refuses ${what}`,
+      r.status === 2 && r.stderr.includes(says) && fs.readFileSync(copy, "utf8") === before,
+      `${r.stdout}${r.stderr}`
+    )
+  }
+  const notUpdate = spawnSync(
+    "node",
+    [
+      path.join(root, "bench", "run.mjs"),
+      "--compiler",
+      path.relative(root, NISH),
+      "--instructions",
+      "--check",
+      "--raise",
+      "fib",
+      "--why",
+      "w",
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "instruction-raises: --raise outside --instructions --update is refused",
+    notUpdate.status === 2 && notUpdate.stderr.includes("--raise, --why and --pr belong to --instructions --update"),
+    `${notUpdate.stdout}${notUpdate.stderr}`
+  )
+  fs.writeFileSync(counts, JSON.stringify({ fib: 1.5 }))
+  const badCount = update()
+  check(
+    "instruction-raises: a --counts entry that is not a positive integer is refused",
+    badCount.status === 2 && badCount.stderr.includes("--counts: `fib` is not a listed program"),
+    `${badCount.stdout}${badCount.stderr}`
+  )
+  fs.rmSync(work, { recursive: true, force: true })
+  fs.rmSync(path.dirname(summary), { recursive: true, force: true })
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------

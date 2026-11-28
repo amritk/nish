@@ -1,6 +1,6 @@
 // `nish/bytes` out of range: at the largest `i32` offset, where `off + 1`
-// would overflow, the read panics `index` on its first byte, before any
-// later index is computed.
+// would overflow, the read panics in its window guard, before any later
+// index is computed.
 import { getU64BE } from "nish/bytes"
 
 export const main = (): i32 => {

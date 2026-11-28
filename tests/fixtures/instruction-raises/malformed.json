@@ -1,0 +1,10 @@
+{
+  "about": "A raises entry that records a fall, gives no reason and names no pull request number: the comparison refuses the file.",
+  "tolerance": 0.001,
+  "programs": {
+    "kept": { "instructions": 100000000 }
+  },
+  "raises": [
+    { "row": "kept", "from": 100000000, "to": 90000000, "why": " ", "pr": "soon" }
+  ]
+}

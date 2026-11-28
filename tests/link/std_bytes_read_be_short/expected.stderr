@@ -1,1 +1,1 @@
-index out of range: 9 >= 9
+getI64BE: the 8 bytes at the offset do not all lie in the array

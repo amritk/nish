@@ -1,0 +1,12 @@
+{
+  "about": "Every row falls or holds: the comparison passes.",
+  "tolerance": 0.001,
+  "programs": {
+    "kept": { "instructions": 100000000 },
+    "rises": { "instructions": 199000000 },
+    "falls": { "instructions": 290000000 },
+    "within": { "instructions": 400000000 },
+    "removed": { "instructions": 500000000 }
+  },
+  "raises": []
+}

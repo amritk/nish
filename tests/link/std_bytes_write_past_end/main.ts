@@ -1,5 +1,5 @@
-// `nish/bytes` out of range: a write whose bytes run past the end panics
-// `index` on the first byte that is not in the array.
+// `nish/bytes` out of range: a write whose bytes run past the end panics in
+// its window guard, before any byte is written.
 import { setU32BE } from "nish/bytes"
 
 export const main = (): i32 => {

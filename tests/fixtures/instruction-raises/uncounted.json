@@ -1,0 +1,11 @@
+{
+  "about": "A count that is not a positive integer: the comparison refuses the file rather than read the row as within its tolerance.",
+  "tolerance": 0.001,
+  "programs": {
+    "kept": { "instructions": 100000000 },
+    "rises": { "instructions": "202000000" },
+    "falls": { "instructions": 2.5 },
+    "within": { "instructions": null }
+  },
+  "raises": []
+}

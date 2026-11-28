@@ -90,7 +90,6 @@ import {
   dnsBuildQuery,
   dnsParseReply,
 } from "nish/net/dns-message"
-import { setU16BE } from "nish/bytes"
 import { DnsConfig, DnsHosts, dnsHostsFind, dnsParseAddress } from "nish/net/dns-config"
 
 /** `result` for a lookup that has not finished. */
@@ -560,6 +559,12 @@ export class DnsResolver {
     ) {
       return -1
     }
+    // Every query buffer holds `DNS_QUERY_MAX_BYTES`, so this is never taken:
+    // it is the test the ID's two bytes below are written under.
+    const query: u8[] = queries[q]
+    if (toI32(query.length) < 2) {
+      return -1
+    }
     const kind: i32 = pending[q]
     pending[q] = 0
     this.cursor = q + 1 < n ? q + 1 : 0
@@ -568,12 +573,13 @@ export class DnsResolver {
     if (kind === DNS_CLOSE) {
       return q
     }
-    const query: u8[] = queries[q]
-    setU16BE(query, 0, toU16(id))
+    query[0] = toU8(id >> 8)
+    query[1] = toU8(id)
     const length: i32 = queryLength[q]
     const skip: i32 = kind === DNS_SEND_TCP ? 2 : 0
     if (skip === 2) {
-      setU16BE(out, 0, toU16(length))
+      out[0] = toU8(length >> 8)
+      out[1] = toU8(length)
     }
     // A query's length is at most its buffer's, and `out` holds the longest
     // with its two-byte prefix, so `o` ends at `skip + length`.
@@ -1033,9 +1039,11 @@ const dnsResolverLoopback = (out: u8[], port: i32): void => {
   out[11] = toU8(255)
   out[12] = toU8(127)
   out[15] = toU8(1)
-  setU16BE(out, 16, toU16(port))
+  out[16] = toU8(port >> 8)
+  out[17] = toU8(port)
   out[DNS_ADDRESS_BYTES + 15] = toU8(1)
-  setU16BE(out, DNS_ADDRESS_BYTES + 16, toU16(port))
+  out[DNS_ADDRESS_BYTES + 16] = toU8(port >> 8)
+  out[DNS_ADDRESS_BYTES + 17] = toU8(port)
 }
 
 /**
@@ -1445,17 +1453,25 @@ const dnsResolverAsk = (r: DnsResolver, q: i32, qtype: i32, nowNanos: i64): void
   const query: u8[] = queries[q]
   const name: u8[] = names[q]
   const length: i32 = nameLength[q]
-  // `255` is DNS_MAX_NAME_BYTES: every name written to `names` fits it, so this never returns.
-  if (length < 0 || length > 255) {
+  // `255` is DNS_MAX_NAME_BYTES: every name written to `names` fits it, and
+  // every query buffer holds `DNS_QUERY_MAX_BYTES` (`16 + 255`), so this never
+  // returns.
+  if (length < 0 || length > 255 || toI32(query.length) < DNS_QUERY_MAX_BYTES) {
     return
   }
   // The bytes are dnsBuildQuery's: the ID, RD, one question, then the name, type and class IN.
-  setU16BE(query, 0, toU16(0))
-  setU16BE(query, 2, toU16(0x0100))
-  setU16BE(query, 4, toU16(1))
-  setU16BE(query, 6, toU16(0))
-  setU16BE(query, 8, toU16(0))
-  setU16BE(query, 10, toU16(0))
+  query[0] = toU8(0)
+  query[1] = toU8(0)
+  query[2] = toU8(0x01)
+  query[3] = toU8(0)
+  query[4] = toU8(0)
+  query[5] = toU8(1)
+  query[6] = toU8(0)
+  query[7] = toU8(0)
+  query[8] = toU8(0)
+  query[9] = toU8(0)
+  query[10] = toU8(0)
+  query[11] = toU8(0)
   let i: i32 = 0
   let o: i32 = 12
   while (i < length && i < toI32(name.length) && o >= 0 && o < toI32(query.length)) {
@@ -1463,8 +1479,11 @@ const dnsResolverAsk = (r: DnsResolver, q: i32, qtype: i32, nowNanos: i64): void
     i += 1
     o += 1
   }
-  setU16BE(query, 12 + length, toU16(qtype))
-  setU16BE(query, 14 + length, toU16(1))
+  const typeAt: i32 = 12 + length
+  query[typeAt] = toU8(qtype >> 8)
+  query[typeAt + 1] = toU8(qtype)
+  query[typeAt + 2] = toU8(0)
+  query[typeAt + 3] = toU8(1)
   queryLength[q] = 16 + length
   // Only this name's reply may say NXDOMAIN, not an earlier candidate's or lookup's.
   nxdomain[q] = false

@@ -1,0 +1,12 @@
+{
+  "about": "rises goes up 1% with no raises entry: the comparison fails it.",
+  "tolerance": 0.001,
+  "programs": {
+    "kept": { "instructions": 100000000 },
+    "rises": { "instructions": 202000000 },
+    "falls": { "instructions": 290000000 },
+    "within": { "instructions": 400200000 },
+    "added": { "instructions": 600000000 }
+  },
+  "raises": []
+}
