@@ -1,6 +1,6 @@
 // Opt-out (`--allow-panics`): this file keeps no panic site of its own. The
 // one site its calls still reach is the lead-byte read in `std/bytes`'s UTF-8
-// walk (`bytesUtf8End`, std/bytes.ts:723:27): its caller's loop tests the
+// walk (`bytesUtf8End`, std/bytes.ts:699:27): its caller's loop tests the
 // index, but a call forgets that test. Proving the read inside the walk costs
 // +0.436% instructions on the std-json-typed bench, over its +0.1% tolerance,
 // so the walk keeps its check. Once the read is proven without that cost,

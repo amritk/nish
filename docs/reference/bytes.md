@@ -444,8 +444,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -472,8 +471,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -500,8 +498,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 3]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -528,8 +525,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 3]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -556,8 +552,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -584,8 +579,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -612,8 +606,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 1]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 1]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -640,8 +633,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 1]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 1]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -668,8 +660,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 3]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -696,8 +687,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 3]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -726,8 +716,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -754,8 +743,7 @@ The bytes the number is read from; they are not changed.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` its first byte is; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -782,8 +770,7 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -810,8 +797,7 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -838,8 +824,7 @@ The bytes written into; only the four at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 3]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -867,8 +852,7 @@ The bytes written into; only the four at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 3]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -896,8 +880,7 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -925,8 +908,7 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -954,8 +936,7 @@ The bytes written into; only the two at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 1]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 1]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -982,8 +963,7 @@ The bytes written into; only the two at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 1]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 1]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -1010,8 +990,7 @@ The bytes written into; only the four at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 3]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -1038,8 +1017,7 @@ The bytes written into; only the four at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 3]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -1066,8 +1044,7 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 
@@ -1094,8 +1071,7 @@ The bytes written into; only the eight at `off` change.
 <scalar-field name="off" type="i32" required>
 
 Where in `b` the first byte goes; it covers `b[off]` to
-  `b[off + 7]`, and an offset whose
-  bytes are not all in `b` panics.
+  `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
 
 </scalar-field>
 

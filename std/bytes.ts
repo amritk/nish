@@ -95,8 +95,7 @@ const bytesWindow = (what: string, b: readonly u8[], off: i32, len: i32): void =
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 1]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 1]`, and an offset whose bytes are not all in `b` panics.
  * @returns The number read.
  */
 export const getU16LE = (b: u8[], off: i32): u16 => {
@@ -109,8 +108,7 @@ export const getU16LE = (b: u8[], off: i32): u16 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 1]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 1]`, and an offset whose bytes are not all in `b` panics.
  * @returns The number read.
  */
 export const getU16BE = (b: u8[], off: i32): u16 => {
@@ -123,8 +121,7 @@ export const getU16BE = (b: u8[], off: i32): u16 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 3]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
  * @returns The number read.
  */
 export const getU32LE = (b: u8[], off: i32): u32 => {
@@ -140,8 +137,7 @@ export const getU32LE = (b: u8[], off: i32): u32 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 3]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
  * @returns The number read.
  */
 export const getU32BE = (b: u8[], off: i32): u32 => {
@@ -157,8 +153,7 @@ export const getU32BE = (b: u8[], off: i32): u32 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @returns The number read.
  */
 export const getU64LE = (b: u8[], off: i32): u64 => {
@@ -180,8 +175,7 @@ export const getU64LE = (b: u8[], off: i32): u64 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @returns The number read.
  */
 export const getU64BE = (b: u8[], off: i32): u64 => {
@@ -201,8 +195,7 @@ export const getU64BE = (b: u8[], off: i32): u64 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 3]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
  * @returns The number read, from -2^31 to 2^31 - 1.
  */
 export const getI32LE = (b: u8[], off: i32): i32 => {
@@ -215,8 +208,7 @@ export const getI32LE = (b: u8[], off: i32): i32 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 3]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
  * @returns The number read, from -2^31 to 2^31 - 1.
  */
 export const getI32BE = (b: u8[], off: i32): i32 => {
@@ -229,8 +221,7 @@ export const getI32BE = (b: u8[], off: i32): i32 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @returns The number read, from -2^63 to 2^63 - 1.
  */
 export const getI64LE = (b: u8[], off: i32): i64 => {
@@ -243,8 +234,7 @@ export const getI64LE = (b: u8[], off: i32): i64 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @returns The number read, from -2^63 to 2^63 - 1.
  */
 export const getI64BE = (b: u8[], off: i32): i64 => {
@@ -257,8 +247,7 @@ export const getI64BE = (b: u8[], off: i32): i64 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @returns The double whose bits the eight bytes are.
  */
 export const getF64LE = (b: u8[], off: i32): f64 => {
@@ -271,8 +260,7 @@ export const getF64LE = (b: u8[], off: i32): f64 => {
  *
  * @param b The bytes the number is read from; they are not changed.
  * @param off Where in `b` its first byte is; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @returns The double whose bits the eight bytes are.
  */
 export const getF64BE = (b: u8[], off: i32): f64 => {
@@ -285,8 +273,7 @@ export const getF64BE = (b: u8[], off: i32): f64 => {
  *
  * @param b The bytes written into; only the two at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 1]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 1]`, and an offset whose bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU16LE = (b: u8[], off: i32, v: u16): void => {
@@ -300,8 +287,7 @@ export const setU16LE = (b: u8[], off: i32, v: u16): void => {
  *
  * @param b The bytes written into; only the two at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 1]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 1]`, and an offset whose bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU16BE = (b: u8[], off: i32, v: u16): void => {
@@ -315,8 +301,7 @@ export const setU16BE = (b: u8[], off: i32, v: u16): void => {
  *
  * @param b The bytes written into; only the four at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 3]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU32LE = (b: u8[], off: i32, v: u32): void => {
@@ -332,8 +317,7 @@ export const setU32LE = (b: u8[], off: i32, v: u32): void => {
  *
  * @param b The bytes written into; only the four at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 3]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU32BE = (b: u8[], off: i32, v: u32): void => {
@@ -349,8 +333,7 @@ export const setU32BE = (b: u8[], off: i32, v: u32): void => {
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU64LE = (b: u8[], off: i32, v: u64): void => {
@@ -370,8 +353,7 @@ export const setU64LE = (b: u8[], off: i32, v: u64): void => {
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @param v The number to store.
  */
 export const setU64BE = (b: u8[], off: i32, v: u64): void => {
@@ -391,8 +373,7 @@ export const setU64BE = (b: u8[], off: i32, v: u64): void => {
  *
  * @param b The bytes written into; only the four at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 3]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
  * @param v The number to store; a negative one is stored as its two's
  *   complement.
  */
@@ -410,8 +391,7 @@ export const setI32LE = (b: u8[], off: i32, v: i32): void => {
  *
  * @param b The bytes written into; only the four at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 3]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 3]`, and an offset whose bytes are not all in `b` panics.
  * @param v The number to store; a negative one is stored as its two's
  *   complement.
  */
@@ -429,8 +409,7 @@ export const setI32BE = (b: u8[], off: i32, v: i32): void => {
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @param v The number to store; a negative one is stored as its two's
  *   complement.
  */
@@ -452,8 +431,7 @@ export const setI64LE = (b: u8[], off: i32, v: i64): void => {
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @param v The number to store; a negative one is stored as its two's
  *   complement.
  */
@@ -475,8 +453,7 @@ export const setI64BE = (b: u8[], off: i32, v: i64): void => {
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @param v The double to store, as its IEEE 754 bits.
  */
 export const setF64LE = (b: u8[], off: i32, v: f64): void => {
@@ -497,8 +474,7 @@ export const setF64LE = (b: u8[], off: i32, v: f64): void => {
  *
  * @param b The bytes written into; only the eight at `off` change.
  * @param off Where in `b` the first byte goes; it covers `b[off]` to
- *   `b[off + 7]`, and an offset whose
- *   bytes are not all in `b` panics.
+ *   `b[off + 7]`, and an offset whose bytes are not all in `b` panics.
  * @param v The double to store, as its IEEE 754 bits.
  */
 export const setF64BE = (b: u8[], off: i32, v: f64): void => {
