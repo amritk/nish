@@ -100,6 +100,7 @@ negative error code and never panics:
 | `DEFLATE_ERR_OUTPUT_LIMIT` | the output would pass `limit` or the end of `out` |
 | `DEFLATE_ERR_HUFFMAN`, `DEFLATE_ERR_SYMBOL`, `DEFLATE_ERR_BLOCK_TYPE`, `DEFLATE_ERR_STORED_LENGTH`, `DEFLATE_ERR_DISTANCE` | the DEFLATE stream is malformed |
 | `DEFLATE_ERR_TRAILING` | bytes follow a zlib or raw stream |
+| `DEFLATE_ERR_WINDOW` | from `decompressRange` and `Inflater.inflateAll` only: a window outside its array, or a negative `limit`, which `decompress` panics on instead |
 | `GZIP_ERR_HEADER`, `GZIP_ERR_CRC`, `GZIP_ERR_SIZE` | gzip's header, CRC-32 or length is wrong, or something other than another gzip member follows one |
 | `ZLIB_ERR_HEADER`, `ZLIB_ERR_ADLER`, `ZLIB_ERR_DICTIONARY` | zlib's header or Adler-32 is wrong, or the stream needs a preset dictionary |
 

@@ -54,7 +54,7 @@
     "std-compress-deflate": { "n": 2, "instructions": 162300111, "commit": "8451307aa", "valgrind": "valgrind-3.26.0" },
     "std-compress-inflate": { "n": 40, "instructions": 206917547 },
     "std-compress-checksum": { "n": 60, "instructions": 106368115 },
-    "std-compress-gzip": { "n": 3, "instructions": 162136060, "commit": "8451307aa", "valgrind": "valgrind-3.26.0" },
+    "std-compress-gzip": { "n": 3, "instructions": 162303005, "commit": "333f85436", "valgrind": "valgrind-3.26.0" },
     "std-term-frame": { "n": 600, "instructions": 164667254, "commit": "8451307aa", "valgrind": "valgrind-3.26.0" },
     "std-raster": { "n": 400, "instructions": 136938571 },
     "std-synth": { "n": 60, "instructions": 110069992 },
@@ -73,5 +73,7 @@
     "std-regex": { "n": 30, "instructions": 326875516, "commit": "8451307aa", "valgrind": "valgrind-3.26.0" },
     "std-text": { "n": 17, "instructions": 278871048, "commit": "8451307aa", "valgrind": "valgrind-3.26.0" }
   },
-  "raises": []
+  "raises": [
+    { "row": "std-compress-gzip", "from": 162136060, "to": 162303005, "why": "gzip's reader checks its trailer through Crc32.ofRange and inflates through deflate's window-tested inflateAll, window and stored, which answer an error code for a window outside the input where the old reads panicked; those tests are the added instructions", "pr": 2460 }
+  ]
 }

@@ -1,0 +1,24 @@
+gzip in range: 0
+gzip end past src: true
+gzip off past end: true
+gzip negative off: true
+gzip at past out: true
+gzip negative limit: true
+zlib in range: 0
+zlib end past src: true
+zlib negative at: true
+zlib negative limit: true
+inflateAll in range: 1
+inflateAll input past src: true
+inflateAll output past out: true
+inflateAll op past outEnd: true
+crc32 abc: 891568578
+crc32 empty: 0
+crc32 end past buf: -1
+crc32 off past end: -1
+crc32 negative off: -1
+adler32 abc: 38600999
+adler32 empty: 1
+adler32 end past buf: -1
+adler32 off past end: -1
+adler32 negative off: -1

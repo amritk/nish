@@ -11828,6 +11828,203 @@ const CALLER_CONTRACT = "a caller's proof discharges a std callee's contract pan
 const WINDOW_FORWARD = "window contracts forward from free functions, arrow consts and literal lengths"
 /** The changelog words of WP80 S7: std/bytes.ts's fixed-width getters and setters check their window through the `bytesWindow` guard, so a caller that tests its window discharges the check. The change's commit subject carries these words verbatim. */
 const WP80_BYTES_WINDOW = "byte getters check their window"
+const S7_HTTP_APP = "http-app builds without --allow-panics"
+
+/**
+ * examples-strict S7's IR moves: the modules that declare or define the
+ * checksum, inflater, gzip/zlib and HMAC-SHA-256 functions the change adds.
+ */
+const s7HttpAppDeclared = () => [
+  ...[
+    "tests/link/net_tls_rsa_server/main.ts",
+  ].map((program) => ({
+    program,
+    file: "checks.ll",
+    changelog: S7_HTTP_APP,
+    why: "std/compress/checksum.ts adds Crc32.ofRange, which answers -1 for a window outside its array, so a module that declares nish/compress's functions declares one more and its declarations and attribute groups renumber",
+  })),
+  ...[
+    "tests/link/net_handler_dead_loop/main.ts",
+    "tests/link/net_http1_server_checked/main.ts",
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_release/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+    "tests/link/net_http_server_ws/main.ts",
+    "tests/link/net_tls_rsa_server/main.ts",
+  ].map((program) => ({
+    program,
+    file: "gzip.ll",
+    changelog: S7_HTTP_APP,
+    why: "gzip's and zlib's readers check their trailers through Crc32.ofRange and adler32Range and inflate through deflate.ts's new Inflater.inflateAll, window and stored, which answer an error code for a window outside the input, so the module declares those functions and its declarations and attribute groups renumber",
+  })),
+  ...[
+    "tests/link/net_handler_dead_loop/main.ts",
+    "tests/link/net_http_server_ws/main.ts",
+  ].map((program) => ({
+    program,
+    file: "handler.ll",
+    changelog: S7_HTTP_APP,
+    why: "HttpBodyDecoder decodes through the new GzipDecompressor.decompressRange and ZlibDecompressor.decompressRange, which answer an error code for a window outside the body, and the inflater's new inflateAll, window and stored, so the module declares those functions and its declarations and attribute groups renumber",
+  })),
+  ...[
+    "tests/link/net_grpc/main.ts",
+    "tests/link/net_grpc_interop/main.ts",
+    "tests/link/net_handler_batch_limits/main.ts",
+    "tests/link/net_handler_bomb/main.ts",
+    "tests/link/net_handler_dead_loop/main.ts",
+    "tests/link/net_handler_open/main.ts",
+    "tests/link/net_handler_refused/main.ts",
+    "tests/link/net_handler_steps/main.ts",
+    "tests/link/net_handler_steps_split/main.ts",
+    "tests/link/net_handler_try_answers/main.ts",
+    "tests/link/net_http1_server_checked/main.ts",
+    "tests/link/net_http1_server_lend_park/main.ts",
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_release/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+    "tests/link/net_http_server_steps/main.ts",
+    "tests/link/net_http_server_steps_full/main.ts",
+    "tests/link/net_http_server_steps_split/main.ts",
+    "tests/link/net_http_server_stream/main.ts",
+    "tests/link/net_http_server_trailers_after_end/main.ts",
+    "tests/link/net_http_server_trailers_ended/main.ts",
+    "tests/link/net_http_server_trailers_fields/main.ts",
+    "tests/link/net_http_server_trailers_h1/main.ts",
+    "tests/link/net_http_server_trailers_h3/main.ts",
+    "tests/link/net_http_server_trailers_short/main.ts",
+    "tests/link/net_http_server_trailers_unstarted/main.ts",
+    "tests/link/net_http_server_ws/main.ts",
+    "tests/link/net_serve_try/main.ts",
+    "tests/link/net_static/main.ts",
+    "tests/link/net_tls_rsa_server/main.ts",
+    "tests/link/std_http1_config_checked/main.ts",
+  ].map((program) => ({
+    program,
+    file: "hkdf.ll",
+    changelog: S7_HTTP_APP,
+    why: "HmacSha256.digest writes its fresh tag through the new private HmacSha256.tagInto, past digestInto's window test, so a module that inlines HMAC-SHA-256 declares tagInto and its declarations and attribute groups renumber",
+  })),
+  ...[
+    "tests/link/crypto_rsa_sign/main.ts",
+    "tests/link/crypto_rsa_sign_f64/main.ts",
+    "tests/link/crypto_rsa_sign_interop/main.ts",
+    "tests/link/net_handler_dead_loop/main.ts",
+    "tests/link/net_http1_server_checked/main.ts",
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_release/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+    "tests/link/net_http_server_ws/main.ts",
+    "tests/link/net_tls_rsa_server/main.ts",
+  ].map((program) => ({
+    program,
+    file: "hmac.ll",
+    changelog: S7_HTTP_APP,
+    why: "HmacSha256.digest writes its fresh tag through the new private HmacSha256.tagInto, past digestInto's window test, so hmac.ll defines one more function and its attribute groups renumber",
+  })),
+  ...[
+    "tests/link/net_handler_dead_loop/main.ts",
+    "tests/link/net_http_server_ws/main.ts",
+  ].map((program) => ({
+    program,
+    file: "http-compress.ll",
+    changelog: S7_HTTP_APP,
+    why: "HttpBodyDecoder decodes through the new GzipDecompressor.decompressRange and ZlibDecompressor.decompressRange, which answer an error code for a window outside the body, and the inflater's new inflateAll, window and stored, so the module declares those functions and its declarations and attribute groups renumber",
+  })),
+  ...[
+    "tests/link/net_handler_dead_loop/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: S7_HTTP_APP,
+    why: "the program's handler decodes bodies with HttpBodyDecoder, which decodes through the new GzipDecompressor.decompressRange and ZlibDecompressor.decompressRange, which answer an error code for a window outside the body, and the inflater's new inflateAll, window and stored, so the module declares those functions and its declarations and attribute groups renumber, and Crc32.ofRange with them",
+  })),
+  ...[
+    "tests/link/net_http1_server_checked/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: S7_HTTP_APP,
+    why: "std/compress/checksum.ts adds Crc32.ofRange, which answers -1 for a window outside its array, so a module that declares nish/compress's functions declares one more and its declarations and attribute groups renumber",
+  })),
+  ...[
+    "tests/link/net_tls_rsa_server/main.ts",
+  ].map((program) => ({
+    program,
+    file: "net_http1_server_harness.ll",
+    changelog: S7_HTTP_APP,
+    why: "std/compress/checksum.ts adds Crc32.ofRange, which answers -1 for a window outside its array, so a module that declares nish/compress's functions declares one more and its declarations and attribute groups renumber",
+  })),
+  ...[
+    "tests/link/net_http_server_ws/main.ts",
+  ].map((program) => ({
+    program,
+    file: "ws.ll",
+    changelog: S7_HTTP_APP,
+    why: "std/compress/checksum.ts adds Crc32.ofRange, which answers -1 for a window outside its array, so a module that declares nish/compress's functions declares one more and its declarations and attribute groups renumber",
+  })),
+  ...[
+    "tests/link/net_handler_dead_loop/main.ts",
+    "tests/link/net_http1_server_checked/main.ts",
+    "tests/link/net_http_server_h1_tls/main.ts",
+    "tests/link/net_http_server_h1_tls_slots/main.ts",
+    "tests/link/net_http_server_h1_tls_twice/main.ts",
+    "tests/link/net_http_server_h1_tls_wait/main.ts",
+    "tests/link/net_http_server_h2c_default_refused/main.ts",
+    "tests/link/net_http_server_h2c_preface/main.ts",
+    "tests/link/net_http_server_h2c_preface_drain/main.ts",
+    "tests/link/net_http_server_h2c_preface_ended/main.ts",
+    "tests/link/net_http_server_h2c_preface_full/main.ts",
+    "tests/link/net_http_server_h2c_preface_h1/main.ts",
+    "tests/link/net_http_server_h2c_preface_late/main.ts",
+    "tests/link/net_http_server_h2c_preface_partial/main.ts",
+    "tests/link/net_http_server_h2c_preface_pri/main.ts",
+    "tests/link/net_http_server_h2c_preface_release/main.ts",
+    "tests/link/net_http_server_h2c_preface_silent/main.ts",
+    "tests/link/net_http_server_ws/main.ts",
+    "tests/link/net_tls_rsa_server/main.ts",
+  ].map((program) => ({
+    program,
+    file: "zlib.ll",
+    changelog: S7_HTTP_APP,
+    why: "gzip's and zlib's readers check their trailers through Crc32.ofRange and adler32Range and inflate through deflate.ts's new Inflater.inflateAll, window and stored, which answer an error code for a window outside the input, so the module declares those functions and its declarations and attribute groups renumber",
+  })),
+]
 /** WP91 S4: the cast wraps in std/net's HTTP, HPACK, URL and server modules, spelled. */
 const WP91_S4_NET_HTTP = "std/net HTTP, HPACK, URL and the server stack"
 
@@ -16884,15 +17081,13 @@ const DECLARED = [
     why: "the program is built with --deny-panics and the `loadU8x16` and `store` in its `simd_mask` dependency are guarded, which the candidate records as proven sites; the 0.42.0 seed records it as unproven and fails on it, so only the candidate compiles it",
   },
   // WP43 S3: `nish/net/static` is a new module, so the 0.42.0 seed refuses
-  // every program that imports it, the http-app example's `--static` included.
-  ...["examples/http-app/main.ts", "tests/link/net_http_app/main.ts", "tests/link/net_static/main.ts"].map(
-    (program) => ({
-      program,
-      file: "exit",
-      changelog: "MIME types, ETag, Range and traversal refused",
-      why: "`nish/net/static` is new in this release, so the 0.42.0 seed's standard library has no such module (WP43 S3)",
-    })
-  ),
+  // every program that imports it.
+  ...["tests/link/net_http_app/main.ts", "tests/link/net_static/main.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "MIME types, ETag, Range and traversal refused",
+    why: "`nish/net/static` is new in this release, so the 0.42.0 seed's standard library has no such module (WP43 S3)",
+  })),
   // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
   // library has none and refuses the program that tests it.
   {
@@ -26307,6 +26502,31 @@ const DECLARED = [
     changelog: WP80_BYTES_WINDOW,
     why: "the case is new with this change and builds under --deny-panics because its caller's window test discharges getU32BE's guard; the seed's std/bytes.ts keeps per-byte index panics no caller test reaches, so the reference refuses it",
   },
+  {
+    program: "bench/std-compress-checksum.ts",
+    file: "std-compress-checksum.ll",
+    changelog: S7_HTTP_APP,
+    why: "std/compress/checksum.ts adds Crc32.ofRange and adler32Range, which answer -1 for a window outside its array, and gzip's and zlib's trailer checks call them, so the module that declares nish/compress's functions declares one more and its declarations and attribute groups renumber",
+  },
+  {
+    program: "tests/link/std_compress_gzip_files/main.ts",
+    file: "main.ll",
+    changelog: S7_HTTP_APP,
+    why: "std/compress/checksum.ts adds Crc32.ofRange, which answers -1 for a window outside its array, so the program's module, which declares nish/compress's functions, declares one more and its declarations and attribute groups renumber",
+  },
+  {
+    program: "tests/link/std_http_compress_window/main.ts",
+    file: "exit",
+    changelog: S7_HTTP_APP,
+    why: "the case is new with this change and calls adler32Range, which std/compress/checksum.ts adds; the seed's module has no such export, so the reference refuses it",
+  },
+  {
+    program: "examples/http-app/main.ts",
+    file: "exit",
+    changelog: S7_HTTP_APP,
+    why: "the example drops its --allow-panics opt-out now that the handler's body decoder and the fetch, url and HMAC calls it makes cannot panic, so the seed, whose gzip reader still can (std/compress/gzip.ts:97), refuses it as a strict module",
+  },
+  ...s7HttpAppDeclared(),
   ...[
     "examples/http-app/main.ts",
     "tests/link/net_http_app/main.ts",

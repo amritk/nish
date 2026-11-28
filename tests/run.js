@@ -11942,7 +11942,11 @@ if (dealtHere("bench") && (!only || "instruction-raises".includes(only))) {
   const nbody = real.programs.nbody.instructions
   const copy = path.join(work, "instructions.json")
   const writeCopy = (edit = (x) => x) =>
-    fs.writeFileSync(copy, JSON.stringify(edit({ ...structuredClone(real), platform: `${process.platform}-${process.arch}` })))
+    // raises starts empty, so the checks read only the entries this fixture writes, never the real file's
+    fs.writeFileSync(
+      copy,
+      JSON.stringify(edit({ ...structuredClone(real), raises: [], platform: `${process.platform}-${process.arch}` }))
+    )
   const counts = path.join(work, "counts.json")
   fs.writeFileSync(counts, JSON.stringify({ fib: fib + Math.ceil(fib / 100), nbody: nbody - 1000 }))
   const update = (...extra) =>
@@ -27991,7 +27995,7 @@ if (dealtHere("cliChecks")) {
       "json-doc":
         "std/json-tokenizer.ts:606:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 120 → 120 bytes",
       "zlib-each":
-        "std/compress/deflate.ts:904:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
+        "std/compress/deflate.ts:910:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 264 → 264 bytes",
       "request-slot":
         "std/net/http-server.ts:246:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 224 → 224 bytes",
     }
@@ -47797,7 +47801,6 @@ if (!only || "net_static".includes(only) || "http-app".includes(only)) {
     const built = spawnNish(
       [
         path.join(root, "examples", "http-app", "main.ts"),
-        ALLOW_PANICS,
         "--sandbox",
         "--allow",
         `net,signal,clock,fs.read=${www}`,

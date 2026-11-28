@@ -712,13 +712,18 @@ const urlBytesOf = (s: string): u8[] | null => {
 
 /** `percentDecode` of `src[off, off + len)` as a new string, or null on an error or when the result is not UTF-8. */
 const urlDecodeString = (src: u8[], off: i32, len: i32, flags: i32): string | null => {
+  // Both callers, `urlDecode` and `urlQueryGet`, cut the window from
+  // `src.length`, so this never answers; it is what proves `len` an array
+  // length, and a window outside `src` is text nobody can decode.
+  if (off < 0 || len < 0 || len > toI32(src.length) - off) {
+    return null
+  }
   // `len` bytes of room; decoding never makes the text longer.
   const out: u8[] = new Array<u8>(len)
-  // A window outside `src` is a caller contract, kept as `percentDecode`'s
-  // panic rather than answered as null: both callers, `urlDecode` and
-  // `urlQueryGet`, cut the window from `src.length`.
-  const n: i32 = percentDecode(src, off, len, out, 0, flags)
-  if (n < 0 || !urlIsUtf8(out, 0, n)) {
+  const n: i32 = tryPercentDecode(src, off, len, out, 0, flags)
+  // A count is at most `out.length`, which `tryPercentDecode` never writes
+  // past; the last test is spelled out for the proof.
+  if (n < 0 || !urlIsUtf8(out, 0, n) || n > toI32(out.length)) {
     return null
   }
   return String.fromBytes(out, 0, n)
@@ -812,15 +817,26 @@ export class Url {
   hasAuthority: boolean = false
 }
 
-/** `bytes[a, b)` as a string with A to Z lower-cased. */
-const urlLowerString = (bytes: u8[], a: i32, b: i32): string => {
-  // Callers pass `0 <= a <= b`; a window the other way round is empty.
-  let width: i32 = 0
-  if (b > a && a >= 0) {
-    width = b - a
+/**
+ * `bytes[a, b)` as a string with A to Z lower-cased, or null when the window
+ * starts below 0 or ends past `bytes`, which no caller's does: each cuts it
+ * from `bytes.length`. A window the other way round is empty.
+ */
+const urlLowerString = (bytes: u8[], a: i32, b: i32): string | null => {
+  const n: i32 = toI32(bytes.length)
+  if (a < 0 || b > n) {
+    return null
+  }
+  if (b <= a) {
+    return ""
+  }
+  // `0 <= a < b <= n`, so the difference fits and is above 0; the prover
+  // reads that only from the clamp, which is never taken.
+  let width: i32 = b - a
+  if (width < 0) {
+    width = 0
   }
   const out: u8[] = new Array<u8>(width)
-  const n: i32 = toI32(bytes.length)
   let j: i32 = 0
   let i: i32 = a
   while (j < toI32(out.length) && i >= 0 && i < n) {
@@ -831,6 +847,18 @@ const urlLowerString = (bytes: u8[], a: i32, b: i32): string => {
     i += 1
   }
   return String.fromBytes(out, 0, toI32(out.length))
+}
+
+/**
+ * `bytes[a, b)` as a string, or null when the window is not inside `bytes`,
+ * which no caller's is: each cuts it with `urlFind`, which answers inside the
+ * window it was given. The test is what proves the read.
+ */
+const urlSlice = (bytes: u8[], a: i32, b: i32): string | null => {
+  if (a < 0 || b < a || b > toI32(bytes.length)) {
+    return null
+  }
+  return String.fromBytes(bytes, a, b)
 }
 
 /** The first `c` in `bytes[a, b)`, or `b`. */
@@ -1019,9 +1047,17 @@ const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
       return false
     }
     const colon: i32 = urlFind(bytes, a, at, URL_COLON)
-    u.username = String.fromBytes(bytes, a, colon)
+    const username: string | null = urlSlice(bytes, a, colon)
+    if (username === null) {
+      return false
+    }
+    u.username = username
     if (colon < at) {
-      u.password = String.fromBytes(bytes, colon + 1, at)
+      const password: string | null = urlSlice(bytes, colon + 1, at)
+      if (password === null) {
+        return false
+      }
+      u.password = password
     }
     h = at + 1
   }
@@ -1031,11 +1067,16 @@ const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
   }
   // `h` lies inside the window, which lies inside `bytes`; the bounds are
   // spelled out for the proof.
+  let host: string | null = null
   if (h >= 0 && h < b && h < toI32(bytes.length) && toI32(bytes[h]) === URL_OPEN_BRACKET) {
-    u.host = urlLowerString(bytes, h + 1, portAt - 1)
+    host = urlLowerString(bytes, h + 1, portAt - 1)
   } else {
-    u.host = urlLowerString(bytes, h, portAt)
+    host = urlLowerString(bytes, h, portAt)
   }
+  if (host === null) {
+    return false
+  }
+  u.host = host
   if (portAt < b && portAt + 1 < b) {
     const port: i32 = urlPortOf(bytes, portAt + 1, b)
     if (port < 0) {
@@ -1158,15 +1199,23 @@ const urlReadReference = (s: string): Url | null => {
     i += 1
   }
   // `urlFind` answers an index at most `n`, so the tests against the length
-  // below always hold; they are spelled out for the proof.
+  // below, and `urlSlice`'s, always hold; they are spelled out for the proof.
   const u: Url = new Url()
   const hash: i32 = urlFind(bytes, 0, n, URL_HASH)
   if (hash < n) {
-    u.fragment = String.fromBytes(bytes, hash + 1, n)
+    const fragment: string | null = urlSlice(bytes, hash + 1, n)
+    if (fragment === null) {
+      return null
+    }
+    u.fragment = fragment
   }
   const question: i32 = urlFind(bytes, 0, hash, URL_QUESTION)
   if (question < hash) {
-    u.query = String.fromBytes(bytes, question + 1, hash)
+    const query: string | null = urlSlice(bytes, question + 1, hash)
+    if (query === null) {
+      return null
+    }
+    u.query = query
   }
   let pos: i32 = 0
   if (question > 0 && toI32(bytes.length) > 0 && urlIsAlpha(toI32(bytes[0]))) {
@@ -1179,7 +1228,11 @@ const urlReadReference = (s: string): Url | null => {
       j += 1
     }
     if (j < question && j < toI32(bytes.length) && toI32(bytes[j]) === URL_COLON) {
-      u.scheme = urlLowerString(bytes, 0, j)
+      const scheme: string | null = urlLowerString(bytes, 0, j)
+      if (scheme === null) {
+        return null
+      }
+      u.scheme = scheme
       pos = j + 1
     }
   }
@@ -1197,7 +1250,11 @@ const urlReadReference = (s: string): Url | null => {
     }
     pos = end
   }
-  u.path = String.fromBytes(bytes, pos, question)
+  const path: string | null = urlSlice(bytes, pos, question)
+  if (path === null) {
+    return null
+  }
+  u.path = path
   return u
 }
 

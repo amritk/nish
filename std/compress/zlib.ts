@@ -23,11 +23,12 @@
  *
  * Written from RFC 1950.
  */
-import { adler32 } from "nish/compress/checksum"
+import { adler32, adler32Range } from "nish/compress/checksum"
 import {
   DEFLATE_ERR_OUTPUT_LIMIT,
   DEFLATE_ERR_TRAILING,
   DEFLATE_ERR_TRUNCATED,
+  DEFLATE_ERR_WINDOW,
   DEFLATE_NO_ROOM,
   Deflater,
   INFLATE_DONE,
@@ -145,7 +146,7 @@ export class ZlibDecompressor {
    * `at`, writing at most `limit` bytes and never past `out`'s end, and
    * answers where the output ends, or a negative `ZLIB_ERR_*` or
    * `DEFLATE_ERR_*`. A window outside its array, or a negative `limit`,
-   * panics. Allocates nothing.
+   * panics: `decompressRange` answers those instead. Allocates nothing.
    *
    * @param src The array that holds the zlib stream.
    * @param off Where in `src` the stream starts.
@@ -164,17 +165,47 @@ export class ZlibDecompressor {
    *   nothing.
    */
   decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 {
-    zlibWindow("ZlibDecompressor.decompress", src, off, len)
-    zlibWindow("ZlibDecompressor.decompress", out, at, 0)
-    if (limit < 0) {
-      panic("ZlibDecompressor.decompress: a negative limit")
+    // One test for every argument, so the call's misuse is one panic site.
+    if (
+      off < 0 ||
+      len < 0 ||
+      off > toI32(src.length) - len ||
+      at < 0 ||
+      at > toI32(out.length) ||
+      limit < 0
+    ) {
+      panic("ZlibDecompressor.decompress: a window outside its array, or a negative limit")
     }
-    // The window was checked in `zlibWindow`; the prover does not carry
-    // that across the call, so the header's bytes are checked again here
-    // and positions are added in i64.
+    return this.decompressRange(src, off, toI32(toI64(off) + toI64(len)), out, at, limit)
+  }
+
+  /**
+   * `decompress` over `src[off .. end)`, a range given by its two ends, that
+   * answers a misuse rather than panicking: a range outside `src`, an output
+   * start outside `out` or a negative `limit` is `DEFLATE_ERR_WINDOW`, with
+   * nothing read or written. `nish/net/http-compress`'s decoder calls this
+   * one, so a body it decodes reaches no panic.
+   *
+   * @internal Called by std/net/http-compress.ts's body decoder.
+   * @param src The array that holds the zlib stream.
+   * @param off Where in `src` the stream starts.
+   * @param end One past the stream's last byte.
+   * @param out The caller's array the data is written into.
+   * @param at Where in `out` the data starts.
+   * @param limit The most bytes of data to accept.
+   * @returns The index in `out` one past the data's last byte, or a negative
+   *   code, as `decompress` answers; or `DEFLATE_ERR_WINDOW`.
+   */
+  decompressRange(src: u8[], off: i32, end: i32, out: u8[], at: i32, limit: i32): i32 {
+    if (off < 0 || off > end || end > toI32(src.length) || at < 0 || at > toI32(out.length) || limit < 0) {
+      return DEFLATE_ERR_WINDOW
+    }
     const n: i32 = toI32(src.length)
+    // Taken in 64 bits: `off` is at most the input's end, but the prover
+    // cannot see that `off + 2` stays in range from the test below.
     const second: i32 = toI32(toI64(off) + 1)
-    if (len < 2 || off < 0 || off >= n || second < 0 || second >= n) {
+    const start: i32 = toI32(toI64(off) + 2)
+    if (end - off < 2 || off >= n || second < 0 || second >= n) {
       return DEFLATE_ERR_TRUNCATED
     }
     const cmf: i32 = toI32(src[off])
@@ -191,8 +222,7 @@ export class ZlibDecompressor {
     }
     const inf: Inflater = this.inflater
     inf.reset()
-    const end: i32 = toI32(toI64(off) + toI64(len))
-    const r: i32 = inf.inflate(src, toI32(toI64(off) + 2), end, false, out, at, outEnd, at)
+    const r: i32 = inf.inflateAll(src, start, end, out, at, outEnd)
     if (r === INFLATE_NEED_OUTPUT) {
       return DEFLATE_ERR_OUTPUT_LIMIT
     }
@@ -217,13 +247,19 @@ export class ZlibDecompressor {
       return DEFLATE_ERR_TRUNCATED
     }
     const want: u32 = (toU32(src[q]) << 24) | (toU32(src[q1]) << 16) | (toU32(src[q2]) << 8) | toU32(src[q3])
-    if (adler32(out, at, toI32(toI64(inf.outPos) - toI64(at))) !== want) {
+    const outPos: i32 = inf.outPos
+    // `inflateAll` wrote `out[at .. outPos)`, so `adler32Range` answers no -1.
+    const got: i64 = adler32Range(out, at, outPos)
+    if (got < 0) {
+      return DEFLATE_ERR_WINDOW
+    }
+    if (got !== toI64(want)) {
       return ZLIB_ERR_ADLER
     }
     if (toI64(q) + 4 !== toI64(end)) {
       return DEFLATE_ERR_TRAILING
     }
-    return inf.outPos
+    return outPos
   }
 }
 

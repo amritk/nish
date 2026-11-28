@@ -236,6 +236,7 @@ struct HmacSha256 (class) size=24 align=8 exported
   method update -> @nish.HmacSha256.update
   method digest -> @nish.HmacSha256.digest
   method digestInto -> @nish.HmacSha256.digestInto
+  method tagInto -> @nish.HmacSha256.tagInto
 struct HmacSha384 (class) size=16 align=8 exported
   field inner: Sha384 index=0 offset=0
   field outer: Sha384 index=1 offset=8
@@ -443,27 +444,36 @@ function HmacSha256.update(this: HmacSha256, data: u8[], off: i32, len: i32): vo
   callee +0:5 Sha256.update -> @nish.Sha256.update
 function HmacSha256.digest(this: HmacSha256): u8[] -> @nish.HmacSha256.digest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.HmacSha256.digestInto
-  calls: nish.HmacSha256.digestInto
-  pointer this: size=24 writesThrough=false captured=false passedTo=nish.HmacSha256.digestInto#0
+  sharedWrite: via nish.HmacSha256.tagInto
+  calls: nish.HmacSha256.tagInto
+  pointer this: size=24 writesThrough=false captured=false passedTo=nish.HmacSha256.tagInto#0
   stackSites=0 stackLocals=0
   local +0:11 tag: u8[] (const)
-  callee +1:5 HmacSha256.digestInto -> @nish.HmacSha256.digestInto
+  callee +1:5 HmacSha256.tagInto -> @nish.HmacSha256.tagInto
 function HmacSha256.digestInto(this: HmacSha256, out: u8[], at: i32): void -> @nish.HmacSha256.digestInto [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.HmacSha256.tagInto
+  escaping: at
+  calls: nish.HmacSha256.tagInto nish.hmacWindowFits nish_panic
+  pointer this: size=24 writesThrough=false captured=false passedTo=nish.HmacSha256.tagInto#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.HmacSha256.tagInto#1
+  stackSites=0 stackLocals=0
+  callee +0:10 hmacWindowFits -> @nish.hmacWindowFits
+  callee +3:5 HmacSha256.tagInto -> @nish.HmacSha256.tagInto
+function HmacSha256.tagInto(this: HmacSha256, out: u8[], at: i32): void -> @nish.HmacSha256.tagInto [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha256.digestInto
   escaping: at
-  calls: nish.Sha256.digestInto nish.Sha256.update nish.hmacWindowFits nish.hmacWipeSha256 nish.wipe$arr.u8 nish_panic
+  calls: nish.Sha256.digestInto nish.Sha256.update nish.hmacWipeSha256 nish.wipe$arr.u8
   pointer this: size=24 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.Sha256.digestInto#1
   stackSites=0 stackLocals=0
-  callee +0:10 hmacWindowFits -> @nish.hmacWindowFits
+  callee +0:5 Sha256.digestInto -> @nish.Sha256.digestInto
+  callee +1:5 Sha256.update -> @nish.Sha256.update
+  callee +2:5 wipe<u8[]> -> @nish.wipe$arr.u8
   callee +3:5 Sha256.digestInto -> @nish.Sha256.digestInto
-  callee +4:5 Sha256.update -> @nish.Sha256.update
-  callee +5:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +6:5 Sha256.digestInto -> @nish.Sha256.digestInto
-  callee +7:5 hmacWipeSha256 -> @nish.hmacWipeSha256
-  callee +8:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee +4:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee +5:5 hmacWipeSha256 -> @nish.hmacWipeSha256
 function HmacSha384.constructor(this: HmacSha384, key: u8[]): void -> @nish.HmacSha384.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.hmacKeySha384

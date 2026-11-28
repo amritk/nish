@@ -16,6 +16,7 @@ import {
   DEFLATE_ERR_SYMBOL,
   DEFLATE_ERR_TRAILING,
   DEFLATE_ERR_TRUNCATED,
+  DEFLATE_ERR_WINDOW,
   DEFLATE_FAST,
   DEFLATE_NO_ROOM,
   DEFLATE_STORE,
@@ -529,6 +530,15 @@ A code the block's tables do not define, or literal/length 286 or 287, or distan
 `DEFLATE_ERR_TRUNCATED: i32`
 
 The input ends inside the stream.
+
+</scalar-card>
+
+<scalar-card title="-16" icon="phosphor/regular/hash">
+
+`DEFLATE_ERR_WINDOW: i32`
+
+A window outside its array, from the calls that answer it rather than
+panic: `Inflater.inflateAll` and the decoders' `decompressRange`.
 
 </scalar-card>
 

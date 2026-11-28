@@ -1,17 +1,9 @@
-// Opt-out (`--allow-panics`): it answers through the `try` calls of
-// `nish/net/handler`, `nish/net/serve` and `nish/net/static`, routes through
-// `routerChecked` and `Router.tryMatch`, and still reaches: the window panic
-// of the `std/compress` gzip reader (std/compress/gzip.ts:97:5), through the
-// body decoder behind every `try` answer, which no caller's proof discharges
-// (docs/LANGUAGE.md, "Panic sites", #2296). Once it is gone, build this
-// program without `--allow-panics`.
-//
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
 // SIGINT or SIGTERM. `--static <dir>` serves the files under `dir` at
 // `/static/` through `nish/net/static`.
 //
-//     build/nish --allow-panics examples/http-app/main.ts --link build/http-app
+//     build/nish examples/http-app/main.ts --link build/http-app
 //     build/http-app 8080 --max-notes 100 &
 //     curl -s localhost:8080/health                          # {"status":"ok","notes":0}
 //     curl -s -d '{"text":"milk"}' localhost:8080/notes      # {"id":1,"text":"milk"}
@@ -28,7 +20,6 @@
 // open connections to finish, for `--drain-ms` at most; a second signal stops
 // it at once. Unknown paths and methods are RFC 9457 problems (404, or 405
 // with its `Allow`). Without a port it prints how to run it and exits 2.
-// smoke: args --allow-panics
 // smoke: exit 2
 import { HttpHandler, HandlerLimits, openHttpHandler } from "nish/net/handler"
 import { Router } from "nish/net/router"

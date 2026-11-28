@@ -3632,6 +3632,7 @@ struct HmacSha256 (class) size=24 align=8 exported
   method update -> @nish.HmacSha256.update
   method digest -> @nish.HmacSha256.digest
   method digestInto -> @nish.HmacSha256.digestInto
+  method tagInto -> @nish.HmacSha256.tagInto
 struct HmacSha384 (class) size=16 align=8 exported
   field inner: Sha384 index=0 offset=0
   field outer: Sha384 index=1 offset=8
@@ -3839,27 +3840,36 @@ function HmacSha256.update(this: HmacSha256, data: u8[], off: i32, len: i32): vo
   callee +0:5 Sha256.update -> @nish.Sha256.update
 function HmacSha256.digest(this: HmacSha256): u8[] -> @nish.HmacSha256.digest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.HmacSha256.digestInto
-  calls: nish.HmacSha256.digestInto
-  pointer this: size=24 writesThrough=false captured=false passedTo=nish.HmacSha256.digestInto#0
+  sharedWrite: via nish.HmacSha256.tagInto
+  calls: nish.HmacSha256.tagInto
+  pointer this: size=24 writesThrough=false captured=false passedTo=nish.HmacSha256.tagInto#0
   stackSites=0 stackLocals=0
   local +0:11 tag: u8[] (const)
-  callee +1:5 HmacSha256.digestInto -> @nish.HmacSha256.digestInto
+  callee +1:5 HmacSha256.tagInto -> @nish.HmacSha256.tagInto
 function HmacSha256.digestInto(this: HmacSha256, out: u8[], at: i32): void -> @nish.HmacSha256.digestInto [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.HmacSha256.tagInto
+  escaping: at
+  calls: nish.HmacSha256.tagInto nish.hmacWindowFits nish_panic
+  pointer this: size=24 writesThrough=false captured=false passedTo=nish.HmacSha256.tagInto#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.HmacSha256.tagInto#1
+  stackSites=0 stackLocals=0
+  callee +0:10 hmacWindowFits -> @nish.hmacWindowFits
+  callee +3:5 HmacSha256.tagInto -> @nish.HmacSha256.tagInto
+function HmacSha256.tagInto(this: HmacSha256, out: u8[], at: i32): void -> @nish.HmacSha256.tagInto [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha256.digestInto
   escaping: at
-  calls: nish.Sha256.digestInto nish.Sha256.update nish.hmacWindowFits nish.hmacWipeSha256 nish.wipe$arr.u8 nish_panic
+  calls: nish.Sha256.digestInto nish.Sha256.update nish.hmacWipeSha256 nish.wipe$arr.u8
   pointer this: size=24 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.Sha256.digestInto#1
   stackSites=0 stackLocals=0
-  callee +0:10 hmacWindowFits -> @nish.hmacWindowFits
+  callee +0:5 Sha256.digestInto -> @nish.Sha256.digestInto
+  callee +1:5 Sha256.update -> @nish.Sha256.update
+  callee +2:5 wipe<u8[]> -> @nish.wipe$arr.u8
   callee +3:5 Sha256.digestInto -> @nish.Sha256.digestInto
-  callee +4:5 Sha256.update -> @nish.Sha256.update
-  callee +5:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +6:5 Sha256.digestInto -> @nish.Sha256.digestInto
-  callee +7:5 hmacWipeSha256 -> @nish.hmacWipeSha256
-  callee +8:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee +4:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee +5:5 hmacWipeSha256 -> @nish.hmacWipeSha256
 function HmacSha384.constructor(this: HmacSha384, key: u8[]): void -> @nish.HmacSha384.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.hmacKeySha384
@@ -5828,15 +5838,15 @@ function urlBytesOf(s: string): u8[] | null -> @nish.urlBytesOf
   local +2:7 i: i32 (let)
   local +4:11 c: i32 (const)
 function urlDecodeString(src: u8[], off: i32, len: i32, flags: i32): string | null -> @nish.urlDecodeString
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: flags len off
-  calls: nish.percentDecode nish.urlIsUtf8 nish_panic nish_panic_slice nish_str_new
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.percentDecode#0
+  calls: nish.tryPercentDecode nish.urlIsUtf8 nish_panic_slice nish_str_new
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.tryPercentDecode#0
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
-  local +4:9 n: i32 (const)
-  callee +4:18 percentDecode -> @nish.percentDecode
-  callee +5:17 urlIsUtf8 -> @nish.urlIsUtf8
+  local +1:9 n: i32 (const)
+  callee +1:18 tryPercentDecode -> @nish.tryPercentDecode
+  callee +4:17 urlIsUtf8 -> @nish.urlIsUtf8
 function urlDecode(s: string, flags: i32): string | null -> @nish.urlDecode [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: flags s
@@ -5861,18 +5871,23 @@ function urlQueryGet(target: string, name: string): string | null -> @nish.urlQu
   callee +13:3 UrlQuery.over -> @nish.UrlQuery.over
   callee +14:7 urlQueryFind -> @nish.urlQueryFind
   callee +20:10 urlDecodeString -> @nish.urlDecodeString
-function urlLowerString(bytes: u8[], a: i32, b: i32): string -> @nish.urlLowerString
+function urlLowerString(bytes: u8[], a: i32, b: i32): string | null -> @nish.urlLowerString
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: a
-  calls: nish_panic nish_panic_slice nish_str_new
+  calls: nish_panic_slice nish_str_new
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:7 width: i32 (let)
-  local +4:9 out: u8[] (const)
-  local +5:9 n: i32 (const)
-  local +6:7 j: i32 (let)
-  local +7:7 i: i32 (let)
-  local +9:11 c: i32 (const)
+  local +0:9 n: i32 (const)
+  local +9:7 width: i32 (let)
+  local +13:9 out: u8[] (const)
+  local +14:7 j: i32 (let)
+  local +15:7 i: i32 (let)
+  local +17:11 c: i32 (const)
+function urlSlice(bytes: u8[], a: i32, b: i32): string | null -> @nish.urlSlice
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_slice nish_str_new
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function urlFind(bytes: u8[], a: i32, b: i32, c: i32): i32 -> @nish.urlFind
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a
@@ -5933,24 +5948,29 @@ function urlReadAuthority(bytes: u8[], a: i32, b: i32, u: Url): boolean -> @nish
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: a b
-  calls: nish.urlFind nish.urlHostEnd nish.urlLowerString nish.urlPortOf nish_panic_slice nish_str_new
-  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.urlFind#0 nish.urlFind#0 nish.urlFind#0 nish.urlFind#0 nish.urlFind#0 nish.urlHostEnd#0 nish.urlLowerString#0 nish.urlLowerString#0 nish.urlPortOf#0
+  calls: nish.urlFind nish.urlHostEnd nish.urlLowerString nish.urlPortOf nish.urlSlice
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.urlFind#0 nish.urlFind#0 nish.urlFind#0 nish.urlFind#0 nish.urlFind#0 nish.urlSlice#0 nish.urlSlice#0 nish.urlHostEnd#0 nish.urlLowerString#0 nish.urlLowerString#0 nish.urlPortOf#0
   pointer u: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -10:9 at: i32 (const)
-  callee -10:19 urlFind -> @nish.urlFind
-  local -9:7 h: i32 (let)
-  callee -7:9 urlFind -> @nish.urlFind
-  callee -4:9 urlFind -> @nish.urlFind
-  callee -4:57 urlFind -> @nish.urlFind
-  local -1:11 colon: i32 (const)
-  callee -1:24 urlFind -> @nish.urlFind
-  local +6:9 portAt: i32 (const)
-  callee +6:23 urlHostEnd -> @nish.urlHostEnd
-  callee +13:14 urlLowerString -> @nish.urlLowerString
-  callee +15:14 urlLowerString -> @nish.urlLowerString
-  local +18:11 port: i32 (const)
-  callee +18:23 urlPortOf -> @nish.urlPortOf
+  local -14:9 at: i32 (const)
+  callee -14:19 urlFind -> @nish.urlFind
+  local -13:7 h: i32 (let)
+  callee -11:9 urlFind -> @nish.urlFind
+  callee -8:9 urlFind -> @nish.urlFind
+  callee -8:57 urlFind -> @nish.urlFind
+  local -5:11 colon: i32 (const)
+  callee -5:24 urlFind -> @nish.urlFind
+  local -4:11 username: string | null (const)
+  callee -4:37 urlSlice -> @nish.urlSlice
+  local +2:13 password: string | null (const)
+  callee +2:39 urlSlice -> @nish.urlSlice
+  local +10:9 portAt: i32 (const)
+  callee +10:23 urlHostEnd -> @nish.urlHostEnd
+  local +16:7 host: string | null (let)
+  callee +18:12 urlLowerString -> @nish.urlLowerString
+  callee +20:12 urlLowerString -> @nish.urlLowerString
+  local +27:11 port: i32 (const)
+  callee +27:23 urlPortOf -> @nish.urlPortOf
 function urlHostEnd(bytes: u8[], h: i32, b: i32): i32 -> @nish.urlHostEnd
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b h
@@ -5987,7 +6007,7 @@ function urlIsHostPort(bytes: u8[], a: i32, b: i32): boolean -> @nish.urlIsHostP
 function urlReadReference(s: string): Url | null -> @nish.urlReadReference
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: s
-  calls: nish.urlBytesOf nish.urlEscapeAt nish.urlFind nish.urlIsAlpha nish.urlIsDigit nish.urlLowerString nish.urlReadAuthority nish_alloc_struct nish_panic_slice nish_str_new
+  calls: nish.urlBytesOf nish.urlEscapeAt nish.urlFind nish.urlIsAlpha nish.urlIsDigit nish.urlLowerString nish.urlReadAuthority nish.urlSlice nish_alloc_struct
   stackSites=0 stackLocals=0
   local +0:9 maybe: u8[] | null (const)
   callee +0:30 urlBytesOf -> @nish.urlBytesOf
@@ -5999,18 +6019,25 @@ function urlReadReference(s: string): Url | null -> @nish.urlReadReference
   local +23:9 u: Url (const)
   local +24:9 hash: i32 (const)
   callee +24:21 urlFind -> @nish.urlFind
-  local +28:9 question: i32 (const)
-  callee +28:25 urlFind -> @nish.urlFind
-  local +32:7 pos: i32 (let)
-  callee +33:50 urlIsAlpha -> @nish.urlIsAlpha
-  local +34:9 j: i32 (let)
-  local +36:13 c: i32 (const)
-  callee +37:13 urlIsAlpha -> @nish.urlIsAlpha
-  callee +37:30 urlIsDigit -> @nish.urlIsDigit
-  callee +43:18 urlLowerString -> @nish.urlLowerString
-  local +54:11 end: i32 (const)
-  callee +54:22 urlFind -> @nish.urlFind
-  callee +56:10 urlReadAuthority -> @nish.urlReadAuthority
+  local +26:11 fragment: string | null (const)
+  callee +26:37 urlSlice -> @nish.urlSlice
+  local +32:9 question: i32 (const)
+  callee +32:25 urlFind -> @nish.urlFind
+  local +34:11 query: string | null (const)
+  callee +34:34 urlSlice -> @nish.urlSlice
+  local +40:7 pos: i32 (let)
+  callee +41:50 urlIsAlpha -> @nish.urlIsAlpha
+  local +42:9 j: i32 (let)
+  local +44:13 c: i32 (const)
+  callee +45:13 urlIsAlpha -> @nish.urlIsAlpha
+  callee +45:30 urlIsDigit -> @nish.urlIsDigit
+  local +51:13 scheme: string | null (const)
+  callee +51:37 urlLowerString -> @nish.urlLowerString
+  local +66:11 end: i32 (const)
+  callee +66:22 urlFind -> @nish.urlFind
+  callee +68:10 urlReadAuthority -> @nish.urlReadAuthority
+  local +73:9 path: string | null (const)
+  callee +73:31 urlSlice -> @nish.urlSlice
 function urlDotAt(s: string, i: i32, end: i32): i32 -> @nish.urlDotAt
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

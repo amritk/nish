@@ -7,249 +7,248 @@ import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 import wrappingMul from "nish:unsafe" -> builtin wrappingMul
 import wrappingSub from "nish:unsafe" -> builtin wrappingSub
-import copyBytes from "nish/bytes" -> function @nish.copyBytes
 import tryCopyBytes from "nish/bytes" -> function @nish.tryCopyBytes
 unsafe import 55:10 uncheckedGet from "nish:unsafe"
 unsafe import 55:24 uncheckedSet from "nish:unsafe"
 unsafe import 55:38 wrappingAdd from "nish:unsafe"
 unsafe import 55:51 wrappingMul from "nish:unsafe"
 unsafe import 55:64 wrappingSub from "nish:unsafe"
-unsafe call 239:9 uncheckedGet (node 599)
-unsafe call 240:10 uncheckedGet (node 610)
-unsafe call 241:10 uncheckedGet (node 626)
-unsafe call 242:10 uncheckedGet (node 642)
-unsafe call 252:3 wrappingMul (node 667)
-unsafe call 261:9 uncheckedGet (node 700)
-unsafe call 262:10 uncheckedGet (node 711)
-unsafe call 263:10 uncheckedGet (node 731)
-unsafe call 264:10 uncheckedGet (node 751)
-unsafe call 265:10 uncheckedGet (node 771)
-unsafe call 266:10 uncheckedGet (node 791)
-unsafe call 267:10 uncheckedGet (node 811)
-unsafe call 268:10 uncheckedGet (node 831)
-unsafe call 272:3 uncheckedSet (node 869)
-unsafe call 273:3 uncheckedSet (node 881)
-unsafe call 274:3 uncheckedSet (node 901)
-unsafe call 275:3 uncheckedSet (node 921)
-unsafe call 276:3 uncheckedSet (node 941)
-unsafe call 277:3 uncheckedSet (node 961)
-unsafe call 278:3 uncheckedSet (node 981)
-unsafe call 279:3 uncheckedSet (node 1001)
-unsafe call 336:9 uncheckedGet (node 1344)
-unsafe call 336:38 uncheckedGet (node 1352)
-unsafe call 656:7 uncheckedSet (node 2686)
-unsafe call 657:7 uncheckedSet (node 2694)
-unsafe call 687:7 uncheckedSet (node 2871)
-unsafe call 694:23 uncheckedGet (node 2956)
-unsafe call 696:28 uncheckedGet (node 2976)
-unsafe call 700:7 uncheckedSet (node 2991)
-unsafe call 708:22 uncheckedGet (node 3032)
-unsafe call 709:7 uncheckedSet (node 3039)
-unsafe call 716:22 uncheckedGet (node 3087)
-unsafe call 720:29 uncheckedGet (node 3115)
-unsafe call 724:7 uncheckedSet (node 3130)
-unsafe call 725:7 uncheckedSet (node 3144)
-unsafe call 725:32 uncheckedGet (node 3150)
-unsafe call 726:7 uncheckedSet (node 3157)
-unsafe call 732:7 uncheckedSet (node 3185)
-unsafe call 732:29 uncheckedGet (node 3191)
-unsafe call 733:7 uncheckedSet (node 3198)
-unsafe call 733:29 uncheckedGet (node 3204)
-unsafe call 739:19 uncheckedGet (node 3217)
-unsafe call 740:19 uncheckedGet (node 3229)
-unsafe call 744:3 uncheckedSet (node 3256)
-unsafe call 752:25 uncheckedGet (node 3308)
-unsafe call 752:52 uncheckedGet (node 3314)
-unsafe call 753:7 uncheckedSet (node 3324)
-unsafe call 753:32 uncheckedGet (node 3330)
-unsafe call 754:7 uncheckedSet (node 3337)
-unsafe call 757:7 uncheckedSet (node 3350)
-unsafe call 757:32 uncheckedGet (node 3356)
-unsafe call 763:24 uncheckedGet (node 3380)
-unsafe call 764:41 uncheckedGet (node 3394)
-unsafe call 764:68 uncheckedGet (node 3400)
-unsafe call 765:27 uncheckedGet (node 3416)
-unsafe call 769:7 uncheckedSet (node 3443)
-unsafe call 770:7 uncheckedSet (node 3453)
-unsafe call 773:27 uncheckedGet (node 3471)
-unsafe call 777:7 uncheckedSet (node 3498)
-unsafe call 783:3 uncheckedSet (node 3512)
-unsafe call 785:21 uncheckedGet (node 3544)
-unsafe call 785:40 uncheckedGet (node 3549)
-unsafe call 789:5 uncheckedSet (node 3564)
-unsafe call 806:25 uncheckedGet (node 3642)
-unsafe call 889:22 uncheckedGet (node 4050)
-unsafe call 1282:7 uncheckedSet (node 5869)
-unsafe call 1308:9 uncheckedSet (node 6032)
-unsafe call 1309:9 uncheckedSet (node 6050)
-unsafe call 1310:9 uncheckedSet (node 6077)
-unsafe call 1311:9 uncheckedSet (node 6104)
-unsafe call 1484:21 uncheckedGet (node 7010)
-unsafe call 1485:5 uncheckedSet (node 7017)
-unsafe call 1486:5 uncheckedSet (node 7025)
-unsafe call 1519:24 uncheckedGet (node 7196)
-unsafe call 1532:13 uncheckedGet (node 7257)
-unsafe call 1536:16 uncheckedGet (node 7277)
-unsafe call 1564:14 uncheckedGet (node 7439)
-unsafe call 1637:25 uncheckedGet (node 7868)
-unsafe call 1638:9 uncheckedSet (node 7875)
-unsafe call 1639:9 uncheckedSet (node 7883)
-unsafe call 1686:18 uncheckedGet (node 8203)
-unsafe call 1700:9 uncheckedSet (node 8279)
-unsafe call 1702:37 uncheckedGet (node 8309)
-unsafe call 1703:25 uncheckedGet (node 8324)
-unsafe call 1705:25 uncheckedGet (node 8344)
-unsafe call 1705:56 uncheckedGet (node 8352)
-unsafe call 1707:25 uncheckedGet (node 8372)
-unsafe call 1711:9 uncheckedSet (node 8392)
-unsafe call 1712:9 uncheckedSet (node 8402)
-unsafe call 1722:11 uncheckedSet (node 8491)
-unsafe call 1722:57 uncheckedGet (node 8502)
-unsafe call 1723:11 uncheckedSet (node 8509)
-unsafe call 1727:30 uncheckedGet (node 8531)
-unsafe call 1728:9 uncheckedSet (node 8538)
-unsafe call 1730:24 uncheckedGet (node 8555)
-unsafe call 1734:9 uncheckedSet (node 8571)
-unsafe call 1810:30 uncheckedGet (node 8987)
-unsafe call 1811:9 uncheckedSet (node 8994)
-unsafe call 1813:24 uncheckedGet (node 9011)
-unsafe call 1817:9 uncheckedSet (node 9027)
-unsafe call 1825:9 uncheckedSet (node 9085)
-unsafe call 1827:37 uncheckedGet (node 9115)
-unsafe call 1828:25 uncheckedGet (node 9130)
-unsafe call 1830:25 uncheckedGet (node 9150)
-unsafe call 1830:56 uncheckedGet (node 9158)
-unsafe call 1832:25 uncheckedGet (node 9178)
-unsafe call 1836:9 uncheckedSet (node 9198)
-unsafe call 1837:9 uncheckedSet (node 9208)
-unsafe call 1858:11 uncheckedSet (node 9360)
-unsafe call 1858:57 uncheckedGet (node 9371)
-unsafe call 1859:11 uncheckedSet (node 9378)
-unsafe call 1931:9 uncheckedSet (node 9784)
-unsafe call 1932:9 uncheckedSet (node 9798)
-unsafe call 1933:9 uncheckedSet (node 9814)
-unsafe call 1934:9 uncheckedSet (node 9831)
-unsafe call 1989:34 uncheckedGet (node 10073)
-unsafe call 1989:57 uncheckedGet (node 10079)
-unsafe call 1994:28 uncheckedGet (node 10111)
-unsafe call 1994:57 uncheckedGet (node 10119)
-unsafe call 2013:11 uncheckedSet (node 10247)
-unsafe call 2025:11 uncheckedSet (node 10335)
-unsafe call 2045:11 uncheckedSet (node 10474)
-unsafe call 2078:20 uncheckedGet (node 10628)
-unsafe call 2082:5 uncheckedSet (node 10648)
-unsafe call 2083:5 uncheckedSet (node 10656)
-unsafe call 2186:22 uncheckedGet (node 11240)
-unsafe call 2187:24 uncheckedGet (node 11252)
-unsafe call 2188:24 uncheckedGet (node 11264)
-unsafe call 2189:39 uncheckedGet (node 11284)
-unsafe call 2213:22 uncheckedGet (node 11393)
-unsafe call 2214:24 uncheckedGet (node 11405)
-unsafe call 2215:28 uncheckedGet (node 11421)
-unsafe call 2382:22 uncheckedGet (node 12457)
-unsafe call 2385:24 uncheckedGet (node 12481)
-unsafe call 2389:32 uncheckedGet (node 12513)
-unsafe call 2396:30 uncheckedGet (node 12561)
-unsafe call 2398:24 uncheckedGet (node 12582)
-unsafe call 2402:30 uncheckedGet (node 12611)
-unsafe call 2403:32 uncheckedGet (node 12630)
-unsafe call 2405:49 uncheckedGet (node 12672)
-unsafe call 2410:13 uncheckedSet (node 12724)
-unsafe call 2411:13 uncheckedSet (node 12736)
-unsafe call 2412:13 uncheckedSet (node 12756)
-unsafe call 2413:13 uncheckedSet (node 12776)
-unsafe call 2422:25 uncheckedGet (node 12836)
-unsafe call 2422:56 uncheckedGet (node 12844)
-unsafe call 2424:25 uncheckedGet (node 12864)
-unsafe call 2428:31 uncheckedGet (node 12893)
-unsafe call 2429:32 uncheckedGet (node 12912)
-unsafe call 2431:45 uncheckedGet (node 12952)
-unsafe call 2437:11 uncheckedSet (node 12998)
-unsafe call 2438:11 uncheckedSet (node 13010)
-unsafe call 2439:11 uncheckedSet (node 13030)
-unsafe call 2440:11 uncheckedSet (node 13050)
-unsafe call 2651:27 uncheckedGet (node 14135)
-unsafe call 2656:9 uncheckedSet (node 14159)
-unsafe call 2685:25 uncheckedGet (node 14368)
-unsafe call 2685:53 uncheckedGet (node 14377)
-unsafe call 2697:25 uncheckedGet (node 14468)
-unsafe call 2700:42 uncheckedGet (node 14508)
-unsafe call 2700:67 uncheckedGet (node 14514)
-unsafe call 2701:31 uncheckedGet (node 14535)
-unsafe call 2704:32 uncheckedGet (node 14586)
-unsafe call 2706:43 uncheckedGet (node 14626)
-unsafe call 2723:11 uncheckedSet (node 14744)
-unsafe call 2736:9 uncheckedSet (node 14800)
-unsafe call 2737:9 uncheckedSet (node 14812)
-unsafe call 2738:9 uncheckedSet (node 14832)
-unsafe call 2739:9 uncheckedSet (node 14852)
-unsafe call 2763:7 uncheckedSet (node 15001)
-unsafe call 2837:5 uncheckedSet (node 15223)
-unsafe call 2837:30 uncheckedGet (node 15229)
-unsafe call 3059:22 uncheckedGet (node 16406)
-unsafe call 3114:22 uncheckedGet (node 16696)
-unsafe call 3147:9 uncheckedSet (node 16863)
-unsafe call 3152:32 uncheckedGet (node 16909)
-unsafe call 3171:13 uncheckedSet (node 17048)
-unsafe call 3201:9 uncheckedSet (node 17195)
-unsafe call 3288:9 uncheckedSet (node 17628)
-unsafe call 3317:9 uncheckedSet (node 17801)
-unsafe call 3419:26 uncheckedGet (node 18374)
-unsafe call 3492:26 uncheckedGet (node 18683)
-unsafe call 3532:30 uncheckedGet (node 18987)
-unsafe call 3575:30 uncheckedGet (node 19260)
-unsafe call 3581:22 uncheckedGet (node 19288)
-unsafe call 3761:34 uncheckedGet (node 20115)
-unsafe call 3761:66 uncheckedGet (node 20126)
-unsafe call 3762:35 uncheckedGet (node 20147)
-unsafe call 3762:71 uncheckedGet (node 20160)
-unsafe call 3895:14 wrappingAdd (node 20835)
-unsafe call 3897:22 uncheckedGet (node 20865)
-unsafe call 3903:18 wrappingSub (node 20901)
-unsafe call 3904:13 uncheckedSet (node 20908)
-unsafe call 3905:18 wrappingAdd (node 20924)
-unsafe call 3906:17 uncheckedGet (node 20933)
-unsafe call 3909:20 wrappingSub (node 20966)
-unsafe call 3910:15 uncheckedSet (node 20973)
-unsafe call 3911:20 wrappingAdd (node 20989)
-unsafe call 3912:19 uncheckedGet (node 20998)
-unsafe call 3915:22 wrappingSub (node 21031)
-unsafe call 3916:17 uncheckedSet (node 21038)
-unsafe call 3917:22 wrappingAdd (node 21054)
-unsafe call 3918:21 uncheckedGet (node 21063)
-unsafe call 3925:20 wrappingSub (node 21101)
-unsafe call 3928:19 uncheckedGet (node 21110)
-unsafe call 3940:18 wrappingSub (node 21177)
-unsafe call 3943:17 uncheckedSet (node 21204)
-unsafe call 3944:22 wrappingAdd (node 21220)
-unsafe call 3945:21 uncheckedGet (node 21229)
-unsafe call 3961:20 wrappingSub (node 21322)
-unsafe call 3962:28 uncheckedGet (node 21334)
-unsafe call 3965:22 wrappingSub (node 21369)
-unsafe call 3967:21 uncheckedGet (node 21378)
-unsafe call 3979:20 wrappingSub (node 21444)
-unsafe call 3984:20 wrappingSub (node 21504)
-unsafe call 3994:19 uncheckedGet (node 21537)
-unsafe call 3995:33 wrappingAdd (node 21555)
-unsafe call 4009:24 wrappingAdd (node 21614)
-unsafe call 4010:26 wrappingAdd (node 21623)
-unsafe call 4013:19 uncheckedSet (node 21635)
-unsafe call 4013:41 uncheckedGet (node 21641)
-unsafe call 4014:24 wrappingAdd (node 21650)
-unsafe call 4015:26 wrappingAdd (node 21659)
-unsafe call 4020:41 uncheckedGet (node 21680)
-unsafe call 4025:24 wrappingAdd (node 21741)
-unsafe call 4028:19 uncheckedSet (node 21753)
-unsafe call 4029:24 wrappingAdd (node 21767)
-unsafe call 4036:19 uncheckedSet (node 21796)
-unsafe call 4036:41 uncheckedGet (node 21802)
-unsafe call 4037:24 wrappingAdd (node 21811)
-unsafe call 4038:26 wrappingAdd (node 21820)
-unsafe call 4049:16 wrappingAdd (node 21879)
-unsafe call 4069:28 uncheckedGet (node 22008)
-unsafe call 4105:9 uncheckedSet (node 22172)
-unsafe call 4191:11 uncheckedSet (node 22668)
-unsafe call 4191:33 uncheckedGet (node 22674)
+unsafe call 245:9 uncheckedGet (node 605)
+unsafe call 246:10 uncheckedGet (node 616)
+unsafe call 247:10 uncheckedGet (node 632)
+unsafe call 248:10 uncheckedGet (node 648)
+unsafe call 258:3 wrappingMul (node 673)
+unsafe call 267:9 uncheckedGet (node 706)
+unsafe call 268:10 uncheckedGet (node 717)
+unsafe call 269:10 uncheckedGet (node 737)
+unsafe call 270:10 uncheckedGet (node 757)
+unsafe call 271:10 uncheckedGet (node 777)
+unsafe call 272:10 uncheckedGet (node 797)
+unsafe call 273:10 uncheckedGet (node 817)
+unsafe call 274:10 uncheckedGet (node 837)
+unsafe call 278:3 uncheckedSet (node 875)
+unsafe call 279:3 uncheckedSet (node 887)
+unsafe call 280:3 uncheckedSet (node 907)
+unsafe call 281:3 uncheckedSet (node 927)
+unsafe call 282:3 uncheckedSet (node 947)
+unsafe call 283:3 uncheckedSet (node 967)
+unsafe call 284:3 uncheckedSet (node 987)
+unsafe call 285:3 uncheckedSet (node 1007)
+unsafe call 342:9 uncheckedGet (node 1350)
+unsafe call 342:38 uncheckedGet (node 1358)
+unsafe call 662:7 uncheckedSet (node 2692)
+unsafe call 663:7 uncheckedSet (node 2700)
+unsafe call 693:7 uncheckedSet (node 2877)
+unsafe call 700:23 uncheckedGet (node 2962)
+unsafe call 702:28 uncheckedGet (node 2982)
+unsafe call 706:7 uncheckedSet (node 2997)
+unsafe call 714:22 uncheckedGet (node 3038)
+unsafe call 715:7 uncheckedSet (node 3045)
+unsafe call 722:22 uncheckedGet (node 3093)
+unsafe call 726:29 uncheckedGet (node 3121)
+unsafe call 730:7 uncheckedSet (node 3136)
+unsafe call 731:7 uncheckedSet (node 3150)
+unsafe call 731:32 uncheckedGet (node 3156)
+unsafe call 732:7 uncheckedSet (node 3163)
+unsafe call 738:7 uncheckedSet (node 3191)
+unsafe call 738:29 uncheckedGet (node 3197)
+unsafe call 739:7 uncheckedSet (node 3204)
+unsafe call 739:29 uncheckedGet (node 3210)
+unsafe call 745:19 uncheckedGet (node 3223)
+unsafe call 746:19 uncheckedGet (node 3235)
+unsafe call 750:3 uncheckedSet (node 3262)
+unsafe call 758:25 uncheckedGet (node 3314)
+unsafe call 758:52 uncheckedGet (node 3320)
+unsafe call 759:7 uncheckedSet (node 3330)
+unsafe call 759:32 uncheckedGet (node 3336)
+unsafe call 760:7 uncheckedSet (node 3343)
+unsafe call 763:7 uncheckedSet (node 3356)
+unsafe call 763:32 uncheckedGet (node 3362)
+unsafe call 769:24 uncheckedGet (node 3386)
+unsafe call 770:41 uncheckedGet (node 3400)
+unsafe call 770:68 uncheckedGet (node 3406)
+unsafe call 771:27 uncheckedGet (node 3422)
+unsafe call 775:7 uncheckedSet (node 3449)
+unsafe call 776:7 uncheckedSet (node 3459)
+unsafe call 779:27 uncheckedGet (node 3477)
+unsafe call 783:7 uncheckedSet (node 3504)
+unsafe call 789:3 uncheckedSet (node 3518)
+unsafe call 791:21 uncheckedGet (node 3550)
+unsafe call 791:40 uncheckedGet (node 3555)
+unsafe call 795:5 uncheckedSet (node 3570)
+unsafe call 812:25 uncheckedGet (node 3648)
+unsafe call 895:22 uncheckedGet (node 4056)
+unsafe call 1288:7 uncheckedSet (node 5875)
+unsafe call 1314:9 uncheckedSet (node 6038)
+unsafe call 1315:9 uncheckedSet (node 6056)
+unsafe call 1316:9 uncheckedSet (node 6083)
+unsafe call 1317:9 uncheckedSet (node 6110)
+unsafe call 1490:21 uncheckedGet (node 7016)
+unsafe call 1491:5 uncheckedSet (node 7023)
+unsafe call 1492:5 uncheckedSet (node 7031)
+unsafe call 1525:24 uncheckedGet (node 7202)
+unsafe call 1538:13 uncheckedGet (node 7263)
+unsafe call 1542:16 uncheckedGet (node 7283)
+unsafe call 1570:14 uncheckedGet (node 7445)
+unsafe call 1643:25 uncheckedGet (node 7874)
+unsafe call 1644:9 uncheckedSet (node 7881)
+unsafe call 1645:9 uncheckedSet (node 7889)
+unsafe call 1692:18 uncheckedGet (node 8209)
+unsafe call 1706:9 uncheckedSet (node 8285)
+unsafe call 1708:37 uncheckedGet (node 8315)
+unsafe call 1709:25 uncheckedGet (node 8330)
+unsafe call 1711:25 uncheckedGet (node 8350)
+unsafe call 1711:56 uncheckedGet (node 8358)
+unsafe call 1713:25 uncheckedGet (node 8378)
+unsafe call 1717:9 uncheckedSet (node 8398)
+unsafe call 1718:9 uncheckedSet (node 8408)
+unsafe call 1728:11 uncheckedSet (node 8497)
+unsafe call 1728:57 uncheckedGet (node 8508)
+unsafe call 1729:11 uncheckedSet (node 8515)
+unsafe call 1733:30 uncheckedGet (node 8537)
+unsafe call 1734:9 uncheckedSet (node 8544)
+unsafe call 1736:24 uncheckedGet (node 8561)
+unsafe call 1740:9 uncheckedSet (node 8577)
+unsafe call 1816:30 uncheckedGet (node 8993)
+unsafe call 1817:9 uncheckedSet (node 9000)
+unsafe call 1819:24 uncheckedGet (node 9017)
+unsafe call 1823:9 uncheckedSet (node 9033)
+unsafe call 1831:9 uncheckedSet (node 9091)
+unsafe call 1833:37 uncheckedGet (node 9121)
+unsafe call 1834:25 uncheckedGet (node 9136)
+unsafe call 1836:25 uncheckedGet (node 9156)
+unsafe call 1836:56 uncheckedGet (node 9164)
+unsafe call 1838:25 uncheckedGet (node 9184)
+unsafe call 1842:9 uncheckedSet (node 9204)
+unsafe call 1843:9 uncheckedSet (node 9214)
+unsafe call 1864:11 uncheckedSet (node 9366)
+unsafe call 1864:57 uncheckedGet (node 9377)
+unsafe call 1865:11 uncheckedSet (node 9384)
+unsafe call 1937:9 uncheckedSet (node 9790)
+unsafe call 1938:9 uncheckedSet (node 9804)
+unsafe call 1939:9 uncheckedSet (node 9820)
+unsafe call 1940:9 uncheckedSet (node 9837)
+unsafe call 1995:34 uncheckedGet (node 10079)
+unsafe call 1995:57 uncheckedGet (node 10085)
+unsafe call 2000:28 uncheckedGet (node 10117)
+unsafe call 2000:57 uncheckedGet (node 10125)
+unsafe call 2019:11 uncheckedSet (node 10253)
+unsafe call 2031:11 uncheckedSet (node 10341)
+unsafe call 2051:11 uncheckedSet (node 10480)
+unsafe call 2084:20 uncheckedGet (node 10634)
+unsafe call 2088:5 uncheckedSet (node 10654)
+unsafe call 2089:5 uncheckedSet (node 10662)
+unsafe call 2192:22 uncheckedGet (node 11246)
+unsafe call 2193:24 uncheckedGet (node 11258)
+unsafe call 2194:24 uncheckedGet (node 11270)
+unsafe call 2195:39 uncheckedGet (node 11290)
+unsafe call 2219:22 uncheckedGet (node 11399)
+unsafe call 2220:24 uncheckedGet (node 11411)
+unsafe call 2221:28 uncheckedGet (node 11427)
+unsafe call 2388:22 uncheckedGet (node 12463)
+unsafe call 2391:24 uncheckedGet (node 12487)
+unsafe call 2395:32 uncheckedGet (node 12519)
+unsafe call 2402:30 uncheckedGet (node 12567)
+unsafe call 2404:24 uncheckedGet (node 12588)
+unsafe call 2408:30 uncheckedGet (node 12617)
+unsafe call 2409:32 uncheckedGet (node 12636)
+unsafe call 2411:49 uncheckedGet (node 12678)
+unsafe call 2416:13 uncheckedSet (node 12730)
+unsafe call 2417:13 uncheckedSet (node 12742)
+unsafe call 2418:13 uncheckedSet (node 12762)
+unsafe call 2419:13 uncheckedSet (node 12782)
+unsafe call 2428:25 uncheckedGet (node 12842)
+unsafe call 2428:56 uncheckedGet (node 12850)
+unsafe call 2430:25 uncheckedGet (node 12870)
+unsafe call 2434:31 uncheckedGet (node 12899)
+unsafe call 2435:32 uncheckedGet (node 12918)
+unsafe call 2437:45 uncheckedGet (node 12958)
+unsafe call 2443:11 uncheckedSet (node 13004)
+unsafe call 2444:11 uncheckedSet (node 13016)
+unsafe call 2445:11 uncheckedSet (node 13036)
+unsafe call 2446:11 uncheckedSet (node 13056)
+unsafe call 2657:27 uncheckedGet (node 14141)
+unsafe call 2662:9 uncheckedSet (node 14165)
+unsafe call 2691:25 uncheckedGet (node 14374)
+unsafe call 2691:53 uncheckedGet (node 14383)
+unsafe call 2703:25 uncheckedGet (node 14474)
+unsafe call 2706:42 uncheckedGet (node 14514)
+unsafe call 2706:67 uncheckedGet (node 14520)
+unsafe call 2707:31 uncheckedGet (node 14541)
+unsafe call 2710:32 uncheckedGet (node 14592)
+unsafe call 2712:43 uncheckedGet (node 14632)
+unsafe call 2729:11 uncheckedSet (node 14750)
+unsafe call 2742:9 uncheckedSet (node 14806)
+unsafe call 2743:9 uncheckedSet (node 14818)
+unsafe call 2744:9 uncheckedSet (node 14838)
+unsafe call 2745:9 uncheckedSet (node 14858)
+unsafe call 2769:7 uncheckedSet (node 15007)
+unsafe call 2843:5 uncheckedSet (node 15229)
+unsafe call 2843:30 uncheckedGet (node 15235)
+unsafe call 3065:22 uncheckedGet (node 16412)
+unsafe call 3120:22 uncheckedGet (node 16702)
+unsafe call 3153:9 uncheckedSet (node 16869)
+unsafe call 3158:32 uncheckedGet (node 16915)
+unsafe call 3177:13 uncheckedSet (node 17054)
+unsafe call 3207:9 uncheckedSet (node 17201)
+unsafe call 3294:9 uncheckedSet (node 17634)
+unsafe call 3323:9 uncheckedSet (node 17807)
+unsafe call 3425:26 uncheckedGet (node 18380)
+unsafe call 3498:26 uncheckedGet (node 18689)
+unsafe call 3538:30 uncheckedGet (node 18993)
+unsafe call 3581:30 uncheckedGet (node 19266)
+unsafe call 3587:22 uncheckedGet (node 19294)
+unsafe call 3810:34 uncheckedGet (node 20234)
+unsafe call 3810:66 uncheckedGet (node 20245)
+unsafe call 3811:35 uncheckedGet (node 20266)
+unsafe call 3811:71 uncheckedGet (node 20279)
+unsafe call 3962:14 wrappingAdd (node 21021)
+unsafe call 3964:22 uncheckedGet (node 21051)
+unsafe call 3970:18 wrappingSub (node 21087)
+unsafe call 3971:13 uncheckedSet (node 21094)
+unsafe call 3972:18 wrappingAdd (node 21110)
+unsafe call 3973:17 uncheckedGet (node 21119)
+unsafe call 3976:20 wrappingSub (node 21152)
+unsafe call 3977:15 uncheckedSet (node 21159)
+unsafe call 3978:20 wrappingAdd (node 21175)
+unsafe call 3979:19 uncheckedGet (node 21184)
+unsafe call 3982:22 wrappingSub (node 21217)
+unsafe call 3983:17 uncheckedSet (node 21224)
+unsafe call 3984:22 wrappingAdd (node 21240)
+unsafe call 3985:21 uncheckedGet (node 21249)
+unsafe call 3992:20 wrappingSub (node 21287)
+unsafe call 3995:19 uncheckedGet (node 21296)
+unsafe call 4007:18 wrappingSub (node 21363)
+unsafe call 4010:17 uncheckedSet (node 21390)
+unsafe call 4011:22 wrappingAdd (node 21406)
+unsafe call 4012:21 uncheckedGet (node 21415)
+unsafe call 4028:20 wrappingSub (node 21508)
+unsafe call 4029:28 uncheckedGet (node 21520)
+unsafe call 4032:22 wrappingSub (node 21555)
+unsafe call 4034:21 uncheckedGet (node 21564)
+unsafe call 4046:20 wrappingSub (node 21630)
+unsafe call 4051:20 wrappingSub (node 21690)
+unsafe call 4061:19 uncheckedGet (node 21723)
+unsafe call 4062:33 wrappingAdd (node 21741)
+unsafe call 4076:24 wrappingAdd (node 21800)
+unsafe call 4077:26 wrappingAdd (node 21809)
+unsafe call 4080:19 uncheckedSet (node 21821)
+unsafe call 4080:41 uncheckedGet (node 21827)
+unsafe call 4081:24 wrappingAdd (node 21836)
+unsafe call 4082:26 wrappingAdd (node 21845)
+unsafe call 4087:41 uncheckedGet (node 21866)
+unsafe call 4092:24 wrappingAdd (node 21927)
+unsafe call 4095:19 uncheckedSet (node 21939)
+unsafe call 4096:24 wrappingAdd (node 21953)
+unsafe call 4103:19 uncheckedSet (node 21982)
+unsafe call 4103:41 uncheckedGet (node 21988)
+unsafe call 4104:24 wrappingAdd (node 21997)
+unsafe call 4105:26 wrappingAdd (node 22006)
+unsafe call 4116:16 wrappingAdd (node 22065)
+unsafe call 4136:28 uncheckedGet (node 22194)
+unsafe call 4172:9 uncheckedSet (node 22358)
+unsafe call 4258:11 uncheckedSet (node 22854)
+unsafe call 4258:33 uncheckedGet (node 22860)
 const DEFLATE_STORE: i32 = 0 [exported]
 const DEFLATE_FAST: i32 = 1 [exported]
 const DEFLATE_DEFAULT: i32 = 6 [exported]
@@ -263,6 +262,7 @@ const DEFLATE_ERR_SYMBOL: i32 = -6 [exported]
 const DEFLATE_ERR_DISTANCE: i32 = -7 [exported]
 const DEFLATE_ERR_OUTPUT_LIMIT: i32 = -8 [exported]
 const DEFLATE_ERR_TRAILING: i32 = -15 [exported]
+const DEFLATE_ERR_WINDOW: i32 = -16 [exported]
 const INFLATE_DONE: i32 = 1 [exported]
 const INFLATE_NEED_INPUT: i32 = 2 [exported]
 const INFLATE_NEED_OUTPUT: i32 = 3 [exported]
@@ -417,7 +417,10 @@ struct Inflater (class) size=160 align=8 exported
   method unread -> @nish.Inflater.unread
   method readDynamic -> @nish.Inflater.readDynamic
   method inflate -> @nish.Inflater.inflate
+  method inflateAll -> @nish.Inflater.inflateAll
+  method window -> @nish.Inflater.window
   method step -> @nish.Inflater.step
+  method stored -> @nish.Inflater.stored
   method huffman -> @nish.Inflater.huffman
   method lookup -> @nish.Inflater.lookup
   method decompress -> @nish.Inflater.decompress
@@ -1548,10 +1551,31 @@ function Inflater.readDynamic(this: Inflater, src: u8[], end: i32): i32 -> @nish
   local +133:11 rd: i32 (const)
   callee +133:21 Inflater.build -> @nish.Inflater.build
 function Inflater.inflate(this: Inflater, src: u8[], ip: i32, inEnd: i32, more: boolean, out: u8[], op: i32, outEnd: i32, histStart: i32): i32 -> @nish.Inflater.inflate [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Inflater.window
+  escaping: histStart inEnd ip more op outEnd
+  calls: nish.Inflater.window nish_panic
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.window#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.window#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.window#5
+  stackSites=0 stackLocals=0
+  local +0:11 r: i32 (const)
+  callee +0:20 Inflater.window -> @nish.Inflater.window
+function Inflater.inflateAll(this: Inflater, src: u8[], ip: i32, inEnd: i32, out: u8[], op: i32, outEnd: i32): i32 -> @nish.Inflater.inflateAll [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Inflater.window
+  escaping: inEnd ip op outEnd
+  calls: nish.Inflater.window
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.window#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.window#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.window#5
+  stackSites=0 stackLocals=0
+  callee +0:12 Inflater.window -> @nish.Inflater.window
+function Inflater.window(this: Inflater, src: u8[], ip: i32, inEnd: i32, more: boolean, out: u8[], op: i32, outEnd: i32, histStart: i32): i32 -> @nish.Inflater.window [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: histStart inEnd ip more op outEnd
-  calls: nish.Inflater.giveBack nish.Inflater.step nish_panic
+  calls: nish.Inflater.giveBack nish.Inflater.step
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.step#0 nish.Inflater.giveBack#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.step#1
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.step#4
@@ -1560,13 +1584,13 @@ function Inflater.inflate(this: Inflater, src: u8[], ip: i32, inEnd: i32, more: 
   callee +2:20 Inflater.step -> @nish.Inflater.step
   callee +5:10 Inflater.giveBack -> @nish.Inflater.giveBack
 function Inflater.step(this: Inflater, src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32 -> @nish.Inflater.step [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: histStart inEnd more outEnd
-  calls: nish.Inflater.fill nish.Inflater.huffman nish.Inflater.readDynamic nish.Inflater.unread nish.copyBytes
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.unread#0 nish.Inflater.fill#0 nish.Inflater.unread#0 nish.Inflater.readDynamic#0 nish.Inflater.huffman#0
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.fill#1 nish.Inflater.readDynamic#1 nish.copyBytes#2 nish.Inflater.huffman#1
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.copyBytes#0 nish.Inflater.huffman#4
+  calls: nish.Inflater.fill nish.Inflater.huffman nish.Inflater.readDynamic nish.Inflater.stored nish.Inflater.unread
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.unread#0 nish.Inflater.fill#0 nish.Inflater.unread#0 nish.Inflater.readDynamic#0 nish.Inflater.stored#0 nish.Inflater.huffman#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.fill#1 nish.Inflater.readDynamic#1 nish.Inflater.stored#1 nish.Inflater.huffman#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.stored#4 nish.Inflater.huffman#4
   stackSites=0 stackLocals=0
   local -9:13 s: i32 (const)
   callee -3:16 Inflater.unread -> @nish.Inflater.unread
@@ -1583,17 +1607,28 @@ function Inflater.step(this: Inflater, src: u8[], inEnd: i32, more: boolean, out
   local +37:17 nlen: i32 (const)
   local +53:17 r: i32 (const)
   callee +53:26 Inflater.readDynamic -> @nish.Inflater.readDynamic
-  local +70:15 ip: i32 (const)
-  local +71:15 opos: i32 (const)
-  local +77:15 inAvail: i32 (const)
-  local +78:15 outAvail: i32 (const)
-  local +83:15 left: i32 (const)
-  local +87:13 n: i32 (let)
-  local +96:15 inGap: i32 (const)
-  local +97:15 outGap: i32 (const)
-  callee +101:9 copyBytes -> @nish.copyBytes
-  local +113:15 r: i32 (const)
-  callee +113:24 Inflater.huffman -> @nish.Inflater.huffman
+  local +70:15 r: i32 (const)
+  callee +70:24 Inflater.stored -> @nish.Inflater.stored
+  local +76:15 r: i32 (const)
+  callee +76:24 Inflater.huffman -> @nish.Inflater.huffman
+function Inflater.stored(this: Inflater, src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32): i32 -> @nish.Inflater.stored [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.tryCopyBytes
+  pointer this: size=160 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tryCopyBytes#0
+  stackSites=0 stackLocals=0
+  local -35:11 ip: i32 (const)
+  local -34:11 opos: i32 (const)
+  local -28:11 inAvail: i32 (const)
+  local -27:11 outAvail: i32 (const)
+  local -22:11 left: i32 (const)
+  local -18:9 n: i32 (let)
+  local -9:11 inGap: i32 (const)
+  local -8:11 outGap: i32 (const)
+  local -1:11 copied: boolean (const)
+  callee -1:29 tryCopyBytes -> @nish.tryCopyBytes
 function Inflater.huffman(this: Inflater, src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32 -> @nish.Inflater.huffman [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:13
@@ -1687,10 +1722,10 @@ function Inflater.decompress(this: Inflater, src: u8[], off: i32, len: i32, out:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: at len limit off
-  calls: nish.Inflater.inflate nish.Inflater.reset nish.deflateWindow nish_panic
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.reset#0 nish.Inflater.inflate#0
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateWindow#1 nish.Inflater.inflate#1
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.deflateWindow#1 nish.Inflater.inflate#5
+  calls: nish.Inflater.inflateAll nish.Inflater.reset nish.deflateWindow nish_panic
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.reset#0 nish.Inflater.inflateAll#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateWindow#1 nish.Inflater.inflateAll#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.deflateWindow#1 nish.Inflater.inflateAll#4
   stackSites=0 stackLocals=0
   callee -10:5 deflateWindow -> @nish.deflateWindow
   callee -9:5 deflateWindow -> @nish.deflateWindow
@@ -1702,9 +1737,9 @@ function Inflater.decompress(this: Inflater, src: u8[], off: i32, len: i32, out:
   local +20:11 inEnd: i32 (const)
   local +21:11 end: i32 (const)
   callee +22:5 Inflater.reset -> @nish.Inflater.reset
-  local +23:11 r: i32 (const)
-  callee +23:20 Inflater.inflate -> @nish.Inflater.inflate
-  local +24:11 pos: i32 (const)
+  local +25:11 r: i32 (const)
+  callee +25:20 Inflater.inflateAll -> @nish.Inflater.inflateAll
+  local +26:11 pos: i32 (const)
 function deflateCompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, level: i32): i32 -> @nish.deflateCompress [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Deflater.compress
@@ -2141,6 +2176,7 @@ module std/compress/gzip.ts [package nish]
 import Crc32 from "nish/compress/checksum" -> struct Crc32
 import DEFLATE_ERR_OUTPUT_LIMIT from "nish/compress/deflate" -> const DEFLATE_ERR_OUTPUT_LIMIT
 import DEFLATE_ERR_TRUNCATED from "nish/compress/deflate" -> const DEFLATE_ERR_TRUNCATED
+import DEFLATE_ERR_WINDOW from "nish/compress/deflate" -> const DEFLATE_ERR_WINDOW
 import DEFLATE_NO_ROOM from "nish/compress/deflate" -> const DEFLATE_NO_ROOM
 import Deflater from "nish/compress/deflate" -> struct Deflater
 import FixedDeflater from "nish/compress/deflate" -> struct FixedDeflater
@@ -2178,6 +2214,7 @@ struct GzipDecompressor (class) size=16 align=8 exported
   field crc: Crc32 index=1 offset=8 readonly
   constructor -> @nish.GzipDecompressor.constructor
   method decompress -> @nish.GzipDecompressor.decompress
+  method decompressRange -> @nish.GzipDecompressor.decompressRange
 struct GzipWriter (class) size=48 align=8 exported
   field deflater: Deflater index=0 offset=0 readonly
   field crc: Crc32 index=1 offset=8 readonly
@@ -2268,11 +2305,11 @@ function gzipWriteHeader(out: u8[], at: i32, level: i32): i32 -> @nish.gzipWrite
   local -16:11 i: i32 (const)
   local -12:9 b: i32 (let)
 function gzipReadHeader(crc: Crc32, src: u8[], p: i32, end: i32): i32 -> @nish.gzipReadHeader
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: p
-  calls: nish.Crc32.update nish.gzipByte
-  pointer crc: size=16 writesThrough=false captured=false passedTo=nish.Crc32.update#0
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.Crc32.update#2
+  calls: nish.Crc32.ofRange nish.gzipByte
+  pointer crc: size=16 writesThrough=false captured=false passedTo=nish.Crc32.ofRange#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.gzipByte#0 nish.Crc32.ofRange#1
   stackSites=0 stackLocals=0
   local +0:9 b0: i32 (const)
   callee +0:19 gzipByte -> @nish.gzipByte
@@ -2297,7 +2334,8 @@ function gzipReadHeader(crc: Crc32, src: u8[], p: i32, end: i32): i32 -> @nish.g
   local +47:11 h1: i32 (const)
   callee +47:21 gzipByte -> @nish.gzipByte
   local +51:11 want: i32 (const)
-  callee +52:15 Crc32.update -> @nish.Crc32.update
+  local +54:11 got: i64 (const)
+  callee +54:22 Crc32.ofRange -> @nish.Crc32.ofRange
 function gzipTrailer(out: u8[], at: i32, crc: u32, size: u32): i32 -> @nish.gzipTrailer
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.gzipPut32
@@ -2370,34 +2408,42 @@ function GzipDecompressor.constructor(this: GzipDecompressor): void -> @nish.Gzi
   callee +0:21 new Inflater -> @nish.Inflater.constructor
   callee +1:16 new Crc32 -> @nish.Crc32.constructor
 function GzipDecompressor.decompress(this: GzipDecompressor, src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 -> @nish.GzipDecompressor.decompress [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Inflater.reset
-  escaping: at len off
-  calls: nish.Crc32.update nish.Inflater.inflate nish.Inflater.reset nish.gzipGet32 nish.gzipReadHeader nish.gzipWindow nish_panic
-  pointer this: size=16 writesThrough=false captured=false
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipWindow#1 nish.gzipReadHeader#1 nish.Inflater.inflate#1 nish.gzipGet32#0 nish.gzipGet32#0
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.Inflater.inflate#5 nish.Crc32.update#2
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.GzipDecompressor.decompressRange
+  escaping: at limit off
+  calls: nish.GzipDecompressor.decompressRange nish_panic
+  pointer this: size=16 writesThrough=false captured=false passedTo=nish.GzipDecompressor.decompressRange#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.GzipDecompressor.decompressRange#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.GzipDecompressor.decompressRange#4
   stackSites=0 stackLocals=0
-  callee +0:5 gzipWindow -> @nish.gzipWindow
-  callee +1:5 gzipWindow -> @nish.gzipWindow
-  local +7:9 outEnd: i32 (let)
-  local +11:11 end: i32 (const)
-  local +12:9 p: i32 (let)
-  local +13:9 op: i32 (let)
-  local +14:9 first: boolean (let)
-  local +17:13 body: i32 (const)
-  callee +17:25 gzipReadHeader -> @nish.gzipReadHeader
-  local +21:13 inf: Inflater (const)
-  callee +22:7 Inflater.reset -> @nish.Inflater.reset
-  local +23:13 r: i32 (const)
-  callee +23:22 Inflater.inflate -> @nish.Inflater.inflate
-  local +30:13 q: i32 (const)
-  local +31:13 wantCrc: i64 (const)
-  callee +31:28 gzipGet32 -> @nish.gzipGet32
-  local +32:13 wantSize: i64 (const)
-  callee +32:29 gzipGet32 -> @nish.gzipGet32
-  local +36:13 n: i32 (const)
-  callee +37:29 Crc32.update -> @nish.Crc32.update
+  callee +0:12 GzipDecompressor.decompressRange -> @nish.GzipDecompressor.decompressRange
+function GzipDecompressor.decompressRange(this: GzipDecompressor, src: u8[], off: i32, end: i32, out: u8[], at: i32, limit: i32): i32 -> @nish.GzipDecompressor.decompressRange [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Inflater.reset
+  escaping: at end off
+  calls: nish.Crc32.ofRange nish.Inflater.inflateAll nish.Inflater.reset nish.gzipGet32 nish.gzipReadHeader
+  pointer this: size=16 writesThrough=false captured=false
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipReadHeader#1 nish.Inflater.inflateAll#1 nish.gzipGet32#0 nish.gzipGet32#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.inflateAll#4 nish.Crc32.ofRange#1
+  stackSites=0 stackLocals=0
+  local +0:9 outEnd: i32 (let)
+  local +4:9 p: i32 (let)
+  local +5:9 op: i32 (let)
+  local +6:9 first: boolean (let)
+  local +9:13 body: i32 (const)
+  callee +9:25 gzipReadHeader -> @nish.gzipReadHeader
+  local +13:13 inf: Inflater (const)
+  callee +14:7 Inflater.reset -> @nish.Inflater.reset
+  local +15:13 r: i32 (const)
+  callee +15:22 Inflater.inflateAll -> @nish.Inflater.inflateAll
+  local +22:13 q: i32 (const)
+  local +23:13 wantCrc: i64 (const)
+  callee +23:28 gzipGet32 -> @nish.gzipGet32
+  local +24:13 wantSize: i64 (const)
+  callee +24:29 gzipGet32 -> @nish.gzipGet32
+  local +28:13 outPos: i32 (const)
+  local +30:13 got: i64 (const)
+  callee +30:24 Crc32.ofRange -> @nish.Crc32.ofRange
 function gzipCompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, level: i32): i32 -> @nish.gzipCompress [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.GzipCompressor.compress
@@ -2689,13 +2735,13 @@ unsafe call 132:27 uncheckedGet (node 724)
 unsafe call 136:7 uncheckedSet (node 744)
 unsafe call 140:11 uncheckedSet (node 807)
 unsafe call 140:44 uncheckedGet (node 817)
-unsafe call 256:9 uncheckedGet (node 1427)
-unsafe call 256:42 uncheckedGet (node 1442)
-unsafe call 311:19 uncheckedGet (node 1671)
-unsafe call 313:19 uncheckedGet (node 1688)
-unsafe call 315:19 uncheckedGet (node 1707)
-unsafe call 317:19 uncheckedGet (node 1726)
-unsafe call 322:19 uncheckedGet (node 1754)
+unsafe call 277:9 uncheckedGet (node 1492)
+unsafe call 277:42 uncheckedGet (node 1507)
+unsafe call 332:19 uncheckedGet (node 1736)
+unsafe call 334:19 uncheckedGet (node 1753)
+unsafe call 336:19 uncheckedGet (node 1772)
+unsafe call 338:19 uncheckedGet (node 1791)
+unsafe call 343:19 uncheckedGet (node 1819)
 const CRC32_POLY: i64 = 3988292384
 const CRC32_TABLE_SIZE: i32 = 2048
 const CRC32_BRAIDS: i32 = 5
@@ -2706,6 +2752,7 @@ struct Crc32 (class) size=16 align=8 exported
   field braid: u32[] index=1 offset=8 readonly
   constructor -> @nish.Crc32.constructor
   method update -> @nish.Crc32.update
+  method ofRange -> @nish.Crc32.ofRange
 function checksumLoad64(buf: u8[], p: integer<0, 2147483639>): u64 -> @nish.checksumLoad64
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer buf: size=0 writesThrough=false captured=false
@@ -2749,6 +2796,14 @@ function Crc32.update(this: Crc32, crc: u32, buf: u8[], off: i32, len: i32): u32
   stackSites=0 stackLocals=0
   callee +0:5 checksumWindow -> @nish.checksumWindow
   callee +1:12 crc32Walk -> @nish.crc32Walk
+function Crc32.ofRange(this: Crc32, buf: u8[], off: i32, end: i32): i64 -> @nish.Crc32.ofRange [exported method]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.crc32Walk
+  pointer this: size=16 writesThrough=false captured=false
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.crc32Walk#3
+  stackSites=0 stackLocals=0
+  callee +0:18 crc32Walk -> @nish.crc32Walk
 function crc32Walk(t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.crc32Walk
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
@@ -2827,6 +2882,13 @@ function adler32(buf: u8[], off: i32, len: i32): u32 -> @nish.adler32 [exported]
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.adler32Update#1
   stackSites=0 stackLocals=0
   callee +0:64 adler32Update -> @nish.adler32Update
+function adler32Range(buf: u8[], off: i32, end: i32): i64 -> @nish.adler32Range [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.adler32Walk
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.adler32Walk#1
+  stackSites=0 stackLocals=0
+  callee +0:16 adler32Walk -> @nish.adler32Walk
 import readFileBytesSync from "nish:fs" -> builtin readFileBytesSync
 import monotonicNanos from "nish:process" -> builtin monotonicNanos
 import compressBound from "nish/compress/deflate" -> function @nish.compressBound

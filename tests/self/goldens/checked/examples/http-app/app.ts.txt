@@ -217,13 +217,6 @@ function addRoutes(router: Router): Router -> @addRoutes
   callee +3:3 Router.add -> @nish.Router.add
   callee +4:3 Router.add -> @nish.Router.add
   callee +5:3 Router.add -> @nish.Router.add
-function appRoutes(): Router -> @appRoutes [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
-  sharedWrite: via addRoutes
-  calls: addRoutes nish.Router.constructor nish_alloc_struct
-  stackSites=1 stackLocals=0
-  callee +0:40 addRoutes -> @addRoutes
-  callee +0:50 new Router -> @nish.Router.constructor
 function tryAppRoutes(): Result<Router, string> -> @tryAppRoutes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via addRoutes

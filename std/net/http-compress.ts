@@ -80,7 +80,12 @@
  * output buffer of `compressBound(maxLength)` bytes and
  * the field arrays `addFields` fills, all built once.
  */
-import { DEFLATE_ERR_OUTPUT_LIMIT, DEFLATE_FAST, compressBound } from "nish/compress/deflate"
+import {
+  DEFLATE_ERR_OUTPUT_LIMIT,
+  DEFLATE_ERR_WINDOW,
+  DEFLATE_FAST,
+  compressBound,
+} from "nish/compress/deflate"
 import { adler32 } from "nish/compress/checksum"
 import { GzipCompressor, GzipDecompressor, GzipFixedCompressor } from "nish/compress/gzip"
 import { ZlibDecompressor } from "nish/compress/zlib"
@@ -1244,6 +1249,7 @@ export class HttpBodyDecoder {
     if (off < 0 || len < 0 || off > toI32(src.length) - len) {
       return HTTP_DECODE_BAD_CALL
     }
+    const stop: i32 = toI32(toI64(off) + toI64(len))
     const limit: i32 = this.limit
     // A first guess of four times the input, so most bodies decode at once.
     // Under the test, `len` is at most a quarter of `limit`, so four times it
@@ -1263,12 +1269,17 @@ export class HttpBodyDecoder {
       while (toI32(output.length) < size) {
         output.push(0)
       }
+      // The range decoders answer a misuse rather than panicking, so a body
+      // decoded here reaches no panic; the test above has ruled it out.
       const end: i32 =
         coding === HTTP_CODING_GZIP
-          ? this.gunzip.decompress(src, off, len, this.output, toI32(0), limit)
-          : this.unzlib.decompress(src, off, len, this.output, toI32(0), limit)
+          ? this.gunzip.decompressRange(src, off, stop, output, toI32(0), limit)
+          : this.unzlib.decompressRange(src, off, stop, output, toI32(0), limit)
       if (end >= 0) {
         return end
+      }
+      if (end === DEFLATE_ERR_WINDOW) {
+        return HTTP_DECODE_BAD_CALL
       }
       if (end !== DEFLATE_ERR_OUTPUT_LIMIT) {
         return HTTP_DECODE_MALFORMED
