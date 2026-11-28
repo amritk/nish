@@ -42,12 +42,30 @@ import { quicPushAck, quicPushAckEcn, quicPutAck, quicPutAckEcn } from "nish/net
 export const QUIC_ACK_MAX_RANGES: i32 = 32
 
 /**
+ * One more than `n`, or -1 when `n` is below 0 or already `QUIC_MAX_VARINT`,
+ * the largest packet number or count a varint carries (RFC 9000 §16).
+ * Counted down from `QUIC_MAX_VARINT`, so the sum is one `src/bounds.ts`
+ * proves, never a wrap.
+ */
+const quicAckNext = (n: i64): i64 => {
+  if (n < 0) {
+    return -1
+  }
+  const left: i64 = QUIC_MAX_VARINT - n
+  if (left < 1) {
+    return -1
+  }
+  return QUIC_MAX_VARINT - (left - 1)
+}
+
+/**
  * One more than the ECN count `n`, or `n` once it is the largest a varint
  * carries, since an ACK_ECN frame could not write a larger one.
  */
-const quicAckCountUp = (n: i64): i64 =>
-  // Below `QUIC_MAX_VARINT`, so the unsigned sum cannot wrap.
-  n < QUIC_MAX_VARINT ? toI64(toU64(n) + 1) : n
+const quicAckCountUp = (n: i64): i64 => {
+  const next: i64 = quicAckNext(n)
+  return next < 0 ? n : next
+}
 
 /**
  * The packet numbers received in one space. `ranges` holds `count` pairs
@@ -188,8 +206,8 @@ export class QuicAckRanges {
     while (k < this.count && this.low(k) > pn) {
       k += 1
     }
-    // `pn` is at most 2^62 - 1 here, so one past it cannot wrap.
-    const joinsAbove: boolean = k > 0 && this.low(k - 1) === toI64(toU64(pn) + 1)
+    // One past `pn`, or -1 at `QUIC_MAX_VARINT`, which no range starts at.
+    const joinsAbove: boolean = k > 0 && this.low(k - 1) === quicAckNext(pn)
     const joinsBelow: boolean = k < this.count && this.high(k) === pn - 1
     if (joinsAbove && joinsBelow) {
       // `pn` closes the hole between two ranges: merge them into the upper one.
@@ -268,8 +286,10 @@ export class QuicAckRanges {
       this.set(j, this.low(j - 1), this.high(j - 1))
     }
     this.set(k, pn, pn)
-    // `count` is below `QUIC_ACK_MAX_RANGES` here, so one more cannot wrap.
-    this.count = toI32(toU32(count) + 1)
+    if (count < 0 || count >= QUIC_ACK_MAX_RANGES) {
+      return
+    }
+    this.count = count + 1
   }
 
   /**
