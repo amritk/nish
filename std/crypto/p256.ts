@@ -157,7 +157,7 @@
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
-import { SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
+import { SHA256_SIZE, Sha256, sha256, sha256Absorbed } from "nish/crypto/sha256"
 import { timingSafeEqual } from "nish/crypto/ct"
 
 /** The length in bytes of a private key: one scalar, big-endian. */
@@ -4004,16 +4004,10 @@ const p256WipeHash = (h: Sha256): void => {
 const p256Mac = (k: u8[], a: u8[], b: u8[], c: u8[], d: u8[]): u8[] => {
   const ipad: u8[] = p256PadBlock(k, 0x36)
   const opad: u8[] = p256PadBlock(k, 0x5c)
-  const inner = new Sha256()
-  inner.update(ipad, P256_FROM, toI32(ipad.length))
-  inner.update(a, P256_FROM, toI32(a.length))
-  inner.update(b, P256_FROM, toI32(b.length))
-  inner.update(c, P256_FROM, toI32(c.length))
-  inner.update(d, P256_FROM, toI32(d.length))
+  const inner: Sha256 = sha256Absorbed(ipad, a, b, c, d)
   const innerDigest: u8[] = inner.digest()
-  const outer = new Sha256()
-  outer.update(opad, P256_FROM, toI32(opad.length))
-  outer.update(innerDigest, P256_FROM, toI32(innerDigest.length))
+  const empty: u8[] = new Array<u8>(0)
+  const outer: Sha256 = sha256Absorbed(opad, innerDigest, empty, empty, empty)
   const tag: u8[] = outer.digest()
   wipe(ipad)
   wipe(opad)

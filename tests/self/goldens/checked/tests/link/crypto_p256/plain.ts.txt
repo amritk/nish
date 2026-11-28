@@ -25,7 +25,7 @@ function p256PublicKeyPlain(priv: u8[]): u8[] | null -> @p256PublicKeyPlain [exp
   callee +1:28 p256PublicKey -> @nish.p256PublicKey
   callee +2:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
 function p256SignPlain(priv: u8[], digest: u8[]): u8[] | null -> @p256SignPlain [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Sign
   calls: keyCopyOf nish.p256Sign nish.secret$arr.u8 nish.wipe$$Secret$arr.u8
   pointer priv: size=0 writesThrough=false captured=false passedTo=keyCopyOf#0
@@ -38,7 +38,7 @@ function p256SignPlain(priv: u8[], digest: u8[]): u8[] | null -> @p256SignPlain 
   callee +1:28 p256Sign -> @nish.p256Sign
   callee +2:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
 function p256SignSha256Plain(priv: u8[], msg: u8[]): u8[] | null -> @p256SignSha256Plain [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SignSha256
   calls: keyCopyOf nish.p256SignSha256 nish.secret$arr.u8 nish.wipe$$Secret$arr.u8
   pointer priv: size=0 writesThrough=false captured=false passedTo=keyCopyOf#0

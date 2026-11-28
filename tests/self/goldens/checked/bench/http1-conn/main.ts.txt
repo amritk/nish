@@ -2505,7 +2505,7 @@ function exposeWith<u8[], u8[], u8[] | null, p256EcdhExposed>(s: Secret<u8[]>, a
   stackSites=0 stackLocals=0
   callee +0:93 p256EcdhExposed -> @nish.p256EcdhExposed
 function exposeWith<u8[], u8[], u8[] | null, p256SignExposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] | null -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SignExposed
   calls: nish.p256SignExposed
   pointer s: size=8 writesThrough=false captured=false
@@ -8160,44 +8160,46 @@ function base64urlEncode(data: u8[]): string -> @nish.base64urlEncode [exported]
   callee +12:38 base64urlCharOf -> @nish.base64urlCharOf
   callee +18:36 base64urlCharOf -> @nish.base64urlCharOf
 function base64urlDecode(text: string): u8[] | null -> @nish.base64urlDecode [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.base64Put nish.base64urlSextetOf nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.base64Put nish.base64urlSextetOf
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 tail: i32 (const)
-  local +10:9 out: u8[] (const)
-  local +14:7 bad: i32 (let)
-  local +25:9 full: u32 (const)
-  local +26:7 j: i32 (let)
-  local +27:12 k: u32 (let)
-  local +28:11 i0: i32 (const)
-  local +29:11 i1: i32 (const)
-  local +30:11 i2: i32 (const)
-  local +31:11 i3: i32 (const)
-  local +32:11 s0: i32 (const)
-  callee +32:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +33:11 s1: i32 (const)
-  callee +33:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +34:11 s2: i32 (const)
-  callee +34:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +35:11 s3: i32 (const)
-  callee +35:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +37:11 word: i32 (const)
-  callee +38:9 base64Put -> @nish.base64Put
-  callee +39:9 base64Put -> @nish.base64Put
-  callee +40:9 base64Put -> @nish.base64Put
-  local +46:11 i0: i32 (const)
-  local +47:11 i1: i32 (const)
-  local +48:11 i2: i32 (const)
-  local +49:11 s0: i32 (const)
-  callee +49:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +50:11 s1: i32 (const)
-  callee +50:41 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +53:11 s2: i32 (const)
-  callee +53:55 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +55:11 word: i32 (const)
-  callee +56:9 base64Put -> @nish.base64Put
-  callee +58:7 base64Put -> @nish.base64Put
+  local +12:7 short: i32 (let)
+  local +16:9 whole: i32 (const)
+  local +17:9 out: u8[] (const)
+  local +21:7 bad: i32 (let)
+  local +32:9 full: u32 (const)
+  local +33:7 j: i32 (let)
+  local +34:12 k: u32 (let)
+  local +35:11 i0: i32 (const)
+  local +36:11 i1: i32 (const)
+  local +37:11 i2: i32 (const)
+  local +38:11 i3: i32 (const)
+  local +39:11 s0: i32 (const)
+  callee +39:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +40:11 s1: i32 (const)
+  callee +40:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +41:11 s2: i32 (const)
+  callee +41:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +42:11 s3: i32 (const)
+  callee +42:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +44:11 word: i32 (const)
+  callee +45:9 base64Put -> @nish.base64Put
+  callee +46:9 base64Put -> @nish.base64Put
+  callee +47:9 base64Put -> @nish.base64Put
+  local +53:11 i0: i32 (const)
+  local +54:11 i1: i32 (const)
+  local +55:11 i2: i32 (const)
+  local +56:11 s0: i32 (const)
+  callee +56:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +57:11 s1: i32 (const)
+  callee +57:41 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +60:11 s2: i32 (const)
+  callee +60:55 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +62:11 word: i32 (const)
+  callee +63:9 base64Put -> @nish.base64Put
+  callee +65:7 base64Put -> @nish.base64Put
 function base64StdPadCharOf(v: i32): i32 -> @nish.base64StdPadCharOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.base64urlRangeMask
@@ -8274,21 +8276,23 @@ function base64StdPadDecodedLength(text: u8[], start: i32, length: i32): i32 -> 
   local +23:11 v: i32 (const)
   callee +23:20 base64StdPadSextetOf -> @nish.base64StdPadSextetOf
 function base64StdPadDecode(text: string): u8[] | null -> @nish.base64StdPadDecode [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.base64Put nish.base64StdPadSextetOf nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.base64Put nish.base64StdPadSextetOf
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +5:7 pad: integer<0, 2> (let)
-  local +9:9 chars: i32 (const)
-  local +10:9 out: u8[] (const)
-  local +11:7 bad: i32 (let)
-  local +12:7 acc: i32 (let)
-  local +13:7 bits: u32 (let)
-  local +14:7 j: i32 (let)
-  local +17:12 k: i32 (let)
-  local +18:11 v: i32 (const)
-  callee +18:20 base64StdPadSextetOf -> @nish.base64StdPadSextetOf
-  callee +24:11 base64Put -> @nish.base64Put
+  local +9:7 pad: integer<0, 2> (let)
+  local +16:7 last: i32 (let)
+  local +23:9 whole: i32 (const)
+  local +24:9 out: u8[] (const)
+  local +25:9 chars: i32 (const)
+  local +26:7 bad: i32 (let)
+  local +27:7 acc: i32 (let)
+  local +28:7 bits: u32 (let)
+  local +29:7 j: i32 (let)
+  local +32:12 k: i32 (let)
+  local +33:11 v: i32 (const)
+  callee +33:20 base64StdPadSextetOf -> @nish.base64StdPadSextetOf
+  callee +39:11 base64Put -> @nish.base64Put
 module std/crypto/sha1.ts [package nish]
 const SHA1_SIZE: i32 = 20 [exported]
 const SHA1_BLOCK: i32 = 64 [exported]
@@ -9584,7 +9588,7 @@ function tlsEcdsaDerSignature(rs: u8[]): u8[] | null -> @nish.tlsEcdsaDerSignatu
   callee +0:35 tlsEcdsaDerLength -> @nish.tlsEcdsaDerLength
   callee +1:3 tlsEcdsaDerInto -> @nish.tlsEcdsaDerInto
 function tlsSignEcdsaP256(priv: Secret<u8[]>, content: u8[]): u8[] | null -> @nish.tlsSignEcdsaP256 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SignSha256
   calls: nish.p256SignSha256 nish.tlsEcdsaDerSignature
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.p256SignSha256#0
@@ -12384,40 +12388,25 @@ function Sha256.constructor(this: Sha256): void -> @nish.Sha256.constructor [exp
   stackSites=0 stackLocals=0
   local +0:11 h: u32[] (const)
 function Sha256.update(this: Sha256, data: u8[], off: i32, len: i32): void -> @nish.Sha256.update [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.sha256Absorb
   escaping: len off
-  calls: nish.sha256Compress nish_panic
-  pointer this: size=40 writesThrough=true captured=false
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256Compress#2
+  calls: nish.sha256Absorb nish_panic
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.sha256Absorb#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorb#1
   stackSites=0 stackLocals=0
-  local -7:11 size: i32 (const)
-  local +1:11 state: u32[] (const)
-  local +2:11 schedule: u32[] (const)
-  local +3:11 block: u8[] (const)
-  local +4:11 room: i32 (const)
-  local +5:9 at: i32 (let)
-  local +6:9 left: i32 (let)
-  local +7:9 fill: i32 (let)
-  callee +22:7 sha256Compress -> @nish.sha256Compress
-  callee +27:7 sha256Compress -> @nish.sha256Compress
+  callee +0:10 sha256Absorb -> @nish.sha256Absorb
 function Sha256.updateAll(this: Sha256, data: u8[]): void -> @nish.Sha256.updateAll [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish.Sha256.update nish.sha256Compress
-  pointer this: size=40 writesThrough=true captured=false passedTo=nish.Sha256.update#0
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Sha256.update
+  calls: nish.Sha256.update nish.sha256AbsorbLong
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.Sha256.update#0 nish.sha256AbsorbLong#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1 nish.sha256AbsorbLong#1
   stackSites=0 stackLocals=0
-  local -10:11 n: i32 (const)
-  local -6:13 from: i32 (const)
-  callee -5:7 Sha256.update -> @nish.Sha256.update
-  local +1:11 state: u32[] (const)
-  local +2:11 schedule: u32[] (const)
-  local +3:11 block: u8[] (const)
-  local +4:11 room: i32 (const)
-  local +5:9 fill: i32 (let)
-  local +6:9 off: i32 (let)
-  callee +17:7 sha256Compress -> @nish.sha256Compress
+  local +0:11 n: i32 (const)
+  local +4:13 from: i32 (const)
+  callee +5:7 Sha256.update -> @nish.Sha256.update
+  callee +8:5 sha256AbsorbLong -> @nish.sha256AbsorbLong
 function Sha256.copy(this: Sha256): Sha256 -> @nish.Sha256.copy [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:7
@@ -12457,25 +12446,85 @@ function Sha256.digestInto(this: Sha256, out: u8[], at: i32): boolean -> @nish.S
   local +9:13 room: i32 (const)
   local +10:13 fill: i32 (const)
   local +11:16 i: i32 (let)
-  callee +15:9 sha256Compress -> @nish.sha256Compress
-  local +16:18 i: i32 (let)
-  local +20:13 bits: u64 (const)
-  local +21:11 shift: u64 (let)
-  local +22:16 i: i32 (let)
-  callee +26:7 sha256Compress -> @nish.sha256Compress
-  local +28:9 p: i32 (let)
-  local +29:14 i: i32 (let)
-  local +30:13 word: u32 (const)
+  callee +18:9 sha256Compress -> @nish.sha256Compress
+  local +19:18 i: i32 (let)
+  local +23:13 bits: u64 (const)
+  local +24:11 shift: u64 (let)
+  local +25:16 i: i32 (let)
+  callee +29:7 sha256Compress -> @nish.sha256Compress
+  local +31:9 p: i32 (let)
+  local +32:14 i: i32 (let)
+  local +33:13 word: u32 (const)
+function sha256Absorb(h: Sha256, data: u8[], off: i32, len: i32): boolean -> @nish.sha256Absorb
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: len off
+  calls: nish.sha256Compress
+  pointer h: size=40 writesThrough=true captured=false
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256Compress#2
+  stackSites=0 stackLocals=0
+  local -5:9 size: i32 (const)
+  local +1:9 state: u32[] (const)
+  local +2:9 schedule: u32[] (const)
+  local +3:9 block: u8[] (const)
+  local +4:9 room: i32 (const)
+  local +5:7 at: i32 (let)
+  local +6:7 left: i32 (let)
+  local +7:7 fill: i32 (let)
+  callee +22:5 sha256Compress -> @nish.sha256Compress
+  callee +27:5 sha256Compress -> @nish.sha256Compress
+function sha256AbsorbLong(h: Sha256, data: u8[]): void -> @nish.sha256AbsorbLong
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: nish.sha256Compress
+  pointer h: size=40 writesThrough=true captured=false
+  pointer data: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -1:9 n: i32 (const)
+  local +1:9 state: u32[] (const)
+  local +2:9 schedule: u32[] (const)
+  local +3:9 block: u8[] (const)
+  local +4:9 room: i32 (const)
+  local +5:7 fill: i32 (let)
+  local +6:7 off: i32 (let)
+  callee +17:5 sha256Compress -> @nish.sha256Compress
+function sha256AbsorbWhole(h: Sha256, data: u8[]): void -> @nish.sha256AbsorbWhole
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.sha256Absorb
+  calls: nish.sha256Absorb nish.sha256AbsorbLong
+  pointer h: size=40 writesThrough=true captured=false passedTo=nish.sha256Absorb#0 nish.sha256AbsorbLong#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorb#1 nish.sha256AbsorbLong#1
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  callee +3:5 sha256Absorb -> @nish.sha256Absorb
+  callee +5:5 sha256AbsorbLong -> @nish.sha256AbsorbLong
 function sha256(data: u8[]): u8[] -> @nish.sha256 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Sha256.updateAll
-  calls: nish.Sha256.constructor nish.Sha256.digest nish.Sha256.updateAll
-  pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha256.updateAll#1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.sha256AbsorbWhole
+  calls: nish.Sha256.constructor nish.Sha256.digest nish.sha256AbsorbWhole
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
   stackSites=1 stackLocals=1
   local +0:9 hasher: Sha256 (const)
   callee +0:26 new Sha256 -> @nish.Sha256.constructor
-  callee +1:3 Sha256.updateAll -> @nish.Sha256.updateAll
+  callee +1:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
   callee +2:10 Sha256.digest -> @nish.Sha256.digest
+function sha256Absorbed(a: u8[], b: u8[], c: u8[], d: u8[], e: u8[]): Sha256 -> @nish.sha256Absorbed [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
+  sharedWrite: via nish.sha256AbsorbWhole
+  calls: nish.Sha256.constructor nish.sha256AbsorbWhole nish_alloc_struct
+  pointer a: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
+  pointer c: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
+  pointer d: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
+  pointer e: size=0 writesThrough=false captured=false passedTo=nish.sha256AbsorbWhole#1
+  stackSites=0 stackLocals=0
+  local +0:9 hasher: Sha256 (const)
+  callee +0:26 new Sha256 -> @nish.Sha256.constructor
+  callee +1:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
+  callee +2:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
+  callee +3:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
+  callee +4:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
+  callee +5:3 sha256AbsorbWhole -> @nish.sha256AbsorbWhole
 module std/crypto/sha512.ts [package nish]
 const SHA512_SIZE: i32 = 64 [exported]
 const SHA384_SIZE: i32 = 48 [exported]
@@ -12901,6 +12950,7 @@ import wipe from "nish:secret" -> generic function wipe
 import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
 import Sha256 from "nish/crypto/sha256" -> struct Sha256
 import sha256 from "nish/crypto/sha256" -> function @nish.sha256
+import sha256Absorbed from "nish/crypto/sha256" -> function @nish.sha256Absorbed
 import timingSafeEqual from "nish/crypto/ct" -> function @nish.timingSafeEqual
 const P256_SCALAR_SIZE: i32 = 32 [exported]
 const P256_POINT_SIZE: i32 = 65 [exported]
@@ -16309,41 +16359,35 @@ function p256WipeHash(h: Sha256): void -> @nish.p256WipeHash
   callee +1:3 wipe<u8[]> -> @nish.wipe$arr.u8
   callee +2:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function p256Mac(k: u8[], a: u8[], b: u8[], c: u8[], d: u8[]): u8[] -> @nish.p256Mac
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Sha256.update
-  calls: nish.Sha256.constructor nish.Sha256.digest nish.Sha256.update nish.p256PadBlock nish.p256WipeHash nish.wipe$arr.u8
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.sha256Absorbed
+  calls: nish.Sha256.digest nish.p256PadBlock nish.p256WipeHash nish.sha256Absorbed nish.wipe$arr.u8
   pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256PadBlock#0 nish.p256PadBlock#0
-  pointer a: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
-  pointer c: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
-  pointer d: size=0 writesThrough=false captured=false passedTo=nish.Sha256.update#1
-  stackSites=2 stackLocals=2
+  pointer a: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorbed#1
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorbed#2
+  pointer c: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorbed#3
+  pointer d: size=0 writesThrough=false captured=false passedTo=nish.sha256Absorbed#4
+  stackSites=1 stackLocals=1
   local +0:9 ipad: u8[] (const)
   callee +0:22 p256PadBlock -> @nish.p256PadBlock
   local +1:9 opad: u8[] (const)
   callee +1:22 p256PadBlock -> @nish.p256PadBlock
   local +2:9 inner: Sha256 (const)
-  callee +2:17 new Sha256 -> @nish.Sha256.constructor
-  callee +3:3 Sha256.update -> @nish.Sha256.update
-  callee +4:3 Sha256.update -> @nish.Sha256.update
-  callee +5:3 Sha256.update -> @nish.Sha256.update
-  callee +6:3 Sha256.update -> @nish.Sha256.update
-  callee +7:3 Sha256.update -> @nish.Sha256.update
-  local +8:9 innerDigest: u8[] (const)
-  callee +8:29 Sha256.digest -> @nish.Sha256.digest
-  local +9:9 outer: Sha256 (const)
-  callee +9:17 new Sha256 -> @nish.Sha256.constructor
-  callee +10:3 Sha256.update -> @nish.Sha256.update
-  callee +11:3 Sha256.update -> @nish.Sha256.update
-  local +12:9 tag: u8[] (const)
-  callee +12:21 Sha256.digest -> @nish.Sha256.digest
-  callee +13:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +14:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +15:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee +16:3 p256WipeHash -> @nish.p256WipeHash
-  callee +17:3 p256WipeHash -> @nish.p256WipeHash
+  callee +2:25 sha256Absorbed -> @nish.sha256Absorbed
+  local +3:9 innerDigest: u8[] (const)
+  callee +3:29 Sha256.digest -> @nish.Sha256.digest
+  local +4:9 empty: u8[] (const)
+  local +5:9 outer: Sha256 (const)
+  callee +5:25 sha256Absorbed -> @nish.sha256Absorbed
+  local +6:9 tag: u8[] (const)
+  callee +6:21 Sha256.digest -> @nish.Sha256.digest
+  callee +7:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +8:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +9:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +10:3 p256WipeHash -> @nish.p256WipeHash
+  callee +11:3 p256WipeHash -> @nish.p256WipeHash
 function p256NonceKey(k: u8[], v: u8[], sep: u8, x: u8[], h: u8[]): u8[] -> @nish.p256NonceKey
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Mac
   escaping: sep
   calls: nish.p256Mac
@@ -16355,7 +16399,7 @@ function p256NonceKey(k: u8[], v: u8[], sep: u8, x: u8[], h: u8[]): u8[] -> @nis
   local +0:9 separator: u8[] (const)
   callee +2:10 p256Mac -> @nish.p256Mac
 function p256NonceValue(k: u8[], v: u8[]): u8[] -> @nish.p256NonceValue
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Mac
   calls: nish.p256Mac
   pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256Mac#0
@@ -16364,7 +16408,7 @@ function p256NonceValue(k: u8[], v: u8[]): u8[] -> @nish.p256NonceValue
   local +0:9 empty: u8[] (const)
   callee +1:10 p256Mac -> @nish.p256Mac
 function p256SignScalar(priv: u8[], z: u32[]): u8[] | null -> @nish.p256SignScalar
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256AffineX nish.p256BaseMult nish.p256FiatNonzero nish.p256FiatScalarAdd nish.p256FiatScalarMul nish.p256Limbs nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceKey nish.p256NonceValue nish.p256Order nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ScalarR2 nish.p256WipePoint nish.p256WipeScratch nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256NonceKey#3 nish.p256NonceKey#3 nish.p256LimbsFromBytes#1
@@ -16502,7 +16546,7 @@ function p256EcdhExposed(priv: u8[], peerPoint: u8[]): u8[] | null -> @nish.p256
   callee +26:3 p256WipePoint -> @nish.p256WipePoint
   callee +28:5 wipe<u8[]> -> @nish.wipe$arr.u8
 function p256Sign(priv: Secret<u8[]>, digest: u8[]): u8[] | null -> @nish.p256Sign [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed
   calls: nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed#0
@@ -16510,7 +16554,7 @@ function p256Sign(priv: Secret<u8[]>, digest: u8[]): u8[] | null -> @nish.p256Si
   stackSites=0 stackLocals=0
   callee +0:3 exposeWith<u8[], u8[], u8[] | null, p256SignExposed> -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.20.nish.p256SignExposed
 function p256SignExposed(priv: u8[], digest: u8[]): u8[] | null -> @nish.p256SignExposed
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256ScalarInRange
   calls: nish.p256DigestScalar nish.p256Limbs nish.p256ScalarInRange nish.p256SignScalar
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256ScalarInRange#0 nish.p256SignScalar#0
@@ -16669,7 +16713,7 @@ function p256Verify(pub: u8[], digest: u8[], sig: u8[]): boolean -> @nish.p256Ve
   callee +51:10 p256LimbsToBytes -> @nish.p256LimbsToBytes
   callee +51:44 timingSafeEqual -> @nish.timingSafeEqual
 function p256SignSha256(priv: Secret<u8[]>, msg: u8[]): u8[] | null -> @nish.p256SignSha256 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Sign
   calls: nish.p256Sign nish.sha256
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.p256Sign#0
@@ -16678,7 +16722,7 @@ function p256SignSha256(priv: Secret<u8[]>, msg: u8[]): u8[] | null -> @nish.p25
   callee +0:79 p256Sign -> @nish.p256Sign
   callee +0:94 sha256 -> @nish.sha256
 function p256VerifySha256(pub: u8[], msg: u8[], sig: u8[]): boolean -> @nish.p256VerifySha256 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Verify
   calls: nish.p256Verify nish.sha256
   pointer pub: size=0 writesThrough=false captured=false passedTo=nish.p256Verify#0
@@ -34006,7 +34050,7 @@ function pkiIssuerCode(s: PkiSearch, child: X509Certificate, cand: X509Certifica
   callee +42:26 pkiCheckSignature -> @nish.pkiCheckSignature
   callee +43:45 pkiKeyIdsCode -> @nish.pkiKeyIdsCode
 function pkiIsDistrusted(store: PkiTrustStore, cert: X509Certificate): boolean -> @nish.pkiIsDistrusted
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.sha256
   calls: nish.Map$str$bool.has nish.pkiHex nish.sha256
   pointer store: size=24 writesThrough=false captured=false
@@ -35901,7 +35945,7 @@ function derToPem(der: u8[], label: string): string -> @nish.derToPem [exported]
   local +3:7 at: i32 (let)
   local +6:11 end: i32 (const)
 function pemToDer(pem: string, label: string): u8[][] | null -> @nish.pemToDer [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.base64StdPadDecode nish.x509EndsWith nish.x509StartsWith nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
@@ -36009,7 +36053,7 @@ function x509FirstBlock(blocks: u8[][]): u8[] -> @nish.x509FirstBlock
   stackSites=0 stackLocals=0
   local +0:14 block: u8[] (const)
 function x509ParseP256PrivateKey(pem: string): Secret<u8[]> | null -> @nish.x509ParseP256PrivateKey [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.pemToDer
   escaping: pem
   calls: nish.pemToDer nish.x509FirstBlock nish.x509Pkcs8Key nish.x509Sec1Key nish.x509WipeBlocks
@@ -36051,7 +36095,7 @@ function x509Pkcs8RsaKey(der: u8[]): Secret<u8[]> | null -> @nish.x509Pkcs8RsaKe
   callee +23:47 x509DerRead -> @nish.x509DerRead
   callee +32:10 rsaParsePrivateKey -> @nish.rsaParsePrivateKey
 function x509ParseRsaPrivateKey(pem: string): Secret<u8[]> | null -> @nish.x509ParseRsaPrivateKey [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.pemToDer
   escaping: pem
   calls: nish.pemToDer nish.rsaParsePrivateKey nish.x509FirstBlock nish.x509Pkcs8RsaKey nish.x509WipeBlocks
@@ -36552,7 +36596,7 @@ function x509ParseChain(pem: string): X509Certificate[] | null -> @nish.x509Pars
   local +6:11 cert: X509Certificate | null (const)
   callee +6:42 x509ParseCertificate -> @nish.x509ParseCertificate
 function x509VerifySignature(cert: X509Certificate, issuer: X509Certificate): boolean -> @nish.x509VerifySignature [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.x509DerSignatureRS
   calls: nish.p256VerifySha256 nish.x509DerSignatureRS
   pointer cert: size=184 writesThrough=false captured=false
@@ -36565,7 +36609,7 @@ function x509MintExtensions(): u8[] -> @nish.x509MintExtensions
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function x509MintSelfSigned(priv: Secret<u8[]>, commonName: string, notBeforeMs: i64, days: i32, serial: u8[]): u8[] | null -> @nish.x509MintSelfSigned [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256PublicKey
   escaping: commonName
   calls: nish.p256PublicKey nish.p256SignSha256 nish.x509Bytes nish.x509DerBitString nish.x509DerSlice nish.x509DerTimeAt nish.x509DerTlv nish.x509DerUnsignedInteger nish.x509DerWrap nish.x509IsUtf8Name nish.x509MintExtensions nish.x509OidCommonName nish.x509OidEcPublicKey nish.x509OidEcdsaSha256 nish.x509OidPrime256v1
@@ -36627,7 +36671,7 @@ function x509MintSelfSigned(priv: Secret<u8[]>, commonName: string, notBeforeMs:
   callee +67:10 x509DerWrap -> @nish.x509DerWrap
   callee +67:58 x509DerBitString -> @nish.x509DerBitString
 function x509CertificateHash(der: u8[]): u8[] -> @nish.x509CertificateHash [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.sha256
   calls: nish.sha256
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.sha256#0

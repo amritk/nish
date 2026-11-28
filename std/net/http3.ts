@@ -212,7 +212,6 @@ import {
   H3_WT_SESSION_GONE,
   Http3FrameHeader,
   Http3Settings,
-  h3CheckWindow,
   h3Count,
   h3FrameHeaderSize,
   h3PutFrameHeader,
@@ -1361,7 +1360,13 @@ export class Http3Connection {
       }
       have = have + n
       headLens[k] = have
-      if (h3ReadFrameHeader(this.header, this.head, base, have) > 0) {
+      const end: i32 = base + have
+      const head: u8[] = this.head
+      // Never: slot `k`'s H3_HEAD bytes lie inside `head`, which nothing resizes.
+      if (base < 0 || base > end || end > toI32(head.length)) {
+        return H3_ZERO
+      }
+      if (h3ReadFrameHeader(this.header, head, base, end - base) > 0) {
         if (k < toI32(headLens.length)) {
           headLens[k] = 0
         }
@@ -1566,8 +1571,14 @@ export class Http3Connection {
 
   /** Acts on a whole control frame of `type` in `control[0 .. controlFill)`. */
   private controlFrame(type: i64): i32 {
+    const control: u8[] = this.control
+    const fill: i32 = this.controlFill
+    // Never: `controlStep` keeps `controlFill` within `control`, which nothing resizes.
+    if (fill < 0 || fill > toI32(control.length)) {
+      return this.fail(H3_INTERNAL_ERROR)
+    }
     if (type === H3_FRAME_SETTINGS) {
-      const result: i64 = h3ReadSettings(this.peer, this.control, H3_ZERO, this.controlFill)
+      const result: i64 = h3ReadSettings(this.peer, control, 0, fill)
       if (result !== H3_SETTINGS_OK) {
         return this.fail(result)
       }
@@ -1596,7 +1607,7 @@ export class Http3Connection {
     if (type === H3_SKIP_TYPE) {
       return H3_NEED_MORE
     }
-    const value: i64 = h3ReadIdPayload(this.control, H3_ZERO, this.controlFill)
+    const value: i64 = h3ReadIdPayload(control, 0, fill)
     if (value < 0) {
       return this.fail(H3_FRAME_ERROR)
     }
@@ -1883,7 +1894,7 @@ export class Http3Connection {
    * many it took — fewer only when the send buffer filled, and H3_WRITABLE
    * then names the stream — or H3_AGAIN when it took none, or H3_CLOSED for
    * a stream with no side here to write, finished, reset, held or stopped.
-   * A window outside `buf` panics.
+   * A window outside `buf` answers H3_INVALID, before anything about the stream is asked.
    *
    * @param id A WebTransport stream this side writes, accepted or opened by `openStream`.
    * @param buf The bytes; copied into the stream's send buffer, so the caller may reuse it.
@@ -1891,10 +1902,14 @@ export class Http3Connection {
    * @param len How many bytes to offer; 0 with `fin` sends only the FIN.
    * @param fin True to finish this side of the stream once all `len` bytes are taken.
    * @returns The bytes taken, 1 to `len`, or 0 for a FIN alone; H3_AGAIN when it took none, a `len` of
-   *   0 without `fin` among them; H3_CLOSED as above, or any stream once the connection has failed.
+   *   0 without `fin` among them; H3_CLOSED as above, or any stream once the connection has failed;
+   *   H3_INVALID for a window outside `buf`.
    */
   writeStream(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
-    h3CheckWindow("Http3Connection.writeStream", buf, off, len)
+    const size: i32 = toI32(buf.length)
+    if (off < 0 || len < 0 || off > size || len > size - off) {
+      return H3_INVALID
+    }
     const k: i32 = this.wtSlot(id)
     const slots: QuicStream[] = this.quic.streams.slots
     if (
@@ -2709,23 +2724,13 @@ export class Http3Connection {
       digits[2] = toU8(H3_DIGIT_ZERO + (status % 10))
       const nameLength: i32 = toI32(this.statusName.length)
       const valueLength: i32 = toI32(digits.length)
-      this.encoder.encodeField(
-        out,
-        this.statusName,
-        H3_ZERO,
-        nameLength,
-        this.statusValue,
-        H3_ZERO,
-        valueLength,
-        false,
-        true
-      )
+      this.encoder.encodeWholeField(out, this.statusName, digits, false, true)
       size = toI64(nameLength) + toI64(valueLength) + toI64(QPACK_FIELD_OVERHEAD)
     }
     if (dated && status >= 200 && toI32(this.date.length) > 0 && !http3NamesHoldDate(names)) {
       const nl: i32 = toI32(this.dateName.length)
       const vl: i32 = toI32(this.date.length)
-      this.encoder.encodeField(out, this.dateName, H3_ZERO, nl, this.date, H3_ZERO, vl, false, true)
+      this.encoder.encodeWholeField(out, this.dateName, this.date, false, true)
       if (size >= 0 && size < 1073741824) {
         size = size + toI64(nl) + toI64(vl) + toI64(QPACK_FIELD_OVERHEAD)
       }
@@ -2736,7 +2741,7 @@ export class Http3Connection {
       const value: u8[] = values[j]
       const nl: i32 = toI32(name.length)
       const vl: i32 = toI32(value.length)
-      this.encoder.encodeField(out, name, H3_ZERO, nl, value, H3_ZERO, vl, httpFieldSensitive(name), true)
+      this.encoder.encodeWholeField(out, name, value, httpFieldSensitive(name), true)
       // The sum stops growing past 2^30 bytes: a section that size is past any stream buffer.
       if (size >= 0 && size < 1073741824) {
         size = size + toI64(nl) + toI64(vl) + toI64(QPACK_FIELD_OVERHEAD)
@@ -2859,7 +2864,7 @@ export class Http3Connection {
    * took none;
    * H3_CLOSED, or H3_INVALID before the head or when `endStream` would cut
    * short the DATA frame the last call started.
-   * A window outside `buf` panics.
+   * A window outside `buf` answers H3_INVALID, before anything about the stream is asked.
    *
    * @param id The request stream, after `respond`.
    * @param buf The body bytes; copied into the stream's send buffer, so the caller may reuse it.
@@ -2871,10 +2876,13 @@ export class Http3Connection {
    *   left owed cannot go; H3_CLOSED for a stream that is not an open request: unknown, not yet handed
    *   to the program, its response finished or reset, stopped by the client, or any stream once the
    *   connection has failed;
-   *   H3_INVALID as above.
+   *   H3_INVALID as above, or for a window outside `buf`.
    */
   writeData(id: i64, buf: u8[], off: i32, len: i32, endStream: boolean): i32 {
-    h3CheckWindow("Http3Connection.writeData", buf, off, len)
+    const size: i32 = toI32(buf.length)
+    if (off < 0 || len < 0 || off > size || len > size - off) {
+      return H3_INVALID
+    }
     const k: i32 = this.writeSlot(id)
     if (k < 0) {
       return H3_CLOSED
@@ -2898,7 +2906,7 @@ export class Http3Connection {
       return 0
     }
     if (len < 0) {
-      return H3_INVALID // never: h3CheckWindow refused a negative length
+      return H3_INVALID // never: the window test refused a negative length
     }
     // DATA frame after DATA frame, until every byte is taken or the send buffer is full.
     let total: i32 = 0
@@ -2938,7 +2946,7 @@ export class Http3Connection {
       const fin: boolean = endStream && take === want && toI64(take) === left
       const at: i64 = toI64(off) + toI64(total)
       if (at > 2147483647) {
-        break // never: h3CheckWindow put the window inside `buf`
+        break // never: the window test put the window inside `buf`
       }
       const n: i32 = this.quic.streamWrite(id, buf, toI32(at), take, fin)
       if (n < 0) {
@@ -2971,7 +2979,7 @@ export class Http3Connection {
    * H3_AGAIN while the send buffer lacks room, and H3_WRITABLE then names the
    * stream; or as `writeData` refuses, and H3_TOO_LARGE for a frame past the
    * stream's buffer.
-   * A window outside `buf` panics.
+   * A window outside `buf` answers H3_INVALID, before anything about the stream is asked.
    *
    * @param id The request stream, after `respond`.
    * @param buf The frame's payload; copied into the stream's send buffer, so the caller may reuse it.
@@ -2982,10 +2990,14 @@ export class Http3Connection {
    *   it, and H3_WRITABLE then names the stream; H3_CLOSED for a stream that is not an open request:
    *   unknown, not yet handed to the program, its response finished or reset, stopped by the client, or
    *   any stream once the connection has failed;
-   *   H3_INVALID before the head or inside a DATA frame `writeData` has not finished; H3_TOO_LARGE.
+   *   H3_INVALID before the head, inside a DATA frame `writeData` has not finished, or for a window
+   *   outside `buf`; H3_TOO_LARGE.
    */
   writeDataWhole(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
-    h3CheckWindow("Http3Connection.writeDataWhole", buf, off, len)
+    const size: i32 = toI32(buf.length)
+    if (off < 0 || len < 0 || off > size || len > size - off) {
+      return H3_INVALID
+    }
     const k: i32 = this.writeSlot(id)
     if (k < 0) {
       return H3_CLOSED
@@ -2997,7 +3009,7 @@ export class Http3Connection {
       return H3_INVALID
     }
     if (len < 0) {
-      return H3_INVALID // never: h3CheckWindow refused a negative length
+      return H3_INVALID // never: the window test refused a negative length
     }
     const head: i32 = h3FrameHeaderSize(H3_FRAME_DATA, toI64(len))
     if (head < 0 || head > 16) {

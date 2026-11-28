@@ -551,32 +551,31 @@ const qpackPushBytes = (out: u8[], src: u8[], off: i32, len: i32): void => {
 }
 
 /**
- * Appends `value` as a §4.1.1 integer with a `prefixBits`-bit prefix, the first
- * byte's high bits being `flags`. A value outside 0 to 2^62 - 1, or a prefix
- * outside 1 to 8 bits, panics: both are the program's choice.
+ * Appends `value` as a §4.1.1 integer whose prefix is the low bits of the
+ * first byte, `max` being the prefix with every bit set (63 for a 6-bit
+ * prefix) and `flags` the bits above it. Every caller passes a literal
+ * `max` and a value that is a count, an index or a checked stream ID, so
+ * the integer is one §4.1.1 can carry; a `u64` cannot be negative.
  */
-const qpackPushInteger = (out: u8[], flags: i32, prefixBits: i32, value: i64): void => {
-  if (prefixBits < 1 || prefixBits > 8 || value < 0 || value > QPACK_MAX_INTEGER) {
-    panic(`qpackPushInteger: a value of ${value} with a ${prefixBits}-bit prefix`)
-  }
-  const max: i32 = (toI32(255) >> (toI32(8) - prefixBits)) & toI32(255)
-  if (value < toI64(max)) {
+const qpackPushInteger = (out: u8[], flags: i32, max: i32, value: u64): void => {
+  const prefix: u64 = toU64(max)
+  if (value < prefix) {
     out.push(toU8(flags | toI32(value)))
     return
   }
   out.push(toU8(flags | max))
-  let rest: i64 = value - toI64(max)
-  while (rest >= toI64(128)) {
-    out.push(toU8(toI32(rest & toI64(127)) | 128))
-    rest = rest >> toI64(7)
+  let rest: u64 = value - prefix
+  while (rest >= toU64(128)) {
+    out.push(toU8(toI32(rest & toU64(127)) | 128))
+    rest = rest >> toU64(7)
   }
   out.push(toU8(toI32(rest)))
 }
 
 /**
- * Appends `src[off, off + len)` as a §4.1.2 string literal with a
- * `prefixBits`-bit prefix: the Huffman flag is the prefix's top bit, the
- * length the `prefixBits - 1` bits below it, and `flags` the bits above.
+ * Appends `src[off, off + len)` as a §4.1.2 string literal: the Huffman
+ * flag is the bit `huffmanBit`, the length an integer whose prefix is `max`
+ * (every bit below the flag set), and `flags` the bits above.
  * When `huffman` is true the string is Huffman-coded if that makes it
  * shorter, and sent raw otherwise, as an empty string always is.
  */
@@ -584,20 +583,20 @@ const qpackPushString = (
   h: HpackHuffman,
   out: u8[],
   flags: i32,
-  prefixBits: i32,
+  huffmanBit: i32,
+  max: i32,
   src: u8[],
   off: i32,
   len: i32,
   huffman: boolean
 ): void => {
-  const lengthBits: i32 = prefixBits - 1
   const coded: i32 = huffman ? hpackHuffmanLength(h, src, off, len) : len
   if (coded < len) {
-    qpackPushInteger(out, flags | (1 << lengthBits), lengthBits, toI64(coded))
+    qpackPushInteger(out, flags | huffmanBit, max, toU64(coded))
     hpackHuffmanEncode(h, src, off, len, out)
     return
   }
-  qpackPushInteger(out, flags, lengthBits, toI64(len))
+  qpackPushInteger(out, flags, max, toU64(len))
   qpackPushBytes(out, src, off, len)
 }
 
@@ -610,7 +609,10 @@ const qpackPushString = (
  * @param streamId The ID of the request stream whose section the peer's encoder may forget, 0 to 2^62 - 1.
  */
 export const qpackPushStreamCancellation = (out: u8[], streamId: i64): void => {
-  qpackPushInteger(out, 64, 6, streamId)
+  if (streamId < 0 || streamId > QPACK_MAX_INTEGER) {
+    panic(`qpackPushStreamCancellation: a stream ID of ${streamId}, outside 0 to 2^62 - 1`)
+  }
+  qpackPushInteger(out, 64, 63, toU64(streamId))
 }
 
 /** The byte at `d.at` of the section being decoded, or -1 when the section has none left there. */
@@ -1193,11 +1195,50 @@ export class QpackEncoder {
   ): void {
     qpackCheckWindow("QpackEncoder.encodeField", name, nameOff, nameLen)
     qpackCheckWindow("QpackEncoder.encodeField", value, valueOff, valueLen)
+    this.encodeLine(out, name, nameOff, nameLen, value, valueOff, valueLen, neverIndexed, huffman)
+  }
+
+  /**
+   * `encodeField` for a field whose name and value are each a whole array,
+   * which has no window to check and so cannot panic.
+   * @param out The buffer the section is being written to; the field line goes after what it holds.
+   * @param name The name, all of it; only read, and lowercase to match a static entry.
+   * @param value The value, all of it; only read.
+   * @param neverIndexed Whether to send the field as a literal with the N bit set.
+   * @param huffman Whether a string may be Huffman-coded; it is only when that is shorter.
+   */
+  encodeWholeField(out: u8[], name: u8[], value: u8[], neverIndexed: boolean, huffman: boolean): void {
+    const zero: i32 = 0
+    this.encodeLine(
+      out,
+      name,
+      zero,
+      toI32(name.length),
+      value,
+      zero,
+      toI32(value.length),
+      neverIndexed,
+      huffman
+    )
+  }
+
+  /** The field line `encodeField` appends, for windows the caller has checked. */
+  private encodeLine(
+    out: u8[],
+    name: u8[],
+    nameOff: i32,
+    nameLen: i32,
+    value: u8[],
+    valueOff: i32,
+    valueLen: i32,
+    neverIndexed: boolean,
+    huffman: boolean
+  ): void {
     let nameIndex: i32 = -1
     for (let i: i32 = 0; i < QPACK_STATIC_LENGTH; i += 1) {
       if (qpackSameText(name, nameOff, nameLen, qpackStaticName(i))) {
         if (!neverIndexed && qpackSameText(value, valueOff, valueLen, qpackStaticValue(i))) {
-          qpackPushInteger(out, 192, 6, toI64(i))
+          qpackPushInteger(out, 192, 63, toU64(i))
           return
         }
         if (nameIndex < 0) {
@@ -1212,11 +1253,11 @@ export class QpackEncoder {
     }
     // `01 N 1` for a static name reference, `001 N` for a literal name.
     if (nameIndex >= 0) {
-      qpackPushInteger(out, neverIndexed ? 112 : 80, 4, toI64(nameIndex))
+      qpackPushInteger(out, neverIndexed ? 112 : 80, 15, toU64(nameIndex))
     } else {
-      qpackPushString(this.huffman, out, neverIndexed ? 48 : 32, 4, name, nameOff, nameLen, huffman)
+      qpackPushString(this.huffman, out, neverIndexed ? 48 : 32, 8, 7, name, nameOff, nameLen, huffman)
     }
-    qpackPushString(this.huffman, out, 0, 8, value, valueOff, valueLen, huffman)
+    qpackPushString(this.huffman, out, 0, 128, 127, value, valueOff, valueLen, huffman)
   }
 
   /**
