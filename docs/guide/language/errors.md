@@ -287,9 +287,11 @@ it prints the message on stderr and ends the process with status 1. `panic`
 never returns, so a function may end with it where it would otherwise need a
 `return`. `r.expect(message)` is the same ending for a `Result` you are
 certain succeeded, and it insists on a reason, which is why there is no
-`unwrap()`. No proof removes a `panic` or an `expect`, so by default the
-compiler refuses both, and the program builds only with `--allow-panics`;
-return a `Result` instead where the program should build under the default.
+`unwrap()`. By default the compiler refuses a `panic` or an `expect` it
+cannot prove the program never reaches, and such a program builds only with
+`--allow-panics`; return a `Result` instead where the program should build
+under the default. No proof removes an `expect`, or a `panic` in the middle
+of a function like `daysIn` below.
 
 <!-- allow-panics: shows a function that ends the program with `panic` -->
 <!-- nish:ok --allow-panics -->
@@ -309,6 +311,46 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+One `panic` can be proved away: a guard at the very start of a function,
+`if (…) { panic(message) }`, whose test compares only the function's own
+integer parameters with `0`, with each other or with an array's length. Each
+call then carries the guard's test to the caller, and when the arguments of
+every call in the program make the test false, the `panic` is never reached
+and the program builds under the default:
+
+<!-- nish:ok -->
+```ts
+const span = (buf: u8[], start: i32, end: i32): i32 => {
+  if (start < 0 || end < start || end > toI32(buf.length)) {
+    panic("span: the range is outside the buffer");
+  }
+  return end - start;
+};
+
+export const main = (): i32 => {
+  const b: u8[] = [104, 105, 10];
+  console.log(`${span(b, 0, 3)}`);   // 3
+  if (b.length >= 2) {
+    console.log(`${span(b, 1, 2)}`); // 1
+  }
+  return 0;
+};
+```
+
+The guard stays the function's own, and the default refuses it, when:
+
+- **one call proves nothing**: a single call whose arguments might make the
+  test true keeps the `panic` for every call;
+- **the function is a value**: a function kept in a field or a variable, or
+  handed to another function (`map(xs, f)`, `s.spawn(f, …)`), is called where
+  no caller's test can be seen;
+- **a host calls it**: a function exported for a host to call by its symbol
+  has callers the compiler never sees.
+
+A guard with a window shape, `(buf, off, len)`, is proved by its own rule
+([Panic sites](../../reference/language/semantics-decisions.md#panic-sites),
+`window`); the full rules for this one are under `contract` there.
 
 There are no `map`, `andThen` or `orElse` methods on a `Result`, because they
 would take a callback, often one that captures a variable, which a
