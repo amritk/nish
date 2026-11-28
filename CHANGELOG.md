@@ -16,6 +16,80 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-11-28
+
+### Added
+
+- checker: A module exports its C bindings ([#2355](https://github.com/amritk/nish/pull/2355))
+- interop: Std/gpu/sys.ts binds the nish-gfx shim, with a clear-screen example ([#2333](https://github.com/amritk/nish/pull/2333))
+- std: Check Http1Server caps once, with checked router and prefork twins ([#2370](https://github.com/amritk/nish/pull/2370))
+- net: Read multipart/form-data bodies in nish/net/multipart ([#2353](https://github.com/amritk/nish/pull/2353))
+- runtime: RSA-PSS CertificateVerify under an RSA certificate on the TLS and QUIC servers ([#2335](https://github.com/amritk/nish/pull/2335))
+- runtime: Add tryFramebuffer and Framebuffer.tryResize beside the panicking API ([#2400](https://github.com/amritk/nish/pull/2400))
+- checker: A std class owns its native handles, is exported, and closes with using ([#2397](https://github.com/amritk/nish/pull/2397))
+- runtime: WP86 S1 — make the JSON helpers and the YAML loader and writer panic-free ([#2388](https://github.com/amritk/nish/pull/2388))
+- checker: Window contracts forward from free functions, arrow consts and literal lengths ([#2403](https://github.com/amritk/nish/pull/2403))
+- runtime: WP86 S2 — make std/yaml.ts panic-free ([#2441](https://github.com/amritk/nish/pull/2441))
+- runtime: WebSocket on the nish/net/http-server façade's HTTP/1.1 listener ([#2381](https://github.com/amritk/nish/pull/2381))
+
+### Fixed
+
+- runtime: Let bench/http1-parse run again and time /json interleaved against another tree ([#2382](https://github.com/amritk/nish/pull/2382))
+- runtime: Prove the slice in term's termBytesText ([#2390](https://github.com/amritk/nish/pull/2390))
+- checker: WP91 S3 — json, text, temporal, sqlite and sync ([#2387](https://github.com/amritk/nish/pull/2387))
+- interop: Add, multi and arrays build without --allow-panics ([#2393](https://github.com/amritk/nish/pull/2393))
+- checker: Prove index sites into module storage ([#2391](https://github.com/amritk/nish/pull/2391))
+- interop: Wasm-arena builds without --allow-panics ([#2404](https://github.com/amritk/nish/pull/2404))
+- runtime: Std/net TLS, QUIC, PostgreSQL and DNS without cast wraps ([#2389](https://github.com/amritk/nish/pull/2389))
+- runtime: WP91 S4 — std/net HTTP, HPACK, URL and the server stack ([#2377](https://github.com/amritk/nish/pull/2377))
+- runtime: WP91 S6 — std/crypto ([#2392](https://github.com/amritk/nish/pull/2392))
+- runtime: HttpHandler builds its body decoder through a checked limit and copies through tryCopyBytes ([#2402](https://github.com/amritk/nish/pull/2402))
+- std: The byte getters check their window through one guard callers can prove ([#2443](https://github.com/amritk/nish/pull/2443))
+- checker: A caller's proof discharges a std callee's contract panic ([#2407](https://github.com/amritk/nish/pull/2407))
+- net: Prove or remove the std panic sites relay reaches ([#2396](https://github.com/amritk/nish/pull/2396))
+
+### Changed
+
+- checker: WP91 S2 — std/regex.ts ([#2375](https://github.com/amritk/nish/pull/2375))
+- self: WP91 S1 — compress, src/ and examples, and one check for every file ([#2374](https://github.com/amritk/nish/pull/2374))
+
+### Documentation
+
+- plans: Split WP80 S6's remainder into S7 (std/bytes windows) and S8 (checked HTTP/1 config) ([#2358](https://github.com/amritk/nish/pull/2358))
+- guide: Write examples strict, keeping --allow-panics only for std code and shown panics ([#2383](https://github.com/amritk/nish/pull/2383))
+- runtime: Finish the http-lean-get record with component ns and serving bytes against RSS ([#2376](https://github.com/amritk/nish/pull/2376))
+- runtime: Record a parked flag in Http1Connection's hot block as no gain, and a slot-indexed block as not built ([#2394](https://github.com/amritk/nish/pull/2394))
+- plan: Add WP93, stored callbacks for signals ([#2416](https://github.com/amritk/nish/pull/2416))
+- plans: Plan WP92 std/ui state management and the WP89 idle mode ([#2423](https://github.com/amritk/nish/pull/2423))
+- plans: Add the WP92 widget library stages S6 to S16 ([#2439](https://github.com/amritk/nish/pull/2439))
+- A std resource owns its native handle and closes with using ([#2425](https://github.com/amritk/nish/pull/2425))
+- guide: Name the std files each example's panic opt-out reaches, and check them ([#2447](https://github.com/amritk/nish/pull/2447))
+- guide: Name the std files each panic opt-out now reaches ([#2456](https://github.com/amritk/nish/pull/2456))
+- self: Require a provoking check for each new std error path ([#2455](https://github.com/amritk/nish/pull/2455))
+
+### Tests
+
+- spec: Add the RSASSA-PSS SHA-256 vector spec for nish/crypto/rsa-sign ([#2371](https://github.com/amritk/nish/pull/2371))
+- runtime: Split syscall-cost's kernel time in one run and measure the QUICKACK alternatives ([#2378](https://github.com/amritk/nish/pull/2378))
+- runtime: Count the pipeline's no-spin waits from once its seats have parked ([#2442](https://github.com/amritk/nish/pull/2442))
+- self: Explicit baseline raises in bench/instructions.json ([#2444](https://github.com/amritk/nish/pull/2444))
+
+### Build
+
+- deps-dev: Bump biome, knip and @types/node, and TypeScript to 6.0 ([#2446](https://github.com/amritk/nish/pull/2446))
+
+### CI
+
+- Refuse a new u32-cast wrap and spell intended wraps with nish:unsafe ([#2367](https://github.com/amritk/nish/pull/2367))
+- Give a runner that boots with no Ubuntu apt source one ([#2384](https://github.com/amritk/nish/pull/2384))
+- Scan the workflows with CodeQL, and keep pinned actions current with Dependabot ([#2395](https://github.com/amritk/nish/pull/2395))
+- Replay unchanged tests/link programs, and defer other platforms' jobs and interop, on pull requests ([#2408](https://github.com/amritk/nish/pull/2408))
+- Decide the plans-only skip inside each test shard instead of waiting on scope ([#2427](https://github.com/amritk/nish/pull/2427))
+- Bump the actions group across 1 directory with 11 updates ([#2426](https://github.com/amritk/nish/pull/2426))
+- WP91 S7 — refuse every cast wrap, with no baseline ([#2445](https://github.com/amritk/nish/pull/2445))
+- self: Compare instruction baselines against the merge-base ([#2448](https://github.com/amritk/nish/pull/2448))
+
+
 ## [0.49.1] - 2026-11-27
 
 ### Fixed
@@ -2428,3 +2502,4 @@ file per release, and each release's notes and downloads are on the
 [0.48.0]: https://github.com/amritk/nish/releases/tag/v0.48.0
 [0.49.0]: https://github.com/amritk/nish/releases/tag/v0.49.0
 [0.49.1]: https://github.com/amritk/nish/releases/tag/v0.49.1
+[0.50.0]: https://github.com/amritk/nish/releases/tag/v0.50.0
