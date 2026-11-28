@@ -157,7 +157,7 @@ function ArenaHeld.constructor(this: ArenaHeld, r: HttpServerRequest, due: i64, 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: due ms r
   pointer this: size=24 writesThrough=true captured=false
-  pointer r: size=200 writesThrough=true captured=true
+  pointer r: size=224 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function arenaSlots(asked: i32, workers: i32): i32 -> @arenaSlots [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -236,7 +236,7 @@ function ArenaServer.badRequest(this: ArenaServer, r: HttpServerRequest): void -
   sharedWrite: +0:5
   calls: nish.HttpServer.send nish_panic_overflow
   pointer this: size=120 writesThrough=true captured=false
-  pointer r: size=200 writesThrough=true captured=true passedTo=nish.HttpServer.send#1
+  pointer r: size=224 writesThrough=true captured=true passedTo=nish.HttpServer.send#1
   stackSites=0 stackLocals=0
   callee -1:5 HttpServer.send -> @nish.HttpServer.send
 function ArenaServer.sendNumber(this: ArenaServer, r: HttpServerRequest, v: i64): void -> @ArenaServer.sendNumber [exported method]
@@ -244,7 +244,7 @@ function ArenaServer.sendNumber(this: ArenaServer, r: HttpServerRequest, v: i64)
   sharedWrite: +0:7
   calls: nish.HttpServer.send nish_panic_overflow nish_str_from_i64
   pointer this: size=120 writesThrough=true captured=false
-  pointer r: size=200 writesThrough=true captured=true passedTo=nish.HttpServer.send#1
+  pointer r: size=224 writesThrough=true captured=true passedTo=nish.HttpServer.send#1
   stackSites=0 stackLocals=0
   local -3:11 text: string (const)
   local -2:11 n: i32 (const)
@@ -256,7 +256,7 @@ function ArenaServer.queryDecimal(this: ArenaServer, r: HttpServerRequest, name:
   escaping: fallback name
   calls: arenaDecimal nish.HttpServerRequest.query
   pointer this: size=120 writesThrough=false captured=false
-  pointer r: size=200 writesThrough=true captured=false passedTo=nish.HttpServerRequest.query#0
+  pointer r: size=224 writesThrough=true captured=false passedTo=nish.HttpServerRequest.query#0
   stackSites=0 stackLocals=0
   local +0:11 n: i32 (const)
   callee +0:20 HttpServerRequest.query -> @nish.HttpServerRequest.query
@@ -266,7 +266,7 @@ function ArenaServer.answer(this: ArenaServer, r: HttpServerRequest): void -> @A
   sharedWrite: +0:9
   calls: ArenaDb.query ArenaHeld.constructor ArenaServer.badRequest ArenaServer.json ArenaServer.queryDecimal ArenaServer.sendNumber arenaDecimal nish.HttpServer.refuse nish.HttpServer.send nish.HttpServerRequest.paramDecimal nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_overflow
   pointer this: size=120 writesThrough=true captured=false passedTo=ArenaServer.sendNumber#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0 ArenaServer.sendNumber#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0 ArenaServer.badRequest#0 ArenaServer.sendNumber#0 ArenaServer.json#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0 ArenaServer.queryDecimal#0
-  pointer r: size=200 writesThrough=true captured=true passedTo=ArenaServer.sendNumber#1 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 ArenaServer.sendNumber#1 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 nish.HttpServer.send#1 nish.HttpServerRequest.paramDecimal#0 ArenaServer.badRequest#1 ArenaServer.sendNumber#1 ArenaHeld.constructor#1 ArenaServer.json#1 ArenaDb.query#2 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 nish.HttpServer.refuse#1
+  pointer r: size=224 writesThrough=true captured=true passedTo=ArenaServer.sendNumber#1 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 ArenaServer.sendNumber#1 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 nish.HttpServer.send#1 nish.HttpServerRequest.paramDecimal#0 ArenaServer.badRequest#1 ArenaServer.sendNumber#1 ArenaHeld.constructor#1 ArenaServer.json#1 ArenaDb.query#2 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 ArenaServer.queryDecimal#1 nish.HttpServer.refuse#1
   stackSites=0 stackLocals=0
   callee -12:9 ArenaServer.sendNumber -> @ArenaServer.sendNumber
   callee -12:28 ArenaServer.queryDecimal -> @ArenaServer.queryDecimal
@@ -292,7 +292,7 @@ function ArenaServer.json(this: ArenaServer, r: HttpServerRequest): void -> @Are
   sharedWrite: +0:5
   calls: ArenaDataset.size ArenaServer.badRequest ArenaServer.queryDecimal nish.HttpCompressor.addFields nish.HttpCompressor.compressAnyway nish.HttpServer.end nish.HttpServer.send nish.HttpServer.start nish.HttpServer.write nish.HttpServerRequest.header nish.HttpServerRequest.paramDecimal nish.HttpServerRequest.valueEnd nish.HttpServerRequest.valueStart nish.JsonWriter.beginArray nish.JsonWriter.beginObject nish.JsonWriter.boolean nish.JsonWriter.complete nish.JsonWriter.endArray nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.i64 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish.httpAcceptEncoding nish_panic_index nish_panic_overflow
   pointer this: size=120 writesThrough=true captured=false passedTo=ArenaServer.badRequest#0 ArenaServer.queryDecimal#0
-  pointer r: size=200 writesThrough=true captured=true passedTo=nish.HttpServerRequest.paramDecimal#0 ArenaServer.badRequest#1 ArenaServer.queryDecimal#1 nish.HttpServer.send#1 nish.HttpServerRequest.header#0 nish.HttpServerRequest.valueStart#0 nish.HttpServerRequest.valueEnd#0 nish.HttpServer.start#1 nish.HttpServer.write#1 nish.HttpServer.end#1 nish.HttpServer.send#1
+  pointer r: size=224 writesThrough=true captured=true passedTo=nish.HttpServerRequest.paramDecimal#0 ArenaServer.badRequest#1 ArenaServer.queryDecimal#1 nish.HttpServer.send#1 nish.HttpServerRequest.header#0 nish.HttpServerRequest.valueStart#0 nish.HttpServerRequest.valueEnd#0 nish.HttpServer.start#1 nish.HttpServer.write#1 nish.HttpServer.end#1 nish.HttpServer.send#1
   stackSites=0 stackLocals=0
   local -58:9 count: i32 (let)
   callee -58:22 HttpServerRequest.paramDecimal -> @nish.HttpServerRequest.paramDecimal

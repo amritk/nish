@@ -10670,6 +10670,18 @@ const serverH2cPrefaceDeclared = () =>
       )
     )
 
+/** The changelog words of WP39 G7, which takes WebSockets on nish/net/http-server's HTTP/1.1 listeners. */
+const SERVER_WEBSOCKET = "WebSocket on the nish/net/http-server façade's HTTP/1.1 listener"
+/** WP39 G7's WebSocket program reads `HttpServerRequest.socket`, which the seed's std/net does not have. */
+const serverWebSocketDeclared = () => [
+  {
+    program: "tests/link/net_http_server_ws/main.ts",
+    file: "exit",
+    changelog: SERVER_WEBSOCKET,
+    why: "the program reads HttpServerRequest.socket and calls HttpServer.acceptWebSocket, which the seed's std/net does not have, so only the candidate compiles it",
+  },
+]
+
 /** The changelog words of WP82 S6, which proves or removes the HTTP/3 stack's panic sites. */
 const HTTP3_PANIC_FREE = "Make the std/net HTTP/3 stack panic-free"
 const http3PanicFree = (why, filesByProgram) =>
@@ -15287,6 +15299,7 @@ const DECLARED = [
   ...serverTrailersDeclared(),
   ...serverH1TlsDeclared(),
   ...serverH2cPrefaceDeclared(),
+  ...serverWebSocketDeclared(),
   ...http3PanicFree(
     "a probe new with this change: it feeds malformed frames to std/net's HTTP/3 frame and QPACK readers, whose proved indexes and Results differ from the seed's, so each module it writes differs, the std/crypto ones it reaches included",
     {
