@@ -5,9 +5,9 @@
     "kept lists the functions whose explicit panic(...) stays, a contract violation where a Result would hand every caller a made-up value (docs/LANGUAGE.md, \"Panics the standard library keeps\"). explicit counts the panic sites of kept functions and the ones still to fix.",
     "residual lists, by module and function, the sites of other kinds that stay, each with its count by kind, its reason and the docs/security record that gives it; in a module with an entry the counted sites must equal the entries, function by function and kind by kind (WP83 S5)."
   ],
-  "total": 617,
+  "total": 591,
   "explicit": {
-    "kept": 357,
+    "kept": 341,
     "toFix": 7
   },
   "modules": {
@@ -38,15 +38,11 @@
     "std/compress/zlib.ts": {
       "panic": 2
     },
-    "std/crypto/aes.ts": {
-      "array-length": 1,
-      "index": 7
-    },
     "std/crypto/base64url.ts": {
       "panic": 7
     },
     "std/crypto/hkdf.ts": {
-      "panic": 14
+      "panic": 9
     },
     "std/crypto/hmac.ts": {
       "panic": 10
@@ -57,15 +53,6 @@
     "std/crypto/p256.ts": {
       "panic": 2
     },
-    "std/crypto/pki-roots.ts": {
-      "overflow": 1
-    },
-    "std/crypto/sha256.ts": {
-      "panic": 2
-    },
-    "std/crypto/sha512.ts": {
-      "panic": 3
-    },
     "std/crypto/x509-random.ts": {
       "io-exit": 2
     },
@@ -73,8 +60,7 @@
       "slice": 1
     },
     "std/net/buffer-pool.ts": {
-      "array-length": 1,
-      "panic": 6
+      "panic": 4
     },
     "std/net/dns-config.ts": {
       "panic": 21
@@ -116,9 +102,6 @@
       "panic": 45,
       "slice": 1,
       "window": 2
-    },
-    "std/net/http1-client-codec.ts": {
-      "panic": 1
     },
     "std/net/http1-codec.ts": {
       "panic": 3
@@ -203,9 +186,6 @@
     },
     "std/net/tls.ts": {
       "io-exit": 1
-    },
-    "std/net/tls/schedule.ts": {
-      "panic": 3
     },
     "std/net/tls/ticket.ts": {
       "io-exit": 3,
@@ -464,11 +444,6 @@
     },
     {
       "module": "std/crypto/hkdf.ts",
-      "function": "hkdfExpandLabelInto",
-      "reason": "hash length, label/context/length ranges, prk at least HashLen and output window are documented preconditions fixed by the caller's protocol"
-    },
-    {
-      "module": "std/crypto/hkdf.ts",
       "function": "hkdfExpandLabelSha256",
       "reason": "prk must be at least 32 bytes and label/context/length in documented ranges; fixed by the caller's TLS key schedule"
     },
@@ -486,11 +461,6 @@
       "module": "std/crypto/hkdf.ts",
       "function": "hkdfExpandLabelSha384Secret",
       "reason": "secret must be at least 48 bytes with documented label/context/length ranges; fixed by the caller's key schedule"
-    },
-    {
-      "module": "std/crypto/hkdf.ts",
-      "function": "hkdfHeldDerive",
-      "reason": "hash length must be 32/48 and the held secret at least that long; both fixed by the caller's algorithm choice"
     },
     {
       "module": "std/crypto/hkdf.ts",
@@ -514,28 +484,23 @@
     },
     {
       "module": "std/crypto/hmac.ts",
+      "function": "HmacSha256.digest",
+      "reason": "digest may be taken once; a second call is a caller call-order violation, and the wiped hashers have no tag to answer"
+    },
+    {
+      "module": "std/crypto/hmac.ts",
       "function": "HmacSha256.digestInto",
-      "reason": "Tag window must lie inside out; the 32-byte output size is fixed by the algorithm"
+      "reason": "Tag window must lie inside out; the 32-byte output size is fixed by the algorithm. digest may be taken once; a second call is a caller call-order violation"
     },
     {
       "module": "std/crypto/hmac.ts",
-      "function": "HmacSha256Scratch.begin",
-      "reason": "Key window must lie inside the key array; caller-controlled bounds contract"
+      "function": "HmacSha384.digest",
+      "reason": "digest may be taken once; a second call is a caller call-order violation, and the wiped hashers have no tag to answer"
     },
     {
       "module": "std/crypto/hmac.ts",
-      "function": "HmacSha256Scratch.finishInto",
-      "reason": "32-byte tag window must lie inside out; size fixed by the algorithm"
-    },
-    {
-      "module": "std/crypto/hmac.ts",
-      "function": "HmacSha384Scratch.begin",
-      "reason": "Key window must lie inside the key array; caller-controlled bounds contract"
-    },
-    {
-      "module": "std/crypto/hmac.ts",
-      "function": "HmacSha384Scratch.finishInto",
-      "reason": "48-byte tag window must lie inside out; size fixed by the algorithm"
+      "function": "HmacSha512.digest",
+      "reason": "digest may be taken once; a second call is a caller call-order violation, and the wiped hashers have no tag to answer"
     },
     {
       "module": "std/crypto/jwt.ts",
@@ -546,26 +511,6 @@
       "module": "std/crypto/p256.ts",
       "function": "p256SignSha256Into",
       "reason": "Message window and the fixed 64-byte signature window must lie inside their arrays; caller bounds contract"
-    },
-    {
-      "module": "std/crypto/sha256.ts",
-      "function": "Sha256.update",
-      "reason": "no update after digest, and the window must lie inside data; caller-controlled preconditions"
-    },
-    {
-      "module": "std/crypto/sha512.ts",
-      "function": "Sha512Engine.absorb",
-      "reason": "no update after digest and the window must lie inside data; call-order and window contracts of the caller"
-    },
-    {
-      "module": "std/crypto/sha512.ts",
-      "function": "Sha512Engine.finish",
-      "reason": "digest may be taken once; a second call is a caller call-order violation"
-    },
-    {
-      "module": "std/net/buffer-pool.ts",
-      "function": "BufferPool.constructor",
-      "reason": "size must be above 0 and ceiling at least 1; both are static sizing choices of the program"
     },
     {
       "module": "std/net/buffer-pool.ts",
@@ -946,11 +891,6 @@
       "module": "std/net/http-server.ts",
       "function": "HttpServer.trailers",
       "reason": "trailers follow a started HTTP/2 response declared HTTP1_CHUNKED whose body is fully written, with names and values the carrier accepts; a caller sequencing and field contract like end"
-    },
-    {
-      "module": "std/net/http1-client-codec.ts",
-      "function": "Http1ResponseParser.feed",
-      "reason": "The off/len window must lie inside data; the caller reports bytes it read into that buffer"
     },
     {
       "module": "std/net/http1-codec.ts",
@@ -1348,16 +1288,6 @@
       "reason": "the match range must lie inside its buffer; a caller precondition of Router.match"
     },
     {
-      "module": "std/net/tls/schedule.ts",
-      "function": "tlsHeldCheck",
-      "reason": "hash length must be 32 or 48 and the secret exactly that long; fixed by the caller's cipher-suite choice"
-    },
-    {
-      "module": "std/net/tls/schedule.ts",
-      "function": "tlsHeldWindow",
-      "reason": "the transcript hash's window must lie inside transcriptHash; the caller's own hash offset, a contract tlsDeriveSecretHeld and tlsFinishedVerifyDataHeld document"
-    },
-    {
       "module": "std/net/tls/ticket.ts",
       "function": "TlsTicketStrikes.constructor",
       "reason": "capacity must be at least 1; a configured table size chosen by the caller"
@@ -1523,60 +1453,5 @@
       "reason": "options.maxDepth must be 1 to 1000; the caller sets it statically, and the YAML text itself yields diagnostics"
     }
   ],
-  "residual": [
-    {
-      "module": "std/crypto/aes.ts",
-      "function": "aesSbox",
-      "sites": {
-        "index": 1
-      },
-      "reason": "a constant-time bitsliced step's first read of a state or key array its exported caller passes in; the read proves the rest, and a length guard would be an early return in a constant-time path, so the bounds check stays as the one site",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/aes.ts",
-      "function": "aesShiftRows",
-      "sites": {
-        "index": 1
-      },
-      "reason": "a constant-time bitsliced step's first read of a state or key array its exported caller passes in; the read proves the rest, and a length guard would be an early return in a constant-time path, so the bounds check stays as the one site",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/aes.ts",
-      "function": "aesMixColumns",
-      "sites": {
-        "index": 1
-      },
-      "reason": "a constant-time bitsliced step's first read of a state or key array its exported caller passes in; the read proves the rest, and a length guard would be an early return in a constant-time path, so the bounds check stays as the one site",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/aes.ts",
-      "function": "aesAddRoundKey",
-      "sites": {
-        "index": 3
-      },
-      "reason": "the constant-time AddRoundKey's first reads of the round keys (rk[base], rk[base + 7]) and of the state (q[7]); they prove the other thirteen, and a length guard would be an early return in a constant-time path",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/aes.ts",
-      "function": "ghashMultiply",
-      "sites": {
-        "index": 1
-      },
-      "reason": "the constant-time GHASH multiply's first read of y, an exported function's argument; it proves the second, and a length guard would be an early return in a constant-time path",
-      "record": "docs/security/crypto-aead.md"
-    },
-    {
-      "module": "std/crypto/aes.ts",
-      "function": "aesGcmSeal",
-      "sites": {
-        "array-length": 1
-      },
-      "reason": "new Array(n) with n the plaintext length plus the 16-byte tag, below 2^31 by Seal's guard: the prover does not prove that length non-negative here (NL2457 under --deny-panics), and the length is the caller's input, so the array-length check stays",
-      "record": "docs/security/crypto-aead.md"
-    }
-  ]
+  "residual": []
 }

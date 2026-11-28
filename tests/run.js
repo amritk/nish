@@ -7146,24 +7146,41 @@ if (dealtHere("stdPanics")) {
   const mismatches = residualMismatches(sites.values(), residual)
   check(
     `std-panics: in every module with a residual entry, the counted sites are its entries, by function and kind`,
-    unreported.length === 0 && residual.length > 0 && mismatches.length === 0,
+    unreported.length === 0 && mismatches.length === 0,
     `${residual.length} entries in ${residualModules.length} modules\n${mismatches.join("\n")}\nA site fixed takes its entry off; a site left gets one, with its reason and record.`
   )
   // The comparison itself fails both ways: on a site its entries do not list
   // (one fabricated extra site in the first entry's function), and on an entry
   // that lists one site more than the code has (the first entry's first kind
-  // counted one too high).
-  const extra = residual.length > 0 ? { module: residual[0].module, function: residual[0].function, kind: "index" } : null
+  // counted one too high). With no entry left (S7b cleared std/crypto/aes.ts,
+  // the last module that had one), the entries are made up from the counted
+  // sites of the first module with a site of another kind than panic, so the
+  // comparison is still run both ways.
+  const fixtureModule = [...sites.values()].find((site) => site.kind !== "panic")?.module
+  const fixtureSites = {}
+  for (const site of sites.values()) {
+    if (site.kind !== "panic" && site.module === fixtureModule) {
+      fixtureSites[site.function] ??= {}
+      fixtureSites[site.function][site.kind] = (fixtureSites[site.function][site.kind] ?? 0) + 1
+    }
+  }
+  const entries =
+    residual.length > 0
+      ? residual
+      : Object.entries(fixtureSites).map(([fn, kinds]) => ({ module: fixtureModule, function: fn, sites: kinds }))
+  const extra = entries.length > 0 ? { module: entries[0].module, function: entries[0].function, kind: "index" } : null
   check(
     `std-panics: the residual comparison fails on one site its entries do not list`,
-    extra !== null && residualMismatches([...sites.values(), extra], residual).length === 1,
+    extra !== null &&
+      residualMismatches(sites.values(), entries).length === 0 &&
+      residualMismatches([...sites.values(), extra], entries).length === 1,
     "residualMismatches did not report a fabricated extra site"
   )
-  const [overKind, overCount] = Object.entries(residual[0]?.sites ?? {})[0] ?? []
+  const [overKind, overCount] = Object.entries(entries[0]?.sites ?? {})[0] ?? []
   const overListed =
     overKind === undefined
       ? null
-      : [{ ...residual[0], sites: { ...residual[0].sites, [overKind]: overCount + 1 } }, ...residual.slice(1)]
+      : [{ ...entries[0], sites: { ...entries[0].sites, [overKind]: overCount + 1 } }, ...entries.slice(1)]
   check(
     `std-panics: the residual comparison fails on an entry that lists one site more than the code has`,
     overListed !== null && residualMismatches(sites.values(), overListed).length === 1,
@@ -7192,7 +7209,7 @@ if (dealtHere("stdPanics")) {
   )
   check(
     `std-panics: every residual entry says why, and its docs/security record exists and names its function`,
-    residual.length > 0 && badRecords.length === 0,
+    badRecords.length === 0,
     badRecords.map((r) => `${r.module} ${r.function}: no reason, or ${r.record} is missing or does not name it`).join("\n")
   )
   const rewritten = rewrittenStdPanics(baseline, sites.size, explicit, baseline.modules)
