@@ -3889,21 +3889,21 @@ export class Inflater {
     // and `opos + n` are the ends less what is left of each room.
     const inGap: i32 = inAvail - n
     const outGap: i32 = outAvail - n
-    // `inflate` checked both windows, so the copy always fits; the prover
-    // cannot follow them through the fields, and the answer for one that did
-    // not would be input that ends where it was read. One test with the gaps,
-    // so the copy shares their return.
-    if (inGap < 0 || outGap < 0 || !tryCopyBytes(out, opos, src, ip, n)) {
+    if (inGap < 0 || outGap < 0) {
       return DEFLATE_ERR_TRUNCATED
     }
+    // `inflate` checked both windows, so the copy always fits; the prover
+    // cannot follow them through the fields. One that did not answers
+    // `DEFLATE_ERR_TRUNCATED` through the same exit as a block cut short.
+    const copied: boolean = tryCopyBytes(out, opos, src, ip, n)
     this.inPos = inEnd - inGap
     this.outPos = outEnd - outGap
     this.storedLeft = left - n
-    if (this.storedLeft > 0) {
-      if (this.outPos === outEnd) {
+    if (!copied || this.storedLeft > 0) {
+      if (copied && this.outPos === outEnd) {
         return INFLATE_NEED_OUTPUT
       }
-      return more ? INFLATE_NEED_INPUT : DEFLATE_ERR_TRUNCATED
+      return more && copied ? INFLATE_NEED_INPUT : DEFLATE_ERR_TRUNCATED
     }
     return 0
   }
