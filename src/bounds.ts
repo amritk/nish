@@ -3614,7 +3614,8 @@ const provesPrecondition = (walk: BoundsWalk, state: State, target: FunctionSig,
   const shift = target.paramNames.length > 0 && target.paramNames[0] === "this" ? 1 : 0
   const atoms = target.preconditionAtoms
   let k = 0
-  while (k + ATOM_WIDTH <= atoms.length) {
+  // `k + 3`, the last slot of an atom, is `ATOM_WIDTH - 1` spelled so the prover reads it.
+  while (k >= 0 && k + 3 < atoms.length) {
     const p = contractArg(args, atoms[k + 1], shift)
     const q = contractArg(args, atoms[k + 2], shift)
     const shape = atoms[k]

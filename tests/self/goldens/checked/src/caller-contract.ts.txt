@@ -299,21 +299,21 @@ function forwardAtoms(program: CheckedProgram, table: TypeTable, sig: FunctionSi
   pointer call: size=40 writesThrough=false captured=false
   pointer atoms: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local -51:9 callee: Node (const)
-  callee -50:42 isFreshName -> @isFreshName
-  local -47:9 target: FunctionSig | null (const)
-  callee -47:18 functionNamed -> @caller_contract$.functionNamed
-  local -42:14 home: CheckedProgram (const)
-  callee -41:9 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee -40:7 noteCallerContract -> @noteCallerContract
-  callee -37:8 isCallerContract -> @isCallerContract
-  local -34:9 args: Node[] (const)
-  local -29:9 at: i32[] (const)
-  local -28:7 k: i32 (let)
-  local -27:14 arg: Node (const)
-  local -26:9 pos: i32 (let)
-  callee -24:13 paramAt -> @caller_contract$.paramAt
-  local -14:9 flat: i32[] (const)
+  local -52:9 callee: Node (const)
+  callee -51:42 isFreshName -> @isFreshName
+  local -48:9 target: FunctionSig | null (const)
+  callee -48:18 functionNamed -> @caller_contract$.functionNamed
+  local -43:14 home: CheckedProgram (const)
+  callee -42:9 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee -41:7 noteCallerContract -> @noteCallerContract
+  callee -38:8 isCallerContract -> @isCallerContract
+  local -35:9 args: Node[] (const)
+  local -30:9 at: i32[] (const)
+  local -29:7 k: i32 (let)
+  local -28:14 arg: Node (const)
+  local -27:9 pos: i32 (let)
+  callee -25:13 paramAt -> @caller_contract$.paramAt
+  local -15:9 flat: i32[] (const)
   local -11:11 shape: i32 (const)
   local -10:11 p: i32 (const)
   local -9:11 q: i32 (const)

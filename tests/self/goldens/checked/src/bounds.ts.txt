@@ -2144,7 +2144,7 @@ function provesProduct(walk: BoundsWalk, state: State, p: Node | null, q: Node |
 function provesPrecondition(walk: BoundsWalk, state: State, target: FunctionSig, args: Node[]): boolean -> @provesPrecondition
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via provesProduct
-  calls: constantValue contractArg holderOf impliesNonNegative isQuietBound nish_panic_index nish_panic_overflow nish_str_eq proves provesOrdered provesProduct provesWindow provesWithin
+  calls: constantValue contractArg holderOf impliesNonNegative isQuietBound nish_panic_overflow nish_str_eq proves provesOrdered provesProduct provesWindow provesWithin
   pointer walk: size=200 writesThrough=false captured=false passedTo=constantValue#0 constantValue#0 provesProduct#0 isQuietBound#0 isQuietBound#0 holderOf#0 impliesNonNegative#0 provesWithin#0 provesWindow#0 provesOrdered#0
   pointer state: size=160 writesThrough=false captured=false passedTo=provesProduct#1 impliesNonNegative#1 provesWithin#1 proves#1 provesWindow#1 provesOrdered#1
   pointer target: size=336 writesThrough=false captured=false
@@ -2153,28 +2153,28 @@ function provesPrecondition(walk: BoundsWalk, state: State, target: FunctionSig,
   local +0:9 shift: i32 (const)
   local +1:9 atoms: i32[] (const)
   local +2:7 k: i32 (let)
-  local +4:11 p: Node | null (const)
-  callee +4:15 contractArg -> @contractArg
-  local +5:11 q: Node | null (const)
+  local +5:11 p: Node | null (const)
   callee +5:15 contractArg -> @contractArg
-  local +6:11 shape: i32 (const)
-  local +10:13 a: i32 (const)
-  callee +10:35 constantValue -> @constantValue
-  local +11:13 c: i32 (const)
+  local +6:11 q: Node | null (const)
+  callee +6:15 contractArg -> @contractArg
+  local +7:11 shape: i32 (const)
+  local +11:13 a: i32 (const)
   callee +11:35 constantValue -> @constantValue
-  local +12:13 constants: boolean (const)
-  callee +13:26 provesProduct -> @provesProduct
-  local +19:11 b: Node | null (const)
-  callee +19:15 contractArg -> @contractArg
-  callee +20:24 isQuietBound -> @isQuietBound
-  callee +20:65 isQuietBound -> @isQuietBound
-  local +23:11 w: Local | null (const)
-  callee +23:49 holderOf -> @holderOf
-  callee +25:12 impliesNonNegative -> @impliesNonNegative
-  callee +31:12 provesWithin -> @provesWithin
-  callee +35:12 proves -> @proves
-  callee +39:26 provesWindow -> @provesWindow
-  callee +42:31 provesOrdered -> @provesOrdered
+  local +12:13 c: i32 (const)
+  callee +12:35 constantValue -> @constantValue
+  local +13:13 constants: boolean (const)
+  callee +14:26 provesProduct -> @provesProduct
+  local +20:11 b: Node | null (const)
+  callee +20:15 contractArg -> @contractArg
+  callee +21:24 isQuietBound -> @isQuietBound
+  callee +21:65 isQuietBound -> @isQuietBound
+  local +24:11 w: Local | null (const)
+  callee +24:49 holderOf -> @holderOf
+  callee +26:12 impliesNonNegative -> @impliesNonNegative
+  callee +32:12 provesWithin -> @provesWithin
+  callee +36:12 proves -> @proves
+  callee +40:26 provesWindow -> @provesWindow
+  callee +43:31 provesOrdered -> @provesOrdered
 function contractArg(args: Node[], k: i32, shift: i32): Node | null -> @contractArg
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow

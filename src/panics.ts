@@ -515,22 +515,29 @@ const holdCallerContracts = (units: AnalysisUnit[], facts: FactsTable, strictExp
       const holder = forwardHolders[k]
       const target = holder.preconditionTarget
       const at = target === null ? -1 : heldAt(held, alive, target)
-      if (at >= 0 && heldAt(held, alive, holder) < 0) {
+      const mine = heldAt(held, alive, holder)
+      if (at >= 0 && at < alive.length && mine < 0) {
         alive[at] = false
+        changed = true
+      }
+      // A holder whose target is not held proves nothing to its own callers.
+      if (mine >= 0 && mine < alive.length && at < 0) {
+        alive[mine] = false
         changed = true
       }
       k = k + 1
     }
   }
   let k = 0
-  while (k < forwardSites.length) {
+  while (k < forwardSites.length && k < forwardHolders.length && k < forwardFacts.length) {
     if (heldAt(held, alive, forwardHolders[k]) >= 0) {
       forwardSites[k].proven = true
     } else {
       const f = forwardFacts[k]
+      const dropped = forwardSites[k]
       const kept: PanicSite[] = []
       for (const site of f.panicSites) {
-        if (site !== forwardSites[k]) {
+        if (site !== dropped) {
           kept.push(site)
         }
       }
@@ -539,7 +546,7 @@ const holdCallerContracts = (units: AnalysisUnit[], facts: FactsTable, strictExp
     k = k + 1
   }
   k = 0
-  while (k < held.length) {
+  while (k < held.length && k < alive.length) {
     const sig = held[k]
     const f = facts.get(sig.name)
     if (alive[k] && f !== null) {
@@ -551,6 +558,30 @@ const holdCallerContracts = (units: AnalysisUnit[], facts: FactsTable, strictExp
     }
     k = k + 1
   }
+  // A call into a contract no longer held reaches its `panic` as any call
+  // does, so its `contract` site, proven or not, goes: none claims a check a
+  // listed call still reaches.
+  for (const f of facts.list) {
+    const kept: PanicSite[] = []
+    for (const site of f.panicSites) {
+      if (site.kind !== PANIC_CONTRACT || heldNamed(held, alive, calleeAt(f.panicSites, site.node))) {
+        kept.push(site)
+      }
+    }
+    f.panicSites = kept
+  }
+}
+
+/** Whether the `held` signature named `name` is still `alive`. */
+const heldNamed = (held: FunctionSig[], alive: boolean[], name: string): boolean => {
+  let k = 0
+  while (k < held.length && k < alive.length) {
+    if (alive[k] && held[k].name === name) {
+      return true
+    }
+    k = k + 1
+  }
+  return false
 }
 
 /** The function whose forward is the call at `node` into `callee` (`preconditionForward`), or null. */

@@ -157,7 +157,7 @@ function holdCallerContracts(units: AnalysisUnit[], facts: FactsTable, strictExp
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: strictExports
-  calls: FactsTable.get FunctionSig.definedIn StringSet.add StringSet.at StringSet.constructor StringSet.has StringSet.size forwardHolder heldAt heldBy hostCalls isCallSite isCallerContract nish_array_grow nish_panic_index panics$.calleeAt panics$.namedBy
+  calls: FactsTable.get FunctionSig.definedIn StringSet.add StringSet.at StringSet.constructor StringSet.has StringSet.size forwardHolder heldAt heldBy heldNamed hostCalls isCallSite isCallerContract nish_array_grow panics$.calleeAt panics$.namedBy
   pointer units: size=0 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 FactsTable.get#0
   stackSites=8 stackLocals=8
@@ -202,18 +202,32 @@ function holdCallerContracts(units: AnalysisUnit[], facts: FactsTable, strictExp
   local +30:13 target: FunctionSig | null (const)
   local +31:13 at: i32 (const)
   callee +31:41 heldAt -> @heldAt
-  callee +32:22 heldAt -> @heldAt
-  local +39:7 k: i32 (let)
-  callee +41:9 heldAt -> @heldAt
-  local +44:13 f: FunctionFacts (const)
-  local +45:13 kept: PanicSite[] (const)
-  local +46:18 site: PanicSite (const)
-  local +57:11 sig: FunctionSig (const)
-  local +58:11 f: FunctionFacts | null (const)
-  callee +58:15 FactsTable.get -> @FactsTable.get
-  local +60:18 site: PanicSite (const)
-  callee +61:30 isCallSite -> @isCallSite
-  callee +61:50 heldBy -> @heldBy
+  local +32:13 mine: i32 (const)
+  callee +32:20 heldAt -> @heldAt
+  local +45:7 k: i32 (let)
+  callee +47:9 heldAt -> @heldAt
+  local +50:13 f: FunctionFacts (const)
+  local +51:13 dropped: PanicSite (const)
+  local +52:13 kept: PanicSite[] (const)
+  local +53:18 site: PanicSite (const)
+  local +64:11 sig: FunctionSig (const)
+  local +65:11 f: FunctionFacts | null (const)
+  callee +65:15 FactsTable.get -> @FactsTable.get
+  local +67:18 site: PanicSite (const)
+  callee +68:30 isCallSite -> @isCallSite
+  callee +68:50 heldBy -> @heldBy
+  local +78:14 f: FunctionFacts (const)
+  local +79:11 kept: PanicSite[] (const)
+  local +80:16 site: PanicSite (const)
+  callee +81:43 heldNamed -> @heldNamed
+  callee +81:66 calleeAt -> @panics$.calleeAt
+function heldNamed(held: FunctionSig[], alive: boolean[], name: string): boolean -> @heldNamed
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer held: size=0 writesThrough=false captured=false
+  pointer alive: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 k: i32 (let)
 function forwardHolder(holders: FunctionSig[], node: Node, callee: string): FunctionSig | null -> @forwardHolder
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq

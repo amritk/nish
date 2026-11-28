@@ -519,7 +519,8 @@ const forwardAtoms = (
   }
   const flat = target.preconditionAtoms
   k = 0
-  while (k + ATOM_WIDTH <= flat.length) {
+  // `k + 3`, the last slot of an atom, is `ATOM_WIDTH - 1` spelled so the prover reads it.
+  while (k >= 0 && k + 3 < flat.length) {
     const shape = flat[k]
     const p = at[flat[k + 1]]
     const q = flat[k + 2] >= 0 ? at[flat[k + 2]] : -1

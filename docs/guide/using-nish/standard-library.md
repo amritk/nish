@@ -3435,8 +3435,7 @@ if ((wants & TLS_RECORD_TICKET) !== 0) {
 }
 ```
 
-<!-- allow-panics: calls `std/net/http1-codec.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1-codec";
 
