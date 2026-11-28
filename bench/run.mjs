@@ -25,7 +25,7 @@
 //                       rewrites only their two tables and keeps the rest
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
-//     --instructions    count the instructions each of the 37 programs executes
+//     --instructions    count the instructions each of the 67 programs executes
 //                       (the crypto kernels among them) under valgrind's cachegrind, at the sizes in
 //                       bench/instructions.json; nothing is timed. With --check,
 //                       fail when one exceeds its baseline by more than the
@@ -773,6 +773,12 @@ const STD_COUNTED = [
     what: "YamlJsonLoader.load and stringifyYaml of a merged document, with line and column",
   },
   { name: "std-json-equal", what: "jsonEqual, hash, canonical text and duplicate check of two spellings" },
+  { name: "std-json-value-parse", what: "parseText and parseTextRanged of 2 MiB, each into a fresh JsonDocument" },
+  { name: "std-json-value-reuse", what: "parseText of 2 MiB into one JsonDocument, grown once" },
+  { name: "std-json-value-read", what: "get, at, keyAt, string, keyStart and start over every node" },
+  { name: "std-yaml-json-load", what: "parseYaml and YamlJsonLoader.load of 1 MiB of merged YAML, fresh each time" },
+  { name: "std-regex", what: "regexCompile, test and findAll of a prefixed and an unprefixed pattern" },
+  { name: "std-text", what: "splitLines, trim and indexOfAny over 1 MiB of padded lines" },
 ]
 
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */

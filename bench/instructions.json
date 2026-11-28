@@ -65,7 +65,13 @@
     "std-math-kernel": { "n": 240, "instructions": 139016271 },
     "std-yaml-parse": { "n": 100, "instructions": 148396698, "commit": "ad29ae37", "valgrind": "valgrind-3.26.0" },
     "std-yaml-json": { "n": 150, "instructions": 173405840, "commit": "ad29ae37", "valgrind": "valgrind-3.26.0" },
-    "std-json-equal": { "n": 60, "instructions": 169511889, "commit": "e4779207", "valgrind": "valgrind-3.26.0" }
+    "std-json-equal": { "n": 60, "instructions": 169511889, "commit": "e4779207", "valgrind": "valgrind-3.26.0" },
+    "std-json-value-parse": { "n": 1 },
+    "std-json-value-reuse": { "n": 2 },
+    "std-json-value-read": { "n": 20 },
+    "std-yaml-json-load": { "n": 1 },
+    "std-regex": { "n": 30 },
+    "std-text": { "n": 17 }
   },
   "raises": []
 }
