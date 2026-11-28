@@ -1209,7 +1209,17 @@ export class QpackEncoder {
    */
   encodeWholeField(out: u8[], name: u8[], value: u8[], neverIndexed: boolean, huffman: boolean): void {
     const zero: i32 = 0
-    this.encodeLine(out, name, zero, toI32(name.length), value, zero, toI32(value.length), neverIndexed, huffman)
+    this.encodeLine(
+      out,
+      name,
+      zero,
+      toI32(name.length),
+      value,
+      zero,
+      toI32(value.length),
+      neverIndexed,
+      huffman
+    )
   }
 
   /** The field line `encodeField` appends, for windows the caller has checked. */

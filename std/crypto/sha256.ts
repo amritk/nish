@@ -524,14 +524,12 @@ export class Sha256 {
    * @param len How many bytes to absorb; 0 absorbs nothing.
    */
   update(data: u8[], off: i32, len: i32): void {
-    if (this.finished) {
-      panic("Sha256: update after digest")
-    }
-    const size: i32 = toI32(data.length)
-    if (off < 0 || len < 0 || off > size || len > size - off) {
+    if (!sha256Absorb(this, data, off, len)) {
+      if (this.finished) {
+        panic("Sha256: update after digest")
+      }
       panic("Sha256: the window is outside the buffer")
     }
-    sha256Absorb(this, data, off, len)
   }
 
   /**
@@ -667,8 +665,11 @@ export class Sha256 {
  * indices, so a window that did not would hash a short read, never read out
  * of range.
  */
-const sha256Absorb = (h: Sha256, data: u8[], off: i32, len: i32): void => {
+const sha256Absorb = (h: Sha256, data: u8[], off: i32, len: i32): boolean => {
   const size: i32 = toI32(data.length)
+  if (h.finished || off < 0 || len < 0 || off > size || len > size - off) {
+    return false
+  }
   // §5.1.1 appends the length modulo 2^64, so the count wraps as a `u64`.
   h.total = toI64(toU64(h.total) + toU64(toI64(len)))
   const state: u32[] = h.state
@@ -690,7 +691,7 @@ const sha256Absorb = (h: Sha256, data: u8[], off: i32, len: i32): void => {
     }
     if (fill < SHA256_BLOCK) {
       h.fill = fill
-      return
+      return true
     }
     sha256Compress(state, schedule, block, 0)
   }
@@ -708,6 +709,7 @@ const sha256Absorb = (h: Sha256, data: u8[], off: i32, len: i32): void => {
     at += 1
   }
   h.fill = fill
+  return true
 }
 
 /**
@@ -743,6 +745,7 @@ const sha256AbsorbLong = (h: Sha256, data: u8[]): void => {
 const sha256AbsorbWhole = (h: Sha256, data: u8[]): void => {
   const n: number = data.length
   if (n <= 2147483647) {
+    // The window is the whole array, so it always lies inside it.
     sha256Absorb(h, data, 0, toI32(n))
   } else {
     sha256AbsorbLong(h, data)
