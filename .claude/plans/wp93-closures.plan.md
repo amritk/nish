@@ -1,14 +1,15 @@
 ---
 name: WP93 — stored callbacks for signals, by context argument and by inline-environment closure
 overview: A signals-based std/ui needs a derivation or handler stored in a reactive node and called later. This plan gives Nish two strict-mode forms that allocate nothing and keep WP51's escape proofs. One is a top-level function plus a typed context argument, through generic function-type aliases. The other is a capturing arrow whose `const` captures live inline in the slot that holds it. Each lands behind a measured dispatch gate on native and wasm32.
-spec: docs/wp93-closures.md
 priority: 270
 labels: [ready]
+issue: 2409
 stages:
   - id: s1-generic-fn-aliases
     title: WP93 S1 — generic function-type aliases, so a factory can store its function
     goal: A generic function, method or constructor takes a parameter typed `Derive<C, T>` and stores it as a WP51 reference, so `computed(rt, t, rowLabel)` compiles with C and T inferred. A call whose argument is already on the heap is no longer refused for an escape-join mismatch.
     verification: node tests/run.js fnref && node tests/run.js generic && node tests/run.js type_alias && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2410
     todos:
       - id: s1-design-note
         content: Write docs/wp93-closures.md with the two forms, the representation, the rules, the gates and every figure it cites recomputed from its source — see WP93 S1 — generic function-type aliases, so a factory can store its function
@@ -29,6 +30,7 @@ stages:
     title: WP93 S2 — dispatch for sets wider than eight, measured
     goal: A call through a set of 16 to 64 members, the shape a signals runtime's node field produces, is lowered the way the data says is fastest, and never costs more than the indirect call WP28's compat closures would pay on the same stream.
     verification: node bench/wp93-dispatch/run.mjs && node tests/run.js fnref && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2411
     todos:
       - id: s2-bench
         content: Add bench/wp93-dispatch/ — switch against a table of function pointers at K = 8, 16, 32, 64 on monomorphic, periodic, aperiodic and signals-propagation streams, plus WP28 section 7.4's programs re-run at the same commit — see WP93 S2 — dispatch for sets wider than eight, measured
@@ -49,6 +51,7 @@ stages:
     title: WP93 S3 — function-typed class fields in sidecar builds
     goal: A build with a sidecar (`--emit-dts`, a C header, napi) compiles a class with a function-typed field when no host-visible signature reaches the class, as a plain wasm32 or native build already does. NL2733 still refuses one a signature reaches, and the wasm-host security record states why a host-written tag is safe.
     verification: node tests/run.js fnref && node tests/run.js wasm && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check
+    issue: 2412
     todos:
       - id: s3-narrow-nl2733
         content: Narrow refuseHostReferences (src/fnrefs.ts) under everyLayoutShared (sidecar builds, src/visibility.ts) from every root class to the classes a host-visible signature reaches, the rule plain wasm32 builds already follow — see WP93 S3 — function-typed class fields in sidecar builds
@@ -66,6 +69,7 @@ stages:
     title: WP93 S4 — capturing arrows stored as inline-environment closures
     goal: An arrow that reads only `const` locals and parameters can be stored in a field, element, local or Map value as a tag plus its captured values, with no allocation. Every arena, region and escape rule sees through it to its captures.
     verification: node tests/run.js fnref && node tests/run.js closure && node tests/run.js arena && node tests/run.js region && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2413
     todos:
       - id: s4-gate
         content: Start only once WP51 S3 (amritk/nish#1899, capture-free arrows in value position) and WP93 S1–S3 are merged — see WP93 S4 — capturing arrows stored as inline-environment closures
@@ -92,6 +96,7 @@ stages:
     title: WP93 S5 — a signals-shaped acceptance program and its cost
     goal: A small signal, computed and effect graph runs on native and wasm32 in both forms, prints the same output in each, and its measured call and memory cost is recorded against WP28 section 7.4.
     verification: node tests/run.js closure && node bench/wp93-dispatch/run.mjs --signals && node tests/run.js wasi && npm run check && npm run lint
+    issue: 2414
     todos:
       - id: s5-gate
         content: Start only once S1–S4 are merged — see WP93 S5 — a signals-shaped acceptance program and its cost
@@ -106,6 +111,7 @@ stages:
     title: WP93 S6 — narrow WP28 C2b to what strict now covers
     goal: WP28's C2b and its issue describe only the function values strict still refuses, and the std/ui plan can cite the two forms as available.
     verification: npm run lint && node docs/check-links.mjs
+    issue: 2415
     todos:
       - id: s6-wp28-doc
         content: Rewrite docs/wp28-compatibility-mode.md C2b and .claude/plans/wp28-compatibility-mode.plan.md c2b-function-values to the remainder (let captures, outliving the holder, generic and async closures) — see WP93 S6 — narrow WP28 C2b to what strict now covers
@@ -178,7 +184,7 @@ S2's gate, therefore:
 
 ## WP93 S1 — generic function-type aliases, so a factory can store its function
 
-The design note [`docs/wp93-closures.md`](../../docs/wp93-closures.md) is written first and is this plan's `spec`.
+The design note `docs/wp93-closures.md` is written first, before any code, and later stages record their figures in it.
 
 **Generic aliases.** Admit a generic alias whose body is a function type:
 
