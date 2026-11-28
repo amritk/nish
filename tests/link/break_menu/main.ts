@@ -41,6 +41,7 @@ import {
   cycleSetting,
   drawBreakMenu,
   fpsChoice,
+  logoRelease,
   newBreakMenu,
   newBreakMenuWith,
   resolutionChoice,
@@ -800,6 +801,25 @@ const testDraw = (t: Suite): void => {
   t.eqI32("the title at 80x45, as text", hashOf(tiny), -880170419)
 }
 
+/**
+ * `logoRelease` is the old `column * 0.7` truncated, for every column a logo
+ * word reaches, the exact multiples of 10 among them.
+ */
+const testLogoRelease = (t: Suite): void => {
+  let same: boolean = true
+  for (let column: i32 = 0; column <= 48; column++) {
+    if (column >= 0 && column <= 48 && logoRelease(column) !== toI32(toF64(column) * 0.7)) {
+      same = false
+    }
+  }
+  t.ok("logoRelease truncates column * 0.7 at columns 0 to 48", same)
+  t.eqI32("column 10 comes loose on step 7", logoRelease(10), 7)
+  t.eqI32("column 20 on step 14", logoRelease(20), 14)
+  t.eqI32("column 30 on step 21", logoRelease(30), 21)
+  t.eqI32("column 40 on step 28", logoRelease(40), 28)
+  t.eqI32("column 47 on step 32", logoRelease(47), 32)
+}
+
 export const main = (): number => {
   const t = new Suite("break-menu")
   testInterface(t)
@@ -811,5 +831,6 @@ export const main = (): number => {
   testWall(t)
   testDraw(t)
   testLowEffects(t)
+  testLogoRelease(t)
   return t.done()
 }

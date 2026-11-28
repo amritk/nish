@@ -187,4 +187,10 @@ PASS  high effects puffs 3 sparks a loosened brick
 PASS  low effects puffs 1 spark a loosened brick
 PASS  a key skips the outro to the level
 PASS  and a second key does not answer it again
-break-menu: 189 passed, 0 failed, 0 skipped
+PASS  logoRelease truncates column * 0.7 at columns 0 to 48
+PASS  column 10 comes loose on step 7
+PASS  column 20 on step 14
+PASS  column 30 on step 21
+PASS  column 40 on step 28
+PASS  column 47 on step 32
+break-menu: 195 passed, 0 failed, 0 skipped

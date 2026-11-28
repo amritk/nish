@@ -69,6 +69,13 @@ PASS  a small room keeps going
 PASS  and holds the intro
 PASS  q quits it
 PASS  a room big enough again goes on
+PASS  clockPassed reads 2 s for settling as now - since does
+PASS  and 1.5 s for a slow rate
+PASS  over every pair
+PASS  a negative width keeps the frame
+PASS  a negative height keeps the frame
+PASS  no width sizes it to 0 x 0
+PASS  and room again sizes it 16:9
 PASS  F4 keeps the step going
 PASS  F4 asks for no reopening
 PASS  F4 asks for nothing kept
@@ -83,4 +90,4 @@ PASS  Enter on the first row shown cycles the resolution
 PASS  and leaves the frame rate
 PASS  the stats name no backend or frame rate with no terminal
 PASS  a terminal's stats name the backend
-break_core: 80 passed, 0 failed, 0 skipped
+break_core: 87 passed, 0 failed, 0 skipped

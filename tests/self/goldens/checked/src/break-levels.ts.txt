@@ -50,20 +50,21 @@ function levelName(level: i32): string -> @levelName [exported]
 function brickKind(c: i32): i32 -> @brickKind [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function brickHits(c: i32): i32 -> @brickHits [exported]
+function brickHits(c: i32): integer<0, 3> -> @brickHits [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: c
   calls: brickKind
   stackSites=0 stackLocals=0
-  callee +0:10 brickKind -> @brickKind
+  local +0:11 hits: i32 (const)
+  callee +3:7 brickKind -> @brickKind
 function LevelTuning.constructor(this: LevelTuning): void -> @LevelTuning.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function levelTuning(level: i32): LevelTuning -> @levelTuning [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=56
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=56
   escaping: level
-  calls: LevelTuning.constructor clampLevel llvm.fabs.f64 llvm.pow.f64 nish_alloc_struct nish_panic_overflow
+  calls: LevelTuning.constructor clampLevel llvm.fabs.f64 llvm.pow.f64 nish_alloc_struct
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   callee +0:18 clampLevel -> @clampLevel

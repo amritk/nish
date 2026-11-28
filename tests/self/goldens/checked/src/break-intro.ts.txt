@@ -99,20 +99,22 @@ function pixelsIndex(x: i32, y: i32, width: i32, length: i32): i32 -> @nish.pixe
 function Framebuffer.constructor(this: Framebuffer, width: i32, height: i32): void -> @nish.Framebuffer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: height width
-  calls: nish.pixelsArea nish_panic
+  calls: nish.pixelsArea
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 area: i32 (const)
   callee +0:23 pixelsArea -> @nish.pixelsArea
+  local +4:9 n: i32 (let)
 function Framebuffer.resize(this: Framebuffer, width: i32, height: i32): void -> @nish.Framebuffer.resize [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: height width
-  calls: nish.pixelsArea nish_panic
+  calls: nish.pixelsArea
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 area: i32 (const)
   callee -2:23 pixelsArea -> @nish.pixelsArea
+  local +3:11 n: i32 (let)
 function Framebuffer.pixelWidth(this: Framebuffer): i32 -> @nish.Framebuffer.pixelWidth [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=16 writesThrough=false captured=false
@@ -185,10 +187,10 @@ function scaleFramebuffer(src: Framebuffer, divisor: i32, dst: Framebuffer): voi
   pointer src: size=16 writesThrough=false captured=false
   pointer dst: size=16 writesThrough=true captured=false passedTo=nish.Framebuffer.resize#0
   stackSites=0 stackLocals=0
-  local -19:9 w: i32 (const)
-  callee -19:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
-  local -18:9 h: i32 (const)
-  callee -18:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
+  local -25:9 w: i32 (const)
+  callee -25:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
+  local -24:9 h: i32 (const)
+  callee -24:18 pixelsCeilDiv -> @nish.pixelsCeilDiv
   callee -17:3 Framebuffer.resize -> @nish.Framebuffer.resize
   local -16:9 from: i32[] (const)
   local -15:9 to: i32[] (const)
@@ -2114,6 +2116,7 @@ const COL_W: f64 = 4
 const LINE_H: f64 = 6
 const TEXT_X: f64 = 1
 const TEXT_Y: f64 = 0
+const CUT_COLUMNS: i32 = 1024
 const PLAIN: i32 = 14210288
 const BOLD: i32 = 16052991
 const FAINT: i32 = 8157336
@@ -2153,7 +2156,7 @@ struct BreakIntro (class) size=200 align=8 exported
   field kinds: i32[] index=7 offset=56
   field colours: i32[] index=8 offset=64
   field widths: i32[] index=9 offset=72
-  field lines: i32[] index=10 offset=80
+  field lines: integer<0, 29>[] index=10 offset=80
   field releases: i32[] index=11 offset=88
   field wallXs: f64[] index=12 offset=96
   field wallPrevXs: f64[] index=13 offset=104
@@ -2172,16 +2175,16 @@ struct BreakIntro (class) size=200 align=8 exported
   field rngState: i32 index=26 offset=196
   constructor -> @BreakIntro.constructor
 function BreakIntro.constructor(this: BreakIntro, seed: i32): void -> @BreakIntro.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: seed
   calls: RasterParticles.constructor View.constructor nish_alloc_struct
   pointer this: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +0:11 bricks: i32 (const)
-  callee +18:19 new RasterParticles -> @RasterParticles.constructor
-  callee +19:17 new View -> @View.constructor
+  callee +0:19 new RasterParticles -> @RasterParticles.constructor
+  callee +1:17 new View -> @View.constructor
 function newBreakIntro(help: string, seed: i64): BreakIntro -> @newBreakIntro [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=200
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=200
+  sharedWrite: via introCutHelp
   escaping: help
   calls: BreakIntro.constructor introCutHelp introFindGap introScheduleCollapse introScheduleWall nish_alloc_struct
   stackSites=0 stackLocals=0
@@ -2193,28 +2196,38 @@ function newBreakIntro(help: string, seed: i64): BreakIntro -> @newBreakIntro [e
   callee +4:3 introFindGap -> @introFindGap
   callee +5:3 introScheduleCollapse -> @introScheduleCollapse
   callee +6:3 introScheduleWall -> @introScheduleWall
-function introRandom(intro: BreakIntro, lo: i32, hi: i32): i32 -> @introRandom
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function introRoll(intro: BreakIntro, sides: i32): i32 -> @introRoll
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  escaping: lo
-  calls: nish_panic_overflow
   pointer intro: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:7 x: i32 (let)
-  local +1:9 span: i32 (const)
-  local +5:9 r: i32 (const)
-function introSgrColour(params: string, colour: i32): i32 -> @introSgrColour
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  local +4:9 r: i32 (const)
+  local +5:9 k: i32 (const)
+function introRandom(intro: BreakIntro, lo: integer<-100, 100>, hi: integer<-100, 100>): i32 -> @introRandom
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via introRoll
+  calls: introRoll
+  pointer intro: size=200 writesThrough=true captured=false passedTo=introRoll#0
+  stackSites=0 stackLocals=0
+  callee +0:8 introRoll -> @introRoll
+function introSgrParam(v: i32, colour: i32): i32 -> @introSgrParam
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: colour
-  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function introSgrColour(params: string, colour: i32): i32 -> @introSgrColour
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: colour
+  calls: introSgrParam
   stackSites=0 stackLocals=0
   local +0:7 out: i32 (let)
   local +1:7 value: i32 (let)
   local +2:7 digits: boolean (let)
   local +3:12 i: i32 (let)
   local +4:11 c: i32 (const)
-  local +13:11 v: i32 (const)
-function introAddPiece(intro: BreakIntro, kind: i32, text: string, colour: i32, line: i32, column: i32, width: i32): void -> @introAddPiece
+  callee +17:11 introSgrParam -> @introSgrParam
+  callee +22:10 introSgrParam -> @introSgrParam
+function introAddPiece(intro: BreakIntro, kind: i32, text: string, colour: i32, line: integer<0, 29>, column: i32, width: i32, lift: f64): void -> @introAddPiece
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: colour kind line text width
@@ -2225,132 +2238,132 @@ function introAddPiece(intro: BreakIntro, kind: i32, text: string, colour: i32, 
   local -1:9 y: f64 (const)
   local +4:9 still: f64 (const)
 function introUpperHalfAt(help: string, i: i32): boolean -> @introUpperHalfAt
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function introCutHelp(intro: BreakIntro, help: string): void -> @introCutHelp
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via introAddPiece
   escaping: help
-  calls: introAddPiece introSgrColour introUpperHalfAt nish_panic_overflow nish_panic_slice nish_str_new
+  calls: introAddPiece introSgrColour introUpperHalfAt nish_str_new
   pointer intro: size=200 writesThrough=false captured=false passedTo=introAddPiece#0 introAddPiece#0
   stackSites=0 stackLocals=0
-  local +0:9 n: i32 (const)
-  local +1:7 line: i32 (let)
-  local +2:7 column: i32 (let)
-  local +3:7 colour: i32 (let)
-  local +4:7 i: i32 (let)
-  local +6:11 c: i32 (const)
-  local +14:11 end: i32 (let)
-  callee +19:18 introSgrColour -> @introSgrColour
-  callee +31:9 introUpperHalfAt -> @introUpperHalfAt
-  local +32:13 from: i32 (const)
-  callee +33:14 introUpperHalfAt -> @introUpperHalfAt
-  callee +37:7 introAddPiece -> @introAddPiece
-  local +40:11 start: i32 (const)
-  local +41:11 from: i32 (const)
-  local +43:13 d: i32 (const)
-  callee +44:47 introUpperHalfAt -> @introUpperHalfAt
-  callee +53:5 introAddPiece -> @introAddPiece
+  local +0:7 line: i32 (let)
+  local +1:7 column: i32 (let)
+  local +2:7 colour: i32 (let)
+  local +3:7 i: i32 (let)
+  local +5:11 c: i32 (const)
+  local +13:11 end: i32 (let)
+  callee +18:18 introSgrColour -> @introSgrColour
+  callee +36:9 introUpperHalfAt -> @introUpperHalfAt
+  local +37:13 from: i32 (const)
+  callee +38:71 introUpperHalfAt -> @introUpperHalfAt
+  callee +42:7 introAddPiece -> @introAddPiece
+  local +45:11 start: i32 (const)
+  local +46:11 from: i32 (const)
+  local +48:13 d: i32 (const)
+  callee +49:47 introUpperHalfAt -> @introUpperHalfAt
+  callee +60:7 introAddPiece -> @introAddPiece
 function introFindGap(intro: BreakIntro): void -> @introFindGap
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: introAddPiece llvm.copysign.f64 llvm.fptosi.sat.i32.f64 nish_floor nish_panic_index nish_panic_overflow
+  calls: introAddPiece llvm.copysign.f64 llvm.fptosi.sat.i32.f64 nish_floor
   pointer intro: size=200 writesThrough=true captured=false passedTo=introAddPiece#0
   stackSites=0 stackLocals=0
-  local -15:9 n: i32 (const)
-  local -14:12 i: i32 (let)
-  local -6:11 width: i32 (const)
-  local -5:11 end: f64 (const)
-  local -4:11 space: i32 (const)
+  local -18:9 n: i32 (const)
+  local -15:9 i: i32 (let)
+  local -11:11 line: integer<0, 29> (const)
+  local -7:11 width: i32 (const)
+  local -6:11 end: f64 (const)
+  local -5:11 space: i32 (const)
   local -2:13 column: i32 (const)
   callee -1:7 introAddPiece -> @introAddPiece
-  local +1:13 last: i32 (const)
 function introScheduleCollapse(intro: BreakIntro): void -> @introScheduleCollapse
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: introRandom nish_panic_index nish_panic_overflow
-  pointer intro: size=200 writesThrough=true captured=false passedTo=introRandom#0 introRandom#0 introRandom#0
+  calls: introRandom introRoll
+  pointer intro: size=200 writesThrough=true captured=false passedTo=introRoll#0 introRandom#0 introRandom#0
   stackSites=0 stackLocals=0
-  local -3:9 n: i32 (const)
-  local -2:12 i: i32 (let)
+  local -6:9 i: i32 (let)
+  local -2:11 line: integer<0, 29> (const)
   local -1:11 fromBottom: i32 (const)
-  callee +0:54 introRandom -> @introRandom
+  callee +0:54 introRoll -> @introRoll
   callee +1:26 introRandom -> @introRandom
   callee +2:27 introRandom -> @introRandom
 function introScheduleWall(intro: BreakIntro): void -> @introScheduleWall
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: introRandom nish_panic_index nish_panic_overflow
-  pointer intro: size=200 writesThrough=true captured=false passedTo=introRandom#0 introRandom#0 introRandom#0
+  calls: introRandom introRoll nish_array_grow
+  pointer intro: size=200 writesThrough=true captured=false passedTo=introRoll#0 introRandom#0 introRandom#0
   stackSites=0 stackLocals=0
   local -5:12 row: i32 (let)
   local -4:11 course: i32 (const)
   local -3:14 col: i32 (let)
-  local -2:13 i: i32 (const)
-  local -1:13 order: i32 (const)
-  callee +6:65 introRandom -> @introRandom
-  callee +7:34 introRandom -> @introRandom
-  callee +8:35 introRandom -> @introRandom
+  local -2:13 x: f64 (const)
+  local -1:13 y: f64 (const)
+  local +4:13 start: i32 (const)
+  callee +7:65 introRoll -> @introRoll
+  callee +8:34 introRandom -> @introRandom
+  callee +9:35 introRandom -> @introRandom
+  local +11:15 still: f64 (const)
 function stepBreakIntro(intro: BreakIntro, input: StepInput): i32 -> @stepBreakIntro [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: introStepGap introStepPieces introStepWall nish_array_grow nish_panic_overflow stepParticles
+  calls: introStepGap introStepPieces introStepWall nish_array_grow stepParticles
   pointer intro: size=200 writesThrough=true captured=false passedTo=introStepGap#0 introStepPieces#0 introStepWall#0
   pointer input: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +1:14 e: TermEvent (const)
-  local +11:9 t: i32 (const)
-  callee +12:3 introStepGap -> @introStepGap
-  local +13:9 pieces: boolean (const)
-  callee +13:27 introStepPieces -> @introStepPieces
-  local +14:9 wall: boolean (const)
-  callee +14:25 introStepWall -> @introStepWall
-  callee +15:3 stepParticles -> @stepParticles
+  local +12:9 last: i32 (const)
+  local +16:9 t: i32 (const)
+  callee +17:3 introStepGap -> @introStepGap
+  local +18:9 pieces: boolean (const)
+  callee +18:27 introStepPieces -> @introStepPieces
+  local +19:9 wall: boolean (const)
+  callee +19:25 introStepWall -> @introStepWall
+  callee +20:3 stepParticles -> @stepParticles
 function introStepGap(intro: BreakIntro, t: i32): void -> @introStepGap
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: clamp introRandom nish_array_grow nish_panic_index nish_panic_overflow outBounce rasterSpawnParticle
+  calls: clamp introRandom nish_array_grow outBounce rasterSpawnParticle
   pointer intro: size=200 writesThrough=true captured=false passedTo=introRandom#0 introRandom#0
   stackSites=0 stackLocals=0
-  local -7:9 g: i32 (const)
+  local -18:9 g: i32 (const)
   local -2:9 home: f64 (const)
   local -1:9 drop: f64 (const)
   callee -1:21 clamp -> @clamp
   callee +1:31 outBounce -> @outBounce
-  local +4:11 count: i32 (const)
-  local +5:11 cx: f64 (const)
-  local +6:14 k: i32 (let)
-  local +7:13 vx: f64 (const)
-  callee +7:29 introRandom -> @introRandom
-  local +8:13 vy: f64 (const)
+  local +4:11 cx: f64 (const)
+  local +6:11 count: i32 (const)
+  local +7:14 k: i32 (let)
+  local +8:13 vx: f64 (const)
   callee +8:29 introRandom -> @introRandom
-  callee +9:7 rasterSpawnParticle -> @rasterSpawnParticle
+  local +9:13 vy: f64 (const)
+  callee +9:29 introRandom -> @introRandom
+  callee +10:7 rasterSpawnParticle -> @rasterSpawnParticle
 function introStepPieces(intro: BreakIntro, t: i32): boolean -> @introStepPieces
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_index
   pointer intro: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -11:9 dt: f64 (const)
-  local -10:7 left: boolean (let)
-  local -9:9 n: i32 (const)
-  local -8:12 i: i32 (let)
+  local -21:9 dt: f64 (const)
+  local -20:7 left: boolean (let)
+  local -17:9 i: i32 (let)
 function introStepWall(intro: BreakIntro, t: i32): boolean -> @introStepWall
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: nish_array_grow nish_panic_index nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_array_grow
   pointer intro: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -5:9 dt: f64 (const)
-  local -4:7 left: boolean (let)
-  local -3:9 n: i32 (const)
-  local -2:12 i: i32 (let)
+  local -31:9 dt: f64 (const)
+  local -30:7 left: boolean (let)
+  local -26:7 clacks: i32 (let)
+  local -23:9 i: i32 (let)
+  local +6:12 k: i32 (let)
 function drawBreakIntro(intro: BreakIntro, fb: Framebuffer, alpha: f64): void -> @drawBreakIntro [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via viewFor
   escaping: alpha
-  calls: clamp drawParticles fillLetterbox gradient introDrawPieces introDrawWall llvm.maximum.f64 nish_panic_overflow rasterMix viewFor
+  calls: clamp drawParticles fillLetterbox gradient introDrawPieces introDrawWall llvm.maximum.f64 rasterMix viewFor
   pointer intro: size=200 writesThrough=false captured=false passedTo=introDrawWall#0 introDrawPieces#0
   pointer fb: size=16 writesThrough=true captured=true passedTo=viewFor#1
   stackSites=0 stackLocals=0
@@ -2369,47 +2382,44 @@ function drawBreakIntro(intro: BreakIntro, fb: Framebuffer, alpha: f64): void ->
   callee +8:3 drawParticles -> @drawParticles
   callee +9:3 fillLetterbox -> @fillLetterbox
 function introDrawWall(intro: BreakIntro, view: View, alpha: f64, time: f64): void -> @introDrawWall
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via bevelBrick
   escaping: alpha
-  calls: bevelBrick clamp lerp nish_panic_index nish_panic_overflow outCubic rasterMix wallColour
+  calls: bevelBrick clamp lerp outCubic rasterMix wallColour
   pointer intro: size=200 writesThrough=false captured=false
   pointer view: size=64 writesThrough=false captured=false passedTo=bevelBrick#0
   stackSites=0 stackLocals=0
-  local +0:9 n: i32 (const)
-  local +1:12 i: i32 (let)
-  local +2:11 laid: f64 (const)
-  callee +2:23 clamp -> @clamp
-  local +6:11 row: i32 (const)
-  local +7:11 y: f64 (const)
-  callee +7:20 lerp -> @lerp
-  local +11:11 course: i32 (const)
-  local +12:11 side: f64 (const)
-  local +13:11 settled: f64 (const)
-  callee +13:26 outCubic -> @outCubic
-  local +14:11 x: f64 (const)
-  callee +14:20 lerp -> @lerp
-  local +15:11 colour: i32 (const)
-  callee +15:25 rasterMix -> @rasterMix
-  callee +15:43 wallColour -> @wallColour
-  callee +16:5 bevelBrick -> @bevelBrick
+  local +0:9 i: i32 (let)
+  local +8:11 laid: f64 (const)
+  callee +8:23 clamp -> @clamp
+  local +12:11 row: i32 (const)
+  local +13:11 y: f64 (const)
+  callee +13:20 lerp -> @lerp
+  local +19:11 side: f64 (const)
+  local +20:11 settled: f64 (const)
+  callee +20:26 outCubic -> @outCubic
+  local +21:11 x: f64 (const)
+  callee +21:20 lerp -> @lerp
+  local +22:11 colour: i32 (const)
+  callee +22:25 rasterMix -> @rasterMix
+  callee +22:43 wallColour -> @wallColour
+  callee +23:5 bevelBrick -> @bevelBrick
 function introDrawPieces(intro: BreakIntro, view: View, alpha: f64): void -> @introDrawPieces
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via drawText
   escaping: alpha
-  calls: bevelBrick drawText glow lerp llvm.fptosi.sat.i32.f64 llvm.smax.i32 nish_floor nish_panic_index
+  calls: bevelBrick drawText glow lerp llvm.fptosi.sat.i32.f64 llvm.smax.i32 nish_floor
   pointer intro: size=200 writesThrough=false captured=false
   pointer view: size=64 writesThrough=false captured=false passedTo=drawText#0 glow#0 bevelBrick#0
   stackSites=0 stackLocals=0
   local +0:9 scale: i32 (const)
   local +4:9 lift: f64 (const)
-  local +5:9 n: i32 (const)
-  local +6:12 i: i32 (let)
-  local +7:11 y: f64 (const)
-  callee +7:20 lerp -> @lerp
-  local +11:11 x: f64 (const)
-  callee +11:20 lerp -> @lerp
-  callee +13:7 drawText -> @drawText
-  local +16:11 w: f64 (const)
-  callee +18:7 glow -> @glow
-  callee +20:5 bevelBrick -> @bevelBrick
+  local +7:9 i: i32 (let)
+  local +18:11 y: f64 (const)
+  callee +18:20 lerp -> @lerp
+  local +22:11 x: f64 (const)
+  callee +22:20 lerp -> @lerp
+  callee +24:7 drawText -> @drawText
+  local +27:11 w: f64 (const)
+  callee +29:7 glow -> @glow
+  callee +31:5 bevelBrick -> @bevelBrick

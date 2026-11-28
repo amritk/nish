@@ -166,9 +166,10 @@ export const formatBreakSettings = (s: BreakSettings): string =>
 /**
  * `v` as one of the whole numbers `lo` to `hi` written plainly, or `lo - 1`.
  * It is compared against each of them rather than parsed, so no value can
- * overflow.
+ * overflow. `lo` is typed to the two lower ends the settings use, which
+ * proves `lo - 1` fits.
  */
-const settingInt = (v: string, lo: i32, hi: i32): i32 => {
+const settingInt = (v: string, lo: integer<-1, 0>, hi: i32): i32 => {
   for (let i: i32 = lo; i <= hi; i++) {
     if (v === `${i}`) {
       return i
@@ -180,11 +181,14 @@ const settingInt = (v: string, lo: i32, hi: i32): i32 => {
 /** Apply one line of a settings file to `s`, when its name is a field and its value one that field takes. */
 const applySettingLine = (s: BreakSettings, line: string): void => {
   const eq: i32 = toI32(line.indexOf("="))
-  if (eq < 0) {
+  // A found `=` is always before the end; saying so proves `eq + 1` fits.
+  if (eq < 0 || eq >= line.length) {
     return
   }
-  const name: string = line.slice(0, eq)
-  const v: string = line.slice(eq + 1)
+  // `substring` rather than `slice`: `eq` is a found offset, so the two agree, and
+  // `substring` needs no proof that it is in range.
+  const name: string = line.substring(0, eq)
+  const v: string = line.substring(eq + 1)
   const yes: boolean = v === "true"
   const flag: boolean = yes || v === "false"
   if (name === "fps") {
@@ -218,12 +222,13 @@ export const parseBreakSettings = (text: string): BreakSettings => {
   const s: BreakSettings = new BreakSettings()
   let start: i32 = 0
   for (let i: i32 = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) === 10) {
-      applySettingLine(s, text.slice(start, i))
+    // `start` is 0 or one past an earlier newline, so never past `i`; saying so proves the cut in range.
+    if (text.charCodeAt(i) === 10 && start >= 0 && start <= i && start <= text.length) {
+      applySettingLine(s, text.substring(start, i))
       start = i + 1
     }
   }
-  applySettingLine(s, text.slice(start))
+  applySettingLine(s, text.substring(start))
   return s
 }
 
@@ -246,8 +251,6 @@ const MENU_LEVELS: i32 = 6
 
 /** The title items, top to bottom: Play, Start level, How to play, Settings, Quit. */
 const ITEM_COUNT: i32 = 5
-/** Where `tick` goes back to 0: 2^30, half the i32 range. */
-const TICK_WRAP: i32 = 1073741824
 const ITEM_PLAY: i32 = 0
 const ITEM_LEVEL: i32 = 1
 const ITEM_HOWTO: i32 = 2
@@ -332,7 +335,11 @@ export const WALL_TOP: f64 = 6.0
 
 /** The steps a knocked-out brick stays away before it grows back: 4 s and up to 2 s more. */
 const REGROW_STEPS: i32 = 480
-const REGROW_SPREAD: i32 = 240
+/**
+ * The most steps past `REGROW_STEPS` that `knock` draws: 2 s. A function, as
+ * a module constant cannot carry the range `menuRandom`'s bound is proved from.
+ */
+const regrowSpread = (): integer<0, 240> => 240
 
 /** The steps a returning brick takes to grow to full size. */
 const GROW_STEPS: i32 = 24
@@ -454,7 +461,11 @@ export class BreakMenu {
     this.outroTick = 0
     this.outroAnswered = false
     this.terminal = true
-    const bricks: i32 = logoBrickCount()
+    // One brick for each `#` of both words; held in ranged locals, the two
+    // counts prove the arrays' length is not negative.
+    const nishBricks: integer<0, 1000> = countBricks(LOGO_NISH)
+    const breakBricks: integer<0, 1000> = countBricks(LOGO_BREAK)
+    const bricks: i32 = nishBricks + breakBricks
     this.homeXs = new Array<f64>(bricks)
     this.homeXs.fill(0.0)
     this.homeYs = new Array<f64>(bricks)
@@ -475,9 +486,10 @@ export class BreakMenu {
     this.columns.fill(0)
     this.releases = new Array<i32>(bricks)
     this.releases.fill(0)
-    this.wallAway = new Array<i32>(WALL_COLS * WALL_ROWS)
+    const wallCells: i32 = WALL_COLS * WALL_ROWS
+    this.wallAway = new Array<i32>(wallCells)
     this.wallAway.fill(0)
-    this.wallAge = new Array<i32>(WALL_COLS * WALL_ROWS)
+    this.wallAge = new Array<i32>(wallCells)
     this.wallAge.fill(GROW_STEPS)
     this.rngState = seed === 0 ? 0x2545f491 : seed
     this.ballX = WORLD_W / 2.0
@@ -518,24 +530,37 @@ export const newBreakMenuWith = (level: i32, seed: i64, settings: BreakSettings)
  * Four shifts in the menu's own state cost less than another module, and a
  * slight modulo bias does not matter to sparks and slants.
  */
-const menuRandom = (menu: BreakMenu, lo: i32, hi: i32): i32 => {
+const menuRandom = (menu: BreakMenu, lo: integer<-100, 100>, hi: integer<-100, 240>): i32 => {
   let x: i32 = menu.rngState
   x = x ^ (x << 13)
   x = x ^ (x >>> 17)
   x = x ^ (x << 5)
   menu.rngState = x
-  return lo + ((x >>> 1) % (hi - lo + 1))
+  // The parameter ranges hold every range the menu asks for and prove the
+  // span fits. They cannot say `hi >= lo`, and the checker gives a remainder
+  // no range, so both are tested; a draw of a non-empty range passes both
+  // (`x >>> 1` is not negative, so the remainder is in [0, span)).
+  const span: i32 = hi - lo + 1
+  if (span > 0) {
+    const r: i32 = (x >>> 1) % span
+    if (r >= 0 && r <= 340) {
+      return lo + r
+    }
+  }
+  return lo
 }
 
-/** The bricks in the logo: one for each `#` of both words. */
-const logoBrickCount = (): i32 => countBricks(LOGO_NISH) + countBricks(LOGO_BREAK)
-
-/** The `#` cells of one word's bitmap. */
-const countBricks = (cells: string): i32 => {
-  let n: i32 = 0
+/**
+ * The `#` cells of one word's bitmap. A word is a few hundred cells at most,
+ * so the cap of 1000 is never reached; it is the range that lets the counts
+ * size the brick arrays.
+ */
+const countBricks = (cells: string): integer<0, 1000> => {
+  let n: integer<0, 1000> = 0
   for (let i: i32 = 0; i < toI32(cells.length); i++) {
-    if (cells.charCodeAt(i) === 35) {
-      n++
+    const next: i32 = n + 1
+    if (cells.charCodeAt(i) === 35 && next <= 1000) {
+      n = next
     }
   }
   return n
@@ -548,25 +573,54 @@ const layOutLogo = (menu: BreakMenu): void => {
 }
 
 /**
+ * The outro step logo column `column` comes loose on, before its jitter:
+ * `column * 0.7` truncated, in integers the checker can bound. The two forms
+ * agree on every column up to 89, and a word in the 24-column grid shifted
+ * at most 24 reaches column 47.
+ *
+ * @param column The brick's column in the logo grid, from 0 to 48.
+ * @returns The step, from 0 to 33.
+ */
+export const logoRelease = (column: i32): i32 => (column / 10) * 7 + ((column % 10) * 7) / 10
+
+/**
  * Place one word's bricks from slot `first` on, its rows `cols` cells wide
  * from world y `top`; `shift` is the word's first column in the logo's
  * 24-column grid, which the shimmer's hue runs along. Answers the next free slot.
  */
 const layOutWord = (menu: BreakMenu, cells: string, cols: i32, top: f64, first: i32, shift: i32): i32 => {
+  // Both words fit the 24-column grid. A module constant reads to the checker
+  // as any `i32`, so this test is what proves the division and the column
+  // sums below; neither word's constants fail it.
+  if (cols < 1 || cols > 24 || shift < 0 || shift > 24) {
+    return first
+  }
   const left: f64 = (WORLD_W - toF64(cols) * CELL_W) / 2.0
   let slot: i32 = first
   for (let i: i32 = 0; i < toI32(cells.length); i++) {
-    if (cells.charCodeAt(i) !== 35 || slot < 0 || slot >= toI32(menu.homeXs.length)) {
-      continue
-    }
     const col: i32 = i % cols
     const row: i32 = i / cols
+    // The brick arrays are all one length, and a remainder is below its
+    // divisor; each is tested because the checker reads neither.
+    if (
+      cells.charCodeAt(i) !== 35 ||
+      col < 0 ||
+      col >= 24 ||
+      slot < 0 ||
+      slot >= menu.homeXs.length ||
+      slot >= menu.homeYs.length ||
+      slot >= menu.columns.length ||
+      slot >= menu.releases.length
+    ) {
+      continue
+    }
+    const column: i32 = col + shift
     menu.homeXs[slot] = left + toF64(col) * CELL_W
     menu.homeYs[slot] = top + toF64(row) * CELL_H
-    menu.columns[slot] = col + shift
+    menu.columns[slot] = column
     // Columns come loose left to right with a little jitter, so the logo crumbles rather than drops.
     // The first outro step is 1, so a release of 0 would never be kicked loose.
-    menu.releases[slot] = toI32(toF64(col + shift) * 0.7) + menuRandom(menu, 1, 10)
+    menu.releases[slot] = logoRelease(column) + menuRandom(menu, 1, 10)
     slot++
   }
   return slot
@@ -592,9 +646,15 @@ const serveBall = (menu: BreakMenu): void => {
  * or the level to play on the step the outro ends.
  */
 export const stepBreakMenu = (menu: BreakMenu, input: StepInput): i32 => {
-  // Wrapped long before i32 runs out, so a menu left open for months does not
-  // panic on the checked add; the animations jump once a billion steps.
-  menu.tick = menu.tick >= TICK_WRAP ? 0 : menu.tick + 1
+  // Wrapped back to 0 at 2^30, half the i32 range, long before i32 runs out,
+  // so a menu left open for months does not panic on the checked add; the
+  // animations jump once a billion steps. The tick never goes below 0.
+  const tick: i32 = menu.tick
+  if (tick >= 0 && tick < 1073741824) {
+    menu.tick = tick + 1
+  } else {
+    menu.tick = 0
+  }
   menuStepWall(menu)
   menuStepBall(menu)
   stepParticles(menu.sparks, 160.0, 1.5)
@@ -749,7 +809,10 @@ const actionOf = (e: TermEvent): i32 => {
     return ACT_NONE
   }
   // Letters either case: W/S and A/D for one hand, k/j and h/l for vi.
-  const c: i32 = e.code >= 65 && e.code <= 90 ? e.code + 32 : e.code
+  let c: i32 = e.code
+  if (c >= 65 && c <= 90) {
+    c = c + 32
+  }
   if (c === 119 || c === 107) {
     return ACT_UP
   }
@@ -766,12 +829,31 @@ const actionOf = (e: TermEvent): i32 => {
 }
 
 /** `value` stepped by `by` within 0..`count`-1, wrapping round at either end. */
-const wrap = (value: i32, by: i32, count: i32): i32 => {
+const wrap = (value: i32, by: i32, count: i32): integer<0, 15> => {
+  // Every list the menu wraps round is a constant of 5 to 8 items, and every
+  // caller hands a value already in its list. A module constant reads to the
+  // checker as any `i32`, so these tests are what bound the sum below; no call
+  // fails them.
+  if (count < 1 || count > 16 || value < 0 || value >= count || value > 15) {
+    return 0
+  }
+  const last: i32 = count - 1
+  // A step longer than the list goes past its end, which is all the sum below
+  // would tell; deciding it here keeps the sum small.
+  if (by > 16) {
+    return 0
+  }
+  if (by < -16) {
+    return last
+  }
   const next: i32 = value + by
   if (next < 0) {
-    return count - 1
+    return last
   }
-  return next >= count ? 0 : next
+  if (next >= count || next > 15) {
+    return 0
+  }
+  return next
 }
 
 /** A title-screen action: arrows move or change the level, and only a pick or a quit leaves. */
@@ -779,7 +861,11 @@ const actOnTitle = (menu: BreakMenu, act: i32): i32 => {
   if (act === ACT_UP || act === ACT_DOWN) {
     menu.selected = wrap(menu.selected, act === ACT_UP ? -1 : 1, ITEM_COUNT)
   } else if ((act === ACT_LEFT || act === ACT_RIGHT) && menu.selected === ITEM_LEVEL) {
-    menu.level = wrap(menu.level - 1, act === ACT_LEFT ? -1 : 1, MENU_LEVELS) + 1
+    // The level is kept in 1..MENU_LEVELS; the test is what proves `level - 1` fits.
+    const level: i32 = menu.level
+    if (level >= 1) {
+      menu.level = wrap(level - 1, act === ACT_LEFT ? -1 : 1, MENU_LEVELS) + 1
+    }
   } else if (act === ACT_BACK || act === ACT_QUIT) {
     return MENU_QUIT
   } else if (act === ACT_PICK) {
@@ -851,7 +937,9 @@ const nextRow = (menu: BreakMenu, by: i32): i32 => {
 const rowLine = (menu: BreakMenu, row: i32): i32 => {
   let line: i32 = 0
   for (let r: i32 = 0; r < row; r++) {
-    if (rowShown(menu, r)) {
+    // `line` counts rows before `r`, so it is always below `row`; the test
+    // says so, which proves the count fits.
+    if (rowShown(menu, r) && line < row) {
       line++
     }
   }
@@ -944,15 +1032,18 @@ const ballOverlaps = (menu: BreakMenu, cell: i32): boolean => {
 
 /** Count down the bricks that are away and grow back the ones whose time is up, unless the ball is in the way. */
 const menuStepWall = (menu: BreakMenu): void => {
-  const n: i32 = Math.min(toI32(menu.wallAway.length), toI32(menu.wallAge.length))
-  for (let i: i32 = 0; i < n; i++) {
-    if (menu.wallAway[i] > 1 || (menu.wallAway[i] === 1 && !ballOverlaps(menu, i))) {
-      menu.wallAway[i] = menu.wallAway[i] - 1
-      if (menu.wallAway[i] === 0) {
+  // The two arrays are made one length; testing both in the loop is what
+  // proves each index.
+  for (let i: i32 = 0; i < menu.wallAway.length && i < menu.wallAge.length; i++) {
+    const away: i32 = menu.wallAway[i]
+    const age: i32 = menu.wallAge[i]
+    if (away >= 1 && (away > 1 || !ballOverlaps(menu, i))) {
+      menu.wallAway[i] = away - 1
+      if (away === 1) {
         menu.wallAge[i] = 0
       }
-    } else if (menu.wallAway[i] === 0 && menu.wallAge[i] < GROW_STEPS) {
-      menu.wallAge[i] = menu.wallAge[i] + 1
+    } else if (away === 0 && age >= 0 && age < GROW_STEPS) {
+      menu.wallAge[i] = age + 1
     }
   }
 }
@@ -962,7 +1053,7 @@ const knock = (menu: BreakMenu, cell: i32): void => {
   if (cell < 0 || cell >= toI32(menu.wallAway.length)) {
     return
   }
-  menu.wallAway[cell] = REGROW_STEPS + menuRandom(menu, 0, REGROW_SPREAD)
+  menu.wallAway[cell] = REGROW_STEPS + menuRandom(menu, 0, regrowSpread())
   const cx: f64 = (toF64(cell % WALL_COLS) + 0.5) * WALL_BRICK_W
   const cy: f64 = WALL_TOP + (toF64(cell / WALL_COLS) + 0.5) * WALL_BRICK_H
   const colour: i32 = rasterAdd(wallColour(cell / WALL_COLS), 0x303030)
@@ -986,8 +1077,9 @@ const menuStepBall = (menu: BreakMenu): void => {
     menu.ballVX = -menu.ballVX
     x = clamp(x, MENU_BALL_R, WORLD_W - MENU_BALL_R)
   }
+  // A cell `wallCellAt` finds is always on the wall; the length test proves the index.
   const hitX: i32 = wallCellAt(x + (menu.ballVX > 0.0 ? MENU_BALL_R : -MENU_BALL_R), menu.ballY)
-  if (hitX >= 0 && menu.wallAway[hitX] === 0) {
+  if (hitX >= 0 && hitX < menu.wallAway.length && menu.wallAway[hitX] === 0) {
     knock(menu, hitX)
     menu.ballVX = -menu.ballVX
     x = menu.ballX
@@ -999,7 +1091,7 @@ const menuStepBall = (menu: BreakMenu): void => {
     y = clamp(y, MENU_BALL_R, WORLD_H - MENU_BALL_R)
   }
   const hitY: i32 = wallCellAt(menu.ballX, y + (menu.ballVY > 0.0 ? MENU_BALL_R : -MENU_BALL_R))
-  if (hitY >= 0 && menu.wallAway[hitY] === 0) {
+  if (hitY >= 0 && hitY < menu.wallAway.length && menu.wallAway[hitY] === 0) {
     knock(menu, hitY)
     menu.ballVY = -menu.ballVY
     y = menu.ballY
@@ -1020,30 +1112,31 @@ const startOutro = (menu: BreakMenu): void => {
   menu.screen = SCREEN_OUTRO
   menu.outroTick = 0
   menu.outroAnswered = false
-  const time: f64 = toF64(menu.tick - 1)
-  const n: i32 = logoSlots(menu)
-  for (let i: i32 = 0; i < n; i++) {
-    menu.xs[i] = menu.homeXs[i]
-    menu.ys[i] = titleLogoY(menu, i, time)
-    menu.prevXs[i] = menu.xs[i]
-    menu.prevYs[i] = menu.ys[i]
+  const time: f64 = toF64(menu.tick) - 1.0
+  // The brick arrays are made one length; the loop tests each it reads, as
+  // the checker cannot see they match.
+  for (
+    let i: i32 = 0;
+    i < menu.xs.length &&
+    i < menu.ys.length &&
+    i < menu.homeXs.length &&
+    i < menu.homeYs.length &&
+    i < menu.columns.length &&
+    i < menu.prevXs.length &&
+    i < menu.prevYs.length &&
+    i < menu.vxs.length &&
+    i < menu.vys.length;
+    i++
+  ) {
+    const x: f64 = menu.homeXs[i]
+    const y: f64 = titleLogoY(menu.columns[i], menu.homeYs[i], time)
+    menu.xs[i] = x
+    menu.ys[i] = y
+    menu.prevXs[i] = x
+    menu.prevYs[i] = y
     menu.vxs[i] = 0.0
     menu.vys[i] = 0.0
   }
-}
-
-/** The logo slots every parallel array holds: they are made the same length, so this is all of them. */
-const logoSlots = (menu: BreakMenu): i32 => {
-  const n: i32 = Math.min(toI32(menu.homeXs.length), toI32(menu.homeYs.length))
-  const m: i32 = Math.min(
-    Math.min(toI32(menu.xs.length), toI32(menu.ys.length)),
-    Math.min(toI32(menu.prevXs.length), toI32(menu.prevYs.length))
-  )
-  const k: i32 = Math.min(
-    Math.min(toI32(menu.vxs.length), toI32(menu.vys.length)),
-    Math.min(toI32(menu.columns.length), toI32(menu.releases.length))
-  )
-  return Math.min(n, Math.min(m, k))
 }
 
 /**
@@ -1055,7 +1148,12 @@ const stepOutro = (menu: BreakMenu, input: StepInput): i32 => {
   if (menu.outroAnswered) {
     return MENU_STAY
   }
-  menu.outroTick = menu.outroTick + 1
+  // Answered once the tick reaches OUTRO_STEPS, so an unanswered outro is
+  // always below it; the test restates that, which proves the add fits.
+  const tick: i32 = menu.outroTick
+  if (tick >= 0 && tick < OUTRO_STEPS) {
+    menu.outroTick = tick + 1
+  }
   for (const e of input.events) {
     if (e.type === EVENT_KEY && e.action === ACTION_PRESS) {
       menu.outroAnswered = true
@@ -1063,17 +1161,28 @@ const stepOutro = (menu: BreakMenu, input: StepInput): i32 => {
     }
   }
   const dt: f64 = 1.0 / toF64(STEPS_PER_SECOND)
-  const n: i32 = logoSlots(menu)
-  for (let i: i32 = 0; i < n; i++) {
+  for (
+    let i: i32 = 0;
+    i < menu.xs.length &&
+    i < menu.ys.length &&
+    i < menu.prevXs.length &&
+    i < menu.prevYs.length &&
+    i < menu.vxs.length &&
+    i < menu.vys.length &&
+    i < menu.releases.length;
+    i++
+  ) {
     menu.prevXs[i] = menu.xs[i]
     menu.prevYs[i] = menu.ys[i]
-    if (menu.releases[i] === menu.outroTick) {
+    const release: i32 = menu.releases[i]
+    if (release === menu.outroTick) {
       loosen(menu, i)
     }
-    if (menu.releases[i] <= menu.outroTick) {
-      menu.vys[i] = menu.vys[i] + OUTRO_GRAVITY * dt
+    if (release <= menu.outroTick) {
+      const vy: f64 = menu.vys[i] + OUTRO_GRAVITY * dt
+      menu.vys[i] = vy
       menu.xs[i] = menu.xs[i] + menu.vxs[i] * dt
-      menu.ys[i] = menu.ys[i] + menu.vys[i] * dt
+      menu.ys[i] = menu.ys[i] + vy * dt
     }
   }
   if (menu.outroTick < OUTRO_STEPS) {
@@ -1085,6 +1194,18 @@ const stepOutro = (menu: BreakMenu, input: StepInput): i32 => {
 
 /** Kick logo brick `i` up and away from the centre, with a puff of sparks where it was. */
 const loosen = (menu: BreakMenu, i: i32): void => {
+  // The outro hands only an index its loop has tested against every brick
+  // array, so this return is never taken; it is the test that proves them here.
+  if (
+    i < 0 ||
+    i >= menu.xs.length ||
+    i >= menu.ys.length ||
+    i >= menu.vxs.length ||
+    i >= menu.vys.length ||
+    i >= menu.columns.length
+  ) {
+    return
+  }
   menu.vxs[i] = (menu.xs[i] + CELL_W / 2.0 - WORLD_W / 2.0) * 0.8 + toF64(menuRandom(menu, -30, 30))
   menu.vys[i] = -toF64(menuRandom(menu, 40, 120))
   const colour: i32 = rasterAdd(logoColour(menu.columns[i], 0.0), 0x404040)
@@ -1116,7 +1237,7 @@ export const drawBreakMenu = (menu: BreakMenu, fb: Framebuffer, alpha: f64): voi
   const view: View = menu.view
   viewFor(view, fb, 0.0, 0.0)
   const a: f64 = clamp(alpha, 0.0, 1.0)
-  const time: f64 = Math.max(toF64(menu.tick - 1) + a, 0.0)
+  const time: f64 = Math.max(toF64(menu.tick) - 1.0 + a, 0.0)
   gradient(view, BG_TOP, BG_BOTTOM)
   menuDrawWall(menu, view, a)
   drawBall(menu, view, a)
@@ -1131,7 +1252,7 @@ export const drawBreakMenu = (menu: BreakMenu, fb: Framebuffer, alpha: f64): voi
     drawTitle(menu, view, a, time, fade)
   }
   if (menu.screen === SCREEN_OUTRO) {
-    drawWipe(view, toF64(menu.outroTick - 1) + a, time)
+    drawWipe(view, toF64(menu.outroTick) - 1.0 + a, time)
   }
   fillLetterbox(view, LETTERBOX)
 }
@@ -1142,7 +1263,7 @@ const itemsFade = (menu: BreakMenu, time: f64, alpha: f64): f64 => {
   if (menu.screen !== SCREEN_OUTRO) {
     return fadeIn
   }
-  const out: f64 = clamp((toF64(menu.outroTick - 1) + alpha) / toF64(FADE_STEPS), 0.0, 1.0)
+  const out: f64 = clamp((toF64(menu.outroTick) - 1.0 + alpha) / toF64(FADE_STEPS), 0.0, 1.0)
   return fadeIn * (1.0 - out)
 }
 
@@ -1152,15 +1273,13 @@ export const wallColour = (row: i32): i32 =>
 
 /** The attract wall: every brick there, and returning ones growing from their centre. */
 const menuDrawWall = (menu: BreakMenu, view: View, alpha: f64): void => {
-  const n: i32 = Math.min(toI32(menu.wallAway.length), toI32(menu.wallAge.length))
-  for (let i: i32 = 0; i < n; i++) {
+  for (let i: i32 = 0; i < menu.wallAway.length && i < menu.wallAge.length; i++) {
     if (menu.wallAway[i] !== 0) {
       continue
     }
+    const age: i32 = menu.wallAge[i]
     const grown: f64 =
-      menu.wallAge[i] >= GROW_STEPS
-        ? 1.0
-        : clamp((toF64(menu.wallAge[i] - 1) + alpha) / toF64(GROW_STEPS), 0.0, 1.0)
+      age >= GROW_STEPS ? 1.0 : clamp((toF64(age) - 1.0 + alpha) / toF64(GROW_STEPS), 0.0, 1.0)
     if (grown <= 0.0) {
       continue
     }
@@ -1197,12 +1316,15 @@ const logoColour = (column: i32, time: f64): i32 => {
   return rasterMix(base, WHITE, near * 0.75)
 }
 
-/** A logo brick's y on the title at `time`: dropping in with a bounce, then bobbing on a slow wave. */
-const titleLogoY = (menu: BreakMenu, i: i32, time: f64): f64 => {
-  const column: f64 = toF64(menu.columns[i])
+/**
+ * The y on the title at `time` of the logo brick in `brickColumn` whose
+ * resting y is `homeY`: dropping in with a bounce, then bobbing on a slow wave.
+ */
+const titleLogoY = (brickColumn: i32, homeY: f64, time: f64): f64 => {
+  const column: f64 = toF64(brickColumn)
   const drop: f64 = clamp((time - column * DROP_STAGGER) / DROP_STEPS, 0.0, 1.0)
   const bob: f64 = Math.sin(time * 0.045 - column * 0.35) * 1.2
-  return menu.homeYs[i] - (1.0 - outBounce(drop)) * DROP_HEIGHT + bob * drop
+  return homeY - (1.0 - outBounce(drop)) * DROP_HEIGHT + bob * drop
 }
 
 /**
@@ -1215,11 +1337,22 @@ const drawLogo = (menu: BreakMenu, view: View, alpha: f64, time: f64): void => {
     drawSmallTitle(view, time)
     return
   }
-  const n: i32 = logoSlots(menu)
   const outro: boolean = menu.screen === SCREEN_OUTRO
-  for (let i: i32 = 0; i < n; i++) {
+  for (
+    let i: i32 = 0;
+    i < menu.xs.length &&
+    i < menu.ys.length &&
+    i < menu.homeXs.length &&
+    i < menu.homeYs.length &&
+    i < menu.columns.length &&
+    i < menu.prevXs.length &&
+    i < menu.prevYs.length;
+    i++
+  ) {
     const x: f64 = outro ? lerp(menu.prevXs[i], menu.xs[i], alpha) : menu.homeXs[i]
-    const y: f64 = outro ? lerp(menu.prevYs[i], menu.ys[i], alpha) : titleLogoY(menu, i, time)
+    const y: f64 = outro
+      ? lerp(menu.prevYs[i], menu.ys[i], alpha)
+      : titleLogoY(menu.columns[i], menu.homeYs[i], time)
     bevelBrick(view, x, y, CELL_W - 0.5, CELL_H - 0.5, logoColour(menu.columns[i], time))
   }
 }
@@ -1345,13 +1478,11 @@ const drawSettings = (menu: BreakMenu, view: View, alpha: f64, time: f64): void 
   }
   const accent: i32 = rasterHue(time / 400.0)
   drawBar(view, lerp(menu.prevHighlightY, menu.highlightY, alpha), 240.0, accent, 1.0)
-  let line: i32 = 0
   for (let r: i32 = 0; r < ROW_COUNT; r++) {
     if (!rowShown(menu, r)) {
       continue
     }
-    const y: f64 = ROW_TOP + toF64(line) * ROW_GAP
-    line++
+    const y: f64 = ROW_TOP + toF64(rowLine(menu, r)) * ROW_GAP
     const on: boolean = r === menu.row
     drawTextShadow(view, 48.0, y, scale, rowName(r), on ? WHITE : TEXT, SHADOW)
     if (r !== ROW_BACK) {
