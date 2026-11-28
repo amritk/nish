@@ -91,10 +91,16 @@ const GZIP_READER_WINDOW: i32 = 32768
 /** The bytes a `GzipReader` buffers of input. */
 const GZIP_READER_INPUT: i32 = 16384
 
-/** Panics unless `buf[off .. off + len)` lies inside `buf`. */
+/**
+ * Panics with `what` unless `buf[off .. off + len)` lies inside `buf`. The
+ * check is a window contract (docs/LANGUAGE.md, "Panic sites", `window`):
+ * it is recorded at each call, so a caller whose own test holds the window
+ * proves it there.
+ */
 const gzipWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
-  if (off < 0 || len < 0 || off > toI32(buf.length) - len) {
-    panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${toI32(buf.length)} bytes`)
+  const size: i32 = toI32(buf.length)
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    panic(what)
   }
 }
 
@@ -286,8 +292,8 @@ export class GzipCompressor {
    *   bytes of `out` from `at` may have been overwritten and mean nothing.
    */
   compress(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32 {
-    gzipWindow("GzipCompressor.compress", src, off, len)
-    gzipWindow("GzipCompressor.compress", out, at, 0)
+    gzipWindow("GzipCompressor.compress: the source window does not lie inside `src`", src, off, len)
+    gzipWindow("GzipCompressor.compress: the output window does not lie inside `out`", out, at, 0)
     if (toI64(toI32(out.length)) - toI64(at) < toI64(GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE)) {
       return DEFLATE_NO_ROOM
     }
@@ -356,8 +362,8 @@ export class GzipFixedCompressor {
    *   nothing.
    */
   compress(src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32 {
-    gzipWindow("GzipFixedCompressor.compress", src, off, len)
-    gzipWindow("GzipFixedCompressor.compress", out, at, room)
+    gzipWindow("GzipFixedCompressor.compress: the source window does not lie inside `src`", src, off, len)
+    gzipWindow("GzipFixedCompressor.compress: the output window does not lie inside `out`", out, at, room)
     if (room < GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE) {
       return DEFLATE_NO_ROOM
     }
@@ -421,8 +427,8 @@ export class GzipDecompressor {
    *   nothing.
    */
   decompress(src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 {
-    gzipWindow("GzipDecompressor.decompress", src, off, len)
-    gzipWindow("GzipDecompressor.decompress", out, at, 0)
+    gzipWindow("GzipDecompressor.decompress: the source window does not lie inside `src`", src, off, len)
+    gzipWindow("GzipDecompressor.decompress: the output window does not lie inside `out`", out, at, 0)
     if (limit < 0) {
       panic("GzipDecompressor.decompress: a negative limit")
     }
@@ -672,8 +678,8 @@ export class GzipWriter {
    *   from `at` mean nothing and the body cannot be completed.
    */
   write(src: u8[], off: i32, len: i32, out: u8[], at: i32): i32 {
-    gzipWindow("GzipWriter.write", src, off, len)
-    gzipWindow("GzipWriter.write", out, at, 0)
+    gzipWindow("GzipWriter.write: the source window does not lie inside `src`", src, off, len)
+    gzipWindow("GzipWriter.write: the output window does not lie inside `out`", out, at, 0)
     if (this.finished) {
       return GZIP_ERR_FINISHED
     }
@@ -725,7 +731,7 @@ export class GzipWriter {
    *   output overran `bound(0)`, as `write` answers it.
    */
   flush(out: u8[], at: i32): i32 {
-    gzipWindow("GzipWriter.flush", out, at, 0)
+    gzipWindow("GzipWriter.flush: the output window does not lie inside `out`", out, at, 0)
     if (this.finished) {
       return GZIP_ERR_FINISHED
     }
@@ -758,7 +764,7 @@ export class GzipWriter {
    *   overran `bound(0)`, as `write` answers it.
    */
   finish(out: u8[], at: i32): i32 {
-    gzipWindow("GzipWriter.finish", out, at, 0)
+    gzipWindow("GzipWriter.finish: the output window does not lie inside `out`", out, at, 0)
     if (this.finished) {
       return GZIP_ERR_FINISHED
     }
@@ -934,7 +940,7 @@ export class GzipReader {
    *   the rest again after `read` has used some input up.
    */
   feed(src: u8[], off: i32, len: i32): i32 {
-    gzipWindow("GzipReader.feed", src, off, len)
+    gzipWindow("GzipReader.feed: the source window does not lie inside `src`", src, off, len)
     const room: i32 = this.inputRoom()
     const take: i32 = len < room ? len : room
     copyBytes(this.input, this.inEnd, src, off, take)
@@ -1093,7 +1099,7 @@ export class GzipReader {
    *   another `DEFLATE_ERR_*`), which is final.
    */
   read(out: u8[], at: i32, max: i32): i32 {
-    gzipWindow("GzipReader.read", out, at, max)
+    gzipWindow("GzipReader.read: the output window does not lie inside `out`", out, at, max)
     if (max < 1) {
       panic("GzipReader.read: room for no bytes")
     }
