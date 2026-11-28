@@ -58,6 +58,16 @@ lanes `bounds.ts` proves in range is recorded as a proven index site and an
 unguarded one as unproven (`src/attributes.ts`), so `std/` code a
 `--deny-panics` caller can reach uses only guarded ones.
 
+**Removing a panic site raises no instruction count.** A change that removes
+or proves a `std/` panic site may not raise any count in
+`bench/instructions.json`. Where the proof needs a slower form, teach the
+prover instead, as #2303 did for `new Array` lengths and slice ranges; only
+where that cannot be done, record the raise in the file's `raises` with a
+measured reason (`node bench/run.mjs --instructions --update --raise <row>
+--why "..."`; `bench/README.md` → "Raising a baseline"). CI's `lint` job runs
+`scripts/instruction-raises.mjs` against the merge-base's file and fails on a
+raise `raises` does not record.
+
 **A wrap is spelled, never cast.** Nish code here (`std/`, `src/`,
 `examples/`) never makes `i32` or `i64` arithmetic wrap by casting it through
 `u32` or `u64` (`toI32(toU32(a) + toU32(b))`). Where the wrap would hide an
@@ -67,8 +77,7 @@ multiply, a counter mod 2^32), it is `wrappingAdd`, `wrappingSub` or
 `wrappingMul` from `nish:unsafe`, so every deliberate wrap is greppable and
 reads as one. A value that is `u32` or `u64` all the way through wraps by its
 type and needs neither. `scripts/wrap-casts.mjs` (in `npm run lint`) fails on
-a new cast wrap; `scripts/wrap-casts.txt`, the casts from before the rule,
-only falls.
+any cast wrap.
 
 A new diagnostic code lands with a `tests/link` negative that provokes it
 (an `expected.err`): inline `tests/run.js` checks do not count toward "every
@@ -110,6 +119,15 @@ shapes, and the native kernel where one replaces it; a loop the bench wrote
 says so. A claimed gain names its callers, found with `git grep` through
 every wrapper, and a stage's gate names a bench that reaches the changed
 function.
+
+**A `std/` resource owns its native handle and closes with `using`.** With
+one owner it holds the object directly, a pointer natively and a `HostHandle`
+on `wasm32`, as a [handle class](docs/LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr):
+one field load and the direct call, and no use after close, proved with no
+runtime check. It holds a table id only for an object that is shared, kept in a
+collection or owned by the JS side, as `std/sqlite.ts` does (a use after
+close answers `MISUSE`). A bare `close()` is not the standard for a new
+module (`.claude/architecture.md` → "A `std/` resource").
 
 A public declaration of `std/` or `runtime/nish.d.ts` lands with a doc
 comment, a `@param` per parameter and a `@returns` for a non-`void` return:

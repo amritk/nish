@@ -467,13 +467,13 @@ const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
  */
 export class Sha256 {
   /**
-   * The message length absorbed so far, in bytes. An `i64` because §5.1.1
-   * appends the length in bits as a 64-bit number, and a transcript can pass
-   * 2^31 bytes where an `i32` would wrap.
+   * The message length absorbed so far, in bytes. A `u64` because §5.1.1
+   * appends the length in bits modulo 2^64, which a `u64` wraps to by its type,
+   * and a transcript can pass 2^31 bytes where an `i32` would wrap.
    *
    * @internal Set by `nish/crypto/hmac` and `nish/net/postgres` when they wipe, copy or restart a hasher.
    */
-  total: i64 = 0
+  total: u64 = 0
   /** H_0 .. H_7, the eight words of the intermediate hash value (§6.2.2 step 4). */
   state: u32[]
   /** The pending bytes of the current block; the first `fill` of them are live. */
@@ -527,49 +527,9 @@ export class Sha256 {
     if (this.finished) {
       panic("Sha256: update after digest")
     }
-    const size: i32 = toI32(data.length)
-    if (off < 0 || len < 0 || off > size || len > size - off) {
+    if (!sha256Absorb(this, data, off, len)) {
       panic("Sha256: the window is outside the buffer")
     }
-    // §5.1.1 appends the length modulo 2^64, so the count wraps as a `u64`.
-    this.total = toI64(toU64(this.total) + toU64(toI64(len)))
-    const state: u32[] = this.state
-    const schedule: u32[] = this.schedule
-    const block: u8[] = this.block
-    const room: i32 = toI32(block.length)
-    let at: i32 = off
-    let left: i32 = len
-    let fill: i32 = this.fill
-    // Top up a partly filled block first, so that the loop below only ever
-    // starts at a block boundary. Each loop's condition beyond its count is
-    // what proves its indices in range; the window check above makes it hold.
-    if (fill > 0) {
-      while (left > 0 && fill >= 0 && fill < SHA256_BLOCK && fill < room && at >= 0 && at < size) {
-        block[fill] = data[at]
-        fill += 1
-        at += 1
-        left -= 1
-      }
-      if (fill < SHA256_BLOCK) {
-        this.fill = fill
-        return
-      }
-      sha256Compress(state, schedule, block, 0)
-    }
-    // Whole blocks are compressed straight out of the caller's buffer, with no
-    // copy through `block`.
-    while (left >= 64 && at >= 0 && at <= size - 64) {
-      sha256Compress(state, schedule, data, at)
-      at += 64
-      left -= 64
-    }
-    fill = 0
-    while (fill < left && fill < room && at >= 0 && at < size) {
-      block[fill] = data[at]
-      fill += 1
-      at += 1
-    }
-    this.fill = fill
   }
 
   /**
@@ -590,26 +550,7 @@ export class Sha256 {
       this.update(data, from, toI32(n))
       return
     }
-    this.total = toI64(toU64(this.total) + toU64(toI64(n)))
-    const state: u32[] = this.state
-    const schedule: u32[] = this.schedule
-    const block: u8[] = this.block
-    const room: i32 = toI32(block.length)
-    let fill: i32 = this.fill
-    let off: number = 0
-    while (true) {
-      while (fill >= 0 && fill < SHA256_BLOCK && fill < room && off >= 0 && off < n) {
-        block[fill] = data[off]
-        fill += 1
-        off += 1
-      }
-      if (fill < SHA256_BLOCK) {
-        this.fill = fill
-        return
-      }
-      sha256Compress(state, schedule, block, 0)
-      fill = 0
-    }
+    sha256AbsorbLong(this, data)
   }
 
   /**
@@ -688,7 +629,10 @@ export class Sha256 {
       const room: i32 = toI32(block.length)
       const fill: i32 = this.fill
       for (let i: i32 = fill; i >= 0 && i < room; i += 1) {
-        block[i] = i === fill ? 0x80 : 0
+        block[i] = 0
+      }
+      if (fill >= 0 && fill < room) {
+        block[fill] = 0x80
       }
       if (fill >= 56) {
         sha256Compress(state, schedule, block, 0)
@@ -696,7 +640,7 @@ export class Sha256 {
           block[i] = 0
         }
       }
-      const bits: u64 = toU64(this.total) << 3
+      const bits: u64 = this.total << 3
       let shift: u64 = 0
       for (let i: i32 = 63; i >= 56 && i < room; i -= 1) {
         block[i] = toU8(bits >>> shift)
@@ -718,6 +662,99 @@ export class Sha256 {
 }
 
 /**
+ * The body of `Sha256.update`, after its finished check: absorbs
+ * `data[off .. off + len)` into `h`, or absorbs nothing and returns false
+ * when that window lies outside `data`. Each loop's own condition still
+ * bounds its indices; the window check is what makes them hold.
+ */
+const sha256Absorb = (h: Sha256, data: u8[], off: i32, len: i32): boolean => {
+  const size: i32 = toI32(data.length)
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    return false
+  }
+  // §5.1.1 appends the length modulo 2^64, so the count wraps as a `u64`.
+  h.total = h.total + toU64(len)
+  const state: u32[] = h.state
+  const schedule: u32[] = h.schedule
+  const block: u8[] = h.block
+  const room: i32 = toI32(block.length)
+  let at: i32 = off
+  let left: i32 = len
+  let fill: i32 = h.fill
+  // Top up a partly filled block first, so that the loop below only ever
+  // starts at a block boundary. Each loop's condition beyond its count is
+  // what proves its indices in range; the window check above makes it hold.
+  if (fill > 0) {
+    while (left > 0 && fill >= 0 && fill < SHA256_BLOCK && fill < room && at >= 0 && at < size) {
+      block[fill] = data[at]
+      fill += 1
+      at += 1
+      left -= 1
+    }
+    if (fill < SHA256_BLOCK) {
+      h.fill = fill
+      return true
+    }
+    sha256Compress(state, schedule, block, 0)
+  }
+  // Whole blocks are compressed straight out of the caller's buffer, with no
+  // copy through `block`.
+  while (left >= 64 && at >= 0 && at <= size - 64) {
+    sha256Compress(state, schedule, data, at)
+    at += 64
+    left -= 64
+  }
+  fill = 0
+  while (fill < left && fill < room && at >= 0 && at < size) {
+    block[fill] = data[at]
+    fill += 1
+    at += 1
+  }
+  h.fill = fill
+  return true
+}
+
+/**
+ * The body of `Sha256.updateAll` for an array longer than 2^31 - 1 bytes,
+ * after its finished check: walks `data` with a `number` offset, a block at a
+ * time through `h.block`, so it is absorbed whole.
+ */
+const sha256AbsorbLong = (h: Sha256, data: u8[]): void => {
+  const n: number = data.length
+  h.total = h.total + toU64(n)
+  const state: u32[] = h.state
+  const schedule: u32[] = h.schedule
+  const block: u8[] = h.block
+  const room: i32 = toI32(block.length)
+  let fill: i32 = h.fill
+  let off: number = 0
+  while (true) {
+    while (fill >= 0 && fill < SHA256_BLOCK && fill < room && off >= 0 && off < n) {
+      block[fill] = data[off]
+      fill += 1
+      off += 1
+    }
+    if (fill < SHA256_BLOCK) {
+      h.fill = fill
+      return
+    }
+    sha256Compress(state, schedule, block, 0)
+    fill = 0
+  }
+}
+
+/** Absorbs all of `data` into `h`, past the finished check (`sha256`). */
+const sha256AbsorbWhole = (h: Sha256, data: u8[]): void => {
+  const n: number = data.length
+  if (n <= 2147483647) {
+    // The window is the whole array, so it always lies inside it.
+    sha256Absorb(h, data, 0, toI32(n))
+  } else {
+    sha256AbsorbLong(h, data)
+  }
+}
+
+/**
  * The SHA-256 digest of all of `data`, as a fresh 32-byte array.
  *
  * An array longer than 2^31 - 1 bytes (possible under `--number-mode f64`)
@@ -727,7 +764,37 @@ export class Sha256 {
  * @returns A fresh 32-byte digest.
  */
 export const sha256 = (data: u8[]): u8[] => {
+  // A fresh hasher is not finished, so the message goes straight to the
+  // absorbing bodies, past `update`'s and `updateAll`'s finished checks.
   const hasher: Sha256 = new Sha256()
-  hasher.updateAll(data)
+  sha256AbsorbWhole(hasher, data)
   return hasher.digest()
+}
+
+/**
+ * A fresh `Sha256` that has absorbed `a || b || c || d || e` and is not yet
+ * finished. This is the start of a hash whose message is keyed material,
+ * such as an HMAC's padded key block followed by its message: the parts are
+ * absorbed in place, never joined into an array that a `push` could outgrow
+ * and leave behind, and the caller, which owns the hasher, calls `digest`
+ * and then wipes its `state`, `block` and `schedule`. Pass an empty array for
+ * a part the message lacks.
+ *
+ * @param a The first part of the message; it is read, not changed.
+ * @param b The second part, read after `a`.
+ * @param c The third part, read after `b`.
+ * @param d The fourth part, read after `c`.
+ * @param e The fifth part, read after `d`.
+ * @returns A hasher holding the five parts, ready for `digest`.
+ */
+export const sha256Absorbed = (a: u8[], b: u8[], c: u8[], d: u8[], e: u8[]): Sha256 => {
+  // A fresh hasher is not finished, so the parts go straight to the
+  // absorbing bodies, past `update`'s finished check.
+  const hasher: Sha256 = new Sha256()
+  sha256AbsorbWhole(hasher, a)
+  sha256AbsorbWhole(hasher, b)
+  sha256AbsorbWhole(hasher, c)
+  sha256AbsorbWhole(hasher, d)
+  sha256AbsorbWhole(hasher, e)
+  return hasher
 }

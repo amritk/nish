@@ -108,23 +108,28 @@ none is open. HANDLER-16 holds; HANDLER-17 is accepted.
 
 **The constructor's limit check is proven where `openHttpHandler` makes the
 handler** (#2296). `new HttpHandler` hands its `limits` to
-`handlerCheckLimits` (`std/net/handler.ts:932:5`), a fault guard over
+`handlerCheckLimits` (`std/net/handler.ts:942:5`), a fault guard over
 `handlerLimitsFault` ([`fault`](../reference/language/semantics-decisions.md#panic-sites)),
-so the guard's `panic` (`std/net/handler.ts:2663:5`) is proven and each
+so the guard's `panic` (`std/net/handler.ts:2788:5`) is proven and each
 construction is a `fault` site of its own. `openHttpHandler` runs
-`handlerLimitsFault(limits)` (`std/net/handler.ts:2648:3`) and returns its
-`Err` before `new HttpHandler` (`2656:13`); the failed-`pollCreate` return
+`handlerLimitsFault(limits)` (`std/net/handler.ts:2761:25`) and returns its
+`Err` before `new HttpHandler` (`2769:13`); the failed-`pollCreate` return
 between them is an `if` that only leaves, so that site is proven.
 `tests/link/fault_contract_proven` and `fault_contract_early_exit` are the
 same shapes on a two-module program, each pinned by its `expected.panics`,
 and each `fault_contract_*` negative stays unproven under `--deny-panics`;
-`tests/std-panics.json` counts the guard's panic as gone from
-`std/net/handler.ts` (8 `panic` sites, from 9). A program that calls
-`new HttpHandler` itself (`bench/http1-server.ts`,
+`tests/std-panics.json` counts 7 `panic` sites in `std/net/handler.ts`. A
+program that calls `new HttpHandler` itself (`bench/http1-server.ts`,
 `bench/handler-ring/server.ts`) still holds an unproven `fault` site. The
-constructor keeps other panic sites (a failed `pollCreate` it made itself, the
-body decoder's), so `openHttpHandler` still reaches a panic and a program that
-builds a handler builds with `--allow-panics`.
+constructor no longer panics on a failed `pollCreate`: it makes a dead
+handler, whose `wait` answers `HANDLER_NO_LOOP` at once and whose `tryWatch`
+answers `Err` (`tests/link/net_handler_dead_loop`, whose `expected.out` reads
+`first: 0` and `tryWatch: Ok` without the guards). It builds its body decoder
+only through `httpBodyDecoderFault`, so `openHttpHandler` reaches no handler
+panic. A program that builds a handler through it builds without
+`--allow-panics` as far as the handler goes; `examples/http-app` still opts
+out for the gzip reader's site (`std/compress/gzip.ts:97:5`), reached through
+`std/net/http-compress.ts`.
 
 ## Properties verified
 

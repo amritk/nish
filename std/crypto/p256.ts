@@ -157,7 +157,7 @@
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
-import { SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
+import { SHA256_SIZE, Sha256, sha256, sha256Absorbed } from "nish/crypto/sha256"
 import { timingSafeEqual } from "nish/crypto/ct"
 
 /** The length in bytes of a private key: one scalar, big-endian. */
@@ -3733,9 +3733,12 @@ const p256BaseSelect = (
   const u: u32 = (digit ^ ctEq(top, 0)) & low
   p256SetZero(out.x)
   p256SetZero(out.y)
+  // `c` is a comb below P256_COMBS (11) and `j` an entry below
+  // P256_COMB_ENTRIES (32), which the masks keep: they let src/bounds.ts prove
+  // the offset, P256_BASE_ENTRY (16) words an entry, in range.
+  const first: i32 = (c & 15) * (P256_COMB_ENTRIES * P256_BASE_ENTRY)
   for (let j: i32 = 0; j < entries; j++) {
-    // In u32: `c` is a comb below P256_COMBS, so the offset is inside the table.
-    const at: i32 = toI32((toU32(c) * toU32(entries) + toU32(j)) * toU32(P256_BASE_ENTRY))
+    const at: i32 = first + (j & 31) * P256_BASE_ENTRY
     p256BaseMove(out, table, at, ctEq(toU32(j), u))
   }
   p256SetZero(s.t1)
@@ -4001,16 +4004,10 @@ const p256WipeHash = (h: Sha256): void => {
 const p256Mac = (k: u8[], a: u8[], b: u8[], c: u8[], d: u8[]): u8[] => {
   const ipad: u8[] = p256PadBlock(k, 0x36)
   const opad: u8[] = p256PadBlock(k, 0x5c)
-  const inner = new Sha256()
-  inner.update(ipad, P256_FROM, toI32(ipad.length))
-  inner.update(a, P256_FROM, toI32(a.length))
-  inner.update(b, P256_FROM, toI32(b.length))
-  inner.update(c, P256_FROM, toI32(c.length))
-  inner.update(d, P256_FROM, toI32(d.length))
+  const inner: Sha256 = sha256Absorbed(ipad, a, b, c, d)
   const innerDigest: u8[] = inner.digest()
-  const outer = new Sha256()
-  outer.update(opad, P256_FROM, toI32(opad.length))
-  outer.update(innerDigest, P256_FROM, toI32(innerDigest.length))
+  const empty: u8[] = new Array<u8>(0)
+  const outer: Sha256 = sha256Absorbed(opad, innerDigest, empty, empty, empty)
   const tag: u8[] = outer.digest()
   wipe(ipad)
   wipe(opad)

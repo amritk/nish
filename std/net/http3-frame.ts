@@ -347,24 +347,18 @@ export class Http3Settings {
 
 /**
  * Panics unless `[off, off + len)` lies inside `buf`: a window outside its buffer is the program's mistake.
+ * A window guard (`docs/LANGUAGE.md`, `window`), so a caller that proves the window in range removes the
+ * panic site, and a function whose first statement hands it its own window passes that proof to its callers.
  * @param what The caller's name, which starts the panic message.
  * @param buf The buffer the window is meant to lie in.
  * @param off The window's first byte offset; negative panics.
  * @param len The window's length in bytes; negative panics, and so does an end past `buf.length`.
  */
 export const h3CheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
-  if (off < 0 || len < 0 || toI64(off) + toI64(len) > toI64(buf.length)) {
-    panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${buf.length} bytes`)
+  const size: i32 = toI32(buf.length)
+  if (off < 0 || len < 0 || off > size || len > size - off) {
+    panic(`${what}: the window [${off}, ${off} + ${len}) is outside a buffer of ${size} bytes`)
   }
-}
-
-/**
- * `off + len`, after `h3CheckWindow` has panicked unless the window lies inside `buf`: the sum is then at
- * most `buf.length`, so the `i64` it is taken in always narrows back exactly.
- */
-const h3WindowEnd = (what: string, buf: u8[], off: i32, len: i32): i32 => {
-  h3CheckWindow(what, buf, off, len)
-  return toI32(toI64(off) + toI64(len))
 }
 
 /**
@@ -452,7 +446,8 @@ export const h3FrameHeaderSize = (type: i64, length: i64): i32 => {
  * @returns The header's size, 2 to 16 bytes, or 0 when the window ends before both varints are whole.
  */
 export const h3ReadFrameHeader = (h: Http3FrameHeader, buf: u8[], off: i32, len: i32): i32 => {
-  const end: i32 = h3WindowEnd("h3ReadFrameHeader", buf, off, len)
+  h3CheckWindow("h3ReadFrameHeader", buf, off, len)
+  const end: i32 = toI32(toI64(off) + toI64(len))
   const type: i64 = quicVarintRead(buf, off, end)
   const at: i32 = h3VarintEnd(buf, off, end)
   if (type < 0 || at < 0) {
@@ -519,7 +514,8 @@ export const h3Greased = (value: i64): boolean => value >= 0x21 && value % H3_GR
  *   error.
  */
 export const h3ReadSettings = (s: Http3Settings, buf: u8[], off: i32, len: i32): i64 => {
-  const end: i32 = h3WindowEnd("h3ReadSettings", buf, off, len)
+  h3CheckWindow("h3ReadSettings", buf, off, len)
+  const end: i32 = toI32(toI64(off) + toI64(len))
   s.reset()
   let at: i32 = off
   while (at < end) {
@@ -624,7 +620,8 @@ export const h3PutIdFrame = (buf: u8[], at: i32, end: i32, type: i64, id: i64): 
  *   bytes after it.
  */
 export const h3ReadIdPayload = (buf: u8[], off: i32, len: i32): i64 => {
-  const end: i32 = h3WindowEnd("h3ReadIdPayload", buf, off, len)
+  h3CheckWindow("h3ReadIdPayload", buf, off, len)
+  const end: i32 = toI32(toI64(off) + toI64(len))
   const id: i64 = quicVarintRead(buf, off, end)
   return id >= 0 && h3VarintEnd(buf, off, end) === end ? id : H3_FRAME_NONE
 }

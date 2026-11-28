@@ -370,183 +370,204 @@ const BYTES_QUOTE: i32 = 34
 const BYTES_BACKSLASH: i32 = 92
 const BYTES_NON_ASCII: i32 = 128
 const BYTES_CONTINUATION_TOP: i32 = 191
+function bytesWindow(what: string, b: readonly u8[], off: i32, len: i32): void -> @nish.bytesWindow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 size: i32 (const)
 function getU16LE(b: u8[], off: i32): u16 -> @nish.getU16LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=false captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU16BE(b: u8[], off: i32): u16 -> @nish.getU16BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=false captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU32LE(b: u8[], off: i32): u32 -> @nish.getU32LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=false captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU32BE(b: u8[], off: i32): u32 -> @nish.getU32BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=false captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU64LE(b: u8[], off: i32): u64 -> @nish.getU64LE [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
-  pointer b: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  local +0:7 v: u64 (let)
-  local +1:12 i: i32 (let)
-function getU64BEByByte(b: u8[], off: i32): u64 -> @nish.getU64BEByByte
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
-  pointer b: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:7 v: u64 (let)
-  local +1:12 i: i32 (let)
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU64BEByByte
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BEByByte#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:10 getU64BEByByte -> @nish.getU64BEByByte
+  callee +0:3 bytesWindow -> @nish.bytesWindow
 function getI32LE(b: u8[], off: i32): i32 -> @nish.getI32LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU32LE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU32LE#0
+  calls: nish.bytesWindow nish.getU32LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU32LE#0
   stackSites=0 stackLocals=0
-  callee +0:59 getU32LE -> @nish.getU32LE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:16 getU32LE -> @nish.getU32LE
 function getI32BE(b: u8[], off: i32): i32 -> @nish.getI32BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU32BE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU32BE#0
+  calls: nish.bytesWindow nish.getU32BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU32BE#0
   stackSites=0 stackLocals=0
-  callee +0:59 getU32BE -> @nish.getU32BE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:16 getU32BE -> @nish.getU32BE
 function getI64LE(b: u8[], off: i32): i64 -> @nish.getI64LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU64LE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64LE#0
+  calls: nish.bytesWindow nish.getU64LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64LE#0
   stackSites=0 stackLocals=0
-  callee +0:59 getU64LE -> @nish.getU64LE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:16 getU64LE -> @nish.getU64LE
 function getI64BE(b: u8[], off: i32): i64 -> @nish.getI64BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU64BE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BE#0
+  calls: nish.bytesWindow nish.getU64BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64BE#0
   stackSites=0 stackLocals=0
-  callee +0:59 getU64BE -> @nish.getU64BE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:16 getU64BE -> @nish.getU64BE
 function getF64LE(b: u8[], off: i32): f64 -> @nish.getF64LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU64LE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64LE#0
+  calls: nish.bytesWindow nish.getU64LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64LE#0
   stackSites=0 stackLocals=0
-  callee +0:69 getU64LE -> @nish.getU64LE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:26 getU64LE -> @nish.getU64LE
 function getF64BE(b: u8[], off: i32): f64 -> @nish.getF64BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.getU64BE
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BE#0
+  calls: nish.bytesWindow nish.getU64BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesWindow#1 nish.getU64BE#0
   stackSites=0 stackLocals=0
-  callee +0:69 getU64BE -> @nish.getU64BE
+  callee +0:3 bytesWindow -> @nish.bytesWindow
+  callee +1:26 getU64BE -> @nish.getU64BE
 function setU16LE(b: u8[], off: i32, v: u16): void -> @nish.setU16LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=true captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU16BE(b: u8[], off: i32, v: u16): void -> @nish.setU16BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=true captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU32LE(b: u8[], off: i32, v: u32): void -> @nish.setU32LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=true captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU32BE(b: u8[], off: i32, v: u32): void -> @nish.setU32BE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: off
-  calls: nish_panic_index
-  pointer b: size=0 writesThrough=true captured=false
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU64LE(b: u8[], off: i32, v: u64): void -> @nish.setU64LE [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish_panic_index nish_panic_overflow
-  pointer b: size=0 writesThrough=true captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  local -1:12 i: i32 (let)
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setU64BE(b: u8[], off: i32, v: u64): void -> @nish.setU64BE [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish_panic_index nish_panic_overflow
-  pointer b: size=0 writesThrough=true captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  local -1:12 i: i32 (let)
+  callee -1:3 bytesWindow -> @nish.bytesWindow
 function setI32LE(b: u8[], off: i32, v: i32): void -> @nish.setI32LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU32LE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU32LE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU32LE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU32LE -> @nish.setU32LE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u32 (const)
 function setI32BE(b: u8[], off: i32, v: i32): void -> @nish.setI32BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU32BE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU32BE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU32BE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU32BE -> @nish.setU32BE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u32 (const)
 function setI64LE(b: u8[], off: i32, v: i64): void -> @nish.setI64LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU64LE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU64LE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64LE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU64LE -> @nish.setU64LE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u64 (const)
 function setI64BE(b: u8[], off: i32, v: i64): void -> @nish.setI64BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU64BE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU64BE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64BE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU64BE -> @nish.setU64BE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u64 (const)
 function setF64LE(b: u8[], off: i32, v: f64): void -> @nish.setF64LE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU64LE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU64LE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64LE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU64LE -> @nish.setU64LE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u64 (const)
 function setF64BE(b: u8[], off: i32, v: f64): void -> @nish.setF64BE [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.setU64BE
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: off
-  calls: nish.setU64BE
-  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64BE#0
+  calls: nish.bytesWindow
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.bytesWindow#1
   stackSites=0 stackLocals=0
-  callee +0:62 setU64BE -> @nish.setU64BE
+  callee -2:3 bytesWindow -> @nish.bytesWindow
+  local -1:9 u: u64 (const)
 function bytesRunEnd(b: u8[], to: i32): i32 -> @nish.bytesRunEnd
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: to
@@ -751,6 +772,9 @@ function bytesRangeError(off: i32, width: i32, b: u8[]): string -> @nish.bytesRa
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 module std/net/hpack.ts [package nish]
+import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+unsafe import 82:10 wrappingAdd from "nish:unsafe"
+unsafe call 1536:26 wrappingAdd (node 5881)
 const HPACK_OK: i32 = 0 [exported]
 const HPACK_LIST_TOO_LARGE: i32 = 1 [exported]
 const HPACK_ERR_TRUNCATED: i32 = -1 [exported]
@@ -785,7 +809,7 @@ struct HpackHuffman (class) size=48 align=8 exported
   field symbols: i32[] index=2 offset=16
   field firstCode: i32[] index=3 offset=24
   field countAt: i32[] index=4 offset=32
-  field baseRank: i32[] index=5 offset=40
+  field baseRank: u32[] index=5 offset=40
   constructor -> @nish.HpackHuffman.constructor
 struct HpackCursor (class) size=16 align=8 exported
   field buf: u8[] index=0 offset=0
@@ -898,45 +922,62 @@ function hpackSameAsText(bytes: u8[], text: string): boolean -> @nish.hpackSameA
   local +6:12 i: i32 (let)
 function hpackSameAsWindow(bytes: u8[], store: u8[], at: i32, n: i32): boolean -> @nish.hpackSameAsWindow
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
   pointer bytes: size=0 writesThrough=false captured=false
   pointer store: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:12 i: i32 (let)
-  local +3:11 j: i32 (const)
-function hpackEntrySize(name: u8[], value: u8[]): i64 -> @nish.hpackEntrySize
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer name: size=0 writesThrough=false captured=false
-  pointer value: size=0 writesThrough=false captured=false
+  local +0:7 j: i32 (let)
+  local +1:12 i: i32 (let)
+function hpackDynamicIndex(index: i32): i32 -> @nish.hpackDynamicIndex
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+function hpackWindowEnd(buf: u8[], off: i32, len: i32): i32 -> @nish.hpackWindowEnd
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 end: i64 (const)
 function hpackCheckWindow(what: string, buf: u8[], off: i32, len: i32): void -> @nish.hpackCheckWindow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function hpackCheckedWindowEnd(what: string, buf: u8[], off: i32, len: i32): i32 -> @nish.hpackCheckedWindowEnd
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: len off what
+  calls: nish.hpackCheckWindow nish.hpackWindowEnd
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.hpackWindowEnd#0 nish.hpackCheckWindow#1
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 hpackWindowEnd -> @nish.hpackWindowEnd
+  callee +2:5 hpackCheckWindow -> @nish.hpackCheckWindow
 function HpackHuffman.constructor(this: HpackHuffman): void -> @nish.HpackHuffman.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 table: string (const)
   local +1:14 sym: i32 (let)
-  local +5:14 sym: i32 (let)
-  local +6:13 len: i32 (const)
-  local +14:9 code: u32 (let)
-  local +15:9 rank: u32 (let)
-  local +17:11 len: i32 (let)
+  local +6:14 sym: i32 (let)
+  local +7:13 len: i32 (const)
+  local +16:9 code: u32 (let)
+  local +17:9 rank: u32 (let)
+  local +19:11 len: i32 (let)
   local +26:13 count: u32 (const)
-  local +34:14 sym: i32 (let)
-  local +35:13 len: i32 (const)
-  local +43:15 done: u32 (const)
-  local +44:15 at: i32 (const)
+  local +37:14 sym: i32 (let)
+  local +38:13 len: i32 (const)
+  local +40:15 at: i32 (const)
+  local +41:15 next: i32 (const)
+  local +55:11 len: i32 (let)
+  local +59:13 end: u32 (const)
+  local +60:13 count: u32 (const)
 function hpackHuffmanLength(h: HpackHuffman, src: u8[], off: i32, len: i32): i32 -> @nish.hpackHuffmanLength [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
-  calls: nish.hpackCheckWindow
+  calls: nish.hpackCheckedWindowEnd
   pointer h: size=48 writesThrough=false captured=false
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckWindow#1
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckedWindowEnd#1
   stackSites=0 stackLocals=0
-  callee +0:3 hpackCheckWindow -> @nish.hpackCheckWindow
+  callee +0:3 hpackCheckedWindowEnd -> @nish.hpackCheckedWindowEnd
   local +2:7 bits: u64 (let)
   local +7:9 end: i64 (const)
   local +8:12 i: i32 (let)
@@ -946,12 +987,12 @@ function hpackHuffmanEncode(h: HpackHuffman, src: u8[], off: i32, len: i32, out:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: len off
-  calls: nish.hpackCheckWindow nish_array_grow
+  calls: nish.hpackCheckedWindowEnd nish_array_grow
   pointer h: size=48 writesThrough=false captured=false
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckWindow#1
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckedWindowEnd#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee -15:3 hpackCheckWindow -> @nish.hpackCheckWindow
+  callee -15:3 hpackCheckedWindowEnd -> @nish.hpackCheckedWindowEnd
   local -14:7 acc: u64 (let)
   local -12:7 bits: u32 (let)
   local -11:9 end: i64 (const)
@@ -963,12 +1004,12 @@ function hpackHuffmanDecode(h: HpackHuffman, src: u8[], off: i32, len: i32, out:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: len off
-  calls: nish.hpackCheckWindow nish_array_grow
+  calls: nish.hpackCheckedWindowEnd nish_array_grow
   pointer h: size=48 writesThrough=false captured=false
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckWindow#1
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.hpackCheckedWindowEnd#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee -37:3 hpackCheckWindow -> @nish.hpackCheckWindow
+  callee -37:3 hpackCheckedWindowEnd -> @nish.hpackCheckedWindowEnd
   local -34:7 code: u32 (let)
   local -33:7 bits: u32 (let)
   local -32:9 end: i64 (const)
@@ -976,26 +1017,26 @@ function hpackHuffmanDecode(h: HpackHuffman, src: u8[], off: i32, len: i32, out:
   local -30:11 byte: u32 (const)
   local -29:14 k: u32 (let)
   local -26:13 row: i32 (const)
-  local -12:15 at: i64 (const)
-  local -8:17 slot: i32 (const)
+  local -10:15 at: i64 (const)
+  local -8:17 slot: u32 (const)
   local -4:17 sym: i32 (const)
 function HpackCursor.constructor(this: HpackCursor, buf: u8[], off: i32, len: i32): void -> @nish.HpackCursor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: buf len off
-  calls: nish.hpackCheckWindow
+  calls: nish.hpackCheckedWindowEnd
   pointer this: size=16 writesThrough=true captured=false
-  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.hpackCheckWindow#1
+  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.hpackCheckedWindowEnd#1
   stackSites=0 stackLocals=0
-  callee +0:5 hpackCheckWindow -> @nish.hpackCheckWindow
+  callee +0:16 hpackCheckedWindowEnd -> @nish.hpackCheckedWindowEnd
 function HpackCursor.reset(this: HpackCursor, buf: u8[], off: i32, len: i32): void -> @nish.HpackCursor.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: buf len off
-  calls: nish.hpackCheckWindow
+  calls: nish.hpackCheckedWindowEnd
   pointer this: size=16 writesThrough=true captured=false
-  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.hpackCheckWindow#1
+  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.hpackCheckedWindowEnd#1
   stackSites=0 stackLocals=0
-  callee -1:5 hpackCheckWindow -> @nish.hpackCheckWindow
+  callee +2:16 hpackCheckedWindowEnd -> @nish.hpackCheckedWindowEnd
 function hpackEncodeInteger(out: u8[], flags: i32, prefixBits: i32, value: i32): void -> @nish.hpackEncodeInteger [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1003,7 +1044,7 @@ function hpackEncodeInteger(out: u8[], flags: i32, prefixBits: i32, value: i32):
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:9 max: i32 (const)
-  local +4:7 rest: i32 (let)
+  local +6:7 rest: i32 (let)
 function hpackDecodeInteger(c: HpackCursor, prefixBits: i32): i32 -> @nish.hpackDecodeInteger [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -1108,15 +1149,16 @@ function HpackTable.nameLength(this: HpackTable, i: i32): i32 -> @nish.HpackTabl
   callee +1:20 HpackTable.slot -> @nish.HpackTable.slot
   local +2:11 at: i32 (const)
 function HpackTable.valueStart(this: HpackTable, i: i32): i32 -> @nish.HpackTable.valueStart [exported method]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
-  calls: nish.HpackTable.nameLength nish.HpackTable.nameStart
+  calls: nish.HpackTable.nameLength nish.HpackTable.nameStart nish.hpackWindowEnd
   pointer this: size=32 writesThrough=false captured=false passedTo=nish.HpackTable.nameStart#0 nish.HpackTable.nameLength#0
   stackSites=0 stackLocals=0
   local +0:11 start: i32 (const)
   callee +0:24 HpackTable.nameStart -> @nish.HpackTable.nameStart
   local +1:11 length: i32 (const)
   callee +1:25 HpackTable.nameLength -> @nish.HpackTable.nameLength
+  callee +4:12 hpackWindowEnd -> @nish.hpackWindowEnd
 function HpackTable.valueLength(this: HpackTable, i: i32): i32 -> @nish.HpackTable.valueLength [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
@@ -1127,7 +1169,9 @@ function HpackTable.valueLength(this: HpackTable, i: i32): i32 -> @nish.HpackTab
   callee +0:20 HpackTable.slot -> @nish.HpackTable.slot
   local +1:11 start: i32 (const)
   callee +1:24 HpackTable.valueStart -> @nish.HpackTable.valueStart
-  callee +6:24 HpackTable.endOf -> @nish.HpackTable.endOf
+  local +6:11 end: i32 (const)
+  callee +6:22 HpackTable.endOf -> @nish.HpackTable.endOf
+  local +7:9 length: i32 (let)
 function HpackTable.entrySize(this: HpackTable, i: i32): i32 -> @nish.HpackTable.entrySize [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
@@ -1160,53 +1204,65 @@ function HpackTable.value(this: HpackTable, i: i32): u8[] -> @nish.HpackTable.va
 function HpackTable.evictTo(this: HpackTable, limit: i32): void -> @nish.HpackTable.evictTo [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.HpackTable.compact nish.HpackTable.costOf nish.HpackTable.count
-  pointer this: size=32 writesThrough=true captured=false passedTo=nish.HpackTable.count#0 nish.HpackTable.costOf#0 nish.HpackTable.compact#0
+  calls: nish.HpackTable.compact nish.HpackTable.costOf
+  pointer this: size=32 writesThrough=true captured=false passedTo=nish.HpackTable.costOf#0 nish.HpackTable.compact#0
   stackSites=0 stackLocals=0
-  callee -3:47 HpackTable.count -> @nish.HpackTable.count
-  callee +0:50 HpackTable.costOf -> @nish.HpackTable.costOf
+  local -12:13 f: i32 (const)
+  local -6:13 size: i32 (const)
+  local -5:13 cost: i32 (const)
+  callee -5:25 HpackTable.costOf -> @nish.HpackTable.costOf
+  local -4:11 left: i32 (let)
   callee +3:5 HpackTable.compact -> @nish.HpackTable.compact
 function HpackTable.compact(this: HpackTable): void -> @nish.HpackTable.compact [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:11
+  sharedWrite: +0:9
   calls: nish.HpackTable.count nish.HpackTable.startOf
   pointer this: size=32 writesThrough=true captured=false passedTo=nish.HpackTable.count#0 nish.HpackTable.startOf#0
   stackSites=0 stackLocals=0
-  local -15:11 entries: i32[] (const)
-  local -14:11 bytes: u8[] (const)
-  local -13:11 end: i32 (const)
-  local -11:11 oldest: i32 (const)
-  callee -11:25 HpackTable.count -> @nish.HpackTable.count
-  callee -11:44 HpackTable.startOf -> @nish.HpackTable.startOf
-  local -10:11 start: i32 (const)
-  local -9:11 n: i32 (const)
-  local -8:11 f: i32 (const)
-  local -5:13 live: i32 (const)
-  local -4:13 from: i32 (const)
-  local -3:16 k: i32 (let)
-  local -2:15 at: i32 (const)
+  local -19:11 entries: i32[] (const)
+  local -18:11 bytes: u8[] (const)
+  local -17:11 end: i32 (const)
+  local -15:11 oldest: i32 (const)
+  callee -15:25 HpackTable.count -> @nish.HpackTable.count
+  callee -15:44 HpackTable.startOf -> @nish.HpackTable.startOf
+  local -14:11 start: i32 (const)
+  local -13:11 n: i32 (const)
+  local -12:11 f: i32 (const)
+  local -9:13 live: i32 (const)
+  local -8:13 from: i32 (const)
+  local -5:11 at: i32 (let)
+  local -4:16 k: i32 (let)
   local +10:16 k: i32 (let)
   local +11:15 at: i32 (const)
   local +16:13 keep: i32 (const)
-  local +21:13 slots: i32 (const)
-  local +22:16 k: i32 (let)
-  local +23:15 at: i32 (const)
+  local +22:13 slots: i32 (const)
+  local +23:16 k: i32 (let)
+  local +24:15 at: i32 (const)
+  local +26:17 was: i32 (const)
+  local +27:15 moved: i32 (let)
 function HpackTable.add(this: HpackTable, name: u8[], value: u8[]): i32 -> @nish.HpackTable.add [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.HpackTable.evictTo nish.hpackEntrySize nish_array_grow
+  calls: nish.HpackTable.evictTo nish_array_grow
   pointer this: size=32 writesThrough=true captured=false passedTo=nish.HpackTable.evictTo#0 nish.HpackTable.evictTo#0
-  pointer name: size=0 writesThrough=false captured=false passedTo=nish.hpackEntrySize#0
-  pointer value: size=0 writesThrough=false captured=false passedTo=nish.hpackEntrySize#1
+  pointer name: size=0 writesThrough=false captured=false
+  pointer value: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -9:11 cost: i64 (const)
-  callee -9:23 hpackEntrySize -> @nish.hpackEntrySize
+  local -21:11 nameLength: i32 (const)
+  local -20:11 valueLength: i32 (const)
+  local -19:11 max: i32 (const)
+  local -18:9 limit: i32 (let)
+  local -16:13 afterOverhead: i32 (const)
+  local -14:15 afterName: i32 (const)
   local -7:13 nothing: i32 (const)
   callee -6:7 HpackTable.evictTo -> @nish.HpackTable.evictTo
   callee -1:5 HpackTable.evictTo -> @nish.HpackTable.evictTo
   local +2:9 pushed: u32 (let)
   local +3:16 b: u8 (const)
   local +7:16 b: u8 (const)
+  local +13:11 size: i32 (const)
+  local +14:9 room: i32 (let)
+  local +18:9 grown: i32 (let)
 function HpackTable.resize(this: HpackTable, maxSize: i32): void -> @nish.HpackTable.resize [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1286,51 +1342,55 @@ function HpackDecoder.appendNameAt(this: HpackDecoder, index: i32, out: u8[]): v
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hpackAppendText
   escaping: index
-  calls: nish.HpackDecoder.countCopied nish.HpackTable.nameLength nish.HpackTable.nameStart nish.hpackAppend nish.hpackAppendText nish.hpackStaticName
+  calls: nish.HpackDecoder.countCopied nish.HpackTable.nameLength nish.HpackTable.nameStart nish.hpackAppend nish.hpackAppendText nish.hpackDynamicIndex nish.hpackStaticName
   pointer this: size=72 writesThrough=true captured=false passedTo=nish.HpackDecoder.countCopied#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hpackAppendText#0 nish.hpackAppend#0
   stackSites=0 stackLocals=0
   callee +0:7 hpackAppendText -> @nish.hpackAppendText
   callee +0:28 hpackStaticName -> @nish.hpackStaticName
-  local +4:11 i: i32 (const)
-  callee +5:5 hpackAppend -> @nish.hpackAppend
-  callee +5:40 HpackTable.nameStart -> @nish.HpackTable.nameStart
-  callee +5:65 HpackTable.nameLength -> @nish.HpackTable.nameLength
-  callee +6:5 HpackDecoder.countCopied -> @nish.HpackDecoder.countCopied
-  callee +6:22 HpackTable.nameLength -> @nish.HpackTable.nameLength
+  local +3:11 i: i32 (const)
+  callee +3:20 hpackDynamicIndex -> @nish.hpackDynamicIndex
+  callee +4:5 hpackAppend -> @nish.hpackAppend
+  callee +4:40 HpackTable.nameStart -> @nish.HpackTable.nameStart
+  callee +4:65 HpackTable.nameLength -> @nish.HpackTable.nameLength
+  callee +5:5 HpackDecoder.countCopied -> @nish.HpackDecoder.countCopied
+  callee +5:22 HpackTable.nameLength -> @nish.HpackTable.nameLength
 function HpackDecoder.appendValueAt(this: HpackDecoder, index: i32, out: u8[]): void -> @nish.HpackDecoder.appendValueAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hpackAppendText
   escaping: index
-  calls: nish.HpackDecoder.countCopied nish.HpackTable.valueLength nish.HpackTable.valueStart nish.hpackAppend nish.hpackAppendText nish.hpackStaticValue
+  calls: nish.HpackDecoder.countCopied nish.HpackTable.valueLength nish.HpackTable.valueStart nish.hpackAppend nish.hpackAppendText nish.hpackDynamicIndex nish.hpackStaticValue
   pointer this: size=72 writesThrough=true captured=false passedTo=nish.HpackDecoder.countCopied#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hpackAppendText#0 nish.hpackAppend#0
   stackSites=0 stackLocals=0
   callee +0:7 hpackAppendText -> @nish.hpackAppendText
   callee +0:28 hpackStaticValue -> @nish.hpackStaticValue
-  local +4:11 i: i32 (const)
-  callee +5:5 hpackAppend -> @nish.hpackAppend
-  callee +5:40 HpackTable.valueStart -> @nish.HpackTable.valueStart
-  callee +5:66 HpackTable.valueLength -> @nish.HpackTable.valueLength
-  callee +6:5 HpackDecoder.countCopied -> @nish.HpackDecoder.countCopied
-  callee +6:22 HpackTable.valueLength -> @nish.HpackTable.valueLength
+  local +3:11 i: i32 (const)
+  callee +3:20 hpackDynamicIndex -> @nish.hpackDynamicIndex
+  callee +4:5 hpackAppend -> @nish.hpackAppend
+  callee +4:40 HpackTable.valueStart -> @nish.HpackTable.valueStart
+  callee +4:66 HpackTable.valueLength -> @nish.HpackTable.valueLength
+  callee +5:5 HpackDecoder.countCopied -> @nish.HpackDecoder.countCopied
+  callee +5:22 HpackTable.valueLength -> @nish.HpackTable.valueLength
 function HpackDecoder.nameLengthAt(this: HpackDecoder, index: i32): i32 -> @nish.HpackDecoder.nameLengthAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
-  calls: nish.HpackTable.nameLength nish.hpackStaticName
+  calls: nish.HpackTable.nameLength nish.hpackDynamicIndex nish.hpackStaticName
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:20 hpackStaticName -> @nish.hpackStaticName
-  callee +3:12 HpackTable.nameLength -> @nish.HpackTable.nameLength
+  callee +2:12 HpackTable.nameLength -> @nish.HpackTable.nameLength
+  callee +2:34 hpackDynamicIndex -> @nish.hpackDynamicIndex
 function HpackDecoder.sizeAt(this: HpackDecoder, index: i32): i64 -> @nish.HpackDecoder.sizeAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
-  calls: nish.HpackTable.entrySize nish.hpackStaticName nish.hpackStaticValue
+  calls: nish.HpackTable.entrySize nish.hpackDynamicIndex nish.hpackStaticName nish.hpackStaticValue
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:15 hpackStaticName -> @nish.hpackStaticName
   callee +1:15 hpackStaticValue -> @nish.hpackStaticValue
-  callee +6:18 HpackTable.entrySize -> @nish.HpackTable.entrySize
+  callee +5:18 HpackTable.entrySize -> @nish.HpackTable.entrySize
+  callee +5:39 hpackDynamicIndex -> @nish.hpackDynamicIndex
 function HpackDecoder.countCopied(this: HpackDecoder, n: i32): void -> @nish.HpackDecoder.countCopied [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -1493,17 +1553,16 @@ function HpackEncoder.findField(this: HpackEncoder, name: u8[], value: u8[]): i3
   callee +2:33 hpackStaticName -> @nish.hpackStaticName
   callee +2:56 hpackSameAsText -> @nish.hpackSameAsText
   callee +2:79 hpackStaticValue -> @nish.hpackStaticValue
-  local +7:11 n: u32 (const)
-  callee +7:26 HpackTable.count -> @nish.HpackTable.count
-  local +8:14 k: u32 (let)
-  local +9:13 t: HpackTable (const)
-  local +10:13 i: i32 (const)
-  callee +12:9 hpackSameAsWindow -> @nish.hpackSameAsWindow
-  callee +12:42 HpackTable.nameStart -> @nish.HpackTable.nameStart
-  callee +12:58 HpackTable.nameLength -> @nish.HpackTable.nameLength
+  local +9:11 n: i32 (const)
+  callee +9:20 HpackTable.count -> @nish.HpackTable.count
+  local +10:14 i: i32 (let)
+  local +11:13 t: HpackTable (const)
   callee +13:9 hpackSameAsWindow -> @nish.hpackSameAsWindow
-  callee +13:43 HpackTable.valueStart -> @nish.HpackTable.valueStart
-  callee +13:60 HpackTable.valueLength -> @nish.HpackTable.valueLength
+  callee +13:42 HpackTable.nameStart -> @nish.HpackTable.nameStart
+  callee +13:58 HpackTable.nameLength -> @nish.HpackTable.nameLength
+  callee +14:9 hpackSameAsWindow -> @nish.hpackSameAsWindow
+  callee +14:43 HpackTable.valueStart -> @nish.HpackTable.valueStart
+  callee +14:60 HpackTable.valueLength -> @nish.HpackTable.valueLength
 function HpackEncoder.findName(this: HpackEncoder, name: u8[]): i32 -> @nish.HpackEncoder.findName [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.HpackTable.count nish.HpackTable.nameLength nish.HpackTable.nameStart nish.hpackSameAsText nish.hpackSameAsWindow nish.hpackStaticName
@@ -1514,13 +1573,12 @@ function HpackEncoder.findName(this: HpackEncoder, name: u8[]): i32 -> @nish.Hpa
   local +1:13 i: i32 (const)
   callee +2:11 hpackSameAsText -> @nish.hpackSameAsText
   callee +2:33 hpackStaticName -> @nish.hpackStaticName
-  local +7:11 n: u32 (const)
-  callee +7:26 HpackTable.count -> @nish.HpackTable.count
-  local +8:14 k: u32 (let)
-  local +9:13 i: i32 (const)
-  callee +10:11 hpackSameAsWindow -> @nish.hpackSameAsWindow
-  callee +10:53 HpackTable.nameStart -> @nish.HpackTable.nameStart
-  callee +10:78 HpackTable.nameLength -> @nish.HpackTable.nameLength
+  local +7:11 n: i32 (const)
+  callee +7:20 HpackTable.count -> @nish.HpackTable.count
+  local +8:14 i: i32 (let)
+  callee +9:11 hpackSameAsWindow -> @nish.hpackSameAsWindow
+  callee +9:53 HpackTable.nameStart -> @nish.HpackTable.nameStart
+  callee +9:78 HpackTable.nameLength -> @nish.HpackTable.nameLength
 function HpackEncoder.encodeField(this: HpackEncoder, out: u8[], name: u8[], value: u8[], indexing: i32, huffman: boolean): void -> @nish.HpackEncoder.encodeField [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

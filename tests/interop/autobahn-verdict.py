@@ -1,8 +1,9 @@
 """The verdict on an Autobahn TestSuite fuzzingclient run against Nish.
 
 The interop job's `autobahn` lane runs the fuzzingclient's cases against the
-interop server's WebSocket echo port (`--ws-port`), every case but 12.* and
-13.*, which need permessage-deflate and the server never negotiates it. This
+interop server's WebSocket echo port (`--ws-port`, agent `nish`) and the
+`nish/net/http-server` façade's echo server (agent `nish-facade`), every
+case but 12.* and 13.*, which need permessage-deflate and the server never negotiates it. This
 reads the run's `index.json` and passes only if every case's `behavior` and
 `behaviorClose` is OK or INFORMATIONAL, the grade the suite gives cases
 whose outcome it only records (7.1.6, 7.13.*). Anything else, NON-STRICT

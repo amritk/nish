@@ -32,6 +32,7 @@
 
 import { AnalysisUnit, constructorOf, FactsTable, FunctionFacts } from "./attributes"
 import { literalValue, unwrapBoundsParens, vectorAccessLanes } from "./bounds"
+import { isCallerContract } from "./caller-contract"
 import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { intrinsicType } from "./emit-util"
@@ -131,6 +132,16 @@ export const PANIC_WINDOW: i32 = 19
  * value and left on a fault (`faultProven`).
  */
 export const PANIC_FAULT: i32 = 20
+/**
+ * #2296: a call into a function or method whose first statements are
+ * `if (test) { panic(m) }` on its own parameters (`src/caller-contract.ts`).
+ * Each call holds them as this site, proven where `src/bounds.ts` proves
+ * every comparison false from the call's arguments, and when every call into
+ * the callee is proven, the callee lists those panics as proven. Only proven
+ * sites of this kind are kept: a call nothing proves reaches the callee's own
+ * `panic`, as before (`holdCallerContracts`).
+ */
+export const PANIC_CONTRACT: i32 = 21
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -175,6 +186,8 @@ const panicKindName = (kind: i32): string => {
       return "window"
     case PANIC_FAULT:
       return "fault"
+    case PANIC_CONTRACT:
+      return "contract"
     default:
       return "oom"
   }
@@ -354,6 +367,7 @@ const inEvaluationOrder = (sites: PanicSite[]): PanicSite[] => {
 export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable, strictExports: boolean): void => {
   const ordered: PanicSite[][] = []
   const reach: (PanicSite | null)[] = []
+  holdCallerContracts(units, facts, strictExports)
   for (const f of facts.list) {
     sortByPosition(f.panicSites)
     ordered.push(inEvaluationOrder(f.panicSites))
@@ -409,6 +423,210 @@ export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable, stri
       }
     }
   }
+}
+
+/**
+ * A caller contract's panics are its callers' (#2296), once every call into
+ * it is proven: each call holds them as a proven `contract` site, so the
+ * callee lists them as proven and a call's route through it passes over them.
+ * One call nothing proves keeps them the callee's: that call reaches its
+ * `panic` as any call does, and its own unproven `contract` site is dropped,
+ * so a contract never adds a site to a program. A forward's own call into
+ * the contract it forwards to (`preconditionForward`) is proven exactly when
+ * its holder is held, and the target is held only while every holder of a
+ * forward into it is. Never held for a function a host calls by its symbol,
+ * or one some function reaches with no call of its own that names it (a
+ * routed `nish/map` method). A function taken as a value needs no clause of
+ * its own: the dispatcher that calls it names it with arguments no guard
+ * bounds, an unproven `contract` site, so it is in `unproven`.
+ */
+const holdCallerContracts = (units: AnalysisUnit[], facts: FactsTable, strictExports: boolean): void => {
+  // The functions whose run ends in a forward into another caller contract.
+  const holders: FunctionSig[] = []
+  for (const unit of units) {
+    for (const sig of unit.program.functions) {
+      if (sig.preconditionForward !== null && sig.preconditionTarget !== null) {
+        holders.push(sig)
+      }
+    }
+  }
+  const unnamed = new StringSet()
+  const unproven = new StringSet()
+  // A forward's unproven `contract` site, its function's facts, and the holder.
+  const forwardSites: PanicSite[] = []
+  const forwardFacts: FunctionFacts[] = []
+  const forwardHolders: FunctionSig[] = []
+  for (const f of facts.list) {
+    let c = 0
+    while (c < f.callees.size()) {
+      const callee = f.callees.at(c)
+      if (!namedBy(f.panicSites, callee)) {
+        unnamed.add(callee)
+      }
+      c = c + 1
+    }
+    const kept: PanicSite[] = []
+    for (const site of f.panicSites) {
+      if (site.kind === PANIC_CONTRACT && !site.proven) {
+        const callee = calleeAt(f.panicSites, site.node)
+        const holder = forwardHolder(holders, site.node, callee)
+        if (holder === null) {
+          unproven.add(callee)
+        } else {
+          // Proven exactly when every call into its holder is: decided below.
+          forwardSites.push(site)
+          forwardFacts.push(f)
+          forwardHolders.push(holder)
+          kept.push(site)
+        }
+      } else {
+        kept.push(site)
+      }
+    }
+    f.panicSites = kept
+  }
+  const held: FunctionSig[] = []
+  for (const unit of units) {
+    const program = unit.program
+    for (const sig of program.functions) {
+      if (
+        isCallerContract(sig) &&
+        // Once, from the module that defines it, not once per module listing it.
+        sig.definedIn(program.source) &&
+        !unnamed.has(sig.name) &&
+        !unproven.has(sig.name) &&
+        !hostCalls(program, strictExports, sig) &&
+        facts.get(sig.name) !== null
+      ) {
+        held.push(sig)
+      }
+    }
+  }
+  // A forward's target is held only while its holder is: drop targets to the greatest set where that holds.
+  const alive: boolean[] = []
+  while (alive.length < held.length) {
+    alive.push(true)
+  }
+  let changed = true
+  while (changed) {
+    changed = false
+    let k = 0
+    while (k < forwardHolders.length) {
+      const holder = forwardHolders[k]
+      const target = holder.preconditionTarget
+      const at = target === null ? -1 : heldAt(held, alive, target)
+      const mine = heldAt(held, alive, holder)
+      if (at >= 0 && at < alive.length && mine < 0) {
+        alive[at] = false
+        changed = true
+      }
+      // A holder whose target is not held proves nothing to its own callers.
+      if (mine >= 0 && mine < alive.length && at < 0) {
+        alive[mine] = false
+        changed = true
+      }
+      k = k + 1
+    }
+  }
+  let k = 0
+  while (k < forwardSites.length && k < forwardHolders.length && k < forwardFacts.length) {
+    if (heldAt(held, alive, forwardHolders[k]) >= 0) {
+      forwardSites[k].proven = true
+    } else {
+      const f = forwardFacts[k]
+      const dropped = forwardSites[k]
+      const kept: PanicSite[] = []
+      for (const site of f.panicSites) {
+        if (site !== dropped) {
+          kept.push(site)
+        }
+      }
+      f.panicSites = kept
+    }
+    k = k + 1
+  }
+  k = 0
+  while (k < held.length && k < alive.length) {
+    const sig = held[k]
+    const f = facts.get(sig.name)
+    if (alive[k] && f !== null) {
+      for (const site of f.panicSites) {
+        if (!site.proven && !isCallSite(site) && heldBy(sig, site.node)) {
+          site.proven = true
+        }
+      }
+    }
+    k = k + 1
+  }
+  // A call into a contract no longer held reaches its `panic` as any call
+  // does, so its `contract` site, proven or not, goes: none claims a check a
+  // listed call still reaches.
+  for (const f of facts.list) {
+    const kept: PanicSite[] = []
+    for (const site of f.panicSites) {
+      if (site.kind !== PANIC_CONTRACT || heldNamed(held, alive, calleeAt(f.panicSites, site.node))) {
+        kept.push(site)
+      }
+    }
+    f.panicSites = kept
+  }
+}
+
+/** Whether the `held` signature named `name` is still `alive`. */
+const heldNamed = (held: FunctionSig[], alive: boolean[], name: string): boolean => {
+  let k = 0
+  while (k < held.length && k < alive.length) {
+    if (alive[k] && held[k].name === name) {
+      return true
+    }
+    k = k + 1
+  }
+  return false
+}
+
+/** The function whose forward is the call at `node` into `callee` (`preconditionForward`), or null. */
+const forwardHolder = (holders: FunctionSig[], node: Node, callee: string): FunctionSig | null => {
+  for (const sig of holders) {
+    const forward = sig.preconditionForward
+    const target = sig.preconditionTarget
+    if (forward !== null && forward === node && target !== null && target.name === callee) {
+      return sig
+    }
+  }
+  return null
+}
+
+/** The position of `sig` among the `held` signatures still `alive`, or -1. */
+const heldAt = (held: FunctionSig[], alive: boolean[], sig: FunctionSig): i32 => {
+  let k = 0
+  while (k < held.length && k < alive.length) {
+    if (alive[k] && held[k] === sig) {
+      return k
+    }
+    k = k + 1
+  }
+  return -1
+}
+
+/** The callee of the plain call `noteCall` lists at `node` beside its `contract` site. */
+const calleeAt = (sites: PanicSite[], node: Node): string => {
+  for (const site of sites) {
+    if (isCallSite(site) && site.node === node) {
+      return site.callee
+    }
+  }
+  return ""
+}
+
+/** Whether `node` lies in one of `sig`'s caller-contract branches. */
+const heldBy = (sig: FunctionSig, node: Node): boolean => {
+  for (const test of sig.precondition) {
+    const branch = test.children[1]
+    if (node.start >= branch.start && node.end <= branch.end) {
+      return true
+    }
+  }
+  return false
 }
 
 /**
@@ -1169,7 +1387,9 @@ const faultAdvice = (program: CheckedProgram, table: TypeTable, call: Node): str
  * A call into a window guard, or into a method that forwards to one
  * (`PANIC_WINDOW`), checks `[off, off + len)` of its buffer, and the shapes
  * `provesWindow` in `src/bounds.ts` credits are a count from 0, a literal
- * count, and a count written `end - off` over a range the caller checked.
+ * count, and a count written `end - off` over a range the caller checked. A
+ * forward that passes its guard a literal count leaves the caller only the
+ * offset to bound.
  */
 const windowAdvice = (program: CheckedProgram, call: Node): string => {
   const target = program.nodeCallees[call.id]
@@ -1182,14 +1402,25 @@ const windowAdvice = (program: CheckedProgram, call: Node): string => {
   }
   const buf = argumentName(program, call, at[0], "buf")
   const off = argumentName(program, call, at[1], "off")
-  const len = argumentName(program, call, at[2], "len")
+  // A literal count is the forward's own (`windowCount`), not an argument.
+  const literal = at[2] < 0 && target !== null ? target.windowCount : -1
+  const len = literal >= 0 ? `${literal}` : argumentName(program, call, at[2], "len")
   const args = call.children[1].children
   const start = literalValue(args[at[1]])
-  const count = literalValue(args[at[2]])
+  const count = literal >= 0 ? literal : literalValue(args[at[2]])
   if (start > 0 && count > 0 && toI64(start) + toI64(count) < toI64(2147483647)) {
     return (
       `${what} panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it inside here: ` +
       `guard the call with \`if (${buf}.length >= ${start + count})\`, or pass \`0\` and a count no larger than \`${buf}.length\``
+    )
+  }
+  if (literal >= 0) {
+    // The count is the callee's: only the offset and the buffer are the caller's to bound.
+    const test =
+      start === 0 ? `${buf}.length >= ${literal}` : `${off} >= 0 && ${off} + ${literal} <= ${buf}.length`
+    return (
+      `${what} panics when \`[${off}, ${off} + ${len})\` is outside \`${buf}\`, and nothing proves it inside here: ` +
+      `guard the call with \`if (${test})\``
     )
   }
   return (

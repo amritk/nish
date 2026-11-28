@@ -53,8 +53,8 @@ the program runs unless the compiler can see the window is inside the buffer
 (`buf, 0, buf.length`, or an offset of 0 and a count tested with
 `n >= 0 && n <= buf.length`, or a window `buf, start, end - start` under
 `start >= 0 && start <= end && end <= buf.length`), so the examples test a
-count before they pass it on, as the echo below does. The HTTP handler,
-`nish/net/prefork` and `nish/net/dns` call standard-library code that keeps
+count before they pass it on, as the echo below does. `nish/net/prefork` and
+`nish/net/dns` call standard-library code that keeps
 panic sites until the standard library is made panic-free, so the examples
 that use them build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do) for now.
@@ -370,15 +370,15 @@ connections to another process with `sendFd` keeps descriptors.
 `HandlerLimits.ring` and open the listener with `limits.listen(host, port,
 backlog, flags)`, which is `tcpListenFlags` with `NET_LISTEN_RING` added when
 `ring` is set, then hand it to `openHttpHandler(limits, listener, router)`,
-which answers an `Err` where `new HttpHandler` would panic, as any listener. `HandlerLimits.slots` is then the cap on connections, not the
+which answers a limit below its least, or a readiness loop it could not make,
+as an `Err`, as with any listener. `HandlerLimits.slots` is then the cap on connections, not the
 descriptor limit: set it to what the server should hold. When every ring slot
 is taken, the handler rests its listener on the `-23`, as it does on `-24`
 for descriptors, until a connection closes or 100 ms pass, so a full server
 waits rather than spin. `h.resting()` is true while it does, for a server
 that wants to log or count the times it is full:
 
-<!-- allow-panics: calls `std/net/handler.ts` code that reaches `std/net/http-compress.ts` panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { HandlerLimits, openHttpHandler } from "nish/net/handler";
 import { RouterLimits, routerChecked } from "nish/net/router";

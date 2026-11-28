@@ -41,7 +41,7 @@ import { isPureRuntime, SECRET_MAKE, SECRET_WIPE, secretRoleOf } from "./secret"
 import { isRegionIntrinsic } from "./region-check"
 import { isShmSource, isShmWindowIntrinsic } from "./shm-window"
 import { jsonRouteCallees, jsonRouteOf } from "./json-typed"
-import { openedHandle } from "./handles"
+import { openedHandle, ownedCloses } from "./handles"
 import { layoutClass } from "./structs"
 import {
   builtinCalleesNamed,
@@ -200,10 +200,12 @@ import {
   PANIC_REGION,
   PANIC_SLICE,
   PANIC_SPAWN_SLOT,
+  PANIC_CONTRACT,
   PANIC_FAULT,
   PANIC_WINDOW,
   PanicSite,
 } from "./panics"
+import { isCallerContract } from "./caller-contract"
 import { faultProven, isFaultGuard } from "./fault-contract"
 import { isWindowGuard } from "./window-contract"
 
@@ -2244,7 +2246,8 @@ class FactCollector {
    * dst.length` (`PANIC_PARALLEL_LENGTH`), and an atomic array's element
    * method's index, proven by the guard or loop test around the call
    * (`PANIC_INDEX`, #2206). A window contract's check is one more
-   * (`PANIC_WINDOW`, #2296), and a fault contract's (`PANIC_FAULT`).
+   * (`PANIC_WINDOW`, #2296), a fault contract's (`PANIC_FAULT`), and a
+   * caller contract's leading tests (`PANIC_CONTRACT`).
    */
   noteCall(node: Node, callee: FunctionSig): void {
     const proven = this.unit.program.nodeProvenIndex[node.id]
@@ -2280,6 +2283,11 @@ class FactCollector {
       const forwards =
         guard !== null && forward !== null && guard === callee && forward === node && isFaultGuard(callee)
       this.noteSite(node, PANIC_FAULT, forwards || faultProven(this.unit.program, this.sig, node, callee), "")
+    }
+    // A caller contract's leading tests (#2296), proven where `src/bounds.ts`
+    // proves each comparison false from the arguments.
+    if (isCallerContract(callee)) {
+      this.noteSite(node, PANIC_CONTRACT, proven, "")
     }
     this.noteSite(node, PANIC_CALL, false, callee.name)
   }
@@ -3729,6 +3737,13 @@ class FactCollector {
       const ctor = made.ctor
       if (ctor !== null) {
         this.addComposedCallee(ctor.name, site)
+        // A caller contract a field's `new` reaches (#2296): no proof reads an
+        // initializer's arguments, so its tests are an unproven `contract`
+        // site there, and the constructor is not held.
+        if (isCallerContract(ctor)) {
+          this.noteSite(init, PANIC_CONTRACT, false, "")
+          this.noteSite(init, PANIC_CALL, false, ctor.name)
+        }
       } else {
         this.noteInitializers(made, site)
       }
@@ -3746,14 +3761,12 @@ class FactCollector {
     if (info === null) {
       return
     }
-    const close = info.handleClose
-    if (close === null) {
-      return
-    }
-    this.facts.callees.add(close.name)
-    this.facts.wholeCallees.add(close.name)
-    if (this.known !== null) {
-      this.facts.offerCapability(CAP_FFI, close.sourceName, node, 0)
+    for (const close of ownedCloses(info)) {
+      this.facts.callees.add(close.name)
+      this.facts.wholeCallees.add(close.name)
+      if (this.known !== null) {
+        this.facts.offerCapability(CAP_FFI, close.sourceName, node, 0)
+      }
     }
   }
 

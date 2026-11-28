@@ -1,0 +1,7 @@
+{"functions":[
+{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_contract_arrow_literal/main.ts","line":11,"panics":[{"kind":"overflow","line":13,"column":49,"proven":true},{"kind":"panic","line":14,"column":5,"proven":true},{"kind":"oom","line":14,"column":11,"allowed":true}]},
+{"name":"readU32","symbol":"readU32","module":"tests/link/window_contract_arrow_literal/main.ts","line":18,"panics":[{"kind":"window","line":19,"column":3,"proven":true},{"kind":"index","line":20,"column":16,"proven":true},{"kind":"index","line":20,"column":33,"proven":true},{"kind":"overflow","line":20,"column":35,"proven":true},{"kind":"index","line":20,"column":60,"proven":true},{"kind":"overflow","line":20,"column":62,"proven":true},{"kind":"index","line":20,"column":88,"proven":true},{"kind":"overflow","line":20,"column":90,"proven":true}]},
+{"name":"word","symbol":"word","module":"tests/link/window_contract_arrow_literal/main.ts","line":23,"panics":[{"kind":"overflow","line":24,"column":19,"proven":true},{"kind":"window","line":25,"column":12,"proven":true}]},
+{"name":"main","symbol":"nish_main","module":"tests/link/window_contract_arrow_literal/main.ts","line":30,"panics":[{"kind":"oom","line":32,"column":15,"allowed":true},{"kind":"oom","line":33,"column":15,"allowed":true}]},
+{"name":"done","symbol":"done","module":"tests/link/window_contract_arrow_literal/done.ts","line":1,"panics":[]}
+]}

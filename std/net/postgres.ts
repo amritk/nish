@@ -285,8 +285,14 @@ export const PG_SSL_REQUEST_CODE: i32 = 80877103
  */
 export const pgSslRequest = (): u8[] => {
   const out: u8[] = new Array<u8>(8)
-  setI32BE(out, 0, 8)
-  setI32BE(out, 4, PG_SSL_REQUEST_CODE)
+  out[0] = toU8(0)
+  out[1] = toU8(0)
+  out[2] = toU8(0)
+  out[3] = toU8(8)
+  out[4] = toU8(PG_SSL_REQUEST_CODE >> 24)
+  out[5] = toU8(PG_SSL_REQUEST_CODE >> 16)
+  out[6] = toU8(PG_SSL_REQUEST_CODE >> 8)
+  out[7] = toU8(PG_SSL_REQUEST_CODE)
   return out
 }
 
@@ -576,6 +582,7 @@ const pgPutDecimal = (out: u8[], at: i32, value: i64, n: i32): i32 => {
     return -1
   }
   const first: i32 = value < 0 ? at + 1 : at
+  // Negated as a `u64`: the magnitude of the least `i64` has no `i64`.
   let m: u64 = value < 0 ? toU64(0) - toU64(value) : toU64(value)
   // Where the last two digits start.
   let j: i32 = at + n - 2
@@ -824,7 +831,12 @@ export class PgText {
       acc = acc * toU64(10) + digit
       i++
     }
-    return negative ? toI64(toU64(0) - acc) : toI64(acc)
+    if (!negative) {
+      return toI64(acc)
+    }
+    // 2^63 reads back as the most negative i64, which is already the answer.
+    const magnitude: i64 = toI64(acc)
+    return magnitude < 0 ? magnitude : -magnitude
   }
 
   /**
@@ -986,15 +998,6 @@ export class PgBinary {
     this.failed = false
   }
 
-  // Whether `[start, start + length)` is inside `b`; sets `failed` when not.
-  private inside(b: u8[], start: i32, length: i32): boolean {
-    if (start < 0 || length < 0 || start > toI32(b.length) - length) {
-      this.failed = true
-      return false
-    }
-    return true
-  }
-
   /**
    * An `int2`, `int4` or `int8` column, told apart by its length (2, 4 or 8
    * bytes, big-endian two's complement); 0 and `failed` for any other length,
@@ -1006,18 +1009,22 @@ export class PgBinary {
    * @returns The value, sign-extended to 64 bits, or 0 with `failed` set.
    */
   int(b: u8[], start: i32, length: i32): i64 {
-    if ((length !== 2 && length !== 4 && length !== 8) || !this.inside(b, start, length)) {
-      this.failed = true
-      return 0
+    // Each width's window is tested where it is read: the getter proves it
+    // from that test.
+    if (start >= 0) {
+      if (length === 8 && start <= toI32(b.length) - 8) {
+        return getI64BE(b, start)
+      }
+      if (length === 4 && start <= toI32(b.length) - 4) {
+        return toI64(getI32BE(b, start))
+      }
+      if (length === 2 && start <= toI32(b.length) - 2) {
+        const v: i32 = toI32(getU16BE(b, start))
+        return toI64(v >= 32768 ? v - 65536 : v)
+      }
     }
-    if (length === 8) {
-      return getI64BE(b, start)
-    }
-    if (length === 4) {
-      return toI64(getI32BE(b, start))
-    }
-    const v: i32 = toI32(getU16BE(b, start))
-    return toI64(v >= 32768 ? v - 65536 : v)
+    this.failed = true
+    return 0
   }
 
   /**
@@ -1051,7 +1058,7 @@ export class PgBinary {
    *   for a column that is not eight bytes inside `b`.
    */
   float(b: u8[], start: i32, length: i32): f64 {
-    if (length !== 8 || !this.inside(b, start, length)) {
+    if (length !== 8 || start < 0 || start > toI32(b.length) - 8) {
       this.failed = true
       return 0
     }
@@ -1070,7 +1077,7 @@ export class PgBinary {
    * @returns 24, the bytes written, or -1 with `failed` set.
    */
   timestamp(b: u8[], start: i32, length: i32, out: u8[], at: i32): i32 {
-    if (length !== 8 || !this.inside(b, start, length)) {
+    if (length !== 8 || start < 0 || start > toI32(b.length) - 8) {
       this.failed = true
       return -1
     }
@@ -1215,8 +1222,18 @@ export class PgBinaryArray {
       return
     }
     const ndim: i32 = getI32BE(b, start)
-    const hasNull: i32 = getI32BE(b, start + 4)
-    const oid: i32 = getI32BE(b, start + 8)
+    // Read here rather than with `getI32BE`, whose call before would end what
+    // the prover knows of `b`.
+    const hasNull: i32 =
+      (toI32(b[start + 4]) << 24) |
+      (toI32(b[start + 5]) << 16) |
+      (toI32(b[start + 6]) << 8) |
+      toI32(b[start + 7])
+    const oid: i32 =
+      (toI32(b[start + 8]) << 24) |
+      (toI32(b[start + 9]) << 16) |
+      (toI32(b[start + 10]) << 8) |
+      toI32(b[start + 11])
     this.size = 0
     if (oid === PG_OID_INT8) {
       this.size = 8
@@ -1239,10 +1256,14 @@ export class PgBinaryArray {
     this.pos = pos
     this.end = end
     if (ndim === 1) {
-      const dim: i32 = getI32BE(b, pos)
       // The length test above keeps the dimension inside the column; this one
-      // states that bound for the prover.
-      if (dim < 0 || pos > toI32(b.length) - 8) {
+      // states that bound for the prover, where `getI32BE` reads it.
+      if (pos < 0 || pos > toI32(b.length) - 8) {
+        this.refuse()
+        return
+      }
+      const dim: i32 = getI32BE(b, pos)
+      if (dim < 0) {
         this.refuse()
         return
       }
@@ -1280,10 +1301,13 @@ export class PgBinaryArray {
     // `begin` keeps `seen` and `pos` from going negative; summed in `i64`,
     // a length cannot overflow on its way to the test against `end`.
     const p: i64 = toI64(pos) + toI64(4)
-    if (pos < 0 || p > toI64(end)) {
+    const b: u8[] = this.b
+    // `end` lies in `b`, so the last test is never taken: it is the window
+    // `getI32BE` proves from.
+    if (pos < 0 || p > toI64(end) || pos > toI32(b.length) - 4) {
       return this.refuse()
     }
-    const n: i32 = getI32BE(this.b, pos)
+    const n: i32 = getI32BE(b, pos)
     const at: i32 = toI32(p)
     this.pos = at
     this.seen = seen + 1
@@ -1629,7 +1653,13 @@ export class PgConnection {
     }
     this.putByte(PG_ZERO)
     // The message is the first in the buffer, so its length is the buffer's end.
-    setI32BE(this.out, at, this.outEnd)
+    // `putI32` wrote the first word, so the test is never taken; it states the bound for the prover.
+    const out: u8[] = this.out
+    const length: i32 = this.outEnd
+    if (toI32(out.length) < 4) {
+      return
+    }
+    setI32BE(out, at, length)
   }
 
   // --- Buffers -----------------------------------------------------------------
@@ -1984,7 +2014,7 @@ export class PgConnection {
     }
     if (type === 75) {
       // 'K': BackendKeyData, the process id and the cancel key.
-      if (state !== PG_STATE_STARTING || size !== 8) {
+      if (state !== PG_STATE_STARTING || size !== 8 || body < 0 || body > toI32(b.length) - 4) {
         return this.fail(state !== PG_STATE_STARTING ? PG_ERR_UNEXPECTED : PG_ERR_FRAME)
       }
       this.backendPid = getI32BE(b, body)
@@ -2043,7 +2073,7 @@ export class PgConnection {
     }
     if (type === 116) {
       // 't': ParameterDescription.
-      if (size < 2 || size !== toI32(getU16BE(b, body)) * 4 + 2) {
+      if (size < 2 || body < 0 || body > toI32(b.length) - 2 || size !== toI32(getU16BE(b, body)) * 4 + 2) {
         return this.fail(PG_ERR_FRAME)
       }
       return PG_NEED_MORE
@@ -2151,7 +2181,12 @@ export class PgConnection {
       if (nameEnd < 0 || end < 0 || end - nameEnd < 19 || nameEnd > toI32(b.length) - 19) {
         return this.fail(PG_ERR_FRAME)
       }
-      types[c] = getI32BE(b, nameEnd + 7)
+      // Never taken after the test above; it states the type's window for the prover.
+      const typeAt: i32 = nameEnd + 7
+      if (typeAt > toI32(b.length) - 4) {
+        return this.fail(PG_ERR_FRAME)
+      }
+      types[c] = getI32BE(b, typeAt)
       p = nameEnd + 19
     }
     if (p !== end) {
@@ -2549,10 +2584,11 @@ export class PgConnection {
     const end: i32 = this.outEnd
     this.reserve(toI64(end) + toI64(2))
     const b: u8[] = this.out
+    const bits: u16 = toU16(v)
     if (end < 0 || end > toI32(b.length) - 2) {
       return
     }
-    setU16BE(b, end, toU16(v))
+    setU16BE(b, end, bits)
     this.outEnd = end + 2
   }
 
@@ -2593,10 +2629,16 @@ export class PgConnection {
   private endMessage(at: i32): void {
     const end: i32 = this.outEnd
     // The message's type byte and length word lie before the end; the test states that for the prover.
-    if (at < 0 || end < 0 || end - at < 5 || at > toI32(this.out.length) - 5) {
+    const out: u8[] = this.out
+    if (at < 0 || end < 0 || end - at < 5 || at > toI32(out.length) - 5) {
       return
     }
-    setI32BE(this.out, at + 1, end - at - 1)
+    // Never taken after the test above; it states the length word's window for the prover.
+    const lengthAt: i32 = at + 1
+    if (lengthAt > toI32(out.length) - 4) {
+      return
+    }
+    setI32BE(out, lengthAt, end - at - 1)
   }
 
   /**
@@ -3089,20 +3131,28 @@ export class PgConnection {
     const end: i32 = toI32(toI64(start) + toI64(count))
     // `reserve` made room for every element; the loop's tests state that bound for the prover.
     for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
+      // The length word is `width`, 4 or 8, so its first three bytes are zero.
+      if (p < 0 || p > toI32(b.length) - 8) {
+        break
+      }
+      b[p] = 0
+      b[p + 1] = 0
+      b[p + 2] = 0
+      b[p + 3] = toU8(width)
+      const valueAt: i32 = p + 4
       if (width === 4) {
-        if (p < 0 || p > toI32(b.length) - 8) {
+        // Never taken after the test above; it states the value's window for the prover.
+        if (valueAt > toI32(b.length) - 4) {
           break
         }
-        setI32BE(b, p, width)
-        setI32BE(b, p + 4, toI32(values[i]))
-        p = p + 8
+        setI32BE(b, valueAt, toI32(values[i]))
+        p = valueAt + 4
       } else {
-        if (p < 0 || p > toI32(b.length) - 12) {
+        if (valueAt > toI32(b.length) - 8) {
           break
         }
-        setI32BE(b, p, width)
-        setI64BE(b, p + 4, values[i])
-        p = p + 12
+        setI64BE(b, valueAt, values[i])
+        p = valueAt + 8
       }
     }
     this.outEnd = p
@@ -3367,15 +3417,32 @@ export class PgConnection {
     if (this.arrayOid !== 0) {
       // The header follows the parameter's length word: ndim, the NULL flag, the OID, then the dimension.
       // `binaryArrayStart` wrote all 24 bytes inside `out`; the test states that bound for the prover.
+      // Each word is written a byte at a time, big-endian, under that one test.
       const at: i32 = this.arrayAt
-      if (at >= 0 && at <= toI32(this.out.length) - 24) {
-        const header: i32 = at + 4
-        if (this.arrayCount === 0) {
-          setI32BE(this.out, header, PG_ZERO)
-          this.outEnd = header + PG_ARRAY_HEADER
+      const out: u8[] = this.out
+      if (at >= 0 && at <= toI32(out.length) - 24) {
+        // ndim sits at `at + 4`, the NULL flag at `at + 8` and the dimension's length at `at + 16`.
+        const count: i32 = this.arrayCount
+        const nulls: u8 = this.arrayNulls ? 1 : 0
+        if (count === 0) {
+          out[at + 4] = 0
+          out[at + 5] = 0
+          out[at + 6] = 0
+          out[at + 7] = 0
+          this.outEnd = at + 4 + PG_ARRAY_HEADER
         } else {
-          setI32BE(this.out, header + 4, this.arrayNulls ? 1 : 0)
-          setI32BE(this.out, header + PG_ARRAY_HEADER, this.arrayCount)
+          out[at + 8] = 0
+          out[at + 9] = 0
+          out[at + 10] = 0
+          out[at + 11] = nulls
+          // Never false after the test above; it states the length's window for the prover.
+          const lengthAt: i32 = at + 16
+          if (lengthAt <= toI32(out.length) - 4) {
+            out[lengthAt] = toU8(count >> 24)
+            out[lengthAt + 1] = toU8(count >> 16)
+            out[lengthAt + 2] = toU8(count >> 8)
+            out[lengthAt + 3] = toU8(count)
+          }
         }
       }
       this.arrayOid = 0
@@ -3408,7 +3475,14 @@ export class PgConnection {
     if (this.binaryParamCount > 0) {
       this.putFormatCodes()
     }
-    setU16BE(this.out, this.paramCountAt, toU16(this.paramCount))
+    // The count word lies inside `out`; the test is never taken and states that for the prover.
+    const out: u8[] = this.out
+    const countAt: i32 = this.paramCountAt
+    const count: i32 = this.paramCount
+    if (countAt >= 0 && countAt <= toI32(out.length) - 2) {
+      out[countAt] = toU8(count >> 8)
+      out[countAt + 1] = toU8(count)
+    }
     if (binary) {
       // One format code, which the server applies to every column.
       this.putI16(toI32(1))
@@ -3472,21 +3546,24 @@ export class PgConnection {
     const codes: i32 = count * 2
     this.reserve(toI64(end) + toI64(codes))
     const b: u8[] = this.out
-    if (end > toI32(b.length) - codes) {
+    if (end > toI32(b.length) - codes || from > toI32(b.length)) {
       return
     }
     // `reserve` made the room, so both ends fit an `i32`.
     const moved: i32 = toI32(toI64(from) + toI64(codes))
     copyBytes(b, moved, b, from, end - from)
     this.outEnd = toI32(toI64(end) + toI64(codes))
-    setU16BE(b, from - 2, toU16(count))
+    // The count, then the codes, each written a byte at a time, big-endian.
+    b[from - 2] = toU8(count >> 8)
+    b[from - 1] = toU8(count)
     // Every code lies in `[from, from + codes)`, inside `b`.
     for (let i: i32 = 0; i < count; i++) {
       const at: i32 = toI32(toI64(from) + toI64(i) * toI64(2))
-      if (at > toI32(b.length) - 2) {
+      if (at < 0 || at > toI32(b.length) - 2) {
         break
       }
-      setU16BE(b, at, toU16(0))
+      b[at] = 0
+      b[at + 1] = 0
     }
     const params: i32[] = this.binaryParams
     for (let k: i32 = 0; k < this.binaryParamCount && k < toI32(params.length); k++) {
@@ -3494,7 +3571,12 @@ export class PgConnection {
       if (param < 0 || param >= count) {
         break
       }
-      setU16BE(b, toI32(toI64(from) + toI64(param) * toI64(2)), toU16(PG_FORMAT_BINARY))
+      const at: i32 = toI32(toI64(from) + toI64(param) * toI64(2))
+      if (at < 0 || at > toI32(b.length) - 2) {
+        break
+      }
+      b[at] = toU8(PG_FORMAT_BINARY >> 8)
+      b[at + 1] = toU8(PG_FORMAT_BINARY)
     }
     this.paramCountAt = moved
   }
@@ -5465,6 +5547,25 @@ export class PgBatcher {
 
 // --- Batch timing --------------------------------------------------------------
 
+/** 2^62 - 1, past any clock reading in microseconds; a clock sum stops there. */
+const PG_CLOCK_MOST: i64 = 1073741824 * 4294967296 - 1
+
+/**
+ * `a + b` for two non-negative clock values, stopping at `PG_CLOCK_MOST`;
+ * -1 for a negative one. Taken below the top, so it cannot overflow.
+ */
+const pgClockSum = (a: i64, b: i64): i64 => {
+  if (a < 0 || b < 0) {
+    return -1
+  }
+  const room: i64 = PG_CLOCK_MOST - a
+  if (room < 0) {
+    return PG_CLOCK_MOST
+  }
+  const left: i64 = room - b
+  return left > 0 ? PG_CLOCK_MOST - left : PG_CLOCK_MOST
+}
+
 /** `PgBatchClock.check`: not yet; wait for an item or for `deadline()`. */
 export const PG_CLOCK_WAIT: i32 = 0
 /** `PgBatchClock.check`: `minCount` items are waiting, and the average asks no more. */
@@ -5703,12 +5804,12 @@ export class PgBatchClock {
   deadline(): i64 {
     const oldest: i64 = this.oldest()
     const wait: i64 = this.maxWaitUs
-    // The times are clock times and `maxWaitUs` is at most a minute, so the sum is below 2^53
-    // and the unsigned add cannot wrap; the test states those bounds.
+    // The times are clock times and `maxWaitUs` is at most a minute, so the sum is below 2^53;
+    // the test states those bounds.
     if (oldest < 0 || oldest > 4503599627370496 || wait < 0 || wait > 60000000) {
       return -1
     }
-    return toI64(toU64(oldest) + toU64(wait))
+    return pgClockSum(oldest, wait)
   }
 
   /**
@@ -5746,9 +5847,9 @@ export class PgBatchClock {
     this.lastSize = size
     this.lastReason = due
     const started: i64 = starts[due]
-    // 2^52 batches cannot start in the clock's 2^52 microseconds, so the unsigned add cannot wrap.
+    // 2^52 batches cannot start in the clock's 2^52 microseconds.
     if (started >= 0 && started < 4503599627370496) {
-      starts[due] = toI64(toU64(started) + toU64(1))
+      starts[due] = pgClockSum(started, 1)
     }
     this.due = PG_CLOCK_WAIT
   }

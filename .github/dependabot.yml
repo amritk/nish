@@ -1,0 +1,35 @@
+# Proposes updates to the actions pinned by commit in .github/workflows and to
+# the npm devDependencies in package-lock.json. The cooldown waits until a
+# release is 5 days old, so a bad or compromised release has time to be caught
+# and pulled first. Each ecosystem's updates arrive as one grouped pull request,
+# titled as a conventional commit so pr-title.yml passes it.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    cooldown:
+      default-days: 5
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    cooldown:
+      default-days: 5
+    commit-message:
+      prefix: build
+      include: scope
+    # typedoc 0.28, which scripts/gen-reference.mjs runs, accepts TypeScript
+    # up to 6.0, so a 7.x bump fails `npm ci` in every job. Drop this once a
+    # typedoc release accepts 7.
+    ignore:
+      - dependency-name: typescript
+        versions: [">=7"]
+    groups:
+      npm:
+        patterns: ["*"]

@@ -669,8 +669,7 @@ number, `true`, `false` or `null`. It reads a window of a `u8[]` and
 allocates nothing per token, so one tokenizer, `reset` for each new body,
 serves a whole connection.
 
-<!-- allow-panics: calls `std/json-tokenizer.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_TOK_END, JSON_TOK_KEY, JSON_TOK_NUMBER, JsonLimits, JsonTokenizer } from "nish/json-tokenizer";
 
@@ -1144,8 +1143,7 @@ do not know — a configuration file, a body you pass on after changing one
 field, a tool that prints whatever it is given — parse the document into a
 `JsonDocument` and walk it.
 
-<!-- allow-panics: calls `std/json-value.ts` code that keeps panic sites no proof removes yet; calls `std/json-value.ts` code that reaches `std/json-tokenizer.ts` panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JSON_VALUE_NUMBER, JsonDocument } from "nish/json-value";
@@ -1173,7 +1171,8 @@ export const main = (): i32 => {
 A value is a `JsonValue`, a handle into the document that made it, and every
 reader is a method of the document: `kind`, then `boolean`, `string`,
 `numberText`, `length`, `at` (an element, or an object's member by position),
-`keyAt` and `get` (a member by key). A handle that names nothing answers an
+`keyAt`, `keys` (every key of an object, in order) and `get` (a member by
+key). A handle that names nothing answers an
 empty value rather than panicking: `get` of a missing key is `-1`, and `kind(-1)`
 is `JSON_VALUE_NONE`.
 
@@ -1278,7 +1277,7 @@ that does not calls `parse`; it should not mix the two to save the ranges'
 cost on the documents that turn out valid.
 
 Objects keep their members in order, and `get` looks a key up by scanning
-them, so walk a large object once with `keyAt` and `at` rather than calling
+them, so walk a large object once with `keys` (or `keyAt`) and `at` rather than calling
 `get` for each of many keys. Under Node, where a string is UTF-16,
 `parseText` and the builders take one byte per character, so non-ASCII text
 differs from the native build there; `parse` over bytes reads the same both
@@ -1342,8 +1341,7 @@ are equal, and its rule is not JavaScript's: numbers are equal by value, so
 `1` and `1.0` are, objects are equal whatever the order of their members, and
 `true` is not `1`.
 
-<!-- allow-panics: calls `std/json-equal.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { jsonEqual, jsonEqualCanonical, jsonEqualFirstDuplicate } from "nish/json-equal";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1479,8 +1477,7 @@ is about. A parse never fails and never panics on its input; a stream that is
 not valid YAML still answers its nodes, as the parser's best reading of it,
 beside the errors that say why.
 
-<!-- allow-panics: calls `std/yaml.ts` and `std/yaml-lines.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { YAML_INT, YAML_MAP, keyText, parseYaml, pathNode, yamlErrorName } from "nish/yaml";
 import { YamlLineIndex } from "nish/yaml-lines";
@@ -1560,8 +1557,7 @@ line that set it. A recursive alias ends the search. A `<<` whose value names
 no map is an error, `BAD_MERGE`. The nodes themselves are not changed: a map
 still holds the pairs it was written with.
 
-<!-- allow-panics: calls `std/yaml.ts` and `std/yaml-lines.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { parseYaml, pathNode, pathPair } from "nish/yaml";
 import { YamlLineIndex } from "nish/yaml-lines";
@@ -1599,7 +1595,8 @@ repeats a key is an error, `DUPLICATE_KEY`.
 **Options.** `parseYamlWith(text, options)` takes a `YamlOptions`:
 `maxDepth` (how deeply collections nest before `DEPTH_LIMIT`, 1000 by
 default; a value outside 1 to 1000 is a mistake in the program, so
-`parseYamlWith` panics on it), `uniqueKeys`, `merge` (whether a plain `<<`
+`parseYamlWith` panics on it; `parseYaml` has no such site, so it builds
+under `--deny-panics`), `uniqueKeys`, `merge` (whether a plain `<<`
 key is a merge key: exempt from the duplicate check, checked for `BAD_MERGE`
 and followed by paths; on by default), `keepComments` (keep every comment's
 range, for `commentCount` and `comment`) and `firstDocumentOnly` (warn
@@ -1624,8 +1621,7 @@ Because the ranges are byte offsets into the text either way, one
 `YamlLineIndex` turns them into `line:column` whether the document came from
 JSON or from YAML:
 
-<!-- allow-panics: calls `std/yaml-json.ts`, `std/yaml-lines.ts` and `std/yaml.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -1673,8 +1669,7 @@ and `false` plain, a number as its JSON text, and a trailing newline. It
 answers `""` for a handle that names no value and for a tree deeper than
 `JSON_WRITER_MAX_DEPTH`, the limit `stringify` keeps.
 
-<!-- allow-panics: calls `std/yaml-write.ts` and `std/yaml.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -2776,27 +2771,37 @@ significant.
 A signed width is the same bytes read as two's complement, and an `f64` is
 its IEEE 754 bits. There is no `f32`.
 
-<!-- allow-panics: calls `std/bytes.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { getU16LE, getU32BE, setU32LE } from "nish/bytes";
 
 export const main = (): i32 => {
   const b: u8[] = [0, 0, 1, 0, 0, 0, 0, 0];
   console.log(`${getU32BE(b, 0)}`); // 256
-  setU32LE(b, 4, toU32(513));
+  const word: u32 = toU32(513);
+  if (b.length < 8) {
+    return 1;
+  }
+  setU32LE(b, 4, word);
   console.log(`${b[4]} ${b[5]}`); // 1 2
+  if (b.length < 6) {
+    return 1;
+  }
   console.log(`${getU16LE(b, 4)}`); // 513
   return 0;
 };
 ```
 
-Every access is an ordinary index, checked inside the module, so a call
-builds only with `--allow-panics` for now. There, an offset whose bytes do
-not all lie in the array panics with `index out of range`, naming the first
-byte that is not there. A guard in your own loop, such as
-`off + 3 < b.length`, does not yet remove these checks, so a hot loop that
-needs them gone indexes the bytes itself.
+Each function first checks that all its bytes lie in the array, and an
+offset whose bytes do not panics there, naming the function and the width
+(`getU32LE: the 4 bytes at the offset do not all lie in the array`). The compiler carries that check to each call, so a call your own
+code has tested builds without `--allow-panics`: test the offset after the
+last call before it, as the `b.length` tests above do, or, for an offset in a
+variable, `if (off < 0 || off > toI32(b.length) - 4)` before a 4-byte read. A
+call whose offset nothing tests keeps its check, and its build needs
+`--allow-panics`. Compute the value to write into a local before the test,
+since any call between the test and the read makes the compiler forget the
+array's length.
 
 Natively every function answers for every value. Under Node the `u16` and
 `u32` functions are expected to answer the same, but the 64-bit ones, the
@@ -3437,8 +3442,7 @@ if ((wants & TLS_RECORD_TICKET) !== 0) {
 }
 ```
 
-<!-- allow-panics: calls `std/net/http1-codec.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1-codec";
 
@@ -3900,7 +3904,7 @@ until it is not `DNS_RESOLVE_PENDING`. Each query goes out on a fresh socket
 with a random ID, and one `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32)
 datagrams, so a flood on the port cannot keep your loop inside the client.
 
-<!-- allow-panics: calls `std/net/dns-config.ts`, `std/net/dns-resolver.ts` and `std/net/dns.ts` code that keeps panic sites no proof removes yet; calls `std/net/dns.ts` code that reaches `std/bytes.ts` panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/dns-config.ts`, `std/net/dns-resolver.ts` and `std/net/dns.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { DnsClient } from "nish/net/dns";

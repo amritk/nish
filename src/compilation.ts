@@ -52,7 +52,7 @@ import { recordOverloads } from "./overloads"
 import { REGION_STD_SPECIFIER } from "./region"
 import { explainLayout, LayoutModule, LayoutReport } from "./compact-rule"
 import { computeLayout } from "./structs"
-import { handleFindings } from "./handles"
+import { handleDisposes, handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
 import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
 import { analyzeFunctions, AnalysisUnit, FactsTable, FunctionFacts, PointerParamFacts } from "./attributes"
@@ -90,6 +90,7 @@ import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
 import { forgetProofs } from "./bounds"
 import { noteWindowContracts } from "./window-contract"
+import { noteCallerContracts } from "./caller-contract"
 import { noteFaultContracts } from "./fault-contract"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
 import { CalleeDrops, arenaJson, unboundedPassFindings } from "./arena-report"
@@ -1593,13 +1594,14 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.foldConstants()
     }
-    // The window and fault contracts (#2296) before any body: bounds reads them at each call.
+    // The window, fault and caller contracts (#2296) before any body: bounds reads them at each call.
     const contracted: CheckedProgram[] = []
     for (const unit of this.modules) {
       contracted.push(unit.checker.program)
     }
     noteWindowContracts(contracted, this.table)
     noteFaultContracts(contracted)
+    noteCallerContracts(contracted, this.table)
     for (const unit of this.modules) {
       unit.checker.checkBodies()
     }
@@ -1681,6 +1683,14 @@ export class Compilation {
     }
     // WP53 §4: the handle rules read the checked tables, so they run once
     // every body, every instance's included, has checked clean.
+    // The first pass settles each class's closes, which the second reads for
+    // a class another module declares.
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const finding of handleDisposes(program, this.table)) {
+        this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
+      }
+    }
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const finding of handleFindings(program, this.table)) {

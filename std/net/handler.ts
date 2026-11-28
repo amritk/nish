@@ -89,7 +89,7 @@
  * Written from RFC 9110, RFC 9112 and RFC 9457, not ported from another
  * implementation.
  */
-import { copyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
 import { httpFieldBytes } from "nish/net/http-fields"
 import { HTTP1_CHUNKED, HTTP1_NO_BODY, http1HexValue } from "nish/net/http1-codec"
@@ -133,8 +133,10 @@ import {
   HTTP_CODING_IDENTITY,
   HTTP_CODING_NONE,
   HTTP_DECODE_TOO_LARGE,
+  HTTP_CODING_BAD_WINDOW,
   HttpBodyDecoder,
-  httpContentEncoding,
+  httpBodyDecoderFault,
+  httpTryContentEncoding,
 } from "nish/net/http-compress"
 
 /** `HandlerLimits.maxWaitMs`' most: a second, the interval `bodyTimeout` is checked at. */
@@ -153,6 +155,12 @@ export const HANDLER_NEXT: i32 = -22
 export const HANDLER_ANSWERED: i32 = -23
 /** The most fields `field` adds to one answer. */
 export const HANDLER_MAX_ADDED: i32 = 16
+/**
+ * `wait`: the handler has no readiness loop, because its constructor was
+ * given a failed `pollCreate`, so no socket can ever be ready. Stop calling
+ * `wait`; a loop that keeps calling it only spins.
+ */
+export const HANDLER_NO_LOOP: i32 = -25
 
 /** The most descriptors `watch` takes beside the handler's own. */
 export const HANDLER_MAX_WATCHED: i32 = 16
@@ -865,8 +873,8 @@ export class HttpHandler {
   private allowBytes: u8[][]
   private jsonType: u8[]
   private problemType: u8[]
-  /** Decodes `gzip` and `deflate` bodies under `HandlerLimits.maxDecoded`. */
-  private decoder: HttpBodyDecoder
+  /** Decodes `gzip` and `deflate` bodies under `HandlerLimits.maxDecoded`; null while that is 0. */
+  private decoder: HttpBodyDecoder | null
   private noFields: u8[][]
   /** Per length: the array `start` gathers an answer's fields and the fields `field` added into, kept for the answers after. */
   private namesBy: u8[][][]
@@ -924,14 +932,16 @@ export class HttpHandler {
    * @param router the routes, which the handler keeps and consults at each request head
    * @param loop a readiness loop from `pollCreate` for the handler to own, or
    *   -1 (the default) to make one here; any other negative is a failed
-   *   `pollCreate` passed through. Panics on limits below their least and on
-   *   a failed loop, each a contract of this constructor: use
-   *   `openHttpHandler` for a `Result`.
+   *   `pollCreate` passed through. A failed loop, passed in or made here,
+   *   leaves the handler dead: it watches nothing and each `wait` answers
+   *   `HANDLER_NO_LOOP` at once. Panics on limits below their least, a
+   *   contract of this constructor: use `openHttpHandler` for a `Result`,
+   *   which also answers a failed `pollCreate` as an `Err`.
    */
   constructor(limits: HandlerLimits, listener: i32, router: Router, loop: i32 = -1) {
     handlerCheckLimits(limits)
     this.maxDecoded = limits.maxDecoded
-    this.decoder = new HttpBodyDecoder(limits.maxDecoded > 0 ? limits.maxDecoded : 1)
+    this.decoder = handlerDecoder(limits.maxDecoded)
     this.bodyTimeout = toI64(limits.bodyTimeout) * HANDLER_NANOS_PER_MS
     this.minEvents = limits.minEvents
     this.maxWaitMs = limits.maxWaitMs
@@ -966,10 +976,10 @@ export class HttpHandler {
     this.namesBy = []
     this.valuesBy = []
     this.loop = loop === -1 ? pollCreate() : loop
-    if (this.loop < 0) {
-      panic(`HttpHandler: pollCreate failed: ${this.loop}`)
+    // A failed loop leaves the handler dead, and `wait` says so.
+    if (this.loop >= 0) {
+      pollAdd(this.loop, listener, H1_WANT_READ, HANDLER_LISTENER)
     }
-    pollAdd(this.loop, listener, H1_WANT_READ, HANDLER_LISTENER)
   }
 
   // ---- The loop -------------------------------------------------------------------
@@ -993,11 +1003,14 @@ export class HttpHandler {
    * `watch`, with an id outside the range answered as an `Err` instead of a panic.
    * @param fd the program's descriptor to watch for reading; it stays the program's to read and close
    * @param id the name `fired` asks about it by, from 0 to `HANDLER_MAX_WATCHED - 1`
-   * @returns `Ok(true)` once `fd` is watched, or `Err` naming the id outside the range
+   * @returns `Ok(true)` once `fd` is watched, or `Err` naming the id outside the range or the handler's lack of a readiness loop
    */
   tryWatch(fd: i32, id: i32): Result<boolean, string> {
     if (id < 0 || id >= HANDLER_MAX_WATCHED) {
       return Err(`HttpHandler.watch: id ${id} is outside 0 to ${HANDLER_MAX_WATCHED - 1}`)
+    }
+    if (this.loop < 0) {
+      return Err("HttpHandler.watch: the handler has no readiness loop")
     }
     pollAdd(this.loop, fd, H1_WANT_READ, -2 - id)
     return Ok(true)
@@ -1020,9 +1033,14 @@ export class HttpHandler {
    * connections past their timeouts, and answers how many whole requests
    * are waiting for `take`.
    * @param timeoutMs the longest to block, in milliseconds, or -1 to block until something is ready
-   * @returns how many whole requests are queued for `take` after this turn
+   * @returns how many whole requests are queued for `take` after this turn,
+   *   or `HANDLER_NO_LOOP` at once, without blocking, from a handler whose
+   *   constructor was given a failed `pollCreate`
    */
   wait(timeoutMs: i32): i32 {
+    if (this.loop < 0) {
+      return HANDLER_NO_LOOP
+    }
     this.flush()
     const fired: boolean[] = this.watchedFired
     for (let id: i32 = 0; id < HANDLER_MAX_WATCHED && id < toI32(fired.length); id++) {
@@ -1309,9 +1327,9 @@ export class HttpHandler {
   /** Sends what `slot` holds and re-arms it, or closes it once it is over; enqueues a parked request once there is room. */
   private settle(slot: i32, conn: Http1Connection): void {
     if (conn.wantsWrite()) {
-      // Worked in `u64`, whose wrapping sum has the bits of the signed one: a
-      // count of sends is centuries short of 2^63.
-      this.sent = toI64(toU64(this.sent) + toU64(1))
+      // Saturates at the last `i64` as an instant does, which a count of
+      // sends is centuries short of; it starts at 0, so it is never negative.
+      this.sent = handlerLater(this.sent, toI64(1))
     }
     // `flush` arms a held write for writing even once its send emptied the output.
     const wants: i32 = this.server.flush(slot)
@@ -1357,7 +1375,14 @@ export class HttpHandler {
     if (toI32(r.head.length) < length) {
       r.head = handlerBytes(handlerGrown(toI32(r.head.length), length))
     }
-    copyBytes(r.head, HANDLER_ZERO, p.head, HANDLER_ZERO, length)
+    // `r.head` was grown to `length` above and the parser's head holds it,
+    // so the copy fits; were it refused, the request goes back unread and
+    // the connection closes, since its head cannot be answered.
+    if (!tryCopyBytes(r.head, HANDLER_ZERO, p.head, HANDLER_ZERO, length)) {
+      this.free.push(r.index)
+      this.closeSlot(slot)
+      return
+    }
     // Only the first `4 * headerCount` spans are this head's, and only those
     // are ever read, so only those are copied.
     const spanCount: i32 = handlerSpanSlot(p.headerCount, 0)
@@ -1449,10 +1474,18 @@ export class HttpHandler {
     }
     if (toI32(r.body.length) < need) {
       const grown: u8[] = handlerBytes(handlerGrown(toI32(r.body.length), need))
-      copyBytes(grown, HANDLER_ZERO, r.body, HANDLER_ZERO, r.bodyLength)
+      // `grown` holds `need`, past `bodyLength`, so the copy fits; were it
+      // refused, the body is lost, so the connection closes.
+      if (!tryCopyBytes(grown, HANDLER_ZERO, r.body, HANDLER_ZERO, r.bodyLength)) {
+        this.closeSlot(slot)
+        return
+      }
       r.body = grown
     }
-    copyBytes(r.body, r.bodyLength, conn.data, conn.dataStart, n)
+    if (!tryCopyBytes(r.body, r.bodyLength, conn.data, conn.dataStart, n)) {
+      this.closeSlot(slot)
+      return
+    }
     r.bodyLength = need
   }
 
@@ -1490,7 +1523,12 @@ export class HttpHandler {
       const valueStart: i32 = spans[at + 2]
       const valueEnd: i32 = spans[at + 3]
       if (handlerSpanIs(r.head, spans[at], spans[at + 1], "content-encoding")) {
-        const named: i32 = httpContentEncoding(r.head, valueStart, valueEnd)
+        const named: i32 = httpTryContentEncoding(r.head, valueStart, valueEnd)
+        if (named === HTTP_CODING_BAD_WINDOW) {
+          // The spans are the parser's own, so this is a head the handler cannot read.
+          r.refusal = toI32(400)
+          return
+        }
         // A second field stacks its codings on the first's (RFC 9110 §5.3).
         coding = coding === HTTP_CODING_IDENTITY ? named : HTTP_CODING_NONE
       }
@@ -1498,14 +1536,19 @@ export class HttpHandler {
     if (coding !== HTTP_CODING_GZIP && coding !== HTTP_CODING_DEFLATE) {
       return
     }
-    const got: i32 = this.decoder.decode(coding, r.body, HANDLER_ZERO, r.bodyLength)
+    const decoder = this.decoder
+    if (decoder === null) {
+      return
+    }
+    // The window is the body's own, so `tryDecode`'s bad-call answer, a 400 below, cannot come.
+    const got: i32 = decoder.tryDecode(coding, r.body, HANDLER_ZERO, r.bodyLength)
     if (got < 0) {
       r.refusal = got === HTTP_DECODE_TOO_LARGE ? toI32(413) : toI32(400)
       return
     }
     // The buffers change hands, so neither is copied or grown twice.
-    const decoded: u8[] = this.decoder.output
-    this.decoder.output = r.body
+    const decoded: u8[] = decoder.output
+    decoder.output = r.body
     r.body = decoded
     r.bodyLength = got
     r.decodedFrom = coding
@@ -1805,8 +1848,11 @@ export class HttpHandler {
     if (left === 0) {
       return HANDLER_NEXT
     }
-    // The lowest bit set, `left & -left`, negated in wrapping unsigned arithmetic.
-    const low: i32 = toI32(toU32(left) & (toU32(0) - toU32(left)))
+    // The lowest bit set, `left & -left`, kept in `u32`, where the negation
+    // wraps by its type and has the bits of the two's complement one.
+    const bits: u32 = toU32(left)
+    const lowest: u32 = bits & (toU32(0) - bits)
+    const low: i32 = toI32(lowest)
     r.stepsLeft = left ^ low
     r.stepsRan = r.stepsRan | low
     return toI32(31) - toI32(Math.clz32(toU32(low)))
@@ -2086,14 +2132,21 @@ export class HttpHandler {
         )
       }
     }
-    if (taken < len) {
-      this.keep(r, buf, handlerAdd(off, taken), handlerSub(len, taken))
+    if (taken < len && !this.keep(r, buf, handlerAdd(off, taken), handlerSub(len, taken))) {
+      // `put` checked the window, so `keep` copies inside it; were it
+      // refused, the body cannot follow the head as declared.
+      this.abandon(r)
+      return this.refused(`HttpHandler.write: the ${len} byte(s) could not be kept to send`)
     }
     return HANDLER_SENT
   }
 
-  /** Appends bytes to `r`'s pending buffer, growing it once to the largest response it has held. */
-  private keep(r: HttpRequest, buf: u8[], off: i32, len: i32): void {
+  /**
+   * Appends bytes to `r`'s pending buffer, growing it once to the largest
+   * response it has held. Answers `false`, with the pending bytes as they
+   * were, where a copy is refused.
+   */
+  private keep(r: HttpRequest, buf: u8[], off: i32, len: i32): boolean {
     const live: i32 = handlerSub(r.pendingEnd, r.pendingStart)
     const want: i32 = handlerAdd(live, len)
     if (handlerSub(toI32(r.pending.length), r.pendingEnd) < len) {
@@ -2102,14 +2155,19 @@ export class HttpHandler {
           toI32(r.pending.length) < want
             ? handlerBytes(handlerGrown(toI32(r.pending.length), want))
             : r.pending
-        copyBytes(target, HANDLER_ZERO, r.pending, r.pendingStart, live)
+        if (!tryCopyBytes(target, HANDLER_ZERO, r.pending, r.pendingStart, live)) {
+          return false
+        }
         r.pending = target
         r.pendingStart = 0
         r.pendingEnd = live
       }
     }
-    copyBytes(r.pending, r.pendingEnd, buf, off, len)
+    if (!tryCopyBytes(r.pending, r.pendingEnd, buf, off, len)) {
+      return false
+    }
     r.pendingEnd = handlerAdd(r.pendingEnd, len)
+    return true
   }
 
   /**
@@ -2651,17 +2709,28 @@ const handlerProbeLength = (maxParams: i32): i32 => toI32(toI64(maxParams) * toI
 
 /**
  * The nanoseconds from the `monotonicNanos` instant `from` to `to`, or 0 when
- * `to` is not after it. Worked in `u64`, which has the bits of the signed
- * difference once `to` is the later.
+ * `to` is not after it. An instant is never negative, so the difference of
+ * the later and a `from` of at least 0 fits an `i64`; a negative `from`
+ * answers 0 too.
  */
-const handlerSince = (from: i64, to: i64): i64 => (to > from ? toI64(toU64(to) - toU64(from)) : toI64(0))
+const handlerSince = (from: i64, to: i64): i64 => (to > from && from >= 0 ? to - from : toI64(0))
 
 /**
- * The `monotonicNanos` instant `span` nanoseconds after `now`. Worked in
- * `u64`, whose wrapping sum has the bits of the signed one: an instant is
- * centuries short of 2^63 and the span a constant of a second or less.
+ * The `monotonicNanos` instant `span` nanoseconds after `now`, or the last
+ * `i64` when the sum would pass it, which no clock reading does: an instant
+ * is centuries short of 2^63 and the span a constant of a second or less.
+ * Both are at least 0, so they are summed in `u64`, where two values below
+ * 2^63 cannot wrap, and the sum is turned back only once it is known to fit.
+ * A negative `now` or `span`, which no caller passes, answers `now`.
  */
-const handlerLater = (now: i64, span: i64): i64 => toI64(toU64(now) + toU64(span))
+const handlerLater = (now: i64, span: i64): i64 => {
+  if (now < 0 || span < 0) {
+    return now
+  }
+  const sum: u64 = toU64(now) + toU64(span)
+  const top: u64 = (toU64(1) << toU64(63)) - toU64(1)
+  return sum > top ? toI64(top) : toI64(sum)
+}
 
 /** Place `start + k` of a ring of `size` places, in `[0, size)`; -1 for an empty ring or a negative place. */
 const handlerRing = (start: i32, k: i32, size: i32): i32 => {
@@ -2676,8 +2745,9 @@ const handlerRing = (start: i32, k: i32, size: i32): i32 => {
 
 /**
  * A handler as `new HttpHandler(limits, listener, router)` makes one, with
- * what that constructor panics on answered as an `Err`: limits below their
- * least, or a readiness loop `pollCreate` could not make.
+ * limits below their least, which that constructor panics on, answered as an
+ * `Err`, and a readiness loop `pollCreate` could not make, which would leave
+ * that constructor's handler dead, answered as an `Err` too.
  * @param limits the caps and timeouts, as the constructor reads them
  * @param listener the listening socket's descriptor, still the program's to close
  * @param router the routes, which the handler keeps and consults at each request head
@@ -2697,6 +2767,18 @@ export const openHttpHandler = (
     return Err(`HttpHandler: pollCreate failed: ${loop}`)
   }
   return Ok(new HttpHandler(limits, listener, router, loop))
+}
+
+/**
+ * The body decoder for a `maxDecoded` of `limit`, or null for 0, which
+ * decodes nothing (`handlerCheckLimits` has refused a negative one).
+ */
+const handlerDecoder = (limit: i32): HttpBodyDecoder | null => {
+  const fault: string = httpBodyDecoderFault(limit)
+  if (fault.length > 0) {
+    return null
+  }
+  return new HttpBodyDecoder(limit)
 }
 
 /** Panics unless `limits` can make a handler: a limit below its least is the program's mistake. */

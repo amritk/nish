@@ -438,11 +438,11 @@ Wall time on a virtual machine moves by more than a codegen regression of a few
 percent, so a regression can hide in the noise of the table above. What the
 compiler emits is also caught by a number that does not move:
 the instructions each program executes, counted by valgrind's cachegrind.
-`bench/instructions.json` holds one count for each of the fifty-eight programs: the
+`bench/instructions.json` holds one count for each of the sixty-one programs: the
 first eight above (`treesum` is not counted), the four map layout prototypes, the three `Map` measurements,
 the seven AWFY ports, twelve crypto kernels (the nine of
 `bench/crypto/`'s families with HMAC-SHA-256 and HKDF-SHA-256, and
-`bench/jwt-verify`'s HS256 `verify`) and twenty-four programs that drive the
+`bench/jwt-verify`'s HS256 `verify`) and twenty-seven programs that drive the
 std/ modules the panic ratchet counts (`std-threads`, `std-json-typed`,
 `std-cli-args`, `std-http1`, `std-router`, `std-ring`, `std-net-quic-packet`, `std-net-tls-record`,
 `std-net-dns-message`, `std-net-http2-frame`, `pg-codec` and `pg-carrier`
@@ -452,14 +452,17 @@ read the same 64 KiB of generated text, and `std-term-frame`, `std-raster` and `
 the terminal's `Screen`, `nish/raster`, `nish/synth` and the `nish/host` modules
 a browser game draws and plays through, `std-temporal-arith`, `std-temporal-format` and
 `std-temporal-parse` for `nish/temporal`'s arithmetic, writers and readers, `std-base64-encode` for
-`nish/base64` and `std-math-kernel` for `nish/math`'s kernels and exact decimal readers; `--only std` names them, and the pool is pinned to one thread
+`nish/base64`, `std-math-kernel` for `nish/math`'s kernels and exact decimal readers, `std-yaml-parse` for
+`nish/yaml`'s parser, `std-yaml-json` for `nish/yaml-json`, `nish/yaml-write` and `nish/yaml-lines`, and
+`std-json-equal` for `nish/json-equal` over `nish/json-value`; `--only std` names them, and the pool is pinned to one thread
 with `NISH_NUM_THREADS=1` so a runner's core count does not move the count). `npm test`
 fails when any of them runs more than 0.1% above its count.
 
 ```bash
-node bench/run.mjs --instructions            # count all fifty-eight and print them against the baseline
+node bench/run.mjs --instructions            # count all sixty-one and print them against the baseline
 node bench/run.mjs --instructions --check    # ...and exit 1 when one is more than the tolerance above it
 node bench/run.mjs --instructions --update   # rewrite the counts in bench/instructions.json
+node bench/run.mjs --instructions --update --raise fib --why "..."   # ...letting fib rise, recorded in `raises`
 node bench/run.mjs --instructions --runs 3   # count each three times; the spread column should read 0
 node bench/run.mjs --instructions --only Queens,fib   # a subset (`awfy` names the seven ports, `maps` the four prototypes, `crypto` the twelve kernels)
 ```
@@ -548,14 +551,64 @@ If one does not, it exits 2 and names the count it misread.
 **Raising a baseline.** `--update` writes the counts it measured, the valgrind
 version and the commit, and leaves the sizes and the tolerance alone. The
 file-level `commit` and `valgrind` describe every count, so only an update of
-all fifty-eight restamps them. `--update --only Queens` stamps a `commit` and
+all sixty-one restamps them. `--update --only Queens` stamps a `commit` and
 `valgrind` on the Queens entry alone, and the next full update clears them. Those two
-are edited by hand. A pull request that runs `--update` shows the table it
-printed, the old count against the new one for every benchmark it moves, and
-says in its body **why** each count went up: what the compiler now does that it
-did not, and why that is worth the instructions. A count that goes up with no
-reason given is a regression, whatever the timing table says. Resizing a program
-changes its count as well, so a resize is its own update and says so.
+are edited by hand. A count falls, or appears for a new row with no stored
+count, without anything more. A count can rise only when it is named:
+
+```bash
+node bench/run.mjs --instructions --update --only fib --raise fib --why "inlines the bounds check it used to call" --pr 2450
+```
+
+`--update` refuses, writes nothing and exits 1 when a count rises above its
+baseline by more than the tolerance and `--raise` does not name its row, or
+when `--raise` names a row the update does not raise. `--raise` takes a comma
+list and needs `--why`, and `--pr` is optional. Each raise it writes appends an
+entry to the file's `raises`, one per line, like this made-up one:
+
+```json
+{ "row": "fib", "from": 410318065, "to": 412000000, "why": "inlines the bounds check it used to call", "pr": 2450 }
+```
+
+An entry with `"pr": null` is filled in once the pull request has a number.
+`bench/run.mjs` refuses a file whose `raises` is missing or holds an entry that
+is not that shape: `to` above `from`, a reason that is not blank, and `pr` a
+number or null. It also refuses a stored count that is not a positive integer. The pull request still shows the table `--update` printed and
+says in its body what the compiler now does that it did not, and why that is
+worth the instructions. Resizing a program changes its count as well, so a
+resize that raises one is a named raise of its own.
+
+The comparison looks for one entry from the base's count to the head's. Two
+updates in one pull request that raise the same row write two entries, A to B
+and then B to C, and neither is A to C. Restore the file from the base
+(`git checkout origin/main -- bench/instructions.json`) and run the update
+once more, so it writes a single entry from the base's count.
+
+`scripts/instruction-raises.mjs` holds a change to the file to that rule:
+
+```bash
+node scripts/instruction-raises.mjs <base.json> <head.json>
+```
+
+It prints each row's base count, head count and change as a Markdown table, to
+stdout and to `$GITHUB_STEP_SUMMARY` when that is set. It exits 1 when a row
+rose by more than the tolerance and the head's `raises` has no entry with that
+row and those exact `from` and `to` counts beyond the ones the base's `raises`
+already holds. An entry for an earlier raise of the same row does not cover a
+new one, even one between the same two counts after the row fell back: the
+update that raises it again appends a second entry. It also
+exits 1 when the head keeps a row but drops its count, which would let the
+count come back later as a new row. The tolerance is the smaller of the two
+files', so a change cannot widen its own band, and a head that widens it gets a
+line saying so. A fall, a change within the tolerance, a new row and a removed
+row are listed and pass. A file it cannot read, or one whose `tolerance`,
+`programs` or `raises` is malformed, exits 2. That includes a count that is not
+a positive integer. `tests/run.js`'s
+`instruction-raises` checks run it on the fixture pairs in
+`tests/fixtures/instruction-raises/`. They run `--update` on a temporary copy
+of this file through two test hooks: `--baseline <file>` reads and writes the
+copy, and `--counts <file>` supplies the measured counts, so neither valgrind
+nor a build is needed.
 
 **Where it runs.** `tests/run.js` runs `--instructions --check` with the compiler
 under test. The counts are only meaningful on x86-64 Linux, and valgrind does not

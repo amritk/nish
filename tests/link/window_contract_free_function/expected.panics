@@ -1,0 +1,7 @@
+{"functions":[
+{"name":"checkWindow","symbol":"checkWindow","module":"tests/link/window_contract_free_function/main.ts","line":12,"panics":[{"kind":"overflow","line":14,"column":49,"proven":true},{"kind":"panic","line":15,"column":5,"proven":true},{"kind":"oom","line":15,"column":11,"allowed":true}]},
+{"name":"total","symbol":"total","module":"tests/link/window_contract_free_function/main.ts","line":19,"panics":[{"kind":"window","line":20,"column":3,"proven":true}]},
+{"name":"part","symbol":"part","module":"tests/link/window_contract_free_function/main.ts","line":24,"panics":[{"kind":"window","line":26,"column":12,"proven":true},{"kind":"overflow","line":26,"column":28,"proven":true}]},
+{"name":"main","symbol":"nish_main","module":"tests/link/window_contract_free_function/main.ts","line":31,"panics":[{"kind":"oom","line":33,"column":15,"allowed":true},{"kind":"window","line":33,"column":18,"proven":true},{"kind":"oom","line":34,"column":15,"allowed":true}]},
+{"name":"done","symbol":"done","module":"tests/link/window_contract_free_function/done.ts","line":1,"panics":[]}
+]}

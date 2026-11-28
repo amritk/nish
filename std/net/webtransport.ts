@@ -141,7 +141,6 @@ import {
   H3_REQUEST_REJECTED,
   H3_WT_SESSION_GONE,
   h3Count,
-  h3CheckWindow,
   h3Greased,
   h3PutFrameHeader,
   h3PutVarint,
@@ -1400,16 +1399,20 @@ export class WebTransport {
    * @param id The session's ID.
    * @param code The application's code; only its low 32 bits are sent.
    * @param buf The buffer holding the reason; only read, and copied into the capsule. A window outside
-   *   it panics, whatever the session's state.
+   *   it answers H3_INVALID, whatever the session's state.
    * @param off Where the reason starts in `buf`.
    * @param len How many bytes the reason has, at most 1024.
-   * @returns 0 once the capsule and the FIN are written; H3_INVALID for a reason past 1024 bytes;
+   * @returns 0 once the capsule and the FIN are written; H3_INVALID for a reason past 1024 bytes or a
+   *   window outside `buf`;
    *   H3_AGAIN while the CONNECT stream has no room for the capsule; H3_TOO_LARGE for a capsule past
    *   the stream's buffer; or H3_CLOSED for a session not accepted or already gone, or a CONNECT
    *   stream that can no longer be written.
    */
   close(id: i64, code: i64, buf: u8[], off: i32, len: i32): i32 {
-    h3CheckWindow("WebTransport.close", buf, off, len)
+    const size: i32 = toI32(buf.length)
+    if (off < 0 || len < 0 || off > size || len > size - off) {
+      return H3_INVALID
+    }
     const w: WebTransportSession | null = this.openSession(id)
     if (w === null) {
       return H3_CLOSED
@@ -1603,7 +1606,12 @@ export class WebTransport {
         head[have] = bytes[at]
         this.capAt = wtAdd(at, 1)
         w.capHeadLen = have + 1
-        if (h3ReadFrameHeader(this.header, head, WT_ZERO, have + 1) === 0) {
+        const filled: i32 = have + 1
+        if (filled > toI32(head.length)) {
+          return this.malformed(w, H3_DATAGRAM_ERROR) // never: `have` was below `head.length`
+        }
+        const start: i32 = 0
+        if (h3ReadFrameHeader(this.header, head, start, filled) === 0) {
           continue
         }
         w.capHeadLen = 0
@@ -1850,17 +1858,22 @@ export class WebTransport {
   /**
    * Writes up to `len` bytes of `buf` from `off` to session stream `id`, with
    * its FIN when `fin` and all were taken. Answers how many it took, or
-   * H3_AGAIN, or H3_CLOSED (see `Http3Connection.writeStream`).
+   * H3_AGAIN, or H3_CLOSED (see `Http3Connection.writeStream`). A window
+   * outside `buf` answers H3_INVALID, whatever stream `id` names.
    * @param id The stream's ID, one of a session this layer took or opened.
    * @param buf The buffer holding the bytes; only read, and what is taken is copied.
    * @param off Where the bytes start in `buf`.
    * @param len How many bytes to write.
    * @param fin Whether to end this side of the stream once every byte is taken.
    * @returns How many bytes it took, fewer than `len` only when the send buffer filled (0 for a bare
-   *   FIN); H3_AGAIN when it took none; or H3_CLOSED for a stream this layer does not hold or with no
-   *   side here to write.
+   *   FIN); H3_AGAIN when it took none; H3_CLOSED for a stream this layer does not hold or with no
+   *   side here to write; or H3_INVALID for a window outside `buf`.
    */
   write(id: i64, buf: u8[], off: i32, len: i32, fin: boolean): i32 {
+    const size: i32 = toI32(buf.length)
+    if (off < 0 || len < 0 || off > size || len > size - off) {
+      return H3_INVALID
+    }
     this.current()
     const t: WebTransportStream | null = this.streamOf(id)
     if (t === null) {
@@ -1943,15 +1956,18 @@ export class WebTransport {
    * for a session not accepted.
    * @param id The session's ID.
    * @param buf The buffer holding the payload; only read, and copied into the datagram. A window
-   *   outside it panics, whatever the session's state.
+   *   outside it answers H3_INVALID, whatever the session's state.
    * @param off Where the payload starts in `buf`.
    * @param len How many bytes the payload has.
    * @returns 0 once the datagram is queued; H3_AGAIN while QUIC's queue is full; H3_TOO_LARGE past
-   *   `maxDatagramPayload`, or when QUIC refuses it for any other reason; or H3_CLOSED for a session
-   *   not accepted, or one already gone.
+   *   `maxDatagramPayload`, or when QUIC refuses it for any other reason; H3_CLOSED for a session
+   *   not accepted, or one already gone; or H3_INVALID for a window outside `buf`.
    */
   sendDatagram(id: i64, buf: u8[], off: i32, len: i32): i32 {
-    h3CheckWindow("WebTransport.sendDatagram", buf, off, len)
+    const size: i32 = toI32(buf.length)
+    if (off < 0 || len < 0 || off > size || len > size - off) {
+      return H3_INVALID
+    }
     const w: WebTransportSession | null = this.openSession(id)
     if (w === null) {
       return H3_CLOSED

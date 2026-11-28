@@ -1,0 +1,12 @@
+{
+  "about": "The base side of scripts/instruction-raises.mjs's fixture pairs (tests/run.js, instruction-raises).",
+  "tolerance": 0.001,
+  "programs": {
+    "kept": { "instructions": 100000000 },
+    "rises": { "instructions": 200000000 },
+    "falls": { "instructions": 300000000 },
+    "within": { "instructions": 400000000 },
+    "removed": { "instructions": 500000000 }
+  },
+  "raises": []
+}

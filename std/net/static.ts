@@ -60,7 +60,7 @@
  */
 
 import { realpathSync, statMtimeSync } from "nish:fs"
-import { copyBytes } from "nish/bytes"
+import { tryCopyBytes } from "nish/bytes"
 import { HANDLER_SENT, HttpHandler, HttpRequest } from "nish/net/handler"
 import { HTTP_DATE_SIZE, httpDateWrite, httpFieldBytes } from "nish/net/http-fields"
 import { HttpServer, HttpServerRequest } from "nish/net/http-server"
@@ -162,13 +162,34 @@ const staticValue = (r: HttpRequest, i: i32, start: boolean): Result<i32, string
 const staticByte = (b: u8[], i: i32): i32 => (i >= 0 && i < toI32(b.length) ? toI32(b[i]) : -1)
 
 /**
- * `a + b` for file offsets and sizes, worked in `u64`, whose wrapping sum
- * has the bits of the signed one: they are below 2^31, so it never wraps.
+ * `a + b` for file offsets and sizes, or -1 when either is below 0 or the
+ * sum is past the last `i64`. Every offset and size it is given is from 0 to
+ * `STATIC_MAX_FILE`, 2^31 - 1, as `staticPlan` refuses a larger file, so the
+ * -1 is never answered. Two values from 0 to 2^63 - 1 sum in `u64` without
+ * wrapping, and the sum is turned back only once it is known to fit.
  */
-const staticAdd64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
+const staticAdd64 = (a: i64, b: i64): i64 => {
+  if (a < 0 || b < 0) {
+    return -1
+  }
+  const sum: u64 = toU64(a) + toU64(b)
+  const top: u64 = (toU64(1) << toU64(63)) - toU64(1)
+  if (sum > top) {
+    return -1
+  }
+  return toI64(sum)
+}
 
-/** `a - b` for the same offsets as `staticAdd64`, the same way. */
-const staticSub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
+/**
+ * `a - b` for the same offsets as `staticAdd64`, or -1 when either is below
+ * 0, which none is: the difference of two such values always fits.
+ */
+const staticSub64 = (a: i64, b: i64): i64 => {
+  if (a < 0 || b < 0) {
+    return -1
+  }
+  return a - b
+}
 
 /**
  * Writes `v` to `out[i]` and answers `i + 1`, the next write's index; -1,
@@ -439,18 +460,27 @@ const staticDate = (b: u8[], start: i32, end: i32): i64 => {
   } else {
     year = year - 1
   }
-  // The prover does not carry `year` through the branches, so `365 * year`
-  // is worked in `u64`, whose wrapping keeps the signed bits.
+  // The prover does not carry `year` through the branches, and it bounds
+  // only values of 0 or more, so `365 * year` is worked from `year + 1`,
+  // 0 to 10000 by the bounds above: this test never holds.
   const y: i32 = year
+  const shiftedYear: i32 = staticAdd(y, 1)
+  if (shiftedYear < 0 || shiftedYear > 10000) {
+    return -1
+  }
   const dayOfYear: i32 = (153 * mp + 2) / 5 + day - 1
   const leaps: i32 = staticAdd(staticSub(y / 4, y / 100), y / 400)
-  const days: i32 = staticSub(
-    staticAdd(staticAdd(toI32(toI64(toU64(y) * toU64(365))), leaps), dayOfYear),
-    719468
-  )
-  // Worked in `u64`, whose wrapping has the bits of the signed result: `days`
-  // is within 2^22 of 0, so the seconds never wrap.
-  return toI64(toU64(days) * toU64(86400) + toU64(3600 * hour + 60 * minute + second))
+  const yearDays: i32 = shiftedYear * 365 - 365
+  const days: i32 = staticSub(staticAdd(staticAdd(yearDays, leaps), dayOfYear), 719468)
+  // A year from -1 to 9999 puts `days` from about -720,000 to 2,940,000, so
+  // `days + 1000000` is from 0 to 5000000 and this test never holds; it is
+  // what proves the seconds, worked from that shifted count and taken back
+  // by 1000000 days' seconds at the end, cannot overflow.
+  const shiftedDays: i32 = staticAdd(days, 1000000)
+  if (shiftedDays < 0 || shiftedDays > 5000000) {
+    return -1
+  }
+  return toI64(shiftedDays) * 86400 + toI64(3600 * hour + 60 * minute + second) - 86400000000
 }
 
 /**
@@ -461,17 +491,17 @@ const staticNumber = (b: u8[], start: i32, end: i32): i64 => {
   if (start < 0 || end <= start || staticSub(end, start) > 18) {
     return -1
   }
-  let n: i64 = 0
+  // The value stays `u64` throughout: eighteen digits are below 10^18, so
+  // the sum never wraps and its value fits an `i64` exactly.
+  let n: u64 = 0
   for (let k: i32 = start; k < end && k < toI32(b.length); k++) {
     const d: i32 = toI32(b[k]) - 48
     if (d < 0 || d > 9) {
       return -1
     }
-    // Worked in `u64`, whose wrapping result has the bits of the signed
-    // one: eighteen digits are below 10^18, so it never wraps.
-    n = toI64(toU64(n) * toU64(10) + toU64(d))
+    n = n * 10 + toU64(d)
   }
-  return n
+  return toI64(n)
 }
 
 /**
@@ -1202,8 +1232,10 @@ export class StaticFiles {
     const last: i64 = this.staticSecond()
     // A date validates only a strong Last-Modified, a second or more before
     // now (RFC 9110 §13.1.5): two versions within one second share the date.
-    // `last` is a time in seconds, far below 2^53, so the product never wraps.
-    return at >= 0 && at === last && toI64((toU64(last) + toU64(1)) * toU64(1000)) <= toI64(Date.now())
+    // `(last + 1) * 1000 <= now` is `last + 1 <= floor(now / 1000)`, as
+    // `last + 1` is whole, and so `last < now / 1000`; for a negative `now`
+    // both are false, as `last` is at least 0. Dividing cannot overflow.
+    return at >= 0 && at === last && last < toI64(Date.now()) / 1000
   }
 
   /**
@@ -1348,7 +1380,10 @@ export class StaticFiles {
     ) {
       return
     }
-    copyBytes(keys[at], 0, path, 0, m)
+    // A key shorter than the path leaves the entry unset, so the file streams.
+    if (!tryCopyBytes(keys[at], 0, path, 0, m)) {
+      return
+    }
     keyLength[at] = m
     keyCoding[at] = this.coding
     sizes[at] = this.size
@@ -1414,8 +1449,9 @@ export class StaticFiles {
       // A size below 2^31 (`STATIC_MAX_FILE`) has 10 digits, which
       // `scratch` holds; -1 would send the 416 without the field, which
       // RFC 9110 §15.5.17 only recommends.
-      const at: i32 = staticDigits(scratch, 8, this.size, 10)
-      copyBytes(scratch, 0, httpFieldBytes("bytes */"), 0, 8)
+      const at: i32 = tryCopyBytes(scratch, 0, httpFieldBytes("bytes */"), 0, 8)
+        ? staticDigits(scratch, 8, this.size, 10)
+        : -1
       if (at >= 0) {
         names.push(httpFieldBytes("content-range"))
         values.push(staticCut(scratch, at))
@@ -1456,11 +1492,12 @@ export class StaticFiles {
       values.push(httpFieldBytes(this.coding === STATIC_BR ? "br" : "gzip"))
     }
     if (status === 206) {
-      copyBytes(scratch, 0, httpFieldBytes("bytes "), 0, 6)
       // Three numbers below 2^31 (`STATIC_MAX_FILE`) and the words around
       // them, 38 bytes at most, fit `scratch`'s 64, so the field is never
       // dropped: a 206 without it would break RFC 9110 §15.3.7.
-      let at: i32 = staticDigits(scratch, 6, this.from, 10)
+      let at: i32 = tryCopyBytes(scratch, 0, httpFieldBytes("bytes "), 0, 6)
+        ? staticDigits(scratch, 6, this.from, 10)
+        : -1
       at = staticPut(scratch, at, 45)
       at = staticDigits(scratch, at, staticSub64(this.to, 1), 10)
       at = staticPut(scratch, at, 47)

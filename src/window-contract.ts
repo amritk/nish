@@ -9,6 +9,7 @@
 // callers hold it. Both shapes are read exactly, and anything else is no
 // contract: the guard's check is then followed as any call's is.
 
+import { literalValue } from "./bounds"
 import { shadowsGuardName } from "./checker"
 import { FLAG_ASYNC, FLAG_CONST, FLAG_GENERATOR, Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD } from "./program"
@@ -250,31 +251,53 @@ const windowGuardNamed = (program: CheckedProgram, name: string): FunctionSig | 
 }
 
 /**
- * A method whose first statement is `guard(...)` on its own parameters, the
- * window ones each named once, and nothing but string literals besides: what
- * it was called with is what the guard checks. Records the guard, the call
- * argument each window parameter is (the call's arguments leave `this` out),
- * and the forwarding call.
+ * Whether `sig` can forward a window: a method (its parameters lead with
+ * `this`) or a free, non-generic function or arrow `const` that is not
+ * itself a guard, defined in `program`, taking its arguments as written,
+ * and neither a task nor a generator.
  */
-const noteWindowForward = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): void => {
-  if (
-    sig.role !== ROLE_METHOD ||
+const canForward = (program: CheckedProgram, sig: FunctionSig): boolean => {
+  const method =
+    sig.role === ROLE_METHOD &&
+    sig.paramNames.length > 0 &&
+    sig.paramNames[0] === "this" &&
+    sig.decl.kind === NodeKind.Method &&
+    sig.decl.children.length <= 4
+  const free =
+    sig.role === ROLE_FUNCTION &&
+    sig.decl.kind === NodeKind.FunctionDecl &&
+    sig.decl.children[4].children.length === 0 &&
+    !sig.lifted &&
+    sig.window.length === 0
+  return (
+    (method || free) &&
     // Unreachable today: instance signatures are made after
     // `noteWindowContracts` runs (`window_near_generic`).
-    sig.instance !== null ||
-    sig.paramNames.length === 0 ||
-    sig.paramNames[0] !== "this" ||
-    !sig.definedIn(program.source) ||
-    sig.decl.kind !== NodeKind.Method ||
-    sig.decl.children.length > 4 ||
+    sig.instance === null &&
+    sig.definedIn(program.source) &&
     // A task or generator body runs after the call returns, when the caller's
     // test no longer holds. The checker refuses async and generator methods
     // today; this keeps the contract from reaching one that it later admits.
-    (sig.decl.flags & (FLAG_ASYNC | FLAG_GENERATOR)) !== 0 ||
-    !takesArgumentsAsWritten(sig)
-  ) {
+    (sig.decl.flags & (FLAG_ASYNC | FLAG_GENERATOR)) === 0 &&
+    takesArgumentsAsWritten(sig)
+  )
+}
+
+/**
+ * A method, free function or arrow `const` whose first statement is
+ * `guard(...)` on its own parameters, the window ones each named once, and
+ * nothing but string literals besides, except that the count may be a
+ * literal: what it was called with is what the guard checks. Records the
+ * guard, the call argument each window parameter is (a method's arguments
+ * leave `this` out; a literal count is -1, its value `windowCount`), and the
+ * forwarding call.
+ */
+const noteWindowForward = (program: CheckedProgram, table: TypeTable, sig: FunctionSig): void => {
+  if (!canForward(program, sig)) {
     return
   }
+  // A method's call arguments leave out `this`, its parameter 0.
+  const skip = sig.role === ROLE_METHOD ? 1 : 0
   const body = sig.body()
   if (body === null || body.kind !== NodeKind.Block || body.children.length === 0) {
     return
@@ -289,7 +312,7 @@ const noteWindowForward = (program: CheckedProgram, table: TypeTable, sig: Funct
     return
   }
   const guard = windowGuardNamed(program, callee.text)
-  if (guard === null) {
+  if (guard === null || guard === sig) {
     return
   }
   const args = call.children[1].children
@@ -297,41 +320,53 @@ const noteWindowForward = (program: CheckedProgram, table: TypeTable, sig: Funct
     return
   }
   const window: i32[] = []
+  let count = -1
   for (const k of guard.window) {
     if (k < 0 || k >= args.length) {
       return
     }
     const arg = args[k]
+    const written = window.length === 2 ? literalValue(arg) : -1
+    if (written >= 0) {
+      count = written
+      window.push(-1)
+      continue
+    }
     if (arg.kind !== NodeKind.Ident) {
       return
     }
     // The guard's array type, or `i32` for the offset and the count, so the forward converts nothing.
     const at = paramAt(table, sig, arg.text, window.length === 0 ? -1 : T_I32)
-    if (at < 1) {
+    if (at < skip) {
       return
     }
     for (const seen of window) {
-      if (seen === at - 1) {
+      if (seen === at - skip) {
         return
       }
     }
-    window.push(at - 1)
+    window.push(at - skip)
   }
-  for (const arg of args) {
-    if (arg.kind !== NodeKind.String && arg.kind !== NodeKind.Ident) {
+  let k = 0
+  while (k < args.length) {
+    const arg = args[k]
+    const literal = count >= 0 && k === guard.window[2]
+    if (!literal && arg.kind !== NodeKind.String && arg.kind !== NodeKind.Ident) {
       return
     }
     if (arg.kind === NodeKind.Ident && !namesParam(sig, arg.text)) {
       return
     }
+    k = k + 1
   }
   sig.window = window
+  sig.windowCount = count
   sig.windowGuard = guard
   sig.windowForward = call
 }
 
 /**
- * Find every window guard and every method that forwards to one, in every
+ * Find every window guard and every method or function that forwards to one, in every
  * module, once each has its signatures and before any body is checked:
  * `src/bounds.ts` reads them as it walks the callers.
  */

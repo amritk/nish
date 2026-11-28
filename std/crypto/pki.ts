@@ -282,18 +282,20 @@ const pkiFoldEqualAt = (a: string, aAt: i32, b: string, bAt: i32, n: i32): boole
   if (aAt < 0 || bAt < 0 || n < 0 || n > toI32(a.length) - aAt || n > toI32(b.length) - bAt) {
     return false
   }
+  let x: i32 = aAt
+  let y: i32 = bAt
   for (let i: i32 = 0; i < n; i++) {
-    // Unsigned: aAt + i < a.length and bAt + i < b.length, so neither wraps.
-    const x: i32 = toI32(toU32(aAt) + toU32(i))
-    const y: i32 = toI32(toU32(bAt) + toU32(i))
     // Restates the range checked above for the index proof, which does not
-    // carry it through the sum.
+    // carry it through `aAt + i`; past it, each step to the next index is
+    // proven.
     if (x < 0 || y < 0 || x >= toI32(a.length) || y >= toI32(b.length)) {
       return false
     }
     if (pkiLower(toI32(a.charCodeAt(x))) !== pkiLower(toI32(b.charCodeAt(y)))) {
       return false
     }
+    x = x + 1
+    y = y + 1
   }
   return true
 }
@@ -341,17 +343,6 @@ const pkiValidDns = (s: string): boolean => {
   return label > 0
 }
 
-const pkiLabelCount = (s: string): i32 => {
-  let count: i32 = 1
-  for (let i: i32 = 0; i < toI32(s.length); i++) {
-    if (toI32(s.charCodeAt(i)) === 46) {
-      // Unsigned: count is at most i + 1, below s.length, so it cannot wrap.
-      count = toI32(toU32(count) + 1)
-    }
-  }
-  return count
-}
-
 // ---------------------------------------------------------------------------
 // Address literals (RFC 3986 §3.2.2, RFC 4291 §2.2)
 // ---------------------------------------------------------------------------
@@ -396,8 +387,9 @@ const pkiParseIpv4 = (s: string, start: i32, end: i32): u8[] | null => {
       if (d < 0 || digits >= 3 || value > 25 || (digits > 0 && value === 0)) {
         return null
       }
-      // Unsigned: value is at most 25 and d a digit, so the sum cannot wrap.
-      value = toI32(toU32(value) * 10 + toU32(d))
+      // The masks keep what the check above holds (`value` at most 25, `d` a
+      // digit) and let src/bounds.ts prove the sum.
+      value = (value & 31) * 10 + (d & 15)
       digits++
       if (value > 255) {
         return null
@@ -549,15 +541,12 @@ const pkiDnsMatch = (san: string, host: string): boolean => {
     const rest: string = name.substring(2, n)
     const dot: i32 = toI32(host.indexOf("."))
     const restLength: i32 = n - 2
-    return (
-      pkiValidDns(rest) &&
-      pkiLabelCount(rest) >= 2 &&
-      dot > 0 &&
-      // Unsigned: dot and restLength are below host.length, so the sum cannot
-      // wrap.
-      toI32(toU32(dot) + toU32(restLength) + 1) === toI32(host.length) &&
-      pkiFoldEqualAt(host, toI32(toU32(dot) + 1), rest, 0, restLength)
-    )
+    // `indexOf` answers below the length; the bound restated proves `dot + 1`.
+    // A valid `rest` with a dot has the two labels or more a wildcard needs.
+    if (dot <= 0 || dot >= toI32(host.length) || !pkiValidDns(rest) || toI32(rest.indexOf(".")) < 0) {
+      return false
+    }
+    return restLength === toI32(host.length) - 1 - dot && pkiFoldEqualAt(host, dot + 1, rest, 0, restLength)
   }
   return pkiValidDns(name) && n === toI32(host.length) && pkiFoldEqualAt(name, 0, host, 0, n)
 }
@@ -943,32 +932,30 @@ const pkiConstraintsCode = (s: PkiSearch, issuer: X509Certificate): i32 => {
   }
   // Each name below the issuer, the host's included, against each subtree.
   // Past PKI_MAX_NAME_CHECKS names, one subtree is already over the budget.
-  const subtrees: i64 = toI64(issuer.ncPermitted.length) + toI64(issuer.ncExcluded.length)
-  let cost: i64 = 0
-  if (subtrees > 0) {
-    let names: i64 = 1
+  // In `u64` throughout: `names` is at most PKI_MAX_NAME_CHECKS before each
+  // add and each length below 2^32, and `subtrees` is below 2^33, so no sum
+  // or product here comes near 2^64.
+  const subtrees: u64 = toU64(issuer.ncPermitted.length) + toU64(issuer.ncExcluded.length)
+  const budget: u64 = toU64(PKI_MAX_NAME_CHECKS)
+  let cost: u64 = toU64(0)
+  if (subtrees > toU64(0)) {
+    let names: u64 = toU64(1)
     for (const c of s.path) {
-      // Unsigned: names is at most PKI_MAX_NAME_CHECKS before the add and each
-      // length below 2^32, so the sum cannot wrap.
-      names = toI64(toU64(names) + toU64(toI64(c.sanDns.length)) + toU64(toI64(c.sanIp.length)) + 1)
-      if (names > toI64(PKI_MAX_NAME_CHECKS)) {
+      names = names + toU64(c.sanDns.length) + toU64(c.sanIp.length) + toU64(1)
+      if (names > budget) {
         s.spent = true
         return PKI_ERR_BUDGET
       }
     }
-    // Unsigned: names is at most PKI_MAX_NAME_CHECKS and subtrees below 2^33,
-    // so the product stays below 2^51.
-    cost = toI64(toU64(names) * toU64(subtrees))
+    cost = names * subtrees
   }
   const used: i32 = s.nameChecks
-  if (cost < 0 || cost > toI64(PKI_MAX_NAME_CHECKS)) {
+  if (used < 0 || cost > budget) {
     s.spent = true
     return PKI_ERR_BUDGET
   }
-  // Unsigned: used and cost are each at most PKI_MAX_NAME_CHECKS, so the sum
-  // cannot wrap.
-  const total: i64 = toI64(toU64(toI64(used)) + toU64(cost))
-  if (total > toI64(PKI_MAX_NAME_CHECKS)) {
+  const total: u64 = toU64(used) + cost
+  if (total > budget) {
     s.spent = true
     return PKI_ERR_BUDGET
   }
@@ -1081,14 +1068,15 @@ const pkiIssuerCode = (s: PkiSearch, child: X509Certificate, cand: X509Certifica
     return PKI_ERR_EXT_KEY_USAGE
   }
   if (cand.bcPathLen >= 0) {
-    let below: i32 = 0
+    // A `u32` count of the path's certificates, which cannot come near 2^32;
+    // `bcPathLen` is not negative here, so its `u32` is its value.
+    let below: u32 = toU32(0)
     for (let i: i32 = 1; i < toI32(s.path.length); i++) {
       if (!pkiSelfIssued(s.path[i])) {
-        // Unsigned: below counts certificates of the path, so it cannot wrap.
-        below = toI32(toU32(below) + 1)
+        below = below + toU32(1)
       }
     }
-    if (below > cand.bcPathLen) {
+    if (below > toU32(cand.bcPathLen)) {
       return PKI_ERR_PATH_LENGTH
     }
   }
@@ -1141,10 +1129,10 @@ const pkiCandidate = (s: PkiSearch, child: X509Certificate, cand: X509Certificat
  */
 const pkiExtend = (s: PkiSearch, child: X509Certificate): boolean => {
   const depth: i32 = toI32(s.path.length)
-  // Unsigned: pkiIssuerCode keeps the path to PKI_MAX_PATH certificates, so
-  // neither position wraps.
-  const above: i32 = toI32(toU32(depth) + 1)
-  const atRoot: i32 = toI32(toU32(PKI_AT_ROOT) + toU32(above))
+  // pkiIssuerCode keeps the path to PKI_MAX_PATH (8) certificates, which the
+  // mask keeps: it lets src/bounds.ts prove both positions.
+  const above: i32 = (depth & 15) + 1
+  const atRoot: i32 = PKI_AT_ROOT + above
   if (toI32(child.issuer.length) > 2) {
     const roots: X509Certificate[] | undefined = s.store.bySubject.get(pkiHex(child.issuer))
     if (roots !== undefined) {
@@ -1399,12 +1387,12 @@ export const pkiVerifyServer = (
   if (count > PKI_MAX_CHAIN_CERTS) {
     return new PkiResult(PKI_ERR_CHAIN_TOO_LONG, none)
   }
-  let bytes: i64 = 0
+  // In `u64`: at most PKI_MAX_CHAIN_BYTES before each add, and a length below
+  // 2^32, so the sum comes nowhere near 2^64.
+  let bytes: u64 = toU64(0)
   for (const der of chain) {
-    // Unsigned: bytes is at most PKI_MAX_CHAIN_BYTES before the add and a
-    // length below 2^32, so the sum cannot wrap.
-    bytes = toI64(toU64(bytes) + toU64(toI64(der.length)))
-    if (bytes > toI64(PKI_MAX_CHAIN_BYTES)) {
+    bytes = bytes + toU64(der.length)
+    if (bytes > toU64(PKI_MAX_CHAIN_BYTES)) {
       return new PkiResult(PKI_ERR_CHAIN_TOO_LONG, none)
     }
   }

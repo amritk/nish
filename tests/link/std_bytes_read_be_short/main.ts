@@ -1,6 +1,6 @@
 // `nish/bytes` out of range: a big-endian 64-bit read one byte short of the
-// array panics `index`, naming the first byte that is not in the array,
-// after the read that ends on the last byte has answered.
+// array panics in its window guard, naming the read, its offset and the
+// array's length, after the read that ends on the last byte has answered.
 import { getI64BE } from "nish/bytes"
 
 export const main = (): i32 => {

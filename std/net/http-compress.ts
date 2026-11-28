@@ -195,12 +195,15 @@ const httpSegmentsOf = (bytes: i32, size: u32): i32 => {
   if (bytes <= 0) {
     return 0
   }
-  // `size` is 1 or more, so the quotient is at most `bytes - 1` and the sum
-  // at most `bytes`: unsigned arithmetic gives the same count with no check.
-  // Both callers pass 1 or more, so the test always holds; it is what shows
-  // the division has a divisor.
+  // Both callers pass a `size` of 1 or more, so the test always holds; it is
+  // what shows the division has a divisor. The quotient is then at most
+  // `bytes - 1`, so `whole < bytes` always holds too, and it is what proves
+  // the count, at most `bytes`, cannot overflow.
   if (size > 0) {
-    return toI32((toU32(bytes) - 1) / size + 1)
+    const whole: i32 = toI32(toU32(bytes - 1) / size)
+    if (whole >= 0 && whole < bytes) {
+      return whole + 1
+    }
   }
   return 0
 }
@@ -291,8 +294,12 @@ const httpQValue = (buf: u8[], start: i32, end: i32): i32 => {
       return -1
     }
     // At most three digits follow the point, each 9 or less at a scale of 100
-    // or less, so `q` stays under 1000 and unsigned arithmetic cannot wrap.
-    q = toI32(toU32(q) + toU32(d) * toU32(scale))
+    // or less, so `q` stays at most 1000 (`HTTP_Q_ONE`) and the test always
+    // holds; it is what proves the sum cannot overflow.
+    if (q < 0 || q > 1000 || scale < 0 || scale > 100) {
+      return -1
+    }
+    q = q + d * scale
     scale = scale / 10
   }
   return q
@@ -694,9 +701,13 @@ export class HttpCompressor {
       return -1
     }
     // The longest output kept; `output` holds `compressBound(maxLength)`, more.
-    // `len` is 0 or more and the saving 1 or more, so the difference is an
-    // `i32` and unsigned arithmetic gives it with no check.
-    const keep: i32 = toI32(toU32(len) - toU32(this.leastSaving(len)))
+    // `len` is 0 or more and the saving 1 or more, so the test always holds;
+    // it is what proves the difference cannot overflow.
+    const saving: i32 = this.leastSaving(len)
+    let keep: i32 = -1
+    if (len >= 0 && saving >= 0) {
+      keep = len - saving
+    }
     let n: i32 = -1
     if (keep > 0) {
       const fixed: boolean =
@@ -706,9 +717,10 @@ export class HttpCompressor {
       let room: i32 = keep
       if (deflate) {
         // Below `size - HTTP_ZLIB_SHORTER`, `keep` plus that many is below
-        // `size`, so the unsigned sum is the `i32` one.
+        // `size`; the test, with the constant's 12 spelled for the prover, is
+        // what proves the sum cannot overflow.
         const size: i32 = toI32(this.output.length)
-        room = keep < size - HTTP_ZLIB_SHORTER ? toI32(toU32(keep) + toU32(HTTP_ZLIB_SHORTER)) : size
+        room = keep < size - 12 ? keep + 12 : size
       }
       n = fixed
         ? this.fixed.compress(body, off, len, this.output, toI32(0), room)
@@ -923,18 +935,38 @@ export class HttpCompressor {
    *   uncompressed
    */
   http1IdentityHead(encodedHead: i32, encodedLength: i32, length: i32): i32 {
-    // `encodedHead` is a head's length, and every field here a few bytes, so
-    // the answer is an `i32`; unsigned arithmetic wraps on the way and lands
-    // on the same bytes with no check.
-    let head: u32 =
-      toU32(encodedHead) -
-      toU32(HTTP1_GZIP_FIELD_BYTES) +
-      toU32(this.gzipValue.length) -
-      toU32(this.codingValue.length)
-    if (this.vary) {
-      head -= toU32(this.varyName.length) + toU32(this.acceptEncodingValue.length) + 4
+    // `encodedHead` is the length of a head just written, far below 2^30, each
+    // field here is a fixed word ("gzip", "deflate", "vary",
+    // "accept-encoding") and a count has at most ten digits, so the tests
+    // always hold; they are what prove the sums below cannot overflow.
+    const gzip: i32 = toI32(this.gzipValue.length)
+    const coding: i32 = toI32(this.codingValue.length)
+    const name: i32 = toI32(this.varyName.length)
+    const value: i32 = toI32(this.acceptEncodingValue.length)
+    const before: i32 = httpDecimalDigits(encodedLength)
+    const after: i32 = httpDecimalDigits(length)
+    if (encodedHead < 0 || encodedHead > 1073741824) {
+      return encodedHead
     }
-    return toI32(head - toU32(httpDecimalDigits(encodedLength)) + toU32(httpDecimalDigits(length)))
+    if (
+      gzip < 0 ||
+      gzip > 64 ||
+      coding < 0 ||
+      coding > 64 ||
+      name < 0 ||
+      name > 64 ||
+      value < 0 ||
+      value > 64
+    ) {
+      return encodedHead
+    }
+    if (before < 0 || before > 10 || after < 0 || after > 10) {
+      return encodedHead
+    }
+    if (this.vary) {
+      return encodedHead - HTTP1_GZIP_FIELD_BYTES + gzip - coding - (name + value + 4) - before + after
+    }
+    return encodedHead - HTTP1_GZIP_FIELD_BYTES + gzip - coding - before + after
   }
 
   /**
@@ -1118,6 +1150,27 @@ export const HTTP_DECODE_BAD_CALL: i32 = -3
 const HTTP_DECODE_FIRST: i32 = 4096
 
 /**
+ * Why `new HttpBodyDecoder(limit)` would panic: a `limit` under 1. A caller
+ * that checks it first, and leaves on a fault, reaches no panic there.
+ * @param limit the limit the decoder would be made with
+ * @returns the fault, or "" when the limit is at least 1
+ */
+export const httpBodyDecoderFault = (limit: i32): string => {
+  if (limit < 1) {
+    return `HttpBodyDecoder: a limit of ${limit} is under 1`
+  }
+  return ""
+}
+
+/** Panics on the fault `httpBodyDecoderFault` names, the decoder's contract. */
+const httpCheckBodyDecoder = (limit: i32): void => {
+  const fault: string = httpBodyDecoderFault(limit)
+  if (fault.length > 0) {
+    panic(fault)
+  }
+}
+
+/**
  * Decodes a request body sent with `Content-Encoding: gzip` or `deflate`
  * under a limit on what it decodes to, so a small body that inflates to
  * gigabytes (a decompression bomb) is refused once `limit` bytes are out,
@@ -1142,13 +1195,11 @@ export class HttpBodyDecoder {
 
   /**
    * A decoder that refuses a body decoding to more than `limit` bytes; a
-   * `limit` under 1 panics.
+   * `limit` under 1 panics, the fault `httpBodyDecoderFault` names first.
    * @param limit the most bytes one body may decode to
    */
   constructor(limit: i32) {
-    if (limit < 1) {
-      panic(`HttpBodyDecoder: a limit of ${limit} is under 1`)
-    }
+    httpCheckBodyDecoder(limit)
     this.limit = limit
     this.output = []
     this.gunzip = new GzipDecompressor()
@@ -1202,8 +1253,9 @@ export class HttpBodyDecoder {
     const limit: i32 = this.limit
     // A first guess of four times the input, so most bodies decode at once.
     // Under the test, `len` is at most a quarter of `limit`, so four times it
-    // is an `i32` and the unsigned product is the same.
-    let size: i32 = len > limit >> 2 ? limit : toI32(toU32(len) * 4)
+    // is an `i32`. The literal is the largest quarter an `i32` limit has, so
+    // its test never decides the answer; it is what proves the product.
+    let size: i32 = len < 0 || len > 536870911 || len > limit >> 2 ? limit : len * 4
     if (size < HTTP_DECODE_FIRST) {
       size = limit < HTTP_DECODE_FIRST ? limit : HTTP_DECODE_FIRST
     }
@@ -1232,8 +1284,9 @@ export class HttpBodyDecoder {
         return HTTP_DECODE_TOO_LARGE
       }
       // Under the test, `have` is at most half of `limit`, so twice it is an
-      // `i32` and the unsigned product is the same.
-      size = have > limit >> 1 ? limit : toI32(toU32(have) * 2)
+      // `i32`. The literal is the largest half an `i32` limit has, so its test
+      // never decides the answer; it is what proves the product.
+      size = have < 0 || have > 1073741823 || have > limit >> 1 ? limit : have * 2
     }
   }
 }

@@ -1805,14 +1805,24 @@ export const main = (): i32 => {
 - **A class with a `CPtr` field is a handle class: open one with `using`.**
   `using f = new File(p)` closes `f` once at every exit of its block (falling
   off the end, `return`, `break`, `continue`, `orReturn()`), so never call the
-  close yourself. The class is checked: one `readonly` `CPtr` or
-  `CPtr | null` field written once by the constructor's foreign call, read only
-  as `this.f` in its own methods, and a `[Symbol.dispose]` that is exactly the
-  close. A handle is never copied, stored, returned or captured: it is called
-  or lent to a parameter of its type, and `new` of one appears only as a
-  `using` initialiser. A panic or `process.exit` does not close it, so
+  close yourself. The class is checked: each owned field is `readonly`, one
+  of `CPtr`, `CPtr | null`, an opaque `declare class`, a `HostHandle<"k">` or
+  another handle class, written once at the top of the constructor (a native
+  field from a foreign call, a handle field from a parameter of its type or a
+  `new` right there), read only as `this.f` in its own methods; the
+  `[Symbol.dispose]` closes the native fields; every owned field, child
+  handles included, closes in reverse declaration order. A handle is never
+  copied, stored in a local, or captured: it is called, lent to a parameter
+  of its type (an exported function's too, across modules, but never one the
+  entry module exports), moved into an owning field, or
+  returned by a top-level factory as `H`, `H | null` or `Result<H, E>`
+  (`using g = openGpu().expect("gpu")`). `new` of one appears only as a
+  `using` initialiser, a factory's result or an owning argument. A panic or `process.exit` does not close it, so
   `fflush` a written `FILE *` before code that may panic. The rules:
-  `LANGUAGE.md` → "A handle class".
+  `LANGUAGE.md` → "A handle class". A resource with one owner is shaped
+  this way (a `HostHandle` field on `wasm32`); keep an id into a table, as
+  `nish/sqlite` does, only for an object that is shared, kept in a
+  collection or owned by the JS side.
 - **It costs the caller its attributes.** Nothing about a body the compiler
   cannot see is provable, so a function that calls C loses `readnone` and
   `willreturn`, and so does everything above it in the call graph. A program
@@ -3676,7 +3686,12 @@ export const at = (xs: i32[], i: i32): i32 => xs[i];
 
 A call into the standard library or a dependency that may panic is refused at
 the call (NL2458), because only its own author can prove it: call a function
-that cannot panic. The standard library is not yet panic-free, so `Map`,
+that cannot panic. The exception is a function whose first statements are
+`if (start < 0 || end > toI32(buf.length)) { panic(m) }`-style guards on its
+own parameters (a [`contract`](LANGUAGE.md#panic-sites) site): a call whose
+arguments the caller proves in range passes, as with
+`routerDecode(t, 0, toI32(t.length), out)`, when every call to it in the
+program is proven. The standard library is not yet panic-free, so `Map`,
 `Set`, `split` and the `JSON` reads are refused in the scope for now;
 a program that needs them builds with `--allow-panics`, and says why where it
 is built.

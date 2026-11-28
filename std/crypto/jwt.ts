@@ -662,7 +662,7 @@ const jwtHexValue = (b: i32): i32 => {
 }
 
 /** How many bytes code point `cp` takes in UTF-8. */
-const jwtUtf8Width = (cp: i32): i32 => {
+const jwtUtf8Width = (cp: i32): integer<1, 4> => {
   if (cp < 0x80) {
     return 1
   }
@@ -676,7 +676,7 @@ const jwtUtf8Width = (cp: i32): i32 => {
 }
 
 /** Byte `k` of the `width`-byte UTF-8 form of `cp`. */
-const jwtUtf8Byte = (cp: i32, width: i32, k: i32): i32 => {
+const jwtUtf8Byte = (cp: i32, width: integer<1, 4>, k: integer<0, 3>): i32 => {
   if (width === 1) {
     return cp
   }
@@ -686,8 +686,8 @@ const jwtUtf8Byte = (cp: i32, width: i32, k: i32): i32 => {
   } else if (width === 3) {
     lead = 0xe0
   }
-  // Unsigned: `k` is below `width`, so the count cannot wrap.
-  const shift: i32 = toI32((toU32(width) - toU32(k) - toU32(1)) * toU32(6))
+  // `k` is below `width`, so the shift is a whole number of six-bit groups.
+  const shift: i32 = (width - k - 1) * 6
   const tail: i32 = 0x80
   return k === 0 ? lead | (cp >> shift) : tail | ((cp >> shift) & 0x3f)
 }
@@ -1049,9 +1049,9 @@ class JwtJson {
     if (lo < 0xdc00 || lo > 0xdfff) {
       return -1
     }
-    // Unsigned: each surrogate's low ten bits, so the sum stays below 0x110000.
-    const plane: u32 = toU32(0x10000)
-    return toI32(plane + (toU32(hi & 0x3ff) << toU32(10)) + toU32(lo & 0x3ff))
+    // Each surrogate's low ten bits, so the sum stays below 0x110000.
+    const high: i32 = (hi & 0x3ff) * 1024
+    return high + (lo & 0x3ff) + 0x10000
   }
 
   /** The four hex digits at `i` as a number, or `-1`. */
@@ -1189,7 +1189,7 @@ class JwtJson {
         continue
       }
       const cp: i32 = this.escapeCodePoint(i)
-      const width: i32 = jwtUtf8Width(cp)
+      const width: integer<1, 4> = jwtUtf8Width(cp)
       for (let k: i32 = 0; k < width; k += 1) {
         if (o >= n) {
           return false
@@ -1228,7 +1228,7 @@ class JwtJson {
         continue
       }
       const cp: i32 = this.escapeCodePoint(i)
-      const width: i32 = jwtUtf8Width(cp)
+      const width: integer<1, 4> = jwtUtf8Width(cp)
       for (let k: i32 = 0; k < width; k += 1) {
         if (o >= 0 && o < toI32(out.length)) {
           out[o] = toU8(jwtUtf8Byte(cp, width, k))
@@ -1253,9 +1253,18 @@ class JwtJson {
     if (!this.isInteger()) {
       return toI64(0)
     }
-    // Unsigned: 0 - 2^63 wraps to the bits of -2^63, and every smaller
-    // magnitude to its negation.
-    return this.at(this.tokStart) === JWT_CH_MINUS ? toI64(toU64(0) - this.value) : toI64(this.value)
+    const magnitude: u64 = this.value
+    if (this.at(this.tokStart) !== JWT_CH_MINUS || magnitude === toU64(0)) {
+      return toI64(magnitude)
+    }
+    // A negative number's magnitude is at most 2^63 (the scan's limit), so one
+    // less fits an `i64` and its negation less one is the value, -2^63 included.
+    const lessMagnitude: u64 = magnitude - toU64(1)
+    const less: i64 = toI64(lessMagnitude)
+    if (less < 0) {
+      return toI64(0)
+    }
+    return -less - 1
   }
 
   /**
@@ -1719,17 +1728,21 @@ export class JwtVerifier {
       return JWT_ERR_CLAIMS
     }
     const leeway: i64 = jwtClamp(this.leeway, toI64(0), toI64(JWT_MAX_LEEWAY))
-    // Unsigned: `now` is held to [0, 2^62] and `leeway` to [0, 2^31 - 1], so
-    // both sums and the difference fit an `i64`, and the wrapped bits are theirs.
-    const early: i64 = toI64(toU64(now) - toU64(leeway))
-    const late: i64 = toI64(toU64(now) + toU64(leeway))
-    if (this.hasExp && !(early < this.exp)) {
+    // `verify` holds `now` to [0, 2^62]: the floors here let src/bounds.ts
+    // prove `now - leeway`, and a claim is compared past `now + leeway` as
+    // its distance from `now`, which cannot overflow.
+    if (now < 0 || leeway < 0) {
+      return JWT_ERR_CLAIMS
+    }
+    if (this.hasExp && !(now - leeway < this.exp)) {
       return JWT_ERR_EXPIRED
     }
-    if (this.hasNbf && this.nbf > late) {
+    const nbf: i64 = this.nbf
+    if (this.hasNbf && nbf > now && nbf - now > leeway) {
       return JWT_ERR_NOT_YET
     }
-    if (this.hasIat && this.iat > late) {
+    const iat: i64 = this.iat
+    if (this.hasIat && iat > now && iat - now > leeway) {
       return JWT_ERR_IAT
     }
     if (issuer !== null && !issOk) {

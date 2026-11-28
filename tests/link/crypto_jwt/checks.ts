@@ -102,7 +102,7 @@ const zeroResumed = (): Sha256 => {
   for (let i: i32 = 0; i < toI32(h.state.length); i++) {
     h.state[i] = toU32(0);
   }
-  h.total = toI64(64);
+  h.total = toU64(64);
   return h;
 };
 

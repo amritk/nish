@@ -139,6 +139,15 @@ import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
 import { builtinAnswerTop } from "./members"
 import { parseIntegerLiteral } from "./constants"
+import {
+  ATOM_AT_END,
+  ATOM_NEGATIVE,
+  ATOM_PAST_END,
+  ATOM_PAST_REST,
+  ATOM_PRODUCT_OVER,
+  ATOM_WIDTH,
+  isCallerContract,
+} from "./caller-contract"
 import { CheckContext } from "./context"
 import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
@@ -193,6 +202,7 @@ const FACT_MIN_LENGTH: i32 = 4
 const FACT_MIN_VALUE: i32 = 5
 const FACT_EXCLUDES: i32 = 6
 const FACT_ORDERED: i32 = 7
+const FACT_PRODUCT: i32 = 8
 
 /**
  * One fact. `v` is the index variable for every kind but `minLength`, whose `v`
@@ -203,7 +213,8 @@ const FACT_ORDERED: i32 = 7
  * every rule that forgets an array's length facts forgets it too; `n`
  * is the literal of the three constant families, and the reach of a `below`:
  * `v + n < w.length`, 0 for the plain `v < w.length`. An `ordered` fact is
- * `v <= w` between two index locals, and its `n` is 0.
+ * `v <= w` between two index locals, and its `n` is 0. A `product` fact is
+ * `toI64(v) * toI64(w) <= n` between two index locals (`productFacts`).
  */
 class Fact {
   kind: i32
@@ -275,6 +286,14 @@ export class State {
    */
   orderedLow: Local[]
   orderedHigh: Local[]
+  /**
+   * `toI64(v) * toI64(w) <= n`, recorded by a guard (`productFacts`): what a
+   * caller contract's product test needs of its two factors
+   * (`ATOM_PRODUCT_OVER`). Any write to either factor drops it.
+   */
+  productLeft: Local[]
+  productRight: Local[]
+  productCap: i32[]
 
   constructor(table: TypeTable) {
     this.table = table
@@ -294,6 +313,9 @@ export class State {
     this.excludedValue = []
     this.orderedLow = []
     this.orderedHigh = []
+    this.productLeft = []
+    this.productRight = []
+    this.productCap = []
   }
 }
 
@@ -345,6 +367,13 @@ const cloneState = (s: State): State => {
     out.orderedHigh.push(s.orderedHigh[k])
     k = k + 1
   }
+  k = 0
+  while (k < s.productLeft.length) {
+    out.productLeft.push(s.productLeft[k])
+    out.productRight.push(s.productRight[k])
+    out.productCap.push(s.productCap[k])
+    k = k + 1
+  }
   return out
 }
 
@@ -371,6 +400,9 @@ const copyInto = (into: State, from: State): void => {
   into.excludedValue = from.excludedValue
   into.orderedLow = from.orderedLow
   into.orderedHigh = from.orderedHigh
+  into.productLeft = from.productLeft
+  into.productRight = from.productRight
+  into.productCap = from.productCap
 }
 
 // ---- Reading the state ------------------------------------------------------------
@@ -548,7 +580,37 @@ const knownOrdered = (state: State, low: Local, high: Local): boolean => {
   return false
 }
 
+/** The least `n` with `toI64(v) * toI64(w) <= n` a `product` fact holds, in either order; -1 for none. */
+const knownProductCap = (state: State, v: Local, w: Local): i32 => {
+  let best = -1
+  let k = 0
+  while (k < state.productLeft.length) {
+    const left = state.productLeft[k]
+    const right = state.productRight[k]
+    if (
+      ((left === v && right === w) || (left === w && right === v)) &&
+      (best < 0 || state.productCap[k] < best)
+    ) {
+      best = state.productCap[k]
+    }
+    k = k + 1
+  }
+  return best
+}
+
 const addFact = (state: State, fact: Fact): void => {
+  if (fact.kind === FACT_PRODUCT) {
+    const right = fact.w
+    if (right !== null) {
+      const known = knownProductCap(state, fact.v, right)
+      if (known < 0 || fact.n < known) {
+        state.productLeft.push(fact.v)
+        state.productRight.push(right)
+        state.productCap.push(fact.n)
+      }
+    }
+    return
+  }
   if (fact.kind === FACT_ORDERED) {
     const high = fact.w
     if (high !== null && !knownOrdered(state, fact.v, high)) {
@@ -673,7 +735,41 @@ const mentions = (state: State, v: Local): boolean => {
       return true
     }
   }
-  return mentionsOrdered(state, v)
+  return mentionsOrdered(state, v) || mentionsProduct(state, v)
+}
+
+/** Whether a `product` fact names `v` as either factor. */
+const mentionsProduct = (state: State, v: Local): boolean => {
+  for (const x of state.productLeft) {
+    if (x === v) {
+      return true
+    }
+  }
+  for (const x of state.productRight) {
+    if (x === v) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Drop every `product` fact with `v` as a factor: a step either way may grow the product. */
+const forgetProduct = (state: State, v: Local): void => {
+  const lefts: Local[] = []
+  const rights: Local[] = []
+  const caps: i32[] = []
+  let k = 0
+  while (k < state.productLeft.length) {
+    if (state.productLeft[k] !== v && state.productRight[k] !== v) {
+      lefts.push(state.productLeft[k])
+      rights.push(state.productRight[k])
+      caps.push(state.productCap[k])
+    }
+    k = k + 1
+  }
+  state.productLeft = lefts
+  state.productRight = rights
+  state.productCap = caps
 }
 
 /** Whether an `ordered` fact names `v` at either end. */
@@ -769,6 +865,7 @@ const forgetUpperBounds = (state: State, v: Local): void => {
   state.maxIndexValue = maxValue
   forgetExcluded(state, v)
   forgetOrdered(state, v, true)
+  forgetProduct(state, v)
 }
 
 /**
@@ -870,6 +967,7 @@ const forgetLowerBounds = (state: State, v: Local): void => {
   state.minValueValue = floorValue
   forgetExcluded(state, v)
   forgetOrdered(state, v, false)
+  forgetProduct(state, v)
 }
 
 /**
@@ -995,6 +1093,17 @@ const intersect = (a: State, b: State): State => {
     if (knownOrdered(b, a.orderedLow[k], a.orderedHigh[k])) {
       out.orderedLow.push(a.orderedLow[k])
       out.orderedHigh.push(a.orderedHigh[k])
+    }
+    k = k + 1
+  }
+  // A product bound holds after the join where both sides hold one, at the larger cap.
+  k = 0
+  while (k < a.productLeft.length) {
+    const other = knownProductCap(b, a.productLeft[k], a.productRight[k])
+    if (other >= 0) {
+      out.productLeft.push(a.productLeft[k])
+      out.productRight.push(a.productRight[k])
+      out.productCap.push(other > a.productCap[k] ? other : a.productCap[k])
     }
     k = k + 1
   }
@@ -1852,6 +1961,53 @@ const squareRootFloor = (n: i32): i32 => {
  * What `lo < hi` (or `lo <= hi`) proves. Four shapes carry a bound worth
  * recording; everything else says nothing this domain can hold.
  */
+/** The two index locals of `toI64(a) * toI64(b)`, the product a caller contract tests (`ATOM_PRODUCT_OVER`); null for any other shape. */
+const productFactors = (walk: BoundsWalk, expr: Node): Local[] | null => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== NodeKind.Binary || e.text !== "*") {
+    return null
+  }
+  const a = widenedLocal(walk, e.children[0])
+  const b = widenedLocal(walk, e.children[1])
+  return a === null || b === null ? null : [a, b]
+}
+
+/** The index local `v` of `toI64(v)`, or null. */
+const widenedLocal = (walk: BoundsWalk, expr: Node): Local | null => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== NodeKind.Call || !isBuiltinConversion(walk.ctx.program, e, "toI64")) {
+    return null
+  }
+  return indexLocal(walk.ctx, e.children[1].children[0])
+}
+
+/**
+ * The value of a decimal literal in `[0, 2^31 - 1]`, written `C` or
+ * `toI64(C)`; -1 for anything else. Not `literalValue`, which leaves out
+ * `2^31 - 1` itself: that is the cap a pixel count is written against.
+ */
+const productCapOf = (walk: BoundsWalk, expr: Node): i32 => {
+  const e = unwrapBoundsParens(expr)
+  const literal =
+    e.kind === NodeKind.Call && isBuiltinConversion(walk.ctx.program, e, "toI64")
+      ? e.children[1].children[0]
+      : e
+  if (literal.kind !== NodeKind.Number || literal.text.length === 0 || literal.text.length > 10) {
+    return -1
+  }
+  let value: i64 = toI64(0)
+  let k = 0
+  while (k < literal.text.length) {
+    const digit = literal.text.charCodeAt(k) - 48
+    if (digit < 0 || digit > 9) {
+      return -1
+    }
+    value = value * toI64(10) + toI64(digit)
+    k = k + 1
+  }
+  return value > I32_MAX ? -1 : toI32(value)
+}
+
 const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: boolean): Fact[] => {
   const ctx = walk.ctx
   const out: Fact[] = []
@@ -1918,6 +2074,12 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   // range check with both ends locals needs between them (`provesRange`).
   if (loVar !== null && hiVar !== null && loVar !== hiVar && sameBase(ctx, loVar, hiVar)) {
     out.push(new Fact(FACT_ORDERED, loVar, hiVar, 0))
+  }
+  // `toI64(a) * toI64(b) <= C` for two index locals and a literal cap.
+  const factors = productFactors(walk, lo)
+  const cap = productCapOf(walk, hi)
+  if (factors !== null && cap >= 0 && (!strict || cap >= 1)) {
+    out.push(new Fact(FACT_PRODUCT, factors[0], factors[1], strict ? cap - 1 : cap))
   }
   // `i < n` / `i <= n`.
   if (loVar !== null && hiConst >= 0) {
@@ -2193,6 +2355,11 @@ const factsOf = (state: State): Fact[] => {
   k = 0
   while (k < state.orderedLow.length) {
     out.push(new Fact(FACT_ORDERED, state.orderedLow[k], state.orderedHigh[k], 0))
+    k = k + 1
+  }
+  k = 0
+  while (k < state.productLeft.length) {
+    out.push(new Fact(FACT_PRODUCT, state.productLeft[k], state.productRight[k], state.productCap[k]))
     k = k + 1
   }
   return out
@@ -3354,6 +3521,24 @@ const provesRange = (walk: BoundsWalk, state: State, w: Local, from: Node, to: N
   provesOrdered(walk, state, from, to, w)
 
 /**
+ * Whether `[off, off + count)` is inside `w` for a constant `count`, `off`
+ * already known quiet and non-negative: a count of 0 needs `off <= w.length`,
+ * a constant `off` a known minimum length, and an index `off` a recorded
+ * `off + count - 1 < w.length`, which `off + count <= w.length` records.
+ */
+const provesCount = (walk: BoundsWalk, state: State, w: Local, off: Node, count: i32): boolean => {
+  if (count === 0) {
+    return provesWithin(walk, state, off, w)
+  }
+  const start = constantValue(walk, off)
+  if (start >= 0) {
+    return toI64(start) + toI64(count) < I32_MAX && knownMinLength(state, w, start + count)
+  }
+  const v = indexLocal(walk.ctx, off)
+  return v !== null && belowReach(state, v, w) >= count - 1
+}
+
+/**
  * `0 <= off` and `off + len <= w.length` with `len >= 0`, the window
  * `[off, off + len)` a buffer call checks (`emitNetCall`): `off` is 0 and
  * `len` within the length, `len` is a literal `off` reaches that far below
@@ -3371,15 +3556,8 @@ const provesWindow = (walk: BoundsWalk, state: State, w: Local, off: Node, len: 
     return impliesNonNegative(walk, state, len) && provesWithin(walk, state, len, w)
   }
   const count = constantValue(walk, len)
-  if (count === 0) {
-    return provesWithin(walk, state, off, w)
-  }
-  if (count > 0) {
-    if (start > 0) {
-      return toI64(start) + toI64(count) < I32_MAX && knownMinLength(state, w, start + count)
-    }
-    const v = indexLocal(ctx, off)
-    return v !== null && belowReach(state, v, w) >= count - 1
+  if (count >= 0) {
+    return provesCount(walk, state, w, off, count)
   }
   const rest = unwrapBoundsParens(len)
   if (rest.kind !== NodeKind.Binary || rest.text !== "-" || !checksOverflow(ctx.program, ctx.table, rest)) {
@@ -3397,9 +3575,13 @@ const provesWindow = (walk: BoundsWalk, state: State, w: Local, off: Node, len: 
 }
 
 /** Whether no argument of `call` from `first` on may change what the check compares (`changesAnything`). */
-const quietFrom = (program: CheckedProgram, call: Node, first: i32): boolean => {
+const quietFrom = (program: CheckedProgram, call: Node, first: i32): boolean =>
+  quietArguments(program, call.children[1], first)
+
+/** Whether no argument of `list` from `first` on may change what the check compares (`changesAnything`). */
+const quietArguments = (program: CheckedProgram, list: Node, first: i32): boolean => {
   let k = 0
-  for (const arg of call.children[1].children) {
+  for (const arg of list.children) {
     if (k >= first && changesAnything(program, arg)) {
       return false
     }
@@ -3407,6 +3589,83 @@ const quietFrom = (program: CheckedProgram, call: Node, first: i32): boolean => 
   }
   return true
 }
+
+/** Whether `p` and `q` are index locals whose product a `product` fact bounds by `cap` or less. */
+const provesProduct = (walk: BoundsWalk, state: State, p: Node | null, q: Node | null, cap: i32): boolean => {
+  if (p === null || q === null || !isQuietBound(walk, p) || !isQuietBound(walk, q)) {
+    return false
+  }
+  const v = indexLocal(walk.ctx, p)
+  const w = indexLocal(walk.ctx, q)
+  if (v === null || w === null) {
+    return false
+  }
+  const known = knownProductCap(state, v, w)
+  return known >= 0 && known <= cap
+}
+
+/**
+ * Whether every comparison of `target`'s caller contract is false for `args`,
+ * the call's arguments (a method's leave `this` out): each one's opposite, or
+ * a stronger fact, holds once they have run. A bound in a shape the section
+ * does not read (`isQuietBound`) proves nothing.
+ */
+const provesPrecondition = (walk: BoundsWalk, state: State, target: FunctionSig, args: Node[]): boolean => {
+  const shift = target.paramNames.length > 0 && target.paramNames[0] === "this" ? 1 : 0
+  const atoms = target.preconditionAtoms
+  let k = 0
+  // `k + 3`, the last slot of an atom, is `ATOM_WIDTH - 1` spelled so the prover reads it.
+  while (k >= 0 && k + 3 < atoms.length) {
+    const p = contractArg(args, atoms[k + 1], shift)
+    const q = contractArg(args, atoms[k + 2], shift)
+    const shape = atoms[k]
+    if (shape === ATOM_PRODUCT_OVER) {
+      // Both factors constants whose product is at most the cap, held in the
+      // `b` slot, or two locals a guard bounded the product of (`FACT_PRODUCT`).
+      const a = p === null ? -1 : constantValue(walk, p)
+      const c = q === null ? -1 : constantValue(walk, q)
+      const constants = a >= 0 && c >= 0 && toI64(a) * toI64(c) <= toI64(atoms[k + 3])
+      if (!constants && !provesProduct(walk, state, p, q, atoms[k + 3])) {
+        return false
+      }
+      k = k + ATOM_WIDTH
+      continue
+    }
+    const b = contractArg(args, atoms[k + 3], shift)
+    if (p === null || !isQuietBound(walk, p) || (q !== null && !isQuietBound(walk, q))) {
+      return false
+    }
+    const w: Local | null = b === null ? null : holderOf(walk, b)
+    if (shape === ATOM_NEGATIVE) {
+      if (!impliesNonNegative(walk, state, p)) {
+        return false
+      }
+    } else if (w === null) {
+      return false
+    } else if (shape === ATOM_PAST_END) {
+      if (!provesWithin(walk, state, p, w)) {
+        return false
+      }
+    } else if (shape === ATOM_AT_END) {
+      if (!proves(walk.ctx, state, w, p)) {
+        return false
+      }
+    } else if (shape === ATOM_PAST_REST) {
+      if (q === null || !provesWindow(walk, state, w, q, p)) {
+        return false
+      }
+    } else if (q === null || !provesOrdered(walk, state, q, p, w)) {
+      // `p < q`: `p` is the range's end, within `w` by the contract's own `p > toI32(w.length)`.
+      return false
+    }
+    k = k + ATOM_WIDTH
+  }
+  return true
+}
+
+/** The argument for parameter `k` (`shift` is 1 past a method's `this`), or null. */
+const contractArg = (args: Node[], k: i32, shift: i32): Node | null =>
+  k - shift >= 0 && k - shift < args.length ? args[k - shift] : null
 
 /** `String.fromBytes(bytes, start, end)`, the builtin (`emitFromBytes`). */
 const isFromBytes = (ctx: CheckContext, call: Node): boolean => {
@@ -3450,6 +3709,64 @@ const windowCallName = (ctx: CheckContext, call: Node): string => {
     return ""
   }
   return netRangeBuffer(name) >= 0 ? name : ""
+}
+
+/** Whether a call with `count` arguments passes every window argument of `target`; a literal count (-1) is none. */
+const windowArgsFit = (target: FunctionSig, count: i32): boolean => {
+  for (const at of target.window) {
+    if (at >= count) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * A call into a window guard (#2296) that returns leaves `[off, off + len)`
+ * inside `buf`: the guard returns exactly when `0 <= off`, `0 <= len` and
+ * `off + len <= buf.length`. So a statement call on an index local `off`
+ * records `off >= 0`, and a constant count `n` from 1 up records
+ * `off + n - 1 < buf.length`, which proves `buf[off]` to `buf[off + n - 1]`;
+ * any other count records `off <= buf.length`, and an index local one
+ * `len <= buf.length` too. A guard's arguments that may change
+ * anything record nothing, and so does a call into a forwarder: its body may
+ * change `buf` after its guard returns, so only the guard's own call is read.
+ */
+const noteGuardedWindow = (walk: BoundsWalk, state: State, expr: Node): void => {
+  const call = unwrapBoundsParens(expr)
+  if (call.kind !== NodeKind.Call) {
+    return
+  }
+  const ctx = walk.ctx
+  const target = ctx.program.nodeCallees[call.id]
+  const args = call.children[1].children
+  // A guard checks a window of its own and hands it to no guard (`isWindowGuard`).
+  if (
+    target === null ||
+    target.window.length !== 3 ||
+    target.windowGuard !== null ||
+    !windowArgsFit(target, args.length) ||
+    !quietFrom(ctx.program, call, 0)
+  ) {
+    return
+  }
+  const at = target.window
+  const w = holderOf(walk, args[at[0]])
+  const off = indexLocal(ctx, args[at[1]])
+  if (w === null || off === null) {
+    return
+  }
+  addFact(state, new Fact(FACT_NON_NEGATIVE, off, null, 0))
+  const count = constantValue(walk, args[at[2]])
+  if (count > 0) {
+    addFact(state, new Fact(FACT_BELOW, off, w, count - 1))
+    return
+  }
+  addFact(state, new Fact(FACT_AT_MOST, off, w, 0))
+  const len = indexLocal(ctx, args[at[2]])
+  if (len !== null) {
+    addFact(state, new Fact(FACT_AT_MOST, len, w, 0))
+  }
 }
 
 /**
@@ -3513,15 +3830,29 @@ const judgeRangeCheck = (walk: BoundsWalk, state: State, call: Node): void => {
     return
   }
   // A window contract's buffer, offset and count (#2296, `src/window-contract.ts`).
-  if (target !== null && target.window.length === 3 && args.length > target.window[2]) {
+  if (target !== null && target.window.length === 3 && windowArgsFit(target, args.length)) {
     const at = target.window
     const w = holderOf(walk, args[at[0]])
-    const first = Math.min(at[0], Math.min(at[1], at[2]))
+    // A literal count is the forward's own (`windowCount`), not an argument.
+    const literal = at[2] < 0
+    const first = literal ? Math.min(at[0], at[1]) : Math.min(at[0], Math.min(at[1], at[2]))
+    const off = args[at[1]]
     if (
       w !== null &&
       quietFrom(ctx.program, call, first + 1) &&
-      provesWindow(walk, state, w, args[at[1]], args[at[2]])
+      (literal
+        ? isQuietBound(walk, off) &&
+          impliesNonNegative(walk, state, off) &&
+          provesCount(walk, state, w, off, target.windowCount)
+        : provesWindow(walk, state, w, off, args[at[2]]))
     ) {
+      noteProof(walk, call)
+    }
+    return
+  }
+  // A caller contract's leading tests (#2296, `src/caller-contract.ts`).
+  if (target !== null && isCallerContract(target)) {
+    if (quietFrom(ctx.program, call, 0) && provesPrecondition(walk, state, target, args)) {
       noteProof(walk, call)
     }
     return
@@ -4473,6 +4804,16 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
       at = at + 1
     }
     judgeArrayLength(walk, state, e)
+    // A constructor's caller contract (#2296, `src/caller-contract.ts`), its arguments past `this`.
+    if (
+      walk.tables === null &&
+      target !== null &&
+      isCallerContract(target) &&
+      quietArguments(ctx.program, e.children[2], 0) &&
+      provesPrecondition(walk, state, target, e.children[2].children)
+    ) {
+      noteProof(walk, e)
+    }
     applyCallEffects(walk, state, e) // a constructor body is a callee like any other
     return
   }
@@ -5364,6 +5705,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
       return false
     }
     walkExpression(walk, state, stmt.children[0])
+    noteGuardedWindow(walk, state, stmt.children[0])
     return terminatesControlFlow(walk.ctx, stmt.children[0])
   }
 
@@ -5657,7 +5999,8 @@ export const analyzeBounds = (ctx: CheckContext, body: Node): BoundsWalk => {
  * called on: an element access, a call spelled `.charCodeAt(...)`,
  * `.substring(...)`, `.pop()`, `.spawn(...)`, `.slice(...)`, `.set(...)` or
  * `.fromBytes(...)` whatever its receiver, an atomic array's element method,
- * a buffer call, a call into a window guard or forward, a foreign call, a `new`, a
+ * a buffer call, a call into a window guard or forward or a caller contract,
+ * a foreign call, a `new`, a
  * division, or a value entering a range. Read
  * off the syntax and the entries the checker recorded, so it answers `true`
  * for more than the walk judges, never less.
@@ -5683,11 +6026,14 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
       return true
     }
     // An array's `slice`, once the checker has rewritten it into a template call.
-    // A window contract's call, whose window `judgeRangeCheck` proves (#2296).
+    // A window or caller contract's call, whose check `judgeRangeCheck` proves (#2296).
     const target = ctx.program.nodeCallees[node.id]
     if (
       target !== null &&
-      (isArraySliceInstance(target) || isAtomicArrayMethod(target) || target.window.length === 3)
+      (isArraySliceInstance(target) ||
+        isAtomicArrayMethod(target) ||
+        target.window.length === 3 ||
+        isCallerContract(target))
     ) {
       return true
     }

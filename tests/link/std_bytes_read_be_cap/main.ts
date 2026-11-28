@@ -1,6 +1,6 @@
 // `nish/bytes` out of range: at the first offset too large for an eight-byte
-// read to be checked whole, the read panics `index` on its first byte, as at
-// any offset past the end.
+// window to fit, the read panics in its window guard, as at any offset past
+// the end.
 import { getU64BE } from "nish/bytes"
 
 export const main = (): i32 => {

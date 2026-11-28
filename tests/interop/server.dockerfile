@@ -6,7 +6,9 @@
 # checkout: the last release (the seed, which `scripts/fetch-seed.sh` checks
 # against its published SHA-256) builds the compiler in `src/` with LLVM 18,
 # and that compiler builds the server, `tests/link/net_interop_server`, and
-# the gRPC server, `tests/link/net_grpc_interop` (`/grpc-server`), with this
+# the gRPC server, `tests/link/net_grpc_interop` (`/grpc-server`), and the
+# `nish/net/http-server` façade's WebSocket echo server for Autobahn,
+# `tests/link/net_http_server_ws/autobahn.ts` (`/ws-facade-server`), with this
 # checkout's `std/`. The second stage is the runner's endpoint image,
 # whose `setup.sh` routes through the network simulator, with the server and
 # `run-endpoint.sh` added. Every base image is pinned by digest.
@@ -60,11 +62,13 @@ COPY tests/link/ tests/link/
 RUN . scripts/nish-compiler.sh \
  && nish_allow_panics build/nish \
  && build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/link/net_interop_server/main.ts -o build/interop/ --link build/interop-server \
- && build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/link/net_grpc_interop/main.ts -o build/grpc/ --link build/grpc-server
+ && build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/link/net_grpc_interop/main.ts -o build/grpc/ --link build/grpc-server \
+ && build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/link/net_http_server_ws/autobahn.ts -o build/ws-facade/ --link build/ws-facade-server
 
 FROM martenseemann/quic-network-simulator-endpoint@sha256:3b2b9e6fa317da238c8140a7b6d2bf8d4d45a8464b873eecac3ff2a32520b71a
 COPY --from=build /nish/build/interop-server /interop-server
 COPY --from=build /nish/build/grpc-server /grpc-server
+COPY --from=build /nish/build/ws-facade-server /ws-facade-server
 COPY tests/interop/run-endpoint.sh /run_endpoint.sh
 RUN chmod +x /run_endpoint.sh
 ENTRYPOINT ["/run_endpoint.sh"]

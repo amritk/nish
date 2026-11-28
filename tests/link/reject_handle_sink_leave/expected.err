@@ -1,0 +1,1 @@
+main.ts:32:24: error: A `Slot` opened as an argument of a `new` that takes ownership of it cannot be followed by an argument that may leave the function, as `.orReturn()` does: the handle is open by then and the object that would close it is never built; compute that argument first, into a `const`

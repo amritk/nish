@@ -843,11 +843,27 @@ leaves the IR unchanged.
   means the call broke a contract the function's doc states, such as an
   index outside an array the caller sized
   ([Panics the standard library keeps](../../reference/language/semantics-decisions.md#panics-the-standard-library-keeps)). A
-  function or method that checks a window `(buf, off, len)` with the one
-  guard shape the compiler reads moves that check to each call, so a caller
-  that has proved `off` and `len` inside `buf` calls it under the default
+  function, arrow `const` or method that checks a window `(buf, off, len)`
+  with the one guard shape the compiler reads moves that check to each call,
+  and so does a *forwarder*, one whose first statement calls such a guard
+  with its own parameters, so a caller that has proved `off` and `len` inside `buf` calls it under the
+  default. A forwarder that passes a fixed count, `check(b, off, 4)`, leaves
+  only `off` to its caller, and `off >= 0 && off + 4 <= b.length` proves it;
+  after the guard's own call, the reads `b[off]` to `b[off + 3]` need no proof
+  of their own
   ([Panic sites](../../reference/language/semantics-decisions.md#panic-sites),
-  `window`).
+  `window`). So does a function or method whose first statements are
+  `if (…) { panic(m) }` guards comparing its own integer parameters with `0`,
+  each other, an array's or string's length (`toI32(b.length)`), or their
+  product with a constant: a call whose arguments you have
+  proved make each comparison false is accepted, once every call to it in
+  the program is. A constructor's guards count, and so does a leading call
+  that passes its own parameters on to another function with such guards.
+  Sizes you only know at run time prove a product guard when you test them
+  first, `if (w < 0 || h < 0 || toI64(w) * toI64(h) > toI64(limit)) { return … }`,
+  with `limit` no larger than the callee's
+  ([Panic sites](../../reference/language/semantics-decisions.md#panic-sites),
+  `contract`).
 - **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`
   list in your `package.json`'s `"nish"` field names are still held to no
   panic, and with no list, none is. **`--deny-panics`** spells the default
